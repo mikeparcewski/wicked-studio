@@ -660,7 +660,7 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
               )}
               {offerLead && !demoing && (
                 <label className="wk-launch-wizard-field">
-                  <span className="wk-field-label">Lead agent</span>
+                  <span className="wk-field-label">Lead helper</span>
                   <select
                     data-testid="launch-wizard-lead"
                     className="wk-field"
@@ -849,7 +849,7 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
               <div><dt>What</dt><dd className="wk-launch-wizard-review-intent">{problemText.trim()}</dd></div>
               <div><dt>Where</dt><dd>{repoName ?? 'No repository'}{projectName !== null ? ` · in ${projectName}` : ''}</dd></div>
               {seats.length > 0 && <div><dt>Helpers</dt><dd>{seats.map(seatLabel).join(', ')}</dd></div>}
-              {offerLead && <div data-testid="launch-wizard-review-lead"><dt>Lead agent</dt><dd>{lead === null ? 'Random (picked when it starts)' : seatLabel(leadable.find((s) => s.key === lead)!)}</dd></div>}
+              {offerLead && <div data-testid="launch-wizard-review-lead"><dt>Lead helper</dt><dd>{lead === null ? 'Random (picked when it starts)' : seatLabel(leadable.find((s) => s.key === lead)!)}</dd></div>}
               {offerPower && <div data-testid="launch-wizard-review-power"><dt>Power mode</dt><dd>{powerOn ? 'On: one orchestrator, rigor at hand-off' : 'Off: phased'}</dd></div>}
               <div><dt>Ask me</dt><dd>{offerPower && powerOn ? 'At hand-off' : gatePostureWord(draft.confirmMode, beforeOrd, deliver === 'pr' && deliverGateCap === true)}</dd></div>
               {deliverVisible && <div><dt>Delivery</dt><dd>{draft.deliverOn ? 'A pull request when done' : 'Stays on its branch'}</dd></div>}

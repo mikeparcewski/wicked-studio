@@ -132,7 +132,7 @@ export function DeskRuns({ start, runs, runsShown, refine, refineBar, now, navig
               <label className="wk-jr-search">
                 <Search size={15} aria-hidden className="wk-jr-search-icon" />
                 <span className="wk-sr-only">Search jobs</span>
-                <input type="search" className="wk-field" data-testid="desk-runs-search" placeholder="Search title, repo, workflow, agent…" value={query}
+                <input type="search" className="wk-field" data-testid="desk-runs-search" placeholder="Search title, repo, workflow, helper…" value={query}
                   onChange={(e) => { setQuery(e.target.value); setShown(PAGE); }} />
               </label>
               {query !== '' && <button type="button" className="wk-jr-icon-btn" aria-label="Clear search" title="Clear search" onClick={() => setQuery('')}><X size={15} aria-hidden /></button>}

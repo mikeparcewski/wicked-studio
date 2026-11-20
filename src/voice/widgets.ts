@@ -39,7 +39,7 @@ const builtin = (id: BuiltinWidgetId, title: string, description: string, side: 
 export const BUILTIN_WIDGETS: readonly BuiltinWidget[] = [
   builtin('builtin.load', 'Machine', 'Machine load, with its recent readings', 'left', 10),
   builtin('builtin.health', 'Health', 'How many services are up', 'left', 20),
-  builtin('builtin.helpers', 'Helpers', 'Your agents and what each is doing', 'left', 30),
+  builtin('builtin.helpers', 'Helpers', 'Your helpers and what each is doing', 'left', 30),
   builtin('builtin.jobs', 'Running jobs', 'Jobs running now and where they are', 'right', 40),
   builtin('builtin.gates', 'Waiting on you', 'Decisions waiting on you; pulses when one arrives', 'right', 50),
   builtin('builtin.spend', 'Today', 'What today cost so far', 'right', 60),

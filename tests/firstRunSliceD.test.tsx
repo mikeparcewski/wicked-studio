@@ -1,16 +1,17 @@
+import { useNewWorkSeatsStore } from '../src/store/newWorkSeats.js';
 /**
  * first-run (2026-11-08), slice D: the New document form a zero-helper user meets (C7), New job's first screen
  * (C6: no "Step 1 of 5" before a chat; P6: no coming-soon cards by default, a document card's own drawing) and the
  * sidebar (P1: one current marker).
  */
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RosterSeat } from '../src/api/types.js';
 
 let ROSTER: RosterSeat[] = [];
 vi.mock('../src/hooks/useRoster.js', () => ({ useRoster: () => ROSTER }));
 vi.mock('../src/api/client.js', () => ({
-  api: new Proxy({}, { get: () => () => Promise.resolve({ members: [], repos: [] }) }),
+  api: new Proxy({ getSettings: () => Promise.resolve({ settings: {} }) }, { get: (target, key) => key === 'getSettings' ? target.getSettings : () => Promise.resolve({ members: [], repos: [] }) }),
   apiFetch: () => Promise.resolve({}),
 }));
 
@@ -18,6 +19,11 @@ const { NewDocument } = await import('../src/components/everything/NewDocument.j
 const { applyFilters, catalogFromWire, NO_FILTERS, searchCatalog } = await import('../src/board/workflowCatalog.js');
 import fixture from './fixtures/workflowCatalog.json';
 const { artShapeOf } = await import('../src/components/launch/WorkflowArt.js');
+
+beforeEach(async () => {
+  useNewWorkSeatsStore.setState({ seats: null, state: 'idle', loaded: false, saving: false, error: null });
+  await useNewWorkSeatsStore.getState().load();
+});
 
 afterEach(() => { cleanup(); localStorage.clear(); });
 

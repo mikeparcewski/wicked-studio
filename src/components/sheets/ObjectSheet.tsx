@@ -236,7 +236,7 @@ function SeatFacts({ seat, navigate }: { seat: RosterSeat | undefined; navigate:
         <button type="button" data-testid="sheet-seat-signin" onClick={() => setSignIn(true)} className="wk-btn wk-btn--secondary">Sign in</button>
       )}
       {/* DES-seats-page §2.2: the same modal inline, plus a door to the agent on the Agents page. */}
-      <p className="wk-sheet-hint"><a className="wk-link" href={agentFixPath(seat.key)} data-testid="sheet-seat-agents" onClick={(e) => { if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); closeSheet(); navigate(agentFixPath(seat.key)); }}>Open in Agents</a></p>
+      <p className="wk-sheet-hint"><a className="wk-link" href={agentFixPath(seat.key)} data-testid="sheet-seat-agents" onClick={(e) => { if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); closeSheet(); navigate(agentFixPath(seat.key)); }}>Open in Helpers</a></p>
       {signIn && <AgentModal agentKey={seat.key} onClose={() => setSignIn(false)} />}
     </div>
   );
@@ -608,7 +608,7 @@ export function SignIns({ roster, navigate }: { roster: RosterSeat[] | null; nav
         <li key={s.key} data-testid="sheet-signin-row" data-seat={s.key} className="wk-sheet-line">
           <b>{s.display_name || s.key}</b> — {helperStanding(s)}
           {seatStandingWord(s).kind === 'ineligible' && <TechDetails text={seatStandingWord(s).detail ?? ''} />}
-          {signInLapsed(s) && <> <button type="button" data-testid="sheet-signin-action" data-seat={s.key} onClick={() => setSignIn(s)} className="wk-btn wk-btn--secondary">Sign in</button>{' '}<a className="wk-link" href={agentFixPath(s.key)} data-testid="sheet-signin-agents" onClick={(e) => { if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); closeSheet(); navigate(agentFixPath(s.key)); }}>Open in Agents</a></>}
+          {signInLapsed(s) && <> <button type="button" data-testid="sheet-signin-action" data-seat={s.key} onClick={() => setSignIn(s)} className="wk-btn wk-btn--secondary">Sign in</button>{' '}<a className="wk-link" href={agentFixPath(s.key)} data-testid="sheet-signin-agents" onClick={(e) => { if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); closeSheet(); navigate(agentFixPath(s.key)); }}>Open in Helpers</a></>}
         </li>
       ))}
       {signIn !== null && <AgentModal agentKey={signIn.key} onClose={() => setSignIn(null)} />}

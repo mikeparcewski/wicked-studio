@@ -34,9 +34,9 @@ export interface AnalyzeInput {
 
 const ASKS: Record<AnalyzeKind, { title: (n: number) => string; questions: readonly string[] }> = {
   agents: {
-    title: (n) => `Analyze ${n === 1 ? 'one agent' : `${n} agents`}: performance, reliability, cost and fit`,
+    title: (n) => `Analyze ${n === 1 ? 'one helper' : `${n} helpers`}: performance, reliability, cost and fit`,
     questions: [
-      'How does each agent perform: steps taken, checks passed first time, rework?',
+      'How does each helper perform: steps taken, checks passed first time, rework?',
       'How reliable is each one: times it sat out and why (signed out, quota, timeouts), failed steps, governance fallbacks?',
       'What does each cost, in total and per step?',
       'What are its typical failure modes, quoted from the failed steps?',
@@ -56,7 +56,7 @@ const ASKS: Record<AnalyzeKind, { title: (n: number) => string; questions: reado
   jobs: {
     title: (n) => `Analyze ${n === 1 ? 'one job' : `${n} jobs`}: what differed and why`,
     questions: [
-      'What differed between these jobs: workflow, agents, steps, gates, time and cost?',
+      'What differed between these jobs: workflow, helpers, steps, gates, time and cost?',
       'Where did their paths part, step by step?',
       'Why did the one that succeeded succeed, and why did the others not?',
       'What would have made the failing ones succeed?',
@@ -66,7 +66,7 @@ const ASKS: Record<AnalyzeKind, { title: (n: number) => string; questions: reado
     title: (n) => `Analyze ${n === 1 ? 'one project' : `${n} projects`}: health, spend and risk`,
     questions: [
       'How healthy is each project: jobs started, finished, failed, waiting on a person?',
-      'Where is its spend going, by agent and by workflow?',
+      'Where is its spend going, by helper and by workflow?',
       'What are its risks: open failures, jobs that ran without governance checks, stale or missing code graphs?',
       'What should be fixed first in each, and why?',
     ],
@@ -92,7 +92,7 @@ export function analysisIntent(input: AnalyzeInput): string {
   const links = evidenceLinks(input.kind, input.items, input.days, input.api, input.project);
   return [
     `${a.title(input.items.length)}.`,
-    `Selected ${input.kind}: ${ids}.`,
+    `Selected ${input.kind === 'agents' ? 'helpers' : input.kind}: ${ids}.`,
     `Window: the last ${input.days} days${input.project !== null ? `, project ${input.projectLabel ?? input.project} (${input.project}) only` : ''}${input.filters ? `, ${input.filters} only` : ''}.`,
     'Answer these questions, one section each:',
     ...a.questions.map((q, i) => `${i + 1}. ${q}`),
@@ -123,5 +123,5 @@ export function analysisLaunchBody(input: AnalyzeInput, edited?: string): Launch
 
 /** An earlier analysis job: a run of the analysis workflow whose words start the way ours do. */
 export function isAnalysisRun(problem: string | null | undefined, workflow: string | null): boolean {
-  return workflow === ANALYZE_WORKFLOW && /^Analyze (one|\d+) (agent|workflow|job|project)s?\b/.test((problem ?? '').trim());
+  return workflow === ANALYZE_WORKFLOW && /^Analyze (one|\d+) (agent|helper|workflow|job|project)s?\b/.test((problem ?? '').trim());
 }

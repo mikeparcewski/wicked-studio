@@ -1,3 +1,4 @@
+import { useNewWorkSeatsStore } from '../src/store/newWorkSeats.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -23,7 +24,7 @@ const apiFetch = vi.fn();
 const getRun = vi.fn<(...a: unknown[]) => Promise<unknown>>(() => Promise.reject(new Error('no run snapshot in this rig')));
 
 vi.mock('../src/api/client.js', () => ({
-  api: {
+  api: { getSettings: () => Promise.resolve({ settings: {} }),
     openChat: (...a: unknown[]) => openChat(...a),
     sendChatMessage: (...a: unknown[]) => sendChatMessage(...a),
     getRoster: (...a: unknown[]) => getRoster(...a),
@@ -51,6 +52,7 @@ const ROSTER = [
 const lastBody = (): ChatOpenBody => openChat.mock.calls.at(-1)![0] as ChatOpenBody;
 
 beforeEach(() => {
+  useNewWorkSeatsStore.setState({ seats: null, state: 'idle', loaded: false, saving: false, error: null });
   cleanup();
   vi.clearAllMocks();
   sessionStorage.clear();

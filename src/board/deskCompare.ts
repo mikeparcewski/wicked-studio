@@ -98,7 +98,7 @@ export function compareJobs(runs: readonly SessionView[], title: (v: SessionView
     { label: 'Time', better: 'low', value: (i) => durationMin(runs[i]!), text: (i) => mins(durationMin(runs[i]!)) },
     { label: 'Steps done', better: 'high', value: (i) => (runs[i]!.units ?? []).filter((u) => u.status === 'done').length, text: (i) => `${(runs[i]!.units ?? []).filter((u) => u.status === 'done').length} of ${(runs[i]!.units ?? []).length}` },
     { label: 'Steps refused', better: 'low', value: (i) => (runs[i]!.units ?? []).filter((u) => u.status === 'rejected').length, text: (i) => String((runs[i]!.units ?? []).filter((u) => u.status === 'rejected').length) },
-    { label: 'Agents', better: null, value: () => null, text: (i) => agentsOf(runs[i]!).map(agentName).join(', ') || '—' },
+    { label: 'Helpers', better: null, value: () => null, text: (i) => agentsOf(runs[i]!).map(agentName).join(', ') || '—' },
     { label: 'Spend', better: 'low', value: (i) => (partial(runs[i]!.session.id) ? null : cost(runs[i]!.session.id) ?? null),
       text: (i) => { const id = runs[i]!.session.id; const c = cost(id); return c === undefined ? 'Reading…' : c !== null && partial(id) ? `at least ${money(c)}` : money(c); } },
   ];
@@ -115,7 +115,7 @@ export function compareJobs(runs: readonly SessionView[], title: (v: SessionView
       differ.push(`${title(ok[0]!)} finished; ${title(b)} failed${at !== undefined ? ` at step ${at.ord}${typeof at.assigned_cli === 'string' ? ` (${agentName(at.assigned_cli)})` : ''}` : ''}.`);
     }
     const ag = runs.map((v) => agentsOf(v).join(','));
-    if (new Set(ag).size > 1) differ.push('Different agents worked on them.');
+    if (new Set(ag).size > 1) differ.push('Different helpers worked on them.');
   }
   return { rows: metrics.map((m) => m.label), cards, differ, small: true };
 }
@@ -156,7 +156,7 @@ export function insightPrompt(kind: string, view: CompareView, days: number, lin
   const rule = `|---|${view.cards.map(() => '---').join('|')}|`;
   const body = view.rows.map((r, k) => `| ${r} | ${view.cards.map((c) => c.cells[k]!.text).join(' | ')} |`);
   return [
-    `Compare these ${kind} from my studio over the last ${days} days and tell me where they REALLY differ.`,
+    `Compare these ${kind === 'agents' ? 'helpers' : kind} from my studio over the last ${days} days and tell me where they REALLY differ.`,
     ...(scope !== null ? [`The numbers below are for ${scope} only; read the evidence for that scope, not for all of studio.`] : []),
     '',
     head, rule, ...body,

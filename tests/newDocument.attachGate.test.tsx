@@ -1,3 +1,4 @@
+import { useNewWorkSeatsStore } from '../src/store/newWorkSeats.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ProjectMember, RepoEntry } from '../src/api/types.js';
@@ -14,7 +15,7 @@ const attachProjectMember = vi.fn();
 const createDoc = vi.fn();
 
 vi.mock('../src/api/client.js', () => ({
-  api: {
+  api: { getSettings: () => Promise.resolve({ settings: {} }),
     listProjectMembers: (...a: unknown[]) => listProjectMembers(...a),
     listRepos: (...a: unknown[]) => listRepos(...a),
     attachProjectMember: (...a: unknown[]) => attachProjectMember(...a),
@@ -50,6 +51,7 @@ function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
 }
 
 beforeEach(() => {
+  useNewWorkSeatsStore.setState({ seats: null, state: 'idle', loaded: false, saving: false, error: null });
   for (const f of [listProjectMembers, listRepos, attachProjectMember, createDoc]) f.mockReset();
   listProjectMembers.mockResolvedValue({ members: [member('p1', 'r-a')] });
   listRepos.mockResolvedValue({ repos: [repo('r-a'), repo('r-b')] });

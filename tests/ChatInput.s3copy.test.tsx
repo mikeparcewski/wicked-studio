@@ -1,3 +1,4 @@
+import { useNewWorkSeatsStore } from '../src/store/newWorkSeats.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -9,7 +10,9 @@ import { clearRetryPrefill, setRetryPrefill } from '../src/store/retryPrefill.js
 import { pickLaunchWorkflow } from './launchWorkflowPick.js';
 
 beforeEach(() => {
+  useNewWorkSeatsStore.setState({ seats: null, state: 'idle', loaded: false, saving: false, error: null });
   vi.restoreAllMocks();
+  vi.spyOn(client.api, 'getSettings').mockResolvedValue({ settings: {} } as never);
   vi.spyOn(client.api, 'getRoster').mockResolvedValue({
     roster: [
       { key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true },
@@ -36,14 +39,14 @@ beforeEach(() => {
 
 describe('ChatInput default-layer copy', () => {
   it('names an empty helper selection', async () => {
-    localStorage.setItem('wicked_default_clis', JSON.stringify([]));
+    vi.mocked(client.api.getSettings).mockResolvedValue({ settings: { newWorkSeats: [] } } as never);
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
     expect(await screen.findByText('No helpers picked')).toBeInTheDocument();
     expect(screen.queryByText(/^CLIs:/)).not.toBeInTheDocument();
   });
 
   it('names helpers in roster order and offers only coding helpers', async () => {
-    localStorage.setItem('wicked_default_clis', JSON.stringify(['codex', 'claude']));
+    vi.mocked(client.api.getSettings).mockResolvedValue({ settings: { newWorkSeats: ['codex', 'claude'] } } as never);
     const user = userEvent.setup();
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
     const pill = await screen.findByText('Helpers: Claude Code, Codex');

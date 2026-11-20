@@ -208,7 +208,7 @@ export function systemSummary(a: SystemAttention): string {
     return a.level === 'red' || /\bdown\b/.test(said) ? 'a service is down' : 'a service needs a look';
   }
   if (a.panel === 'clis') {
-    if (a.id === ONE_REVIEWER_ID) return 'sign in a second agent';
+    if (a.id === ONE_REVIEWER_ID) return 'sign in a second helper';
     if (/bench|quota|429|rate.?limit/.test(said)) return 'a helper is resting';
     if (/sign/.test(said)) return 'a helper is signed out';
     return 'a helper needs a look';

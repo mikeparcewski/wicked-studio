@@ -43,7 +43,7 @@ describe('Generate insights rides the existing Ask path', () => {
     vi.spyOn(mod, 'defaultSelection').mockReturnValue([]);
     const { result } = renderHook(() => useDeskInsights('k2'));
     await act(async () => { await generateInsights('k2', 'x'); });
-    expect(result.current.phase).toBe('error');
+    expect(result.current).toEqual({ phase: 'error', error: 'No helper is signed in and able to chat, so nothing can answer.' });
     expect(calls.send).toEqual([]);
   });
 

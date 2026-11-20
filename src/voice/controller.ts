@@ -94,10 +94,10 @@ async function openVoiceChat(): Promise<string> {
   if (chatId !== null) return chatId;
   chatOpening ??= (async () => {
     const clis = await chatSeats();
-    if (clis.length === 0) throw new Error('No agent is signed in and able to chat, so nothing can answer.');
+    if (clis.length === 0) throw new Error('No helper is signed in and able to chat, so nothing can answer.');
     const id = crypto.randomUUID();
     const opened = await api.openChat({ chatId: id, scopeKind: 'system', clis });
-    if (!opened.seats.some((s) => s.ok)) throw new Error('No agent came up to answer.');
+    if (!opened.seats.some((s) => s.ok)) throw new Error('No helper came up to answer.');
     chatId = id;
     return id;
   })().finally(() => { chatOpening = null; });
@@ -117,7 +117,7 @@ async function askSystemChat(question: string): Promise<string> {
       if (reply === undefined || reply.pending) return;
       clearTimeout(timer);
       unsub();
-      if (reply.ok === false) reject(new Error(reply.text.trim() !== '' ? reply.text : 'The agent could not answer.'));
+      if (reply.ok === false) reject(new Error(reply.text.trim() !== '' ? reply.text : 'The helper could not answer.'));
       else resolve(reply.text);
     };
     const unsub = useAskThreadStore.subscribe(read);

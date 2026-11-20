@@ -139,7 +139,7 @@ export const BUILD_LINKS: readonly { id: string; label: string; path: string; te
   { id: 'plugins', label: PAGE_NAMES.plugins, path: '/plugins', testId: 'build-link-plugins', hint: 'Editor plugins, and making one' },
   { id: 'workflows', label: PAGE_NAMES.workflows, path: '/workflows', testId: 'build-link-workflows', hint: 'The steps a job goes through' },
   { id: 'sources', label: PAGE_NAMES.sources, path: SOURCES_PATH, testId: 'build-link-sources', hint: 'The databases, APIs, files and trackers your work reads from, and what agents may see or query' },
-  { id: 'settings', label: PAGE_NAMES.system, path: '/system', testId: 'build-link-settings', hint: 'Agents, notifications and the theme for this computer' },
+  { id: 'settings', label: PAGE_NAMES.system, path: '/system', testId: 'build-link-settings', hint: 'Helpers, notifications and the theme for this computer' },
 ];
 
 export const BUILD_ITEM: NavItem = {

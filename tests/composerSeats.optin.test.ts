@@ -37,4 +37,10 @@ describe('composer seats: opt-in', () => {
     expect(defaultOn('opencode')).toBe(true);
     expect([...defaultDocSeats(roster, null).selected]).toEqual(['claude', 'opencode']);
   });
+
+  it('an explicit server pool overrides the default rule, including an empty pool and an opt-in seat', () => {
+    const roster = ['claude', 'opencode'].map((key) => ({ key, display_name: key, binary: key, enabled_for_council: true }) as RosterSeat);
+    expect([...defaultDocSeats(roster, []).selected]).toEqual([]);
+    expect([...defaultDocSeats(roster, ['opencode']).selected]).toEqual(['opencode']);
+  });
 });

@@ -190,7 +190,7 @@ with sync_playwright() as p:
           and [r["status"] for r in rows][:3] == [None, "Ready, except repository jobs", "Ready"] and (rows[3]["status"] or "").startswith("Out of quota")
           and rows[4]["status"] == "Not recommended"
           and [r["fix"] for r in rows] == ["Sign in", None, None, None, None] and sentence == "1 of 5 are ready to work."
-          and all(r["qe"] is None for r in rows) and "which agents can run quality checks" in page.get_by_test_id("agents-foot").text_content() and "1 / 5" in summary and "1 more with limits · 1 held back for now · 1 not recommended · 1 signed out" in summary and "1 on a sandbox floor only, 1 on a repository boundary only" in summary and "plus 4 notes" in summary, rows=rows, summary=summary, sentence=sentence)
+          and all(r["qe"] is None for r in rows) and "which helpers can run quality checks" in page.get_by_test_id("agents-foot").text_content() and "1 / 5" in summary and "1 more with limits · 1 held back for now · 1 not recommended · 1 signed out" in summary and "1 on a sandbox floor only, 1 on a repository boundary only" in summary and "plus 4 notes" in summary, rows=rows, summary=summary, sentence=sentence)
 
     # ── 3. the modals ────────────────────────────────────────────────────────────
     page.locator('[data-testid="agents-fix"][data-agent="claude"]').click()

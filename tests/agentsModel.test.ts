@@ -238,9 +238,9 @@ describe('one row per agent, in plain words (§3.1)', () => {
     };
     expect(copyFor(true)).toContain('Nothing to do.');
     const none = copyFor(false);
-    expect(none).toContain('Right now no agent can run them.');
+    expect(none).toContain('Right now no helper can run them.');
     expect(none).not.toContain('Nothing to do');
-    expect(none).toContain('Sign in an agent that can run them.');
+    expect(none).toContain('Sign in a helper that can run them.');
   });
 
   it('qe_blocked and no_qe come from crew’s codes, not a studio rule', () => {

@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from 'react';
+import { useNewWorkSeats } from '../../store/newWorkSeats.js';
 import { Check } from 'lucide-react';
 import { setPickedForNewWork } from './useAgentRows.js';
 import { goodEnough, setupAgents, setupMove, setupSteps, withRowRuntime } from '../../board/firstUse.js';
@@ -19,7 +20,7 @@ function names(rows: readonly AgentRow[]): string {
   return n.length <= 1 ? (n[0] ?? '') : `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`;
 }
 
-/** Turn one agent on for new work in the stored defaults (the composer's own key, until S2 moves it). */
+/** Turn one agent on for new work in crew's pool. */
 function pickForNewWork(rows: readonly AgentRow[], key: string): void {
   setPickedForNewWork(rows, key, true);
 }
@@ -42,6 +43,7 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
 }): React.ReactElement {
   const titleId = useId();
   const f = useFirstUseReads();
+  const newWorkSeats = useNewWorkSeats();
   const [creating, setCreating] = useState(false);
 
   const checks = withRowRuntime(f.checks, rows);
@@ -49,7 +51,7 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
   const steps = setupSteps(facts);
   const counted = setupAgents(rows);
   const helperReadingKnown = helpersKnown && (steps.agentsDone || rows.every((r) => authOf(r.seat) !== 'unknown'));
-  const ready = helperReadingKnown && f.state === 'ok' && f.counted && goodEnough(facts);
+  const ready = newWorkSeats.loaded && !newWorkSeats.saving && helperReadingKnown && f.state === 'ok' && f.counted && goodEnough(facts);
   // Good enough, reached here: persist it once (§5.1); from then on studio opens on the Desk.
   // A failed write is not retried on its own (no loop): the steps say so, and the next app load tries again.
   useEffect(() => {
@@ -85,6 +87,7 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
                     return (
                       <button key={r.key} type="button" data-testid="agents-setup-move" data-agent={r.key} data-kind={m.kind}
                         className={`wk-btn ${m.kind === 'sign-in' ? 'wk-btn--primary' : 'wk-btn--secondary'}`}
+                        disabled={m.kind === 'use' && (!newWorkSeats.loaded || newWorkSeats.saving)}
                         onClick={() => (m.kind === 'use' ? pickForNewWork(rows, r.key) : open(r.key))}>
                         {m.label}
                       </button>
@@ -135,6 +138,9 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
             </div>
           </Step>
         </ol>
+        {newWorkSeats.error !== null && <p role="alert" className="wk-agents-sub">{newWorkSeats.error}{' '}
+          {!newWorkSeats.loaded && <button type="button" className="wk-btn wk-btn--link" onClick={() => void newWorkSeats.load()}>Try again</button>}
+        </p>}
         <div className="wk-agents-setup-foot">
           {ready
             ? <button type="button" data-testid="agents-setup-desk" className="wk-btn wk-btn--primary" onClick={() => navigate('/')}>You’re ready: go to the Desk</button>

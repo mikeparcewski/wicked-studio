@@ -1,3 +1,4 @@
+import { useNewWorkSeatsStore } from '../src/store/newWorkSeats.js';
 /**
  * Roster rows carry home paths (crew keeps them raw: studio posts the rows back as `POST /runs` clisJson, so crew
  * can't scrub them). Studio masks them on RENDER only: the Helpers page, every helper's dialog with every disclosure
@@ -9,7 +10,7 @@ import type { RosterSeat } from '../src/api/types.js';
 
 const getRoster = vi.fn();
 vi.mock('../src/api/client.js', () => ({
-  api: { getRoster: (refresh?: string) => getRoster(refresh), getSeatRecord: () => Promise.resolve({ days: 7, since: 0, until: 0, runsRead: 0, truncated: false, seats: [] }) },
+  api: { getSettings: () => Promise.resolve({ settings: {} }), getRoster: (refresh?: string) => getRoster(refresh), getSeatRecord: () => Promise.resolve({ days: 7, since: 0, until: 0, runsRead: 0, truncated: false, seats: [] }) },
   apiFetch: () => Promise.resolve({}),
 }));
 vi.mock('../src/api/diagnostics.js', () => ({
@@ -57,6 +58,7 @@ function scan(root: HTMLElement): string[] {
 const openAll = (): void => { for (const d of document.querySelectorAll('details')) d.setAttribute('open', ''); };
 
 beforeEach(() => {
+  useNewWorkSeatsStore.setState({ seats: null, state: 'idle', loaded: false, saving: false, error: null });
   resetAgentsReads();
   clearCachedRoster();
   getRoster.mockReset().mockResolvedValue({ roster: structuredClone(ROSTER) });

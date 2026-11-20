@@ -182,7 +182,7 @@ describe('chores for whoever runs studio', () => {
     ] as unknown as RosterSeat[];
     const chores = lapsedSeatChores(roster);
     expect(chores.map((c) => c.seat)).toEqual(['pi', 'cx']);
-    expect(chores[0]!.title).toBe('An AI agent (Pi) needs signing in');
+    expect(chores[0]!.title).toBe('A helper (Pi) needs signing in');
     expect(chores[0]!.action).toEqual({ label: 'Sign in', path: `/agents?fix=${chores[0]!.seat}` });
     expect(chores[0]!.rosterSeat).toBe(roster[1]);
     // A first-run Desk leads with the sign-in only when NO seat is usable; an unread roster never does.
@@ -221,4 +221,8 @@ describe('deskReadState', () => {
   it('a good read: the verdict', () => {
     expect(deskReadState(true, null)).toBe('known');
   });
+});
+
+it('names the coding CLI category in the settings navigation hint', () => {
+  expect(BUILD_LINKS.find((link) => link.id === 'settings')?.hint).toBe('Helpers, notifications and the theme for this computer');
 });

@@ -1,3 +1,4 @@
+import { useNewWorkSeatsStore } from '../src/store/newWorkSeats.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import type { RosterSeat } from '../src/api/types.js';
@@ -48,6 +49,7 @@ const ROSTER: RosterSeat[] = [
 ];
 
 beforeEach(() => {
+  useNewWorkSeatsStore.setState({ seats: null, state: 'idle', loaded: false, saving: false, error: null });
   resetAgentsReads();
   clearCachedRoster();
   // Each read answers a fresh list, as a real fetch does.
@@ -65,6 +67,7 @@ describe('one count for "ready"', () => {
 
     render(<DeskV2 runs={[]} runsLoaded needRows={[]} now={Date.now()} navigate={vi.fn()} search="?tab=work" projectId="studio" />);
     const tile = await screen.findByTestId('desk-block-agents');
+    expect(tile).toHaveTextContent('Helpers ready');
     await waitFor(() => expect(tile.querySelector('.wk-stat-value')).toHaveTextContent('2 of 5'));
     expect(tile.querySelector('.wk-stat-note')).toHaveTextContent('1 more with limits · 1 can’t tell · 1 signed out');
     cleanup();
@@ -88,7 +91,7 @@ describe('the Desk tile in every reading state, and with reviewer-only seats', (
   it('a cold failed read: says it could not read them, no number', async () => {
     getRoster.mockRejectedValue(new Error('boom'));
     desk();
-    await waitFor(() => expect(tile().querySelector('.wk-stat-note')).toHaveTextContent('couldn’t read the agents'));
+    await waitFor(() => expect(tile().querySelector('.wk-stat-note')).toHaveTextContent('couldn’t read the helpers'));
     expect(tile().querySelector('.wk-stat-value')).toHaveTextContent('—');
   });
 

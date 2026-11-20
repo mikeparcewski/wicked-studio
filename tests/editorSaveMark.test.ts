@@ -30,6 +30,12 @@ async function bootDeck(): Promise<void> {
 beforeAll(bootDeck);
 
 describe('editor save markers', () => {
+  it('marks the deck Notes toggle to reveal the save-on-blur field', () => {
+    const toggle = document.querySelector('#notes-toggle');
+    expect(toggle).toBeInstanceOf(HTMLButtonElement);
+    expect(toggle).toHaveAttribute('data-wicked-reveal');
+  });
+
   it('marks the deck speaker-notes textarea for the save-on-blur conformance path', () => {
     const notes = document.querySelector('[data-testid="deck-notes"]');
     expect(notes).toBeInstanceOf(HTMLTextAreaElement);

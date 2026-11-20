@@ -173,7 +173,7 @@ with sync_playwright() as p:
     }""")
     page.screenshot(path=str(SHOTS / "desk-signin-firstrun.png"))
     check("first-run", lead["setup"] == "agents"
-          and "Set up your helpers" in (lead["text"] or "") and lead["act"] == "Set up agents", **lead)
+          and "Set up your helpers" in (lead["text"] or "") and lead["act"] == "Set up helpers", **lead)
 
     check("no-errors", not errors, errors=errors[:5])
     browser.close()

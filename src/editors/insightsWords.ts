@@ -127,7 +127,7 @@ const REGRESSION: Record<string, {
     title: (w) => `Runs are retrying more${w}`,
     say: (v, b) => `A typical run now needs ${v} retries, up from ${b}.`,
     effect: 'Fewer runs redo work.',
-    changeMind: 'If a single flaky agent caused the retries, fix that agent rather than the workflow.',
+    changeMind: 'If a single flaky helper caused the retries, fix that helper rather than the workflow.',
   },
 };
 
@@ -170,11 +170,11 @@ export function plainRecommendation(rec: InsightsRecommendation, metrics: readon
     }
   } else if (c.startsWith('setting-judge-')) {
     const where = after(line, / runs on (.+)\.$/u);
-    title = 'Sign in a second agent, so someone independent can review';
+    title = 'Sign in a second helper, so someone independent can review';
     say = `In ${runs(n)}${where !== null ? ` on ${where}` : ''} a person had to stand in for the reviewer.`;
     if (!interpreted) {
-      effect = 'Reviews come from a different agent, so nobody has to stand in.';
-      changeMind = 'If a second agent is already signed in but still sits out, the cause is its sign-in or quota, not the number of agents.';
+      effect = 'Reviews come from a different helper, so nobody has to stand in.';
+      changeMind = 'If a second helper is already signed in but still sits out, the cause is its sign-in or quota, not the number of helpers.';
     }
     why.push(`${runs(n)} stopped because there was no independent reviewer, and a person overrode the stop each time.`);
   } else if (c.startsWith('issue-floor-')) {
@@ -195,14 +195,14 @@ export function plainRecommendation(rec: InsightsRecommendation, metrics: readon
     if (!interpreted) effect = `Fewer runs stop for ${plain}, so fewer wait for a person.`;
     why.push(`${runs(n)} stopped for ${plain}, and a person overrode it each time.`);
   } else if (c.startsWith('setting-bench-')) {
-    const cli = after(line, /^(\S+) was benched/u) ?? 'An agent';
+    const cli = after(line, /^(\S+) was benched/u) ?? 'A helper';
     const reason = after(line, /benched \(([^)]+)\)/u)?.replace(/ /g, '_') ?? '';
     const r = reasonWords(reason);
     title = r === 'signed out' ? `Sign ${cli} back in` : r === 'out of quota' ? `Check ${cli}’s quota` : `Check why ${cli} keeps sitting out`;
     say = `${cli} sat out ${runs(n)}: ${r}.`;
     if (!interpreted) {
       effect = `${cli} takes work again, so more runs get an independent reviewer.`;
-      changeMind = `If ${cli} sits out on purpose, remove it from the agents list so runs stop trying it.`;
+      changeMind = `If ${cli} sits out on purpose, remove it from the helpers list so runs stop trying it.`;
     }
   } else if (c.startsWith('issue-failure-')) {
     const where = after(line, / runs on (.+?) failed/u);

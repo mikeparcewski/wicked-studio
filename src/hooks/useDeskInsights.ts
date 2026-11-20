@@ -65,19 +65,19 @@ export async function generateInsights(key: string, prompt: string): Promise<voi
   try {
     const clis = await seats();
     if (done) return;
-    if (clis.length === 0) throw new Error('No agent is signed in and able to chat, so nothing can answer.');
+    if (clis.length === 0) throw new Error('No helper is signed in and able to chat, so nothing can answer.');
     const body: ChatOpenBody = { chatId, scopeKind: 'system', clis };
     opening = true;
     const opened = await api.openChat(body);
     if (done) { void api.closeChat(chatId).catch(() => undefined); return; } // gave up while it opened: never send
-    if (!opened.seats.some((s) => s.ok)) throw new Error(`No agent came up to answer (${opened.seats.map((s) => `${s.cliKey}: ${s.error ?? 'failed'}`).join('; ') || 'none'}).`);
+    if (!opened.seats.some((s) => s.ok)) throw new Error(`No helper came up to answer (${opened.seats.map((s) => `${s.cliKey}: ${s.error ?? 'failed'}`).join('; ') || 'none'}).`);
     const read = (): void => {
       if (done) return;
       const turns = useAskThreadStore.getState().turns[chatId] ?? [];
       const reply = [...turns].reverse().find((t) => t.who !== 'you');
       if (reply === undefined) return;
       if (reply.pending) { if (generation.get(key) === gen) set(key, { phase: 'loading', text: reply.text, chatId }); }
-      else if (reply.ok === false) finish({ phase: 'error', error: reply.text.trim() !== '' ? reply.text : 'The agent could not answer.' });
+      else if (reply.ok === false) finish({ phase: 'error', error: reply.text.trim() !== '' ? reply.text : 'The helper could not answer.' });
       else finish({ phase: 'done', text: reply.text, at: Date.now() });
     };
     unsub = useAskThreadStore.subscribe(read);

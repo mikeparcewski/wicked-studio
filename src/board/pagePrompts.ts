@@ -213,7 +213,7 @@ export function pagePrompts(input: PagePromptInputs): PagePrompt[] {
     case 'report':
       out = [
         { label: 'What changed most this week?', text: 'Of the numbers on this report, what changed most against the period before, and why?' },
-        { label: 'Which jobs cost the most?', text: 'Which jobs and agents cost the most in this period, and was it worth it?' },
+        { label: 'Which jobs cost the most?', text: 'Which jobs and helpers cost the most in this period, and was it worth it?' },
         { label: 'Why do jobs fail first time?', text: 'Why do steps fail their first check in this period? Name the commonest reasons.' },
       ];
       break;

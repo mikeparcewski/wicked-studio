@@ -26,7 +26,7 @@ import { Segmented, Skeleton } from '../ui/index.js';
  * existing `learn` workflow through the wizard's launch body) above "Past analyses".
  */
 const KINDS: readonly { value: AnalyzeKind; label: string }[] = [
-  { value: 'agents', label: 'Agents' }, { value: 'workflows', label: 'Workflows' }, { value: 'jobs', label: 'Jobs' }, { value: 'projects', label: 'Projects' },
+  { value: 'agents', label: 'Helpers' }, { value: 'workflows', label: 'Workflows' }, { value: 'jobs', label: 'Jobs' }, { value: 'projects', label: 'Projects' },
 ];
 const MAX_CARDS = 4;
 
@@ -147,7 +147,7 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
   // A new window, scope or filter starts the analysis over: an edited intent or a pending launch
   // belongs to the comparison it was made for.
   useEffect(() => { setEditing(null); launchGen.current += 1; setLaunch({ phase: 'idle' }); }, [days, project, filters, filterAgent, filterWorkflow]);
-  const runInsights = (): void => { if (!runsShown) return; void generateInsights(insightKey, insightPrompt(kind, view, days, evidenceLinks(kind, items, days, apiBase(), project), scopeWords) + (kind === 'agents' && agentsTruncated ? `\n${PARTIAL_RECORD_NOTE}. The agent comparison is partial.` : '')); };
+  const runInsights = (): void => { if (!runsShown) return; void generateInsights(insightKey, insightPrompt(kind, view, days, evidenceLinks(kind, items, days, apiBase(), project), scopeWords) + (kind === 'agents' && agentsTruncated ? `\n${PARTIAL_RECORD_NOTE}. The helper comparison is partial.` : '')); };
   const agentsUnread = kind === 'agents' && agentsRead !== 'done';
   const agentsUnavailable = kind === 'agents' && filterWorkflow !== null;
   const suggestions = [
@@ -183,7 +183,7 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
       </p>
       <div className="wk-und-bar">
         <Segmented label="Compare what" data-testid="desk-pick-kind" value={kind} options={KINDS} onChange={(k) => { setKind(k); setEditing(null); launchGen.current += 1; setLaunch({ phase: 'idle' }); }} />
-        <div className="wk-und-chips" role="group" aria-label={`Picked ${kind}`}>
+        <div className="wk-und-chips" role="group" aria-label={`Picked ${kind === 'agents' ? 'helpers' : kind}`}>
           {items.map((it) => {
             const o = options.find((x) => x.id === it.id);
             return (
@@ -238,13 +238,13 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
           ) : agentsUnread ? (
             <section className="wk-card wk-und-empty" data-testid="desk-und-agents-unread" aria-busy={agentsRead === 'loading'}>
               {agentsRead === 'loading' ? <Skeleton rows={3} variant="line" />
-                : <p className="wk-viz-state" role="alert">Couldn’t read the agent record, so agents can’t be compared right now. Workflows, jobs and projects still can.</p>}
+                : <p className="wk-viz-state" role="alert">Couldn’t read the helper record, so helpers can’t be compared right now. Workflows, jobs and projects still can.</p>}
             </section>
           ) : view.cards.length === 0 ? (
             <section className="wk-card wk-und-empty" data-testid="desk-und-empty">
               <span aria-hidden className="wk-und-empty-mark"><Columns3 size={18} /></span>
               <h3 className="wk-desk2-title">Nothing picked yet</h3>
-              <p className="wk-viz-note">{options.length === 0 ? `No ${kind} in the last ${days} days. Try a longer window, or one of these:` : 'Start from one of these, or use Add above:'}</p>
+              <p className="wk-viz-note">{options.length === 0 ? `No ${kind === 'agents' ? 'helpers' : kind} in the last ${days} days. Try a longer window, or one of these:` : 'Start from one of these, or use Add above:'}</p>
               <ul className="wk-und-suggest">
                 {suggestions.map((g) => <li key={g.id}><button type="button" className="wk-btn wk-btn--secondary" data-testid="desk-und-suggest" data-id={g.id} onClick={g.go}>{g.label}</button></li>)}
               </ul>
@@ -285,13 +285,13 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
               </header>
               {insight.phase === 'idle' && (
                 <div className="wk-und-gen">
-                  <p className="wk-viz-note">An agent reads the numbers above (and the records behind them) and says what really differs, why, and what to do. It answers here, in a minute or two; nothing is changed.</p>
+                  <p className="wk-viz-note">A helper reads the numbers above (and the records behind them) and says what really differs, why, and what to do. It answers here, in a minute or two; nothing is changed.</p>
                   <button type="button" data-testid="desk-insights-generate" className="wk-btn wk-btn--primary" onClick={runInsights}><Sparkles size={14} aria-hidden />Generate insights</button>
                 </div>
               )}
               {insight.phase === 'loading' && (
                 <div className="wk-und-gen" data-testid="desk-insights-loading">
-                  <p className="wk-viz-meta" role="status">Asking an agent… this usually takes a minute or two.</p>
+                  <p className="wk-viz-meta" role="status">Asking a helper… this usually takes a minute or two.</p>
                   {insight.text.trim() !== '' && <div className="wk-und-insight"><Markdown>{insight.text}</Markdown></div>}
                 </div>
               )}
@@ -305,7 +305,7 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
                 <div className="wk-und-gen" data-testid="desk-insights-done">
                   <div className="wk-und-insight"><Markdown>{insight.text}</Markdown></div>
                   <p className="wk-und-gen-meta">
-                    <span className="wk-viz-meta" title={new Date(insight.at).toLocaleString()}>Generated {relTime(insight.at, Date.now())} by an agent, from the numbers above</span>
+                    <span className="wk-viz-meta" title={new Date(insight.at).toLocaleString()}>Generated {relTime(insight.at, Date.now())} by a helper, from the numbers above</span>
                     <button type="button" data-testid="desk-insights-regenerate" className="wk-btn wk-btn--quiet wk-btn--sm" onClick={runInsights}><RefreshCw size={13} aria-hidden />Regenerate</button>
                   </p>
                 </div>

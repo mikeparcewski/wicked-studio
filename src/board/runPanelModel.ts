@@ -38,7 +38,7 @@ export const PANEL_SECTIONS: readonly PanelSection[] = [
     { id: 'governance', label: 'Governance' },
     { id: 'steering', label: 'Steering' },
   ] },
-  { id: 'agents', label: 'Agents and spend', items: [
+  { id: 'agents', label: 'Helpers and spend', items: [
     { id: 'helpers', label: 'Helpers and their roles' },
     { id: 'signins', label: 'Sign-ins' },
     { id: 'burn', label: 'Spend over time' },
