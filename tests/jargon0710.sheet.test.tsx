@@ -74,6 +74,14 @@ describe('Helpers tab names each helper once, the way the card does', () => {
     const names = within(list).getAllByTestId('sheet-helper-open').map((b) => b.textContent);
     expect(names).toEqual(['Claude Code', 'Pi CLI']);
   });
+
+  it('opens a named helper’s details with a link to Helpers', async () => {
+    render(<ObjectSheet runs={[RUN]} navigate={() => {}} needCount={0} />);
+    act(() => openSheet({ kind: 'helper', runId: 'r1', cli: 'claude' }, 'signin'));
+    const link = await screen.findByTestId('sheet-seat-agents');
+    expect(link).toHaveTextContent('Open in Helpers');
+    expect(link).toHaveAttribute('href', '/agents?fix=claude');
+  });
 });
 
 describe('the deliver card does not offer a delivery crew will refuse (QE acceptance required, not passed)', () => {

@@ -594,7 +594,7 @@ describe('the tone rule: a CLI nobody set up never turns Nerve Center yellow', (
     const tile = screen.getByTestId('desk-rail-nerve');
     await waitFor(() => expect(tile).toHaveAttribute('data-read', 'fresh'));
     expect(tile).toHaveAttribute('data-tone', 'yellow');
-    expect(screen.getByTestId('nerve-center-words')).toHaveTextContent('sign in a second agent');
+    expect(screen.getByTestId('nerve-center-words')).toHaveTextContent('sign in a second helper');
     const slow = await screen.findByTestId('nc-slow');
     expect(slow).toHaveTextContent('Sign in a second agent so a different one can review');
     // While too few agents are signed in, none of the others is "optional".

@@ -116,6 +116,8 @@ describe('agent words', () => {
   it('says how many are ready', () => {
     const ready = row({});
     const out = row({ key: 'pi', ready: { word: 'Not ready', tone: 'fail', sub: null }, usable: false });
+    expect(agentsSentence([ready])).toBe('Your one helper is ready to work.');
+    expect(agentsSentence([out])).toBe('Your one helper isn’t ready to work yet.');
     expect(agentsSentence([ready, ready, out])).toBe('2 of 3 are ready to work.');
     expect(agentsSentence([ready, ready])).toBe('All 2 are ready to work.');
     expect(agentsSentence([])).toBe('No helpers found on this computer yet.');

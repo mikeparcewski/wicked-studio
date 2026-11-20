@@ -175,8 +175,8 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
       };
     case 'qe_blocked':
       return {
-        title: 'No agent can run quality checks',
-        what: `Quality checks need an agent that can start a fresh reviewer, with no memory of the work it is checking. No agent that is signed in can do that right now; ${name} can, once it is signed in.`,
+        title: 'No helper can run quality checks',
+        what: `Quality checks need a helper that can start a fresh reviewer, with no memory of the work it is checking. No helper that is signed in can do that right now; ${name} can, once it is signed in.`,
         why: 'Until then, jobs that need a quality check (features, bug fixes, migrations) stop before delivery and wait for you.',
         fix: [
           step(`Sign ${name} in`, 'above. That fixes both problems.'),
@@ -188,9 +188,9 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
       return {
         title: 'Not picked for work right now',
         what: `${name} looks signed in, but studio’s service won’t give it work at the moment.`,
-        why: 'Jobs and reviews go to the other agents until this clears. The reason is in Technical details.',
+        why: 'Jobs and reviews go to the other helpers until this clears. The reason is in Technical details.',
         fix: [
-          step('Check again in a minute.', 'Studio’s service re-checks each agent on its own.'),
+          step('Check again in a minute.', 'Studio’s service re-checks each helper on its own.'),
           again('If it keeps happening, sign in again:'),
         ],
         tech: row.tech.ineligible,
@@ -199,9 +199,9 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
       return {
         title: 'Skipped on jobs that work in a repository',
         what: `Studio’s service keeps ${name} off jobs that work in one repository. On a computer where its account needs a person to approve each command, every command it tries there comes back “approval request failed”, and a job running on its own has no one to approve.`,
-        why: `Builds, fixes and tests in a repository go to the other agents; ${name} still chats and reviews decisions.`,
+        why: `Builds, fixes and tests in a repository go to the other helpers; ${name} still chats and reviews decisions.`,
         fix: [
-          step('Leave it as it is (recommended).', qe === false ? 'Quality checks stay unavailable until an agent that can run them is signed in.' : ''),
+          step('Leave it as it is (recommended).', qe === false ? 'Quality checks stay unavailable until a helper that can run them is signed in.' : ''),
           { ...step('Or, if you run studio’s service on this computer, allow it in repositories.', 'It takes both of these steps; the account change alone doesn’t lift it.'),
             subLabel: 'Show the two steps',
             sub: [
@@ -218,8 +218,8 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
       return {
         title: 'Not given jobs in a repository right now',
         what: `Studio’s service won’t give ${name} jobs that work in one repository at the moment.`,
-        why: `Builds, fixes and tests in a repository go to the other agents; ${name} still chats.`,
-        fix: [step('Check again in a minute.', 'Studio’s service re-checks each agent on its own; “Check sign-ins now” asks straight away.')],
+        why: `Builds, fixes and tests in a repository go to the other helpers; ${name} still chats.`,
+        fix: [step('Check again in a minute.', 'Studio’s service re-checks each helper on its own; “Check sign-ins now” asks straight away.')],
         tech: wa?.reason_code ?? null,
       };
     }
@@ -229,7 +229,7 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
         what: `${name} has no step-by-step check, and its writes are only limited by a sandbox tool around the repository. There is no sandbox tool on this computer, so nothing limits what it writes.`,
         why: 'A job or chat it takes part in can change files outside the work’s repository.',
         fix: [
-          step('Pick an agent whose actions are checked', 'for now.'),
+          step('Pick a helper whose actions are checked', 'for now.'),
           step('Or run studio’s service on a computer with a sandbox tool', '(macOS has one built in; on Linux, install bubblewrap).'),
         ],
         tech: null,
@@ -239,7 +239,7 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
         title: 'Nothing checks its actions',
         what: `${name} has no step-by-step check and no sandbox around its writes on this version, so its actions run unchecked.`,
         why: 'A job on it could change files that studio would normally stop it from touching.',
-        fix: [step('Pick an agent whose actions are checked', 'for jobs and chats for now.')],
+        fix: [step('Pick a helper whose actions are checked', 'for jobs and chats for now.')],
         tech: row.tech.disclosure,
       };
     case 'fence_scoped': {
@@ -250,7 +250,7 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
         why: 'Studio also leaves it out of chats that span several repositories, because no single repository limits it there.',
         fix: [
           step('Give it work in one repository.'),
-          step('For chats with no repository,', checked.length > 0 ? `pick an agent whose actions are checked: ${names(checked)}.` : 'pick an agent whose actions are checked.'),
+          step('For chats with no repository,', checked.length > 0 ? `pick a helper whose actions are checked: ${names(checked)}.` : 'pick a helper whose actions are checked.'),
         ],
         tech: null,
       };
@@ -306,7 +306,7 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
       return {
         title: 'Out of quota',
         what: `${name} answered “quota exhausted” in ${jobs(runs)}${lastAt !== null ? `, most recently ${lastAt}` : ''}.${retryLine}`,
-        why: `Other agents take its part meanwhile, and reviews have one fewer voice.${notReset}`,
+        why: `Other helpers take its part meanwhile, and reviews have one fewer voice.${notReset}`,
         fix: [
           step('Wait for your plan to reset.', 'Your provider’s account settings show the reset date.'),
           step('Or upgrade the plan', 'with your provider.'),
@@ -318,7 +318,7 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
       return {
         title: 'Hit its usage limit',
         what: `${name} answered that it reached its usage limit in ${jobs(runs)}${lastAt !== null ? `, most recently ${lastAt}` : ''}.${retryLine}`,
-        why: `Other agents take its part meanwhile.${notReset}`,
+        why: `Other helpers take its part meanwhile.${notReset}`,
         fix: [
           step('Wait for the limit to reset.', 'Your provider’s account settings show when.'),
           step('Or raise the plan’s limit', 'with your provider.'),
@@ -329,7 +329,7 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
       return {
         title: 'Held back after failed steps',
         what: `${name} failed in ${jobs(runs)}${lastAt !== null ? `, most recently ${lastAt}` : ''}.${retryLine}`,
-        why: 'Other agents take its part meanwhile; nothing is lost.',
+        why: 'Other helpers take its part meanwhile; nothing is lost.',
         fix: [step('Nothing to do now.', 'If it keeps happening, check sign-ins, or leave it out of new work for a while.')],
         tech: bench?.reason ?? null,
       };
@@ -339,7 +339,7 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
         // One reading for both floors (crew#1095): on the host, the live request studio's service sends; in a
         // container, the agent's own last step there. Crew's line names which, in Technical details.
         what: `${name} reads as signed in, but the last request studio’s service sent it got no answer${probed !== null ? ` (${probed})` : ''}.`,
-        why: 'Its next step may fail and move to another agent.',
+        why: 'Its next step may fail and move to another helper.',
         fix: [
           { ...step('Check again now.', 'A request it answers clears this.'), check: true },
           ...(containerSignIn || row.login !== null ? [again('If it keeps failing, sign in again:')] : []),
@@ -350,7 +350,7 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
       return {
         title: 'Opt-in: known to stall',
         what: `${name} sometimes stops answering partway through a step, so new work leaves it out by default.`,
-        why: 'Picking it can slow a job down while studio waits and moves its part to another agent.',
+        why: 'Picking it can slow a job down while studio waits and moves its part to another helper.',
         fix: [row.issues.some((i) => i.code === 'version_unproven')
           ? step('Once its checks are back on,', 'pick it per job in the new-job form when you want it.')
           : step('Pick it per job', 'in the new-job form when you want it.')],
@@ -360,18 +360,18 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
       return {
         title: 'Can’t run quality checks',
         what: `${name} can’t start a fresh, separate reviewer right now, which quality checks need.`,
-        why: `It still builds, fixes and reviews decisions. ${qe === true ? 'Quality checks go to an agent that can run them.' : 'Right now no agent can run them.'}`,
+        why: `It still builds, fixes and reviews decisions. ${qe === true ? 'Quality checks go to a helper that can run them.' : 'Right now no helper can run them.'}`,
         // The fix agrees with the why (agy #759 r2): with no agent able to run them, there is something to do.
         fix: [qe === true
-          ? step('Nothing to do.', 'Studio’s service gives quality checks to an agent that can run them.')
-          : step('Sign in an agent that can run them.', 'Until one is signed in, jobs that need a quality check wait for you before delivery.')],
+          ? step('Nothing to do.', 'Studio’s service gives quality checks to a helper that can run them.')
+          : step('Sign in a helper that can run them.', 'Until one is signed in, jobs that need a quality check wait for you before delivery.')],
         tech: null,
       };
     case 'unverified':
       return {
         title: 'Sign-in not confirmed',
         what: `${name}’s sign-in hasn’t been confirmed: it has no command that reports it, so studio goes by its saved sign-in. If a request fails because the sign-in has expired, studio marks it signed out.`,
-        why: 'A job may start on it and move to another agent.',
+        why: 'A job may start on it and move to another helper.',
         fix: [containerSignIn || row.login !== null ? again('If studio marks it signed out, sign in again:') : step('If studio marks it signed out,', 'sign in again with its own command.')],
         tech: row.tech.evidence,
       };

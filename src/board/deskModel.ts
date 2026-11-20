@@ -438,14 +438,14 @@ export function setupChores(agents: { known: boolean; usable: readonly { name: s
     out.push({
       key: 'agents', tone: 'fail',
       title: agents.total === 0 ? 'Set up your helpers — none is set up yet' : `Set up your helpers — none can work yet (0 of ${agents.total} ready)`,
-      line: 'Nothing can run until at least one AI agent is signed in and ready.',
-      action: { label: 'Set up agents', path: paths.agents },
+      line: 'Nothing can run until at least one helper is signed in and ready.',
+      action: { label: 'Set up helpers', path: paths.agents },
     });
   } else if (agents.known && agents.usable.length === 1) {
     out.push({
       key: 'second-agent', tone: 'gate',
-      title: `Only ${agents.usable[0]!.name} can work — jobs need a second agent to review the work`,
-      line: 'A job’s work is checked by a different agent than the one that did it.',
+      title: `Only ${agents.usable[0]!.name} can work — jobs need a second helper to review the work`,
+      line: 'A job’s work is checked by a different helper than the one that did it.',
       action: { label: 'Sign in another', path: paths.agents },
     });
   }
@@ -494,8 +494,8 @@ export function lapsedSeatChores(roster: readonly RosterSeat[] | null): DeskChor
         seat: s.key,
         rosterSeat: s,
         // crew-0182: "again" read wrong for an agent never signed in (a fresh install); true for both.
-        title: `An AI agent (${name}) needs signing in`,
-        line: 'No sign-in seen for it — work given to it may pause or move to another agent',
+        title: `A helper (${name}) needs signing in`,
+        line: 'No sign-in seen for it — work given to it may pause or move to another helper',
         action: { label: 'Sign in', path: agentFixPath(s.key) },
       };
     });

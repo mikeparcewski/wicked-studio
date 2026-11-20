@@ -575,7 +575,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
       <div ref={scrollRef} className={flow ? 'flex flex-col gap-2' : 'flex max-h-72 flex-col gap-1.5 overflow-y-auto'}>
         {msgs.length === 0 ? (
           <p data-testid="assist-chat-waiting" className="font-mono text-xs" style={{ color: 'var(--ink-dim)' }}>
-            Sent — the agents answer here as their replies stream in.
+            Sent — the helpers answer here as their replies stream in.
           </p>
         ) : (
           msgs.map((m, i) => m.note === true ? (
@@ -631,7 +631,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
 
 // ── The dock ──────────────────────────────────────────────────────────────────────────────────
 
-const RESUMED_NOTE = 'Resumed your earlier session — its agents are still on the line.';
+const RESUMED_NOTE = 'Resumed your earlier session — its helpers are still on the line.';
 
 export function AssistDock({ context, verbs, importable, open, onOpenChange, onError, resumeChatId = null, onExpandChat, onResumeGone, fill = false, typeTarget, initialText = '', sendOnOpen = false, headerProps, headerStart, headerExtra, headerEnd, compactHeader = false, onStatus, allowAttach = true, answerFooter, promptsSend = false, notice, fileMode = false, loadHistory, variant, threadTail, seed, onSeedTaken, sendChip, composerRef, bare = false, onLatestChat, userText }: {
   /** crew-0183: a page that IS the conversation (Understand) draws no header row and no scope line of its own; the page

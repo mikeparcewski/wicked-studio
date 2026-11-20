@@ -116,7 +116,7 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
   const rootRef = useRef<HTMLDivElement | null>(null);
   const pw = periodWords(period, now);
   usePageChatHostPage('report', {
-    knows: `Knows this page: ${pw.toLowerCase()}: the 4 headline numbers, throughput, quality, cost, by repository, by agent and shipped; ${count(jobs.length, 'job')} behind them.`,
+    knows: `Knows this page: ${pw.toLowerCase()}: the 4 headline numbers, throughput, quality, cost, by repository, by helper and shipped; ${count(jobs.length, 'job')} behind them.`,
     data: () => [`period: ${pw}`, ...pageTextLines(rootRef.current)],
   });
   const askable = useAskableItems('report', rootRef, () => [`period: ${pw}`]);
@@ -174,14 +174,14 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
             <Tile period={pw} testId="report-tile-firstpass" label="passed first time" loading={!noSpend && !recordRead}
               value={fp === null ? null : fp.rate === null ? '—' : fp.gated < 20 ? `${fp.passed} of ${fp.gated}` : `${Math.round(fp.rate * 100)}%`}
               change={fp !== null && fp.gated < 20 ? null : fpChange}
-              note={noSpend ? 'counted per project: work in no project has no record of its own' : fp === null ? 'Couldn’t read the agent record for this period'
+              note={noSpend ? 'counted per project: work in no project has no record of its own' : fp === null ? 'Couldn’t read the helper record for this period'
                 : fp.rate === null ? 'no checked steps in this period' : fp.gated < 20 ? 'checked steps that passed first try (too few to compare)' : `of ${fp.gated} checked steps`}
 />
             <Tile period={pw} testId="report-tile-ttp" label="median time to PR" loading={!runsShown} value={ttp.minutes === null ? '—' : durationWords(ttp.minutes)} change={ttpChange}
               note={ttp.n === 0 ? 'no pull request opened in this period' : `start to PR, over ${count(ttp.n, 'delivered job')}`} />
             <Tile period={pw} testId="report-tile-spend" label="spend" loading={!noSpend && !recordRead}
               value={spend === null ? null : `${spend.partial ? '≥ ' : ''}${moneyWords(spend.usd)}`} change={spendChange}
-              note={noSpend ? 'spend is counted per project' : now7 === null ? 'Couldn’t read spend for this period' : spend === null ? 'usage recorded, no price reported' : spend.partial ? 'priced usage only: some agents report no price' : null}
+              note={noSpend ? 'spend is counted per project' : now7 === null ? 'Couldn’t read spend for this period' : spend === null ? 'usage recorded, no price reported' : spend.partial ? 'priced usage only: some helpers report no price' : null}
 />
           </ul>
         </section>
@@ -270,27 +270,27 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
 
         {/* 4. Cost */}
         <section id="desk-focus-spend" className="wk-rep-sec" aria-labelledby="report-h-cost" data-testid="report-cost" {...ask('Cost')} data-ask-key="cost">
-          <SecHead id="report-h-cost" label="Cost" meta={`spend per ${per}, by agent`} />
+          <SecHead id="report-h-cost" label="Cost" meta={`spend per ${per}, by helper`} />
           {noSpend ? <p className="wk-rep-quiet">Spend is counted per project, so work in no project has none of its own.</p>
             : !recordRead ? <Skeleton rows={3} variant="line" />
             : spendDaily === null ? <p className="wk-rep-quiet" data-tone="fail">Couldn’t read spend for every {per} of this period (a read failed or the record left out older runs), so no {per} is drawn.</p>
             : spend === null ? <p className="wk-rep-quiet" data-testid="report-spend-unknown">Spend unknown: usage recorded, no price reported.</p>
             : spendDaily.length === 0 ? <p className="wk-rep-quiet">No priced usage in this period.</p> : (
               <ChartFigure summary={`Spend per ${per}: ${spendDaily.map((s) => `${s.label} ${moneyWords(sumOf(s.values))}`).join(', ')}.`}
-                table={{ caption: `Spend per ${per} by agent`, head: cap(per), rows: bucketWords(buckets, per), series: spendDaily, format: moneyWords, note: dayNote(buckets, per) }} testId="report-spend-chart">
-                <StackedBars buckets={buckets} series={spendDaily.map((s) => ({ ...s, color: agentColor(s.key) }))} format={money} label={`Spend per ${per} by agent, ${periodWords(period, now).toLowerCase()}`} height={160} ownTable />
+                table={{ caption: `Spend per ${per} by helper`, head: cap(per), rows: bucketWords(buckets, per), series: spendDaily, format: moneyWords, note: dayNote(buckets, per) }} testId="report-spend-chart">
+                <StackedBars buckets={buckets} series={spendDaily.map((s) => ({ ...s, color: agentColor(s.key) }))} format={money} label={`Spend per ${per} by helper, ${periodWords(period, now).toLowerCase()}`} height={160} ownTable />
               </ChartFigure>
             )}
           <div className="wk-rep-pair">
             <div className="wk-rep-sub" data-testid="report-spend-agents">
-              <h3 className="wk-rep-block-title">Per agent</h3>
-              {noSpend || !recordRead || now7 === null ? <p className="wk-rep-quiet">{noSpend ? '—' : !recordRead ? 'Reading…' : 'Couldn’t read the agent record.'}</p> : (
+              <h3 className="wk-rep-block-title">Per helper</h3>
+              {noSpend || !recordRead || now7 === null ? <p className="wk-rep-quiet">{noSpend ? '—' : !recordRead ? 'Reading…' : 'Couldn’t read the helper record.'}</p> : (
                 <SpendTable rows={agents} />
               )}
             </div>
             <div className="wk-rep-sub" data-testid="report-spend-repos">
               <h3 className="wk-rep-block-title">Per repository</h3>
-              <NotTracked feed="spend-per-repo" block why="Crew records cost per agent and per project, not per repository or per job." />
+              <NotTracked feed="spend-per-repo" block why="Crew records cost per helper and per project, not per repository or per job." />
             </div>
           </div>
         </section>
@@ -312,20 +312,20 @@ export function ReportPage({ runs, runsShown, now, navigate, projectId, agentNam
         </section>
 
         {/* 6. By agent */}
-        <section className="wk-rep-sec" aria-labelledby="report-h-agents" data-testid="report-agents" {...ask('Steps by agent')} data-ask-key="agents">
-          <SecHead id="report-h-agents" label="By agent" meta="steps each agent took in this period" />
-          {noSpend ? <p className="wk-rep-quiet">The agent record is counted per project, so work in no project has none of its own.</p>
+        <section className="wk-rep-sec" aria-labelledby="report-h-agents" data-testid="report-agents" {...ask('Steps by helper')} data-ask-key="agents">
+          <SecHead id="report-h-agents" label="By helper" meta="steps each helper took in this period" />
+          {noSpend ? <p className="wk-rep-quiet">The helper record is counted per project, so work in no project has none of its own.</p>
             : !recordRead ? <Skeleton rows={3} variant="line" />
-            : now7 === null ? <p className="wk-rep-quiet" data-tone="fail">Couldn’t read the agent record for this period.</p>
-            : agents.length === 0 ? <p className="wk-rep-quiet">No agent took a step in this period.</p> : (
-              <SortTable<AgentReportRow> caption="Steps by agent" testId="report-agents-table" rows={agents} rowKey={(r) => r.cli} initial="units"
+            : now7 === null ? <p className="wk-rep-quiet" data-tone="fail">Couldn’t read the helper record for this period.</p>
+            : agents.length === 0 ? <p className="wk-rep-quiet">No helper took a step in this period.</p> : (
+              <SortTable<AgentReportRow> caption="Steps by helper" testId="report-agents-table" rows={agents} rowKey={(r) => r.cli} initial="units"
                 cols={[
-                  { key: 'agent', label: 'Agent', sort: (r) => r.label, head: true, cell: (r) => <span className="wk-rep-agent"><i className="wk-chart-swatch wk-chart-swatch--dot" style={{ background: agentColor(r.cli) }} aria-hidden />{r.label}</span> },
+                  { key: 'agent', label: 'Helper', sort: (r) => r.label, head: true, cell: (r) => <span className="wk-rep-agent"><i className="wk-chart-swatch wk-chart-swatch--dot" style={{ background: agentColor(r.cli) }} aria-hidden />{r.label}</span> },
                   { key: 'units', label: 'Steps', num: true, sort: (r) => r.units, cell: (r) => r.units },
                   { key: 'pass', label: 'Pass rate', num: true, sort: (r) => r.passRate ?? -1, cell: (r) => rateText(r.firstPass, r.gated) },
                   { key: 'median', label: 'Median step', num: true, sort: (r) => r.medianMs ?? -1, cell: (r) => (r.medianMs !== null ? durationWords(r.medianMs / 60_000) : <SevenDayCell isLast7={isLast7 && projectId === undefined} />) },
                   { key: '429', label: '429s', num: true, sort: (r) => r.rateLimited ?? -1, cell: (r) => (r.rateLimited !== null ? <span data-hot={r.rateLimited > 0 ? 'true' : undefined}>{r.rateLimited}</span> : <SevenDayCell isLast7={isLast7 && projectId === undefined} />) },
-                  { key: 'cost', label: 'Cost', num: true, sort: (r) => r.costUsd ?? -1, cell: (r) => (r.costUsd === null ? <span className="wk-rep-dim" title="This agent reports no price">no price</span> : moneyWords(r.costUsd)) },
+                  { key: 'cost', label: 'Cost', num: true, sort: (r) => r.costUsd ?? -1, cell: (r) => (r.costUsd === null ? <span className="wk-rep-dim" title="This helper reports no price">no price</span> : moneyWords(r.costUsd)) },
                 ]} />
             )}
           <p className="wk-rep-note">
@@ -535,8 +535,8 @@ function SpendTable({ rows }: { rows: readonly AgentReportRow[] }): React.ReactE
   if (priced.length === 0 && unpriced.length === 0) return <p className="wk-rep-quiet">No spend in this period.</p>;
   return (
     <table className="wk-table wk-rep-table">
-      <caption className="wk-sr-only">Spend per agent</caption>
-      <thead><tr><th scope="col">Agent</th><th scope="col" className="num">Spend</th><th scope="col" className="num">Share</th></tr></thead>
+      <caption className="wk-sr-only">Spend per helper</caption>
+      <thead><tr><th scope="col">Helper</th><th scope="col" className="num">Spend</th><th scope="col" className="num">Share</th></tr></thead>
       <tbody>
         {[...priced].sort((a, b) => b.costUsd! - a.costUsd!).map((r) => (
           <tr key={r.cli}><th scope="row"><span className="wk-rep-agent"><i className="wk-chart-swatch wk-chart-swatch--dot" style={{ background: agentColor(r.cli) }} aria-hidden />{r.label}</span></th>

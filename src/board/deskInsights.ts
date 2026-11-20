@@ -24,7 +24,7 @@ export const RANGES: readonly RangeDays[] = [7, 30, 90];
 export type GroupBy = 'outcome' | 'agent' | 'project' | 'workflow';
 export const GROUP_BYS: readonly { value: GroupBy; label: string }[] = [
   { value: 'outcome', label: 'Outcome' },
-  { value: 'agent', label: 'Agent' },
+  { value: 'agent', label: 'Helper' },
   { value: 'project', label: 'Project' },
   { value: 'workflow', label: 'Workflow' },
 ];
@@ -447,8 +447,8 @@ export function governanceOf(cli: string, acp: AcpFallbacks | null, roster: read
   return { word: 'checks not reported', tone: null, unchecked: 0 };
 }
 
-export const PARTIAL_RECORD_NOTE = 'Partial: the agent record left out older runs';
-export const AGENT_WORKFLOW_NOTE = 'Agent numbers can’t be split by workflow yet: the agent record has no workflow filter (needs crew data).';
+export const PARTIAL_RECORD_NOTE = 'Partial: the helper record left out older runs';
+export const AGENT_WORKFLOW_NOTE = 'Helper numbers can’t be split by workflow yet: the helper record has no workflow filter (needs crew data).';
 
 export function callouts(input: {
   agents: readonly AgentRow[];
@@ -475,11 +475,11 @@ export function callouts(input: {
       tone: 'warn',
       title: `${a.label} sat out ${a.benched} ${a.benched === 1 ? 'time' : 'times'} ${win}`,
       why: reason === '' ? 'Studio benched it; the record names no reason.' : `Most often: ${plainBench(reason)} (${n} of ${a.benched}).`,
-      fix: signedOut ? 'Sign it in again; until then the other agents take its work.'
+      fix: signedOut ? 'Sign it in again; until then the other helpers take its work.'
         : quota ? 'Its plan quota ran out; it rejoins when the quota resets or the plan is raised.'
           : timedOut ? 'It kept timing out in reviews; check that it answers quickly on this machine.'
             : 'Open its record to see each time it sat out.',
-      evidence: { label: 'Agent record', path: '/watch' },
+      evidence: { label: 'Helper record', path: '/watch' },
     });
   }
   for (const [cli, f] of Object.entries(input.workflow != null ? {} : input.acp ?? {})) {
@@ -527,7 +527,7 @@ export function callouts(input: {
       title: `${a.label} passes its checks first time on ${pct(a.firstPassRate)} of steps`,
       why: `${a.gated - Math.round(a.firstPassRate * a.gated)} of ${a.gated} checked steps needed another go ${win}.`,
       fix: 'Give it the steps it passes first time, or tighten the instructions on the others.',
-      evidence: { label: 'Agent record', path: '/watch' },
+      evidence: { label: 'Helper record', path: '/watch' },
     });
   }
   return out;

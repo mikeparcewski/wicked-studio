@@ -118,9 +118,10 @@ describe('everyday words on the face, the detail behind "Why we think this"', ()
   it('a stop for no independent reviewer reads as a person standing in for the reviewer, with no engine ids', () => {
     const p = words.plainRecommendation(judge, M);
     expect(p.say).toBe('In 5 runs on wicked-e2e a person had to stand in for the reviewer.');
+    expect(p.title).toBe('Sign in a second helper, so someone independent can review');
     expect(`${p.title} ${p.say} ${p.effect}`).not.toMatch(/judge_unavailable|n=\d|CI/u);
     expect(p.verb).toBe('Change a setting');
-    expect(p.effect).toBe('Reviews come from a different agent, so nobody has to stand in.');
+    expect(p.effect).toBe('Reviews come from a different helper, so nobody has to stand in.');
     expect(`${p.effect} ${p.changeMind}`).not.toMatch(/judge|seat|fallback/u);
     expect(p.confidence).toBe('Medium');
     expect(words.plainText('A "judge_unavailable" stop, n=8 (95% CI 41%–93%)')).toBe('A no independent reviewer stop, 8 runs (likely between 41% and 93%)');

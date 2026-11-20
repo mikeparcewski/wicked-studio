@@ -155,7 +155,7 @@ describe('RunTab', () => {
   it('says when phases and agents are absent', async () => {
     await tab();
     expect(screen.getByTestId('run-tab-phases')).toHaveTextContent('No phases yet.');
-    expect(screen.getByTestId('run-tab-agents')).toHaveTextContent('No agent has been assigned yet.');
+    expect(screen.getByTestId('run-tab-agents')).toHaveTextContent('No helper has been assigned yet.');
   });
 
   it('dedupes agents, uses roster names, aggregates roles and opens a helper sheet', async () => {
@@ -305,18 +305,18 @@ describe('RunRibbon', () => {
     view.units.push(makeUnit({ ord: 3, assigned_cli: 'claude' }));
     await act(async () => render(<RunRibbon runs={[view, makeView({ id: 'finished', status: 'completed' })]} />));
     const line = screen.getByTestId('run-ribbon-line');
-    expect(line).toHaveTextContent('MCP server · Build · 2 agents · $1.25');
+    expect(line).toHaveTextContent('MCP server · Build · 2 helpers · $1.25');
     expect(line.tagName).toBe('SPAN');
   });
 
   it('uses the status without a current phase and omits unreported spend', async () => {
     await act(async () => render(<RunRibbon runs={[makeView({ status: 'completed', workflow_id: 'qe-author-tests' })]} />));
-    expect(screen.getByTestId('run-ribbon-line').textContent).toBe('Write tests · Finished · 0 agents');
+    expect(screen.getByTestId('run-ribbon-line').textContent).toBe('Write tests · Finished · 0 helpers');
   });
 
   it('uses the next todo phase of a live run', async () => {
     await act(async () => render(<RunRibbon runs={[phases('awaiting_human')]} />));
-    expect(screen.getByTestId('run-ribbon-line')).toHaveTextContent('MCP server · Build · 2 agents');
+    expect(screen.getByTestId('run-ribbon-line')).toHaveTextContent('MCP server · Build · 2 helpers');
   });
 
   it('handles a session without runs', () => {

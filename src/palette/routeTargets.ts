@@ -113,7 +113,7 @@ const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }
   { shape: 'insights', label: 'Run insights', href: '/insights' },
   { shape: 'sources', label: `${PAGE_NAMES.sources} — what apps read from`, href: '/sources' },
   { shape: 'apps', label: PAGE_NAMES.apps, href: '/apps' },
-  { shape: 'system', label: `${PAGE_NAMES.system} — agents, notifications and the theme`, href: '/system' },
+  { shape: 'system', label: `${PAGE_NAMES.system} — helpers, notifications and the theme`, href: '/system' },
   // studio-settings-tabs: Theme is a tab of the Settings page (`/theme` only redirects there).
   { shape: 'system', label: `${PAGE_NAMES.theme} — light or dark, logo, site name`, href: SETTINGS_THEME_PATH },
   { shape: 'editors-dev', label: 'Editor test page — try an editor plugin', href: '/editors/dev' },

@@ -242,7 +242,8 @@ describe('First run (§4)', () => {
     render(<FirstRun navigate={nav} agents={agents} hasRoster />);
     expect((await screen.findByTestId('known-git')).textContent).toContain('Sam Rivera');
     await waitFor(() => expect(screen.getByTestId('known-repos').textContent).toContain('1 repository · 1 nearby'));
-    expect(screen.getByTestId('known-agents').textContent).toContain('2 agents found');
+    expect(screen.getByTestId('known-agents').textContent).toContain('2 helpers found');
+    expect(screen.getByTestId('first-run-setup')).toHaveTextContent('Change any of it later in Learn and Helpers.');
     expect(screen.getByTestId('known-agents').textContent).toContain('Codex not signed in');
     expect(screen.getByTestId('known-languages').textContent).toContain('TypeScript, Go');
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Welcome, Sam');
@@ -254,7 +255,7 @@ describe('First run (§4)', () => {
     const row = screen.getAllByTestId('first-run-row').find((r) => r.getAttribute('data-k') === 'repos')!;
     expect(row.getAttribute('data-done')).toBe('true');
     const agentsAsk = await screen.findByTestId('first-run-ask-agents');
-    expect(within(agentsAsk).getByTestId('ask-question').textContent).toBe('Sign Codex in now? Jobs need a second agent to check the work.');
+    expect(within(agentsAsk).getByTestId('ask-question').textContent).toBe('Sign Codex in now? Jobs need a second helper to check the work.');
     expect((settings['studio.firstRun'] as { answers: Record<string, unknown> }).answers['repos']).toBeTruthy();
   });
 

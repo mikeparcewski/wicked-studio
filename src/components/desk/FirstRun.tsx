@@ -195,7 +195,7 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
       </div>
       <aside className="wk-fr-setup" aria-label="Your setup" data-testid="first-run-setup">
         <h2>Your setup</h2>
-        <p>Fills in as you answer. Change any of it later in Learn and Agents.</p>
+        <p>Fills in as you answer. Change any of it later in Learn and Helpers.</p>
         <ul className="wk-fr-rows">
           {SETUP_ASKS.map((key) => (
             <li key={key} className="wk-fr-row" data-k={key} data-testid="first-run-row" data-done={answers[key] === undefined ? undefined : answers[key]!.done ? 'true' : 'skip'}
@@ -230,7 +230,7 @@ function Known({ known, repos, agents, hasRoster, ready }: {
       </div>
       <div className="wk-fr-k" data-testid="known-agents">
         <span className="wk-fr-k-ic"><TerminalSquare size={16} aria-hidden /></span>
-        <span><b>{hasRoster ? `${agents.length} ${agents.length === 1 ? 'agent' : 'agents'} found` : 'Agents…'}</b>
+        <span><b>{hasRoster ? `${agents.length} ${agents.length === 1 ? 'helper' : 'helpers'} found` : 'Helpers…'}</b>
           <span>{hasRoster ? [`${ready} ready`, ...notReady.slice(0, 2).map((a) => `${a.name} ${a.issues[0]?.code === 'signed_out' ? 'not signed in' : 'needs a look'}`)].join(' · ') : 'Reading the roster'}</span></span>
       </div>
       <div className="wk-fr-k" data-testid="known-languages">
@@ -281,11 +281,11 @@ function buildAsks({ repos, nearby, signedOut, ready, total, site }: {
     },
     agents: {
       ...base, id: 'setup-agents', from: from(2), kind: 'confirm',
-      prompt: who !== undefined ? `Sign ${who.name} in now? Jobs need a second agent to check the work.` : total > 0 ? `${ready} of ${total} agents are ready. Keep going?` : 'No agent found yet. Set one up on Agents?',
+      prompt: who !== undefined ? `Sign ${who.name} in now? Jobs need a second helper to check the work.` : total > 0 ? `${ready} of ${total} helpers are ready. Keep going?` : 'No helper found yet. Set one up on Helpers?',
       options: who !== undefined
-        ? [{ id: 'yes', token: 'yes', label: 'Yes, sign it in', consequence: who.login !== null ? `Run “${who.login}” in a terminal; this card updates when the sign-in lands.` : 'Opens Agents with its sign-in steps.' }, { id: 'no', token: 'no', label: 'Later' }]
-        : [{ id: 'yes', token: 'yes', label: total > 0 ? 'Keep going' : 'Open Agents' }, { id: 'no', token: 'no', label: 'Later' }],
-      record: who !== undefined ? `${who.name}: {label}` : 'Agents: {label}',
+        ? [{ id: 'yes', token: 'yes', label: 'Yes, sign it in', consequence: who.login !== null ? `Run “${who.login}” in a terminal; this card updates when the sign-in lands.` : 'Opens Helpers with its sign-in steps.' }, { id: 'no', token: 'no', label: 'Later' }]
+        : [{ id: 'yes', token: 'yes', label: total > 0 ? 'Keep going' : 'Open Helpers' }, { id: 'no', token: 'no', label: 'Later' }],
+      record: who !== undefined ? `${who.name}: {label}` : 'Helpers: {label}',
     },
     style: {
       ...base, id: 'setup-style', from: from(3), kind: 'choose', prompt: 'Where should I learn how your team works?',

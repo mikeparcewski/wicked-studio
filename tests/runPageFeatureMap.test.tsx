@@ -181,7 +181,7 @@ describe('where today’s features go (one row each)', () => {
     expect(within(panel()).getByTestId('run-tab-orphaned')).toBeTruthy();
   });
 
-  it('RunAssuranceLabel, acceptance → “Checks and evidence”; spend → “Agents and spend” (its header says it closed)', () => {
+  it('RunAssuranceLabel, acceptance → “Checks and evidence”; spend → “Helpers and spend” (its header says it closed)', () => {
     page([live('executing', { cost_usd: 1.39 })]);
     expect(within(panel()).getByTestId('run-tab-checks')).toBeTruthy();
     const agents = within(panel()).getAllByTestId('run-panel-section').find((s) => s.dataset['section'] === 'agents')!;

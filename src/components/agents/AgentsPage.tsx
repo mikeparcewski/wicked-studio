@@ -103,7 +103,7 @@ function AgentLine({ r, open }: { r: AgentRow; open: (key: string) => void }): R
 export function AgentsPanel({ search, navigate, basePath = AGENTS_PATH }: {
   search: string; navigate: Navigate; basePath?: string;
 }): React.ReactElement {
-  usePageChatFor('agents', 'Knows Agents: who is signed in, ready and how each has done this week.', 'agents-panel');
+  usePageChatFor('agents', 'Knows Helpers: who is signed in, ready and how each has done this week.', 'agents-panel');
   const v = useAgentRows();
   const [, tick] = useState(0);
   const [retrying, setRetrying] = useState(false);
@@ -171,9 +171,9 @@ export function AgentsPanel({ search, navigate, basePath = AGENTS_PATH }: {
 
   // The page's moves, behind one quiet menu (the page itself has no primary action: its rows are the moves).
   const menu = (
-    <OverflowMenu label="More for agents" data-testid="agents-more" items={[
+    <OverflowMenu label="More for helpers" data-testid="agents-more" items={[
       { id: 'check', label: retrying ? 'Checking…' : 'Check sign-ins now', testId: 'agents-check-all', onSelect: checkAll, disabled: retrying ? 'Checking now' : null },
-      { id: 'add', label: 'Add an agent', testId: 'agents-add', onSelect: () => { window.open(INSTALL_DOCS, '_blank', 'noopener,noreferrer'); } },
+      { id: 'add', label: 'Add a helper', testId: 'agents-add', onSelect: () => { window.open(INSTALL_DOCS, '_blank', 'noopener,noreferrer'); } },
       ...(setup ? [] : [{ id: 'setup', label: 'Setup guide', testId: 'agents-setup-guide', onSelect: () => navigate(join(basePath, 'setup=1')) }]),
     ]} />
   );
@@ -186,7 +186,7 @@ export function AgentsPanel({ search, navigate, basePath = AGENTS_PATH }: {
       ? (
         <>
           <StateBanner kind="offline" onRetry={retry} retrying={retrying} data-testid="agents-banner" />
-          <p className="wk-calm-foot">So it can’t say which agents are ready. If this keeps happening, start studio’s service again on this computer, then Retry.</p>
+          <p className="wk-calm-foot">So it can’t say which helpers are ready. If this keeps happening, start studio’s service again on this computer, then Retry.</p>
           <TechDetails data-testid="agents-offline-how" summary="How to start studio’s service" text={['In a terminal: npx wicked-crew serve', 'Installed as a login service: wicked-crew serve --install-service starts it again.']} />
         </>
       )
@@ -198,15 +198,15 @@ export function AgentsPanel({ search, navigate, basePath = AGENTS_PATH }: {
         </>
       );
   } else if (!v.hasRoster) {
-    sentence = 'Asking each agent…';
-    body = <CalmLoading data-testid="agents-loading" rows={5} label="Asking each agent" />;
+    sentence = 'Asking each helper…';
+    body = <CalmLoading data-testid="agents-loading" rows={5} label="Asking each helper" />;
   } else if (v.rows.length === 0) {
     sentence = agentsSentence(v.rows);
     body = (
       <CalmEmpty data-testid="agents-empty" title="No helpers found on this computer."
         body={<p>Install one of Claude Code, Codex, Pi, GitHub Copilot CLI or opencode, then check again.</p>}
         action={<>
-          <a href={INSTALL_DOCS} target="_blank" rel="noreferrer" className="wk-calm-btn wk-calm-btn--primary">How to install an agent</a>
+          <a href={INSTALL_DOCS} target="_blank" rel="noreferrer" className="wk-calm-btn wk-calm-btn--primary">How to install a helper</a>
           <CalmButton onClick={retry} disabled={retrying}>{retrying ? 'Checking…' : 'Check again'}</CalmButton>
         </>} />
     );
@@ -236,7 +236,7 @@ export function AgentsPanel({ search, navigate, basePath = AGENTS_PATH }: {
               { k: 'Things to fix', v: `${t.fixes}${t.notes > 0 ? ` · plus ${t.notes} ${t.notes === 1 ? 'note' : 'notes'}` : ''}`, testId: 'agents-tile-fix' },
             ]} />
             <p className="wk-calm-foot" data-testid="agents-foot">
-              {v.settled && checked !== null ? `Refreshed ${checked}. ` : ''}{v.runsRead !== null ? `Steps count the last 7 days (${v.runsRead} ${v.runsRead === 1 ? 'job' : 'jobs'}). ` : ''}{qeShared ? 'Studio’s service doesn’t report yet which agents can run quality checks.' : ''}
+              {v.settled && checked !== null ? `Refreshed ${checked}. ` : ''}{v.runsRead !== null ? `Steps count the last 7 days (${v.runsRead} ${v.runsRead === 1 ? 'job' : 'jobs'}). ` : ''}{qeShared ? 'Studio’s service doesn’t report yet which helpers can run quality checks.' : ''}
             </p>
           </div>
         </details>
