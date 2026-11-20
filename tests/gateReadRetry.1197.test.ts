@@ -7,11 +7,12 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as client from '../src/api/client.js';
+import { ApiError } from '../src/api/errors.js';
 import type { GateInfo } from '../src/api/types.js';
 import {
-  GATE_READ_DEADLINE_MS, GATE_READS_IN_FLIGHT, GATE_RETRY_BASE_MS, ensureGate, inGateSlot, reconcileGateRetries, refreshGate, useGateReadStore,
+  GATE_READ_DEADLINE_MS, GATE_READS_IN_FLIGHT, GATE_RETRY_BASE_MS, ensureGate, inGateSlot, resetGateSlotsForTest, reconcileGateRetries, refreshGate, useGateReadStore,
 } from '../src/board/gateActions.js';
-import { useGateStore } from '../src/store/gates.js';
+import { invalidateGateReads, useGateStore } from '../src/store/gates.js';
 
 const NOW = 1_700_000_000_000;
 let n = 0;
@@ -28,7 +29,7 @@ function slowGate(ms: number, runId: string): ReturnType<typeof vi.spyOn> {
 }
 
 beforeEach(() => { vi.useFakeTimers(); useGateStore.setState({ gates: {}, approaching: {} }); useGateReadStore.setState({ failed: {} }); });
-afterEach(() => { reconcileGateRetries([]); vi.useRealTimers(); vi.restoreAllMocks(); });
+afterEach(() => { reconcileGateRetries([]); resetGateSlotsForTest(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('a gate read that misses its deadline', () => {
   it('lands on a later try: the deadline grows, so a 15 s gate is read where a fixed 10 s never would', async () => {
@@ -110,4 +111,28 @@ describe('a gate read that misses its deadline', () => {
     expect(spy).toHaveBeenCalledTimes(1);
     expect(useGateReadStore.getState().failed[id]).toBeUndefined();
   });
+
+  for (const response of ['200', '404'] as const) {
+    it(`an obsolete ${response} (after a reconnect) does not cancel the retry of a newer failed read`, async () => {
+      const id = fresh();
+      let resolveOld!: (v: GateInfo) => void;
+      let rejectOld!: (e: unknown) => void;
+      const oldResponse = new Promise<GateInfo>((res, rej) => { resolveOld = res; rejectOld = rej; });
+      const spy = vi.spyOn(client.api, 'getGate')
+        .mockReturnValueOnce(oldResponse)
+        .mockRejectedValueOnce(new Error('temporary network failure'))
+        .mockResolvedValue(planInfo(id));
+      const oldRead = ensureGate(id);
+      invalidateGateReads();
+      await ensureGate(id);
+      expect(useGateReadStore.getState().failed[id]).toBe(1);
+      if (response === '200') resolveOld(planInfo(id)); else rejectOld(new ApiError(404, 'no open gate'));
+      await oldRead;
+      expect(useGateStore.getState().gates[id]).toBeUndefined();
+      expect(useGateReadStore.getState().failed[id]).toBe(1);
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(spy).toHaveBeenCalledTimes(3);
+      expect(useGateStore.getState().gates[id]).toBeDefined();
+    });
+  }
 });

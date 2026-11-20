@@ -591,15 +591,15 @@ function startGateRead(runId: string): GateRead {
     const timer = setTimeout(() => deadline.abort(), Math.min(GATE_READ_DEADLINE_MS * 2 ** failures, GATE_READ_DEADLINE_MAX_MS));
     try {
       store.applyGateRead(ticket, gateFromInfo(await api.getGate(runId, deadline.signal)));
-      clearRetry(runId);
-      setFailed(runId, 0);
+      // An answer ends the retrying only when it is the newest read's, for a run still waiting: an obsolete read's
+      // answer (after a reconnect) applies by its ticket as before but must not cancel a newer read's retry.
+      if (gateReads.get(runId) === read && epochOf(runId) === epoch) { clearRetry(runId); setFailed(runId, 0); }
     } catch (e) {
       // crew's 404: no open gate, an answer. Any other failure (network, the deadline) leaves the store as it was and
       // is tried again, later and for longer (studio#1197), until a read lands or the run stops waiting.
       if (e instanceof ApiError && e.status === 404) {
         store.applyGateRead(ticket, null);
-        clearRetry(runId);
-        setFailed(runId, 0);
+        if (gateReads.get(runId) === read && epochOf(runId) === epoch) { clearRetry(runId); setFailed(runId, 0); }
       } else if (gateReads.get(runId) === read && epochOf(runId) === epoch && useGateStore.getState().gates[runId] === undefined) {
         // Only the newest read counts, for a run still waiting that holds no gate: a read that was replaced, one begun
         // before the run stopped waiting, and a forced refresh of a gate already in hand schedule nothing.
