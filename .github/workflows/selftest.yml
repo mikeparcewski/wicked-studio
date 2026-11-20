@@ -21,7 +21,12 @@ concurrency:
 
 jobs:
   selftest:
-    uses: mikeparcewski/wicked-ci/.github/workflows/selftest.yml@40d9ec2c4e2d18ee07dced50e5595277e99b8a31
+    # The called workflow's advisory verdict job publishes a check run (wicked-ci #76); GitHub checks a nested job's
+    # permissions against the caller's before the run starts.
+    permissions:
+      contents: read
+      checks: write
+    uses: mikeparcewski/wicked-ci/.github/workflows/selftest.yml@3bd45ae3a77b6b40eff09172261c8f08478c3232
     with:
       under_test: studio
-      wicked_ci_ref: 40d9ec2c4e2d18ee07dced50e5595277e99b8a31
+      wicked_ci_ref: 3bd45ae3a77b6b40eff09172261c8f08478c3232
