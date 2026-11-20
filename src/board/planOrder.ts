@@ -236,10 +236,12 @@ export function plannedRun(v: SessionView): boolean {
   return typeof id === 'object' && id !== null && (id.kind === 'preset' || id.kind === 'user_plan');
 }
 
-/** Whether the run's plan can be edited now: a planned run (`run_identity`), or a run whose open plan gate LISTS
- *  `edit_plan` (studio#1175: the engine lists it at any plan gate whose unit has not run, a fixed workflow's too). */
+/** Whether the run's plan can be edited now. At a plan gate whose answer list the engine served, THAT decides, for every
+ *  run identity (studio#1175: it lists `edit_plan` at any plan gate whose unit has not run, a fixed workflow's too).
+ *  With no list (an older daemon, or a mid-run edit) a planned run (`run_identity`) is the rule, as before. */
 export function takesPlanEdit(v: SessionView, gate: Pick<OpenGate, 'gateKind' | 'actions'> | undefined): boolean {
-  return plannedRun(v) || (gate?.gateKind === 'plan_approval' && (gate.actions ?? []).some((a) => a.action === 'edit_plan'));
+  if (gate?.gateKind === 'plan_approval' && gate.actions !== undefined) return gate.actions.some((a) => a.action === 'edit_plan');
+  return plannedRun(v);
 }
 
 /** Whether a run gets the plan artifact at all: a run that takes plan edits (see {@link takesPlanEdit}) that is

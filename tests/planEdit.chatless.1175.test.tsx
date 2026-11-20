@@ -7,6 +7,8 @@ import * as client from '../src/api/client.js';
 import { teamPlanApi } from '../src/api/teamPlan.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../src/board/gateActions.js';
 import type { GateAction } from '../src/board/gateContract.js';
+import { takesPlanEdit } from '../src/board/planOrder.js';
+import { useCapabilities } from '../src/store/capabilities.js';
 import { RunBlock } from '../src/components/session/RunConversation.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useGateStore, type OpenGate } from '../src/store/gates.js';
@@ -56,12 +58,45 @@ describe('studio#1175: the plan card offers the editor exactly when edit_plan is
     takeProposal('session-proposal-edit');
     await waitFor(() => expect(screen.getByTestId('plan-order')).toBeTruthy());
     expect(screen.queryByTestId('plan-order-none')).toBeNull();
-    expect(screen.getAllByTestId('plan-step').length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId('plan-step')).toHaveLength(3);
   });
 
   it('edit_plan not listed: no Change something', async () => {
     mount([APPROVE, BACK, STOP]);
-    await screen.findByTestId('session-proposal');
+    await screen.findByTestId('session-proposal-option');
+    await waitFor(() => expect(teamPlanApi.team).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 50));
     expect(screen.queryByTestId('session-proposal-edit')).toBeNull();
+  });
+
+  it('a planned run at a gate that does not list edit_plan has no editor either (the list decides for every identity)', () => {
+    const planned = makeView({ id: RUN, status: 'awaiting_human', run_identity: { kind: 'preset' } } as never, []);
+    expect(takesPlanEdit(planned, gateWith([APPROVE, BACK, STOP]))).toBe(false);
+    expect(takesPlanEdit(planned, gateWith([APPROVE, EDIT]))).toBe(true);
+    // no list (an older daemon): the planned-run rule, as before
+    expect(takesPlanEdit(planned, { gateKind: 'plan_approval' })).toBe(true);
+    expect(takesPlanEdit(view(), { gateKind: 'plan_approval' })).toBe(false);
+  });
+
+  it('the held plan is unreadable (no team rows) on a fixed-workflow run: no control that would open nothing', async () => {
+    vi.spyOn(teamPlanApi, 'team').mockResolvedValue({ units: [], rows: [] } as never);
+    mount([APPROVE, EDIT, BACK, STOP]);
+    await screen.findByTestId('session-proposal-option');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByTestId('session-proposal-edit')).toBeNull();
+  });
+
+  it('while a capable daemon\'s list is still being read the control waits', async () => {
+    useCapabilities.setState({ gateActions: true } as never);
+    const g = gateWith([]);
+    delete (g as { actions?: unknown }).actions;
+    delete (g as { actionsRead?: unknown }).actionsRead;
+    useGateStore.setState({ gates: { [RUN]: g }, approaching: {} });
+    vi.spyOn(client.api, 'getGate').mockReturnValue(new Promise(() => {}) as never);
+    render(<RunBlock view={view()} badge={0} sessionId={`run:${RUN}`} />);
+    await screen.findByTestId('session-proposal-option');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByTestId('session-proposal-edit')).toBeNull();
+    useCapabilities.setState({ gateActions: false } as never);
   });
 });
