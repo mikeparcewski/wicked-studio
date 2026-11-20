@@ -806,6 +806,7 @@ body[data-coverage="side"] #coverage{position:absolute;right:0;top:0;width:min(3
       style = mountStyle(styleRoot, {
         tokens: () => themeTokens,
         key: (key) => send('ui.key', { key }),
+        typed: (grapheme) => send('ui.typed', { grapheme }),
         apply: async (tokens) => {
           for (let attempt = 0; attempt < 2; attempt += 1) {
             if (head === null) return { ok: false, reason: `The ${cfg.kind} is not loaded yet` };

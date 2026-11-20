@@ -1,5 +1,5 @@
 import themesJson from './themes.json';
-import { forwardOptionsKey } from './v2.js';
+import { forwardFrameKey } from './v2.js';
 
 /** Artifact theme controls shared by the framework-free editors. No host chrome or network access. */
 export interface ThemeTokens {
@@ -11,6 +11,7 @@ export interface StyleContext {
   tokens(): ThemeTokens | null;
   apply(tokens: ThemeTokens): Promise<{ ok: true } | { ok: false; reason: string }>;
   key?(key: string): void;
+  typed?(grapheme: string): void;
 }
 
 /** Verbatim colors/fonts from wicked-interactive's built-in theme JSON. */
@@ -23,7 +24,13 @@ export const copyTokens = (t: ThemeTokens): ThemeTokens => ({ name: t.name, colo
 export function mountStyle(root: HTMLElement, ctx: StyleContext): { refresh(): void } {
   root.replaceChildren();
   root.classList.add('plugin-style');
-  root.onkeydown = (e) => { if (ctx.key !== undefined) forwardOptionsKey(e, root, ctx.key); };
+  root.tabIndex = -1;
+  root.onkeydown = (e) => {
+    forwardFrameKey(e, root, (_type, payload) => {
+      if ('key' in payload) ctx.key?.(payload.key);
+      else ctx.typed?.(payload.grapheme);
+    });
+  };
   const css = document.createElement('style');
   css.textContent = `.plugin-style{padding:16px;box-sizing:border-box;color:var(--ink-high);background:var(--surface-base);font:13px var(--font-sans,system-ui)}
 .plugin-style h2{font-size:16px;margin:0 0 12px}.plugin-style .theme-cards{display:grid;gap:8px;margin-bottom:18px}

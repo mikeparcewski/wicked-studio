@@ -14,7 +14,7 @@
  * A plugin never names a host decision: it only answers what the host asks and acts through its granted requests.
  */
 
-import { isForwardable } from '../../editors/keys.js';
+import { isForwardable, isOneGrapheme } from '../../editors/keys.js';
 
 export const PROTOCOL = 'wicked.editor';
 export const ENVELOPE = 1;
@@ -82,6 +82,21 @@ export function forwardOptionsKey(e: KeyboardEvent, root: HTMLElement, send: (ke
   e.preventDefault();
   e.stopPropagation();
   send(key);
+  return true;
+}
+
+/** Frame content hands typing to the composer; controls keep their native typing and activation keys. */
+export function forwardFrameKey(e: KeyboardEvent, root: HTMLElement, send: (type: 'ui.key' | 'ui.typed', payload: { key: string } | { grapheme: string }) => void): boolean {
+  if (e.key === 'Tab' && e.target === root) return false;
+  if (forwardOptionsKey(e, root, key => send('ui.key', { key }))) return true;
+  if (e.metaKey || e.ctrlKey || e.altKey || !isOneGrapheme(e.key)) return false;
+  const target = e.target as Element | null;
+  const editable = target?.closest('[contenteditable]');
+  if (target?.closest('input,textarea,select') || (editable && editable.getAttribute('contenteditable') !== 'false')) return false;
+  if (e.key === ' ' && target?.closest('button,summary,a[href]')) return false;
+  e.preventDefault();
+  e.stopPropagation();
+  send('ui.typed', { grapheme: e.key });
   return true;
 }
 

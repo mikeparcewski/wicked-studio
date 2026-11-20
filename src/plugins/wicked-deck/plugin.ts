@@ -536,6 +536,7 @@ export function start(): void {
   const stylePanel = mountStyle(styleRoot, {
     tokens: () => themeTokens,
     key: (key) => send('ui.key', { key }),
+    typed: (grapheme) => send('ui.typed', { grapheme }),
     apply: async (tokens) => {
       if (protocol !== 2 || !grants.includes('artifact.theme')) return { ok: false, reason: 'Theme changes are not granted here.' };
       if (head === null) return { ok: false, reason: 'The deck has not loaded yet.' };
