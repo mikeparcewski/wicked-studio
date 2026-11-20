@@ -83,8 +83,13 @@ with sync_playwright() as p:
     retry = page.get_by_test_id("repos-error").get_by_role("button", name="Retry")
     page.unroute("**/api/v1/repos*")
     retry.click()
-    page.wait_for_function("() => !document.querySelector('[data-testid=\"repos-error\"]')")
-    check("retry-recovers-and-add-is-back", not add.is_disabled())
+    # The banner leaves when the reload starts; the loading rows leave when it has settled.
+    page.get_by_test_id("repos-error").wait_for(state="detached")
+    page.get_by_test_id("repos-loading").wait_for(state="detached")
+    # RepositoriesPanel renders repos-add on loading || repos.length > 0 || ...;
+    # on this empty list the header button exists only while the reload is in flight.
+    empty_add = page.get_by_test_id("repos-empty").get_by_role("button", name="Add a repository", exact=True)
+    check("retry-recovers-and-add-is-back", empty_add.is_visible() and empty_add.is_enabled())
 
     # 3a. Another page announces the waiting run in the strip.
     page.goto(f"{origin}/watch", wait_until="networkidle")
