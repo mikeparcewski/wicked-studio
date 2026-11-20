@@ -89,7 +89,7 @@ const MARKUP = `
     <p data-testid="deck-note" id="note" class="note" hidden></p>
     <div id="notes-box" data-testid="deck-notes-tab" class="notes">
       <label for="notes" id="notes-label" data-testid="deck-notes-label">Speaker notes</label>
-      <textarea id="notes" data-testid="deck-notes" placeholder="What to say on this slide. Saved when you leave the field; Undo puts the old notes back."></textarea>
+      <textarea id="notes" data-testid="deck-notes" data-wicked-save placeholder="What to say on this slide. Saved when you leave the field; Undo puts the old notes back."></textarea>
     </div>
   </div>
   <div data-testid="deck-handle" id="handle" class="handle" tabindex="-1"></div>
