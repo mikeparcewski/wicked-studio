@@ -2,7 +2,7 @@
    one-modal-per-agent. Tokens only (UI-CONTRACT §2); class prefix `.wk-agents-`. */
 
 /* The panel (mountable: the /agents page or the Desk's Agents tab) and its toolbar. */
-.wk-agents-panel { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.wk-agents-panel { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; padding-bottom: var(--fab-clear); }
 .wk-agents-toolbar { display: flex; justify-content: flex-end; gap: var(--space-2); }
 
 .wk-agents-tiles { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 1fr); gap: var(--space-4); align-items: stretch; }

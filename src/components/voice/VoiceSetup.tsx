@@ -23,6 +23,11 @@ export function VoiceSetup(): React.ReactElement | null {
           <b>I can’t hear you yet:</b>{' '}
           {status.engine.found ? status.engine.install : <>the speech engine (whisper.cpp) isn’t on this computer. {status.engine.install}</>}
         </p>
+        {!status.model.present && (
+          <p data-testid="voice-engine-then-model">
+            Then there is one more step: I’ll ask before downloading the speech model ({status.model.name}, about {mb(status.model.approxBytes)}).
+          </p>
+        )}
         <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" onClick={() => void refreshStatus()}>Check again</button>
       </div>,
     );

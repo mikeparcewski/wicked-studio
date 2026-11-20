@@ -440,6 +440,66 @@ describe('voice mode', () => {
 });
 
 describe('voice setup: what it needs before it can hear', () => {
+  describe.each([
+    ['model missing', { ...STATUS, ready: false, model: { ...STATUS.model, present: false, bytes: null } }],
+    ['engine missing', { ...STATUS, ready: false, engine: { ...STATUS.engine, found: false, install: 'brew install whisper-cpp' } }],
+  ] as const)('%s', (_name, notReady) => {
+    beforeEach(() => { status = notReady; });
+
+    it('the modal offers tapping or typing while it cannot hear', async () => {
+      render(<VoiceRoot />);
+      await act(async () => { await openVoice(); });
+      expect(screen.getByTestId('voice-mic-state').textContent).toMatch(/not hearing yet/);
+      expect(screen.getByTestId('voice-modal').querySelector('.wk-voice-tip')?.textContent).not.toMatch(/\bsay\b/i);
+      expect(screen.getByTestId('voice-modal').querySelector('.wk-voice-tip')?.textContent).toMatch(/tap.*type/i);
+    });
+
+    it('full screen offers tapping or typing and keeps listening indicators off', async () => {
+      render(<VoiceRoot />);
+      await act(async () => { await openVoice(); await hear('yes', 'typed'); });
+      expect(screen.getByTestId('voice-foot').textContent).not.toMatch(/\bsay\b/i);
+      expect(screen.getByTestId('voice-foot').textContent).toMatch(/tap.*type/i);
+      expect(screen.getByTestId('voice-mic-state').textContent).toBe('Microphone on, not hearing yet');
+      expect(screen.getByTestId('voice-full').querySelector('.wk-voice-micdot')?.getAttribute('data-on')).toBe('false');
+      expect(screen.getByTestId('voice-mode').textContent).toBe('Not listening');
+      await act(async () => { await hear('streaming', 'typed'); });
+      expect(screen.getByTestId('voice-mode').textContent).toBe('Not listening');
+      expect(screen.getByTestId('voice-mode').getAttribute('data-on')).toBe('false');
+      expect(screen.getByTestId('voice-foot').textContent).not.toMatch(/\bsay\b/i);
+      expect(screen.getByTestId('voice-foot').textContent).toMatch(/type/i);
+    });
+  });
+
+  it('keeps the spoken prompts and listening indicators when ready', async () => {
+    render(<VoiceRoot />);
+    await act(async () => { await openVoice(); });
+    expect(screen.getByTestId('voice-modal').querySelector('.wk-voice-tip')?.textContent).toBe('Say “yes”, “no”, or ask about voice mode. Esc closes.');
+    await act(async () => { await hear('yes', 'typed'); });
+    expect(screen.getByTestId('voice-foot').textContent).toMatch(/Say or tap how I should listen/);
+    expect(screen.getByTestId('voice-mic-state').textContent).toBe('Microphone on');
+    expect(screen.getByTestId('voice-full').querySelector('.wk-voice-micdot')?.getAttribute('data-on')).toBe('true');
+    await act(async () => { await hear('streaming', 'typed'); });
+    expect(screen.getByTestId('voice-mode').textContent).toBe('● Streaming');
+    expect(screen.getByTestId('voice-mode').getAttribute('data-on')).toBe('true');
+  });
+
+  it.each([false, true])('explains the model consent after engine setup (engine found: %s)', async (found) => {
+    status = { ...STATUS, ready: false, engine: { ...STATUS.engine, found, supported: false, install: 'brew install whisper-cpp' }, model: { ...STATUS.model, present: false, bytes: null } };
+    render(<VoiceRoot />);
+    await act(async () => { await openVoice(); });
+    expect(screen.getByTestId('voice-engine-then-model').textContent).toMatch(/one more step.*speech model.*base\.en.*142 MB/);
+    expect(screen.getByTestId('voice-engine-then-model').textContent).toMatch(/ask before downloading/);
+    expect(modelPosts).toEqual([]);
+  });
+
+  it('does not promise a model download after engine setup when the model is present', async () => {
+    status = { ...STATUS, ready: false, engine: { ...STATUS.engine, found: false, install: 'brew install whisper-cpp' } };
+    render(<VoiceRoot />);
+    await act(async () => { await openVoice(); });
+    expect(screen.getByTestId('voice-engine-missing')).toBeTruthy();
+    expect(screen.queryByTestId('voice-engine-then-model')).toBeNull();
+  });
+
   it('a missing model is fetched only on Download, with consent; nothing listens until it is here', async () => {
     status = { ...STATUS, ready: false, model: { ...STATUS.model, present: false, bytes: null } };
     render(<VoiceRoot />);

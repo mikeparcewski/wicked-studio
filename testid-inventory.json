@@ -25047,6 +25047,12 @@
       ]
     },
     {
+      "testId": "voice-engine-then-model",
+      "files": [
+        "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
       "testId": "voice-exit",
       "files": [
         "src/components/voice/VoiceFullScreen.tsx"
@@ -25267,6 +25273,12 @@
       "testId": "voice-setup",
       "files": [
         "src/components/voice/VoiceSetup.tsx"
+      ]
+    },
+    {
+      "testId": "voice-tip",
+      "files": [
+        "src/components/voice/VoiceModal.tsx"
       ]
     },
     {

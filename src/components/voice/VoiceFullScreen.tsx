@@ -46,8 +46,12 @@ export function VoiceFullScreen(): React.ReactElement {
 
   const all = loaded ? dashboardWidgets(layout, widgets) : [];
   const { left, right } = sides(all);
-  const modeLabel = v.mode === 'stream' ? '● Streaming' : v.mode === 'space' ? (v.holding ? '● Listening' : 'Hold Space to talk') : 'Mode not chosen';
-  const foot = v.mode === 'stream'
+  // Voice can hear only with the engine, the model and the mic all here; otherwise nothing says it is listening or asks the person to speak.
+  const hears = v.micOn && v.status?.ready === true;
+  const modeLabel = !hears ? 'Not listening' : v.mode === 'stream' ? '● Streaming' : v.mode === 'space' ? (v.holding ? '● Listening' : 'Hold Space to talk') : 'Mode not chosen';
+  const foot = !hears
+    ? (v.mode === null ? 'Tap how I should listen · type below until I can hear you' : 'I can’t hear you yet · type below')
+    : v.mode === 'stream'
     ? (v.transcribing ? 'Writing down what you said…' : 'Listening · pause to send · say “stop listening” or press Esc')
     : v.mode === 'space'
       ? (v.holding ? 'Listening while you hold…' : v.transcribing ? 'Writing down what you said…' : 'Hold Space, or the mic button, to talk · Esc leaves')
@@ -73,10 +77,10 @@ export function VoiceFullScreen(): React.ReactElement {
       </aside>
       <section className="wk-voice-center" aria-label="Conversation">
         <div className="wk-voice-top">
-          <span className="wk-voice-micdot" data-on={v.micOn ? 'true' : 'false'} aria-hidden />
-          <span className="sr-only" data-testid="voice-mic-state">{v.micOn ? 'Microphone on' : 'Microphone off'}</span>
+          <span className="wk-voice-micdot" data-on={hears ? 'true' : 'false'} aria-hidden />
+          <span className="sr-only" data-testid="voice-mic-state">{hears ? 'Microphone on' : v.micOn ? 'Microphone on, not hearing yet' : 'Microphone off'}</span>
           <LiveWave count={40} testId="voice-fwave" />
-          <span className="wk-voice-mode" data-on={v.mode === 'stream' || v.holding ? 'true' : 'false'} data-testid="voice-mode">{modeLabel}</span>
+          <span className="wk-voice-mode" data-on={hears && (v.mode === 'stream' || v.holding) ? 'true' : 'false'} data-testid="voice-mode">{modeLabel}</span>
           <button
             type="button"
             className="wk-btn wk-btn--secondary wk-btn--sm"
