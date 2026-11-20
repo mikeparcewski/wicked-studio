@@ -1,20 +1,23 @@
+import { useNewWorkSeatsStore } from '../src/store/newWorkSeats.js';
 /**
  * What General settings' agents block did, now on the Agents tab's modal (operator 2026-10-16: "General
  * settings page doesn't need 'agents' block anymore"):
- *   - which agents new work uses (`wicked_default_clis`, the composers' key): "Use <agent> for new work";
+ *   - which agents new work uses (crew's `newWorkSeats` setting): "Use <agent> for new work";
  *   - an agent's free tier, said under it;
  *   - Sign out run here: crew's `POST /seats/:cli/logout` (crew#615) runs the agent's own sign-out command
  *     in a terminal — studio types nothing; a 404 (no documented sign-out) takes the offer away.
  * Sign in was already the modal's (it replaced the old sign-in panel everywhere, DES-seats-page §4).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { RosterSeat } from '../src/api/types.js';
 
 const getRoster = vi.fn();
 const seatLogout = vi.fn();
+const getSettings = vi.fn();
+const updateSettings = vi.fn();
 vi.mock('../src/api/client.js', () => ({
-  api: { getRoster: (refresh?: string) => getRoster(refresh), getSeatRecord: () => Promise.resolve({ days: 7, since: 0, until: 0, runsRead: 0, truncated: false, seats: [] }), seatLogout: (k: string, b: unknown) => seatLogout(k, b) },
+  api: { getSettings: () => getSettings(), updateSettings: (patch: unknown) => updateSettings(patch), getRoster: (refresh?: string) => getRoster(refresh), getSeatRecord: () => Promise.resolve({ days: 7, since: 0, until: 0, runsRead: 0, truncated: false, seats: [] }), seatLogout: (k: string, b: unknown) => seatLogout(k, b) },
   apiFetch: () => Promise.resolve({}),
 }));
 vi.mock('../src/api/diagnostics.js', () => ({ getDiagnostics: () => Promise.resolve({ acp: { byCli: {} } }), isDiagnosticsUnsupported: () => false }));
@@ -44,25 +47,47 @@ const opencode = { key: 'opencode', display_name: 'OpenCode', binary: 'opencode'
   login_invocation: 'XDG_CONFIG_HOME=/w/opencode opencode auth login', logout_invocation: 'XDG_CONFIG_HOME=/w/opencode opencode auth logout' } as unknown as RosterSeat;
 
 beforeEach(() => {
+  useNewWorkSeatsStore.setState({ seats: null, state: 'idle', loaded: false, saving: false, error: null });
   localStorage.clear();
   resetAgentsReads();
   clearCachedRoster();
   getRoster.mockReset().mockResolvedValue({ roster: [codex, opencode] });
   seatLogout.mockReset();
+  getSettings.mockReset().mockResolvedValue({ settings: {} });
+  updateSettings.mockReset().mockResolvedValue({ settings: {} });
 });
-afterEach(() => { cleanup(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe('the agent modal carries what General settings did', () => {
-  it('Use <agent> for new work: on by default, off writes the stored defaults without it, on again adds it back', async () => {
+  it('Use <agent> for new work: off PUTs server defaults without it, on adds it back without browser storage', async () => {
     render(<AgentsPage search="?fix=codex" navigate={vi.fn()} />);
     const dialog = await screen.findByRole('dialog', { name: 'Codex' });
     const toggle = within(dialog).getByTestId('agents-new-work-toggle');
     expect(toggle).toHaveAttribute('aria-checked', 'true');
+    const write = vi.spyOn(Storage.prototype, 'setItem');
     fireEvent.click(toggle);
-    expect(JSON.parse(localStorage.getItem('wicked_default_clis') ?? 'null')).toEqual(['opencode']);
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ newWorkSeats: ['opencode'] }));
+    expect(write).not.toHaveBeenCalled();
+    write.mockRestore();
     await waitFor(() => expect(within(dialog).getByTestId('agents-new-work-toggle')).toHaveAttribute('aria-checked', 'false'));
+    await waitFor(() => expect(within(dialog).getByTestId('agents-new-work-toggle')).toBeEnabled());
     fireEvent.click(within(dialog).getByTestId('agents-new-work-toggle'));
-    expect(JSON.parse(localStorage.getItem('wicked_default_clis') ?? 'null')).toEqual(['opencode', 'codex']);
+    await waitFor(() => expect(updateSettings).toHaveBeenLastCalledWith({ newWorkSeats: ['opencode', 'codex'] }));
+  });
+
+  it('a failed PUT restores the toggle and says the choice was not saved', async () => {
+    getSettings.mockResolvedValue({ settings: { newWorkSeats: ['codex', 'away-seat'] } });
+    let refuse!: (error: unknown) => void;
+    updateSettings.mockReturnValue(new Promise((_resolve, reject) => { refuse = reject; }));
+    render(<AgentsPage search="?fix=codex" navigate={vi.fn()} />);
+    const dialog = await screen.findByRole('dialog', { name: 'Codex' });
+    fireEvent.click(within(dialog).getByTestId('agents-new-work-toggle'));
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ newWorkSeats: ['away-seat'] }));
+    expect(within(dialog).getByTestId('agents-new-work-toggle')).toHaveAttribute('aria-checked', 'false');
+    await act(async () => { refuse(new ApiError(403, 'workers cannot change settings')); });
+    expect(within(dialog).getByTestId('agents-new-work-toggle')).toHaveAttribute('aria-checked', 'true');
+    expect(useNewWorkSeatsStore.getState().seats).toEqual(['codex', 'away-seat']);
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(/couldn.t save/i);
   });
 
   it('says an agent\'s free tier', async () => {
@@ -106,11 +131,11 @@ describe('the agent modal carries what General settings did', () => {
   });
 
   it('toggling one agent keeps every other stored choice, even ones no row shows (codex r1)', async () => {
-    localStorage.setItem('wicked_default_clis', JSON.stringify(['claude-judge', 'codex', 'away-seat']));
+    getSettings.mockResolvedValue({ settings: { newWorkSeats: ['claude-judge', 'codex', 'away-seat'] } });
     render(<AgentsPage search="?fix=codex" navigate={vi.fn()} />);
     const dialog = await screen.findByRole('dialog', { name: 'Codex' });
     fireEvent.click(within(dialog).getByTestId('agents-new-work-toggle'));
-    expect(JSON.parse(localStorage.getItem('wicked_default_clis') ?? 'null')).toEqual(['claude-judge', 'away-seat']);
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ newWorkSeats: ['claude-judge', 'away-seat'] }));
   });
 
   it('an agent that needs no sign-in still offers its provider sign-in and its documented sign-out (codex r1)', async () => {

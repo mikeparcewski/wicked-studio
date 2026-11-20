@@ -1,4 +1,5 @@
 import { defaultOn } from '../store/composerSeats.js';
+import { useNewWorkSeatsStore } from '../store/newWorkSeats.js';
 import { VoiceMicButton } from './voice/VoiceMicButton.js';
 import { setVoicePageFocus } from '../voice/controller.js';
 import { commitGateDecision } from '../board/gateActions.js';
@@ -604,9 +605,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
 
   // ── Data loading ───────────────────────────────────────────────────────────
   useEffect(() => {
-    api
-      .getRoster()
-      .then(({ roster: seats }) => {
+    const settings = useNewWorkSeatsStore.getState();
+    const defaultsReady = settings.state === 'idle' ? settings.load() : Promise.resolve();
+    Promise.all([api.getRoster(), defaultsReady])
+      .then(([{ roster: seats }]) => {
         // Deposit for Chat's default chips (§6.1: cached, never fetched on mount).
         setCachedRoster(seats);
         setRoster(seats);
@@ -621,13 +623,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           setSelectedClis(pickable(prefill.clis));
           return;
         }
-        try {
-          const stored = localStorage.getItem('wicked_default_clis');
-          if (stored) {
-            setSelectedClis(pickable(JSON.parse(stored) as string[]));
-            return;
-          }
-        } catch { /* ignore */ }
+        const stored = useNewWorkSeatsStore.getState().seats;
+        if (stored !== null) {
+          setSelectedClis(pickable(stored));
+          return;
+        }
         // (operator ruling 2026-10-11) The DEFAULT pick leaves opt-in seats (opencode) out unless
         // the operator picked them; a saved default (Settings) or a prefill is an explicit choice.
         setSelectedClis(pickable(userSeats(seats).filter((s) => s.enabled_for_council && defaultOn(s.key)).map((s) => s.key)));

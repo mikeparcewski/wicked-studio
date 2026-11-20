@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { useNewWorkSeatsStore } from '../src/store/newWorkSeats.js';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ChatInput } from '../src/components/ChatInput.js';
@@ -14,28 +15,13 @@ function seat(overrides: Partial<RosterSeat> & { key: string }): RosterSeat {
   };
 }
 
-// This jsdom setup exposes no localStorage (ChatInput guards reads with try/catch);
-// stub one so the stored-default-selection path is exercisable.
-function stubLocalStorage(): void {
-  const store = new Map<string, string>();
-  vi.stubGlobal('localStorage', {
-    getItem: (k: string) => store.get(k) ?? null,
-    setItem: (k: string, v: string) => void store.set(k, v),
-    removeItem: (k: string) => void store.delete(k),
-    clear: () => store.clear(),
-  });
-}
-
 beforeEach(() => {
+  useNewWorkSeatsStore.setState({ seats: null, state: 'idle', loaded: false, saving: false, error: null });
   vi.restoreAllMocks();
-  stubLocalStorage(); // empty store → default selection = enabled_for_council seats
+  vi.spyOn(client.api, 'getSettings').mockResolvedValue({ settings: {} } as never);
   vi.spyOn(client.api, 'getRoster').mockResolvedValue({ roster: [] });
   vi.spyOn(client.api, 'listRepos').mockResolvedValue({ repos: [] });
   vi.spyOn(client.api, 'listWorkflows').mockResolvedValue({ workflows: [] });
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
 });
 
 describe('ChatInput seat sign-in warning (launch check)', () => {
@@ -111,7 +97,7 @@ describe('ChatInput seat sign-in warning (launch check)', () => {
 
   it('a signed-out seat that is DESELECTED does not warn (stored default selection)', async () => {
     const user = userEvent.setup();
-    localStorage.setItem('wicked_default_clis', JSON.stringify(['claude']));
+    vi.mocked(client.api.getSettings).mockResolvedValue({ settings: { newWorkSeats: ['claude'] } } as never);
     vi.mocked(client.api.getRoster).mockResolvedValue({
       roster: [
         seat({ key: 'claude', signed_in: true }),

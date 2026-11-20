@@ -1,5 +1,6 @@
+import { useNewWorkSeatsStore } from '../src/store/newWorkSeats.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ApiError } from '../src/api/errors.js';
 import type { Diagnostics } from '../src/api/diagnostics.js';
@@ -21,6 +22,7 @@ import { makeView } from './factories.js';
 const openChat = vi.fn();
 const sendChatMessage = vi.fn();
 const getRoster = vi.fn();
+const getSettings = vi.fn();
 const getChat = vi.fn();
 const listRepos = vi.fn();
 const listProjects = vi.fn();
@@ -30,6 +32,7 @@ vi.mock('../src/api/client.js', () => ({
   api: {
     openChat: (...a: unknown[]) => openChat(...a),
     sendChatMessage: (...a: unknown[]) => sendChatMessage(...a),
+    getSettings: () => getSettings(),
     getRoster: (...a: unknown[]) => getRoster(...a),
     getChat: (...a: unknown[]) => getChat(...a),
     listRepos: (...a: unknown[]) => listRepos(...a),
@@ -98,6 +101,8 @@ function dock(runs: ReturnType<typeof makeView>[] = [], pathname = '/steering'):
 }
 
 beforeEach(() => {
+  useNewWorkSeatsStore.setState({ seats: null, state: 'idle', loaded: false, saving: false, error: null });
+  getSettings.mockReset().mockResolvedValue({ settings: {} });
   cleanup();
   openChat.mockReset();
   sendChatMessage.mockReset();
@@ -268,7 +273,7 @@ describe('the chat-launch wire — the GroupChat seat machinery, one warm sessio
       const user = userEvent.setup();
       wireDiagnostics('present');
       dock();
-      expect(screen.getByTestId('chat-cli')).toHaveAttribute('data-key', 'claude');
+      await waitFor(() => expect(screen.getByTestId('chat-cli')).toHaveAttribute('data-key', 'claude'));
       await user.type(screen.getByTestId('assist-input'), 'what is in the estate store?');
       await user.click(screen.getByTestId('assist-send'));
       await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
@@ -277,6 +282,20 @@ describe('the chat-launch wire — the GroupChat seat machinery, one warm sessio
     } finally {
       resetComposerSeats();
     }
+  });
+
+  it('waits for crew’s saved default before opening a new chat', async () => {
+    const user = userEvent.setup();
+    let answer!: (value: unknown) => void;
+    getSettings.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+    wireDiagnostics('present');
+    dock();
+    await user.type(screen.getByTestId('assist-input'), 'hello');
+    await user.click(screen.getByTestId('assist-send'));
+    expect(openChat).not.toHaveBeenCalled();
+    await act(async () => { answer({ settings: { newWorkSeats: ['pi'] } }); });
+    await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
+    expect(openChat.mock.calls[0]?.[0]).toMatchObject({ clis: ['pi'] });
   });
 
   it('the CLI picker: a picked CLI answers, and the pick is remembered for the next chat', async () => {

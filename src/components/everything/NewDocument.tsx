@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNewWorkSeats } from '../../store/newWorkSeats.js';
 import { createDoc, listDocs, UNFILED_MOUNT } from '../../api/interactive.js';
 import { api } from '../../api/client.js';
 import { setCachedRoster } from '../../store/rosterCache.js';
@@ -90,7 +91,8 @@ function NewDocumentForm({ projects, initialProject, initialFormat = '', onClose
   const sending = useRef(false);
   // studio#302: the council. The roster is read-only here (the shared cache, one GET /roster).
   const roster = useRoster();
-  const defaults = useMemo(() => (roster === null ? null : defaultDocSeats(roster)), [roster]);
+  const { seats: newWorkSeats, state: seatsState } = useNewWorkSeats();
+  const defaults = useMemo(() => (roster === null || seatsState === 'idle' ? null : defaultDocSeats(roster, newWorkSeats)), [roster, seatsState, newWorkSeats]);
   const [seatPick, setSeatPick] = useState<ReadonlySet<string> | null>(null);
   const selected = seatPick ?? defaults?.selected ?? null;
   // Counted against the CURRENT roster: a pick whose seats a roster refresh dropped must not send `[]`.

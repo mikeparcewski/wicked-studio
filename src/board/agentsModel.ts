@@ -109,7 +109,7 @@ export interface AgentsInputs {
   acpByCli?: Record<string, { sessionsStarted: number; fallbacks: number; fallbackKinds: Record<string, number> }> | undefined;
   /** `undefined` = not answered: no week numbers. */
   record?: SeatRecordResponse | undefined;
-  /** Stored default keys (`wicked_default_clis`), or `null` for the composer's default rule. */
+  /** Crew's newWorkSeats keys, or `null` for the composer's default rule. */
   defaults: readonly string[] | null;
   now: number;
 }

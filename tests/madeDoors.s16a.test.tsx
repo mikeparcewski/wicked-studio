@@ -1,3 +1,5 @@
+import { api } from '../src/api/client.js';
+import { useNewWorkSeatsStore } from '../src/store/newWorkSeats.js';
 // S16a-4d: the Made list's two doors — "New document" (one POST per press, none on render; a
 // collision named with "Open it"; any other refusal in the daemon's words) and a Delete per
 // document row (DocDeleteConfirm, one DELETE) — plus the name derivation shared with the thread.
@@ -40,7 +42,10 @@ const ROSTER: RosterSeat[] = [
   seat('opencode', { enabled_for_council: false }),
 ];
 
-beforeEach(() => { vi.mocked(interactive.createDoc).mockReset(); setCachedRoster(ROSTER); localStorage.clear(); });
+beforeEach(() => {
+  useNewWorkSeatsStore.setState({ seats: null, state: 'idle', loaded: false, saving: false, error: null });
+  vi.spyOn(api, 'getSettings').mockResolvedValue({ settings: {} } as never);
+  vi.mocked(interactive.createDoc).mockReset(); setCachedRoster(ROSTER); localStorage.clear(); });
 afterEach(() => { cleanup(); clearCachedRoster(); });
 
 describe('S16a-4d — the name and the body (one spelling with the thread)', () => {
@@ -78,7 +83,7 @@ describe('S16a-4d — the New document door', () => {
   it('studio#302: the council defaults to the seats that will answer, names the left-out ones, and rides the create as clisJson', async () => {
     vi.mocked(interactive.createDoc).mockResolvedValue({ name: 'offsite-plan', head: 1 });
     render(<NewDocument projects={PROJECTS} initialProject="notes" onClose={vi.fn()} onCreated={vi.fn()} onOpen={vi.fn()} />);
-    const seats = screen.getAllByTestId('made-new-document-seat');
+    const seats = await screen.findAllByTestId('made-new-document-seat');
     expect(seats.map((b) => [b.dataset.seat, b.getAttribute('aria-pressed')])).toEqual([
       ['claude', 'true'], ['pi', 'true'], ['copilot', 'false'], ['codex', 'false'], ['opencode', 'false'],
     ]);
@@ -103,9 +108,9 @@ describe('S16a-4d — the New document door', () => {
   });
 
   it('studio#302: every seat unchecked refuses Create and says why; the stored Build default wins over enabled_for_council', async () => {
-    localStorage.setItem('wicked_default_clis', JSON.stringify(['pi', 'opencode']));
+    vi.mocked(api.getSettings).mockResolvedValue({ settings: { newWorkSeats: ['pi', 'opencode'] } } as never);
     render(<NewDocument projects={PROJECTS} initialProject="notes" onClose={vi.fn()} onCreated={vi.fn()} onOpen={vi.fn()} />);
-    expect(screen.getByTestId('made-new-document-council')).toHaveTextContent('Helpers: pi · opencode');
+    await waitFor(() => expect(screen.getByTestId('made-new-document-council')).toHaveTextContent('Helpers: pi · opencode'));
     await userEvent.type(screen.getByTestId('made-new-document-brief'), 'Offsite plan');
     for (const b of screen.getAllByTestId('made-new-document-seat').filter((x) => x.getAttribute('aria-pressed') === 'true')) await userEvent.click(b);
     expect(screen.getByTestId('made-new-document-council')).toHaveTextContent('Choose two helpers: one writes the document and another checks it.');
