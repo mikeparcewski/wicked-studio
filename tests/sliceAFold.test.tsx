@@ -127,9 +127,9 @@ describe('saved setup decisions', () => {
 
 describe('frozen sign-in refusals and next actions', () => {
   it.each([
-    [502, 'container_runtime_down', 'Docker or Rancher needs to be started.', 'Start Docker Desktop or Rancher Desktop'],
+    [502, 'container_runtime_down', 'Docker or Rancher needs to be started.', 'Start Rancher Desktop'],
     // The k8s runner's refusal kinds (crew maps wicked-core's FloorUnarmed kinds to these codes).
-    [503, 'cluster_unreachable', 'Kubernetes needs to be started.', 'Start Rancher Desktop or Docker Desktop with Kubernetes on'],
+    [503, 'cluster_unreachable', 'Kubernetes needs to be started.', 'Start Rancher Desktop with Kubernetes on'],
     [503, 'no_cluster', 'This computer’s cluster isn’t set up for helpers yet.', 'Run wicked-core cluster install'],
     [503, 'controller_missing', 'This computer’s cluster isn’t set up for helpers yet.', 'Run wicked-core cluster install'],
     [503, 'pids_unlimited', 'The cluster needs a process limit first.', 'pod-max-pids'],
@@ -154,6 +154,7 @@ describe('frozen sign-in refusals and next actions', () => {
     // Crew's sentence already says what to do: studio adds no second action line (no Technical details either).
     if (code === 'signin_failed') expect(result).toHaveTextContent(String(action));
     else expect(result).not.toHaveTextContent(String(action));
+    expect(result).not.toHaveTextContent(/Docker Desktop/);
     expect(result.textContent).not.toContain('Technical details');
     expect(result).not.toHaveTextContent('alice');
   });
@@ -163,7 +164,8 @@ describe('frozen sign-in refusals and next actions', () => {
     fireEvent.click(await screen.findByTestId('agents-signin'));
     const result = await screen.findByTestId('agents-check-result');
     await waitFor(() => expect(result).toHaveAttribute('data-state', 'signin-failed'));
-    expect(result).toHaveTextContent('Start Rancher Desktop or Docker Desktop with Kubernetes on, then try again.');
+    expect(result).toHaveTextContent('Start Rancher Desktop with Kubernetes on, then try again.');
+    expect(result).not.toHaveTextContent(/Docker Desktop/);
   });
   it.each([['no_cluster'], ['controller_missing']])('a coded %s without crew sentence gives the whole install command', async (code) => {
     refusal = { status: 503, body: { code, error: '' } };
@@ -198,7 +200,8 @@ describe('frozen sign-in refusals and next actions', () => {
     fireEvent.click(await screen.findByTestId('agents-signin'));
     const result = await screen.findByTestId('agents-check-result');
     await waitFor(() => expect(result).toHaveAttribute('data-state', 'signin-failed'));
-    expect(result).toHaveTextContent('Start Docker Desktop or Rancher Desktop, then try again.');
+    expect(result).toHaveTextContent('Start Rancher Desktop, then try again.');
+    expect(result).not.toHaveTextContent(/Docker Desktop/);
   });
   it('keeps unrecognized older-service errors under Technical details', async () => {
     refusal = { status: 500, body: { error: 'internal_probe_failure: stack dump' } };
@@ -265,7 +268,8 @@ describe('helper sign-in wording and stopped Docker', () => {
     expect(within(row).getByRole('button', { name: 'Start Kubernetes' })).toBeInTheDocument();
     expect(row).not.toHaveTextContent(/Not checked|signed out|Not signed in/i);
     const modal = await screen.findByTestId('agents-modal');
-    expect(modal).toHaveTextContent('Start Rancher Desktop or Docker Desktop with Kubernetes on');
+    expect(modal).toHaveTextContent('Start Rancher Desktop with Kubernetes on');
+    expect(modal).not.toHaveTextContent(/Docker Desktop/);
     expect(modal).not.toHaveTextContent(/Docker or Rancher is stopped|Sign-in couldn’t be read/i);
   });
   it('describes both possible sign-in paths truthfully by default, including the terminal layer', async () => {
@@ -290,7 +294,8 @@ describe('helper sign-in wording and stopped Docker', () => {
     expect(row).not.toHaveTextContent(/Not checked|signed out|Not signed in/i);
     const modal = await screen.findByTestId('agents-modal');
     expect(modal).toHaveTextContent("Docker isn't running");
-    expect(modal).toHaveTextContent('Start Docker Desktop or Rancher Desktop');
+    expect(modal).toHaveTextContent('Start Rancher Desktop');
+    expect(modal).not.toHaveTextContent(/Docker Desktop/);
     expect(modal).not.toHaveTextContent(/Not checked|signed out|Sign-in couldn’t be read/i);
   });
 });

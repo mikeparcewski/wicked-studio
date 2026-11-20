@@ -81,7 +81,8 @@ describe('A-C3 sign-in opening failures', () => {
   ])('explains the runtime action for HTTP %s and %j', async (status, body) => {
     refusal = { status, body };
     const result = await failSignIn();
-    expect(result).toHaveTextContent('The container runtime isn’t running. Start Docker Desktop or Rancher Desktop, then try again.');
+    expect(result).toHaveTextContent('The container runtime isn’t running. Start Rancher Desktop, then try again.');
+    expect(result).not.toHaveTextContent(/Docker Desktop/);
     const main = result.cloneNode(true) as HTMLElement;
     main.querySelectorAll('details').forEach((d) => d.remove());
     expect(main).not.toHaveTextContent(/docker.sock|unix:|docker API|Cannot connect/);
@@ -225,6 +226,15 @@ describe('A-C4 complete setup guide', () => {
       expect(step).toHaveAttribute('data-done', 'false');
       expect(step).toHaveTextContent('Not checked yet.');
     }
+  });
+  it('names Rancher Desktop when the runtime is down without a helper row sentence', async () => {
+    roster = [];
+    infra = [{ key: 'seat_images', state: 'down' }];
+    page('?setup=1');
+    const step = await screen.findByTestId('agents-setup-step-runtime');
+    await waitFor(() => expect(step).toHaveTextContent('Not done. Start Rancher Desktop, then check again.'));
+    expect(step).not.toHaveTextContent(/Docker Desktop/);
+    expect(step).toHaveAttribute('data-done', 'false');
   });
   it('updates the skills, code map and runtime steps from fresh reads', async () => {
     page('?setup=1');

@@ -110,11 +110,11 @@ function signInFailure(name: string, error: unknown): { lead: string; tone: 'fai
   const crewSaid = typeof body['error'] === 'string' && body['error'].trim() !== '';
   const result = (lead: string, action: string, fallback: string) => ({ lead, tone: 'fail' as const, line: code === undefined ? fallback : line, ...(code === undefined || crewSaid ? {} : { action }) });
   if (code === 'container_runtime_down' || code === undefined && /container runtime|docker/i.test(raw)) {
-    return result('Docker or Rancher needs to be started.', 'Start Docker Desktop or Rancher Desktop, then try again.',
-      'The container runtime isn’t running. Start Docker Desktop or Rancher Desktop, then try again.');
+    return result('Docker or Rancher needs to be started.', 'Start Rancher Desktop, then try again.',
+      'The container runtime isn’t running. Start Rancher Desktop, then try again.');
   }
   // The k8s runner's refusals (crew maps wicked-core's kinds; its sentence names the repair).
-  if (code === 'cluster_unreachable') return result('Kubernetes needs to be started.', 'Start Rancher Desktop or Docker Desktop with Kubernetes on, then try again.', line);
+  if (code === 'cluster_unreachable') return result('Kubernetes needs to be started.', 'Start Rancher Desktop with Kubernetes on, then try again.', line);
   if (code === 'no_cluster' || code === 'controller_missing') return result('This computer’s cluster isn’t set up for helpers yet.', 'Run wicked-core cluster install --admin-context <your cluster context> --home <this daemon’s state home>, then try again.', line);
   if (code === 'pids_unlimited') return result('The cluster needs a process limit first.', 'Set the kubelet’s pod-max-pids to 4096, then try again.', line);
   if (code === 'policy_refused') {
