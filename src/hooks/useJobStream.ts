@@ -12,6 +12,7 @@ import { useElicitationStore } from '../store/elicitations.js';
 import { useGateStore } from '../store/gates.js';
 import { loadPlanGate, usePlanGate } from '../store/planGates.js';
 import { useTeamFold } from './useTeamFold.js';
+import { useGateActions } from './useGateActions.js';
 
 /**
  * The job stream's one hook (DES-CATALOG-002 rev 7 §2.8.3): a lineage plus its run's state from studio's existing
@@ -124,6 +125,9 @@ export function useJobView(lineage: JobLineage, runs: readonly SessionView[], no
     return rows.some((r) => r.event_type === 'wicked.team.gate.opened' && r.payload['kind'] === 'plan_approval' && !decided.has(String(r.payload['gate_id'])));
   }, [fold]);
   const classified = gate?.gateKind !== undefined || (fold?.snapshot != null && !openPlanOnRecord && teamError === null) || plan.view !== null;
+  // The passage answers held plans; other gates' cards read their own lists under their own refresh keys.
+  const planGate = (plan.view !== null && plan.view.ord === gate?.ord) || gate?.gateKind === 'plan_approval' || (waiting && !classified);
+  const actions = useGateActions(runId ?? '', planGate ? gate : undefined);
   const inputs = useMemo<JobRunInputs>(() => {
     const pv = plan.view;
     // The plan this gate holds: only a read made for the gate open now may be approved (`fresh`).
@@ -137,6 +141,7 @@ export function useJobView(lineage: JobLineage, runs: readonly SessionView[], no
     return {
       view: run,
       gate: gate === undefined ? null : { ord: gate.ord, receivedAt: gate.receivedAt, gateKind: gate.gateKind, prompt: gate.prompt },
+      ...(actions !== undefined ? { actions } : {}),
       plan: planIn,
       planReading: plan.reading,
       planUnknown: waiting && !classified,
@@ -147,7 +152,7 @@ export function useJobView(lineage: JobLineage, runs: readonly SessionView[], no
       question,
       pending: pending === null ? null : { id: pending.id, queuedAt: pending.queuedAt, dueAt: pending.dueAt, verb: pending.verb },
     };
-  }, [run, gate, plan.view, plan.fresh, plan.reading, waiting, classified, answering, reshapeOn, planDecided, sentBackRaw, question, pending, fold]);
+  }, [run, gate, actions, plan.view, plan.fresh, plan.reading, waiting, classified, answering, reshapeOn, planDecided, sentBackRaw, question, pending, fold]);
   const view = useMemo(() => jobView(lineage, inputs, { stepName: unitStepName, swapPending, deciding, starting: deciding, now }),
     [lineage, inputs, swapPending, deciding, now]);
   // The plan gate is held but nothing readable came back for it: a failed read (either reader), not "still reading".

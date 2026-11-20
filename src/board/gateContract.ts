@@ -39,6 +39,14 @@ export function gateActionsOf(info: unknown): GateAction[] | undefined {
     && ((a as GateAction).note === 'none' || (a as GateAction).note === 'optional' || (a as GateAction).note === 'required'));
 }
 
+/** The card and passage send the same listed answer, with words only where the wire takes them. */
+export function listedGateAnswer(token: string, words: string | undefined, ord: number): GateAnswer {
+  const note = words?.trim() ?? '';
+  if (token === 'reject') return { approve: false, ...(note !== '' ? { amend: note } : {}) };
+  if (token === 'request_changes') return { approve: false, action: 'request_changes', amend: note, ord } as GateAnswer;
+  return { approve: true, action: token, ...(note !== '' ? { amend: note } : {}), ord } as GateAnswer;
+}
+
 /** An approve's words by what it does at this gate: [the plain answer, the answer with a note]. */
 const APPROVE_WORDS: Readonly<Record<string, readonly [string, string, string]>> = {
   continue: ['Approve', 'Approve and steer', 'Continue the run (a note steers the next step).'],

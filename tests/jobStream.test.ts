@@ -137,6 +137,48 @@ describe('jobView', () => {
     expect(v.tokensLive).toBe(false);
   });
 
+  it.each([
+    { name: 'reject only', tokens: ['reject'], ids: ['reject'] },
+    { name: 'all plan answers', tokens: ['approve', 'request_changes', 'reject'], ids: ['approve', 'change', 'reject'] },
+    { name: 'empty list', tokens: [], ids: [] },
+    { name: 'missing list', tokens: undefined, ids: ['approve', 'change'] },
+  ])('a held plan follows the engine answers: $name', ({ tokens, ids }) => {
+    const listed = tokens === undefined ? {} : { actions: tokens.map((action) => ({ action, intent: action, note: 'none' as const })) };
+    expect(jobView(started, held({ ...listed }), NAME).replies.map((r) => r.id)).toEqual(ids);
+  });
+
+  it('keeps listed order with refusal last, omits editor and reassignment, and binds listed words', () => {
+    const actions = [
+      { action: 'reject', intent: 'cancel', note: 'none' as const },
+      { action: 'retry_rules', intent: 'retry_rules', note: 'optional' as const },
+      { action: 'edit_plan', intent: 'edit_plan', note: 'none' as const },
+      { action: 'request_changes', intent: 'send_back', note: 'required' as const },
+      { action: 'reassign', intent: 'reassign', note: 'none' as const, seats: ['codex'] },
+      { action: 'approve', intent: 'approve_plan', note: 'none' as const },
+      { action: 'new_answer', intent: 'new_answer', note: 'none' as const },
+    ];
+    const replies = jobView(started, held({ actions }), NAME).replies;
+    expect(replies.map((r) => [r.id, r.label, r.binds === true])).toEqual([
+      ['act:retry_rules', 'Re-check the rules', true], ['change', 'Change', true],
+      ['approve', 'Approve plan v2', false], ['act:new_answer', 'new answer', false], ['reject', 'Don’t start', false],
+    ]);
+    expect(replies.every((r) => r.target === 'plan:run-1:1:2' && r.enabled)).toBe(true);
+    expect(replies.at(-1)?.tone).toBe('quiet');
+  });
+
+  it('holds every listed answer while the shown plan is stale or an answer is queued', () => {
+    const actions = ['approve', 'request_changes', 'reject', 'new_answer'].map((action) => ({ action, intent: action, note: 'none' as const }));
+    const holds: Array<[Partial<JobRunInputs>, string]> = [
+      [{ plan: { ord: 1, planRev: 2, steps: [], fresh: false } }, 'reading the plan…'],
+      [{ pending: { id: 1, queuedAt: 0, dueAt: 10_000, verb: 'approve' } }, 'your answer is queued'],
+    ];
+    for (const [over, reason] of holds) {
+      const replies = jobView(started, held({ actions, ...over }), NAME).replies;
+      expect(replies).toHaveLength(4);
+      expect(replies.every((r) => !r.enabled && r.held === reason && r.target === 'plan:run-1:1:2')).toBe(true);
+    }
+  });
+
   it('a plan read not made for this gate, a queued answer, and re-planning all hold Approve', () => {
     expect(jobView(started, held({ plan: { ord: 1, planRev: 2, steps: [], fresh: false } }), NAME).replies[0]).toMatchObject({ enabled: false, held: 'reading the plan…' });
     expect(jobView(started, held({ pending: { id: 1, queuedAt: 0, dueAt: 10_000, verb: 'approve' } }), NAME).replies[0]).toMatchObject({ enabled: false, held: 'your answer is queued' });

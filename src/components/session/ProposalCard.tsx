@@ -1,5 +1,5 @@
 import { useGateActions } from '../../hooks/useGateActions.js';
-import { choicesForAction } from '../../board/gateContract.js';
+import { choicesForAction, listedGateAnswer } from '../../board/gateContract.js';
 import { gateOffers, offerActions, OFFER_APPROVE, OFFER_REJECT, OFFER_REQUEST_CHANGES } from '../../board/gateOffers.js';
 import { useGateSkipQe } from '../../hooks/useGateSkipQe.js';
 import { SKIP_QE_ACTION, SKIP_QE_CONSEQUENCE, SKIP_QE_SEND } from '../../board/qeSkip.js';
@@ -11,7 +11,7 @@ import type { ChainModel } from '../../board/chainModel.js';
 import { api } from '../../api/client.js';
 import { commitGateDecision, GATE_HASH, IDLE_GATE_ACTION, gateKeyOf, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
 import { InlineUndo } from '../InlineUndo.js';
-import { deliverCardOf, deliverFailureOf, deliverLine, gateInstance, proposalCard, proposalKindOf, type ProposalKind } from '../../board/proposalCard.js';
+import { deliverCardOf, deliverFailureOf, deliverLine, gateInstance, PLAN_STOP, proposalCard, proposalKindOf, type ProposalKind } from '../../board/proposalCard.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
 import { repoNameOf } from '../../board/deskWords.js';
 import type { AskProposal } from '../../board/askThread.js';
@@ -78,8 +78,7 @@ export function planNoteKey(runId: string, instance: string | null): string {
   return `plan-note:${runId}:${instance ?? '-'}`;
 }
 
-/** A plan gate's reject arm, as its card says it. */
-export const PLAN_STOP = 'Don’t start';
+export { PLAN_STOP } from '../../board/proposalCard.js';
 /** studio#992: the plan gate's note choice, as the reply box names it ("Replies to this decision (…)"). */
 export const PLAN_NOTE_REPLY = 'Approve plan with your note';
 /** studio#992: the reply box's words while the plan gate takes a note. */
@@ -304,8 +303,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   const listedAnswer = (token: string, why?: string): void => {
     if (sending.current || gate === undefined) return;
     sending.current = true;
-    const words = why?.trim() ?? '';
-    commitGateDecision(runId, { approve: true, action: token, ...(words !== '' ? { amend: words } : {}), ord: gate.ord } as unknown as GateAnswer,
+    commitGateDecision(runId, listedGateAnswer(token, why, gate.ord),
       { receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: token } })
       .catch(() => { /* said in the shared action state */ })
       .finally(() => { sending.current = false; });
@@ -315,7 +313,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     const note = why.trim();
     if (note === '' || sending.current || gate === undefined) return;
     sending.current = true;
-    commitGateDecision(runId, { approve: false, action: OFFER_REQUEST_CHANGES, amend: note, ord: gate.ord } as unknown as GateAnswer,
+    commitGateDecision(runId, listedGateAnswer(OFFER_REQUEST_CHANGES, note, gate.ord),
       { receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: 'Sent back' } })
       .catch(() => { /* said in the shared action state */ })
       .finally(() => { sending.current = false; });
@@ -331,8 +329,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
         ? { preview: 'The job stops before anything is built.', sent: 'Stopped the job; nothing was built.' }
         : { preview: 'The conversation ends; the helpers stand down.', sent: 'Ended the conversation.' };
     // Stop asks why (DES-GUIDED-CHAT §4): the words ride the reject into the Decisions ledger.
-    const reason = why?.trim() ?? '';
-    commitGateDecision(runId, reason !== '' ? { approve: false, amend: reason } : { approve: false }, { notice, receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: card.end ?? PLAN_STOP } })
+    commitGateDecision(runId, listedGateAnswer(OFFER_REJECT, why, gate.ord), { notice, receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: card.end ?? PLAN_STOP } })
       .catch(() => { /* said in the shared action state */ })
       .finally(() => { sending.current = false; });
   };
