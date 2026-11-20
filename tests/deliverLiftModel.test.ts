@@ -63,7 +63,7 @@ function chk(over: Partial<GateFloorCheck> = {}): GateFloorCheck {
   return {
     name: 'test', argv: [], source: '', exitCode: 0, timedOut: false, spawnError: null,
     durationMs: 0, stdoutTail: null, stderrTail: null, classification: null,
-    preExisting: [], regressions: [], ...over,
+    preExisting: [], regressions: [], flakyIds: [], ...over,
   };
 }
 

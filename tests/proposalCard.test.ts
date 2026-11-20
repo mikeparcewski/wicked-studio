@@ -231,7 +231,7 @@ describe('the deliver card: the one "Are you sure?"', () => {
     expect(deliverFailureOf(events.filter((e) => e.type !== 'stepFailed'), 2)).toBeNull();
     const c = proposalCard({ view: run('r9', 'awaiting_human', units), gate, chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI, deliverFailure: failure })!;
     expect(c.text).toBe('The last hand-over didn’t work.');
-    expect(c.why).toContain('already exists');
+    expect(c.why).toBe(`It failed: ${failure} Deliver again re-runs the checks on the same tree and tries once more; Stop cancels the run.`);
     expect(c.act).toBe('Deliver again');
     expect(c.end).toBe('Stop the run');
   });

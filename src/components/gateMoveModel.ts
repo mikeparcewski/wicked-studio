@@ -67,6 +67,27 @@ function mdLevel(line: string): number {
   return m !== null ? m[1]!.length : 0;
 }
 
+/** studio#1081: a rule verdict's status words (core `rule_check` statuses as a reviewer writes them). Only these
+ *  make a `RULE <id>:` line a verdict line, so a prose finding that starts "Rule 3: …" is never dropped. */
+const RULE_VERDICT = /^RULE\s+([^:\s]+)\s*:\s*(KEPT|BROKEN|N\/A|NA|N_A|UNCHECKED|SKIPPED|WAIVED|DEFERRED|DISPUTED)\b(?:\s*[—–:-]\s*(.*))?$/i;
+const ITEM_VERDICT = /^ITEM\s+(\d+)\s*:\s*(NOT PASS|FAIL|PASS)\b(?:\s*[—–:-]\s*(.*))?$/i;
+
+/** studio#1081: null means no verdict line; an empty finding means a passing item or unbroken rule. */
+function itemVerdictFinding(line: string): string | null {
+  const t = plain(BULLET.exec(line)?.[1] ?? line);
+  const item = ITEM_VERDICT.exec(t);
+  if (item !== null) return item[2]!.toUpperCase() === 'PASS' ? '' : `Item ${item[1]}${item[3]?.trim() ? `: ${item[3].trim()}` : ''}`;
+  const rule = RULE_VERDICT.exec(t);
+  if (rule !== null) return rule[2]!.toUpperCase() === 'BROKEN' ? `Rule ${rule[1]} broken${rule[3]?.trim() ? `: ${rule[3].trim()}` : ''}` : '';
+  return null;
+}
+
+/** studio#1081: the verdict contract's failing items and broken rules, in report order. */
+function itemVerdictFindings(text: string | null | undefined): string[] | null {
+  const findings = lines(text).map(itemVerdictFinding).filter((item) => item !== null);
+  return findings.length === 0 ? null : [...new Set(findings.filter((item) => item !== ''))];
+}
+
 function outsideNonFinding(text: string | null | undefined): { bullets: string[]; prose: string[] } {
   const out = { bullets: [] as string[], prose: [] as string[] };
   let excluded = false;
@@ -110,7 +131,7 @@ function outsideNonFinding(text: string | null | undefined): { bullets: string[]
       excludedLevel = level;
       continue;
     }
-    if (excluded || FRAME.test(body)) continue;
+    if (excluded || FRAME.test(body) || itemVerdictFinding(l) === '') continue;
     if (INLINE_PASSING.test(t) || NON_FINDING_LEAD.test(t)) {
       skipDeeper = indent;
       continue;
@@ -535,6 +556,10 @@ export function failingItems(verdict: GateVerdictView | null, verdictSummary?: s
   if (fromFindings !== null && fromFindings.length > 0) return fromFindings;
   const fromSummaryFindings = findingsItems(verdictSummary);
   if (fromSummaryFindings !== null && fromSummaryFindings.length > 0) return fromSummaryFindings;
+  const fromItems = itemVerdictFindings(reason);
+  if (fromItems !== null && fromItems.length > 0) return fromItems;
+  const fromSummaryItems = itemVerdictFindings(verdictSummary);
+  if (fromSummaryItems !== null && fromSummaryItems.length > 0) return fromSummaryItems;
   const sectioned = fromFindings !== null || fromSummaryFindings !== null;
   if (!sectioned) {
     const fromBold = boldParagraphFindings(reason) ?? boldParagraphFindings(verdictSummary);

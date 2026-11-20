@@ -82,6 +82,8 @@ export interface GateFloorCheck {
   /** The failing tests the engine read off the runner's output (`RepoCheckRun.failureIds`); `[]` when the
    *  runner's format is not one it knows, or the check passed. */
   failureIds?: string[];
+  /** studio#930: head tests that passed on retry. */
+  flakyIds: string[];
   /** The same check on the run base (`RepoCheckRun.base.run`) failed too: `true`, passed: `false`, `null`
    *  when the base was not run (or could not be). */
   baseFailed?: boolean | null;
@@ -254,6 +256,7 @@ function checkOf(raw: unknown): GateFloorCheck | null {
     preExisting: strings(c.preExisting),
     regressions: strings(c.regressions),
     failureIds: strings(c.failureIds),
+    flakyIds: strings(c['flakyIds']),
     baseFailed: baseFailedOf(c.base),
     baseFailureIds: baseFailureIdsOf(c.base),
     rerunFailureIds: [

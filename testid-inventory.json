@@ -19598,6 +19598,12 @@
       ]
     },
     {
+      "testId": "session-gate-flaky",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-floor-override-consequence",
       "files": [
         "src/components/session/GateRow.tsx"

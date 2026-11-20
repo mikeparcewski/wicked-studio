@@ -352,7 +352,7 @@ export function proposalCard(input: ProposalInput): ProposalCardModel | null {
       card.text = kind === 'plan' ? planSentence(planSteps(chain, gate.prompt)) : failed !== null ? 'The last hand-over didn’t work.' : 'Ready to hand it over.';
       card.why = kind === 'plan'
         ? ['Nothing is built until you approve it.', floorLine(gate.prompt, chain)].filter((x) => x !== null).join(' ')
-        : failed !== null ? `It failed: ${failed} Deliver again tries it once more; Stop cancels the run.` : deliverLine(view, gate, input.repoName ?? null);
+        : failed !== null ? `It failed: ${failed} Deliver again re-runs the checks on the same tree and tries once more; Stop cancels the run.` : deliverLine(view, gate, input.repoName ?? null);
       // studio#606 (1): the deliver gate's own reject arm ("reject to cancel the run") is on the card.
       if (kind === 'deliver') { card.end = 'Stop the run'; if (failed !== null) card.act = 'Deliver again'; }
     }
