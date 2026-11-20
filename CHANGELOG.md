@@ -12,6 +12,10 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Changed
+
+- **CI: the selftest pin moves to wicked-ci 3bd45ae (the advisory verdict now concludes, wicked-ci#76/#81).** The selftest job grants `checks: write` so the called workflow can publish its verdict check run; the advisory job still never blocks a merge.
+
 ### Fixed
 
 - A waiting run's plan card no longer stays on "reading the plan…" when the gate read is slow (studio#1197). A `GET /runs/:id/gate` that
