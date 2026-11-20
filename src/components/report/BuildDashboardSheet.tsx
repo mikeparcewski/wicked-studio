@@ -4,7 +4,7 @@ import { create } from 'zustand';
 import { reportOrigin, type AppOrigin } from '../../editors/apps/appOrigin.js';
 import { dashboardSeeds } from '../../editors/apps/appSeeds.js';
 import type { KnowledgeSummary } from '../../api/knowledgeSummary.js';
-import { readSuggestionGrounds } from '../../editors/apps/suggestionGrounds.js';
+import { knowledgeAvailable, readSuggestionGrounds } from '../../editors/apps/suggestionGrounds.js';
 import { dataSeedsWhen, knowledgeSeeds, mixSeeds } from '../../editors/apps/knowledgeSeeds.js';
 import { nameFrom } from '../../editors/apps/appTurns.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -119,6 +119,7 @@ export function BuildDashboardSheet({ projectId, period, navigate, onClose, fram
   }, []);
   const names = sources.state === 'ok' ? sources.names : [];
   const summary = sources.state === 'ok' || sources.state === 'failed' ? sources.summary : null;
+  const knows = knowledgeAvailable(sources.state === 'ok' || sources.state === 'failed' ? sources.summary : undefined);
   const known = summary !== null && sources.state !== 'none' && summary.projectId === sources.project ? knowledgeSeeds(summary) : [];
   const seeds = sources.state === 'reading' || sources.state === 'none' ? []
     : mixSeeds(known, dataSeedsWhen(dashboardSeeds(period, names), sources.state === 'ok' ? sources.readable : null));
@@ -179,7 +180,7 @@ export function BuildDashboardSheet({ projectId, period, navigate, onClose, fram
           <h2 id="wk-rep-build-title" className="wk-rep-build-title">Build a dashboard</h2>
           <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm wk-rep-build-x" data-testid="report-build-close" aria-label="Close" onClick={onClose}>×</button>
         </header>
-        <p className="wk-rep-build-sub">Say what it should show: your data sources, or what this project knows (its documents, memories, steering rules and data shapes). An agent builds it, another reviews it, and it’s pinned here.</p>
+        <p className="wk-rep-build-sub">Say what it should show: your data sources{knows ? ', or what this project knows (its documents, memories, steering rules and data shapes)' : ''}. An agent builds it, another reviews it, and it’s pinned here.</p>
         {made !== null ? (
           <div ref={status} className="wk-rep-build-made" data-testid="report-build-made" data-verdict={made.busy ? 'pending' : made.verdict.kind}>
             {made.busy ? <p className="wk-rep-build-line" role="status">Made {made.name}. Putting it on Report…</p> : (
@@ -215,7 +216,7 @@ export function BuildDashboardSheet({ projectId, period, navigate, onClose, fram
             <p className="wk-rep-build-foot" data-testid="report-build-foot">
               {full ? 'Its Show on Report switch can be turned on later, from its Properties.'
                 : <>It shows on this Report when it’s made: <b>Show on Report</b> starts on ({shown.length} of {REPORT_MAX} shown).</>}
-              {' '}It reads your data sources or what this project knows; Report’s own numbers, such as spend and steps, can’t go on a dashboard yet.
+              {' '}It reads your data sources{knows ? ' or what this project knows' : ''}; Report’s own numbers, such as spend and steps, can’t go on a dashboard yet.
             </p>
             {run.failNote !== null && <p className="wk-rep-build-line" data-tone="warn" data-testid="report-build-failnote">{run.failNote}</p>}
             {load === 'failed' && <p className="wk-rep-build-line" data-tone="warn">{UNREAD_WHY}: it is tried again when the app is made.</p>}

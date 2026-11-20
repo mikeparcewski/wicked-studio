@@ -10,7 +10,7 @@ import type { AnchorRef } from '../../editors/protocol.js';
 import { readThemeTokens } from '../../editors/theme.js';
 import { useRoute } from '../../hooks/useRoute.js';
 import { InsightsDecide } from './InsightsDecide.js';
-import { forwardedKey } from '../editorHost/composerBridge.js';
+import { composerOnScreen, forwardedEscape, forwardedKey, typedToComposer } from '../editorHost/composerBridge.js';
 import { focusBeside } from '../../editors/focus.js';
 
 /** Crew's insights read narrowed to ONE review run's own review (G2): what that run found, and nothing else. */
@@ -42,12 +42,12 @@ type Phase =
  * The plugin is mounted ONCE for the slot and told its surface on each morph (`setSurface`), so the frame keeps its
  * place (EP-D2).
  */
-export function RunInsightsSlot(props: { runId: string; runStatus: string; size: ArtifactSize }): React.ReactElement {
+export function RunInsightsSlot(props: { runId: string; runStatus: string; size: ArtifactSize; composerKey?: string }): React.ReactElement {
   // One run's review, one instance: another run never inherits this one's picked recommendation or adapter (review r1).
   return <RunInsightsOf key={props.runId} {...props} />;
 }
 
-function RunInsightsOf({ runId, runStatus, size }: { runId: string; runStatus: string; size: ArtifactSize }): React.ReactElement {
+function RunInsightsOf({ runId, runStatus, size, composerKey }: { runId: string; runStatus: string; size: ArtifactSize; composerKey?: string }): React.ReactElement {
   const { navigate } = useRoute();
   const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
@@ -56,6 +56,9 @@ function RunInsightsOf({ runId, runStatus, size }: { runId: string; runStatus: s
   const [metrics, setMetrics] = useState<InsightsMetricDef[]>([]);
   const [said, setSaid] = useState<string | null>(null);
   const frameBox = useRef<HTMLDivElement | null>(null);
+  // Read at each typed letter: the session's composer key, without remounting the frame when it changes.
+  const composerRef = useRef(composerKey);
+  composerRef.current = composerKey;
   const hostRef = useRef<EditorHost | null>(null);
   const adapterRef = useRef<InsightsAdapter | null>(null);
   const editorIdRef = useRef<string | null>(null);
@@ -132,9 +135,12 @@ function RunInsightsOf({ runId, runStatus, size }: { runId: string; runStatus: s
         ui: {
           chips: () => undefined,
           draft: () => undefined,
-          // No composer on this page: the first typed letter leaves the frame (the rest is the page's, never three drops).
-          typed: () => { focusBeside(frameBox.current?.querySelector('iframe') ?? null, false); },
-          key: (k) => forwardedKey(k, frameBox.current?.querySelector('iframe') ?? null),
+          typed: (g) => {
+            const key = composerRef.current;
+            if (key !== undefined && composerOnScreen(key)) typedToComposer(key, g);
+            else focusBeside(frameBox.current?.querySelector('iframe') ?? null, false);
+          },
+          key: (k) => { const frame = frameBox.current?.querySelector('iframe') ?? null; if (k === 'Escape') forwardedEscape(frame); else forwardedKey(k, frame); },
           morph: () => undefined,
           status: () => undefined,
           notes: () => undefined,

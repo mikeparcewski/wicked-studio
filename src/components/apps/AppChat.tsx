@@ -139,7 +139,8 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, frame
   );
 }
 
-export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, prepareSend, pending = 0, undoOff = false, closedWhy = null, publishRunId = null }: {
+export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, prepareSend, pending = 0, undoOff = false, closedWhy = null, publishRunId = null, typedInto }: {
+  typedInto?: React.MutableRefObject<((g: string) => void) | null>;
   publishRunId?: string | null;
   /** (G16) Why nothing can be sent now (an archived app), or null. The chat stays mounted, so a typed message is kept. */
   closedWhy?: string | null;
@@ -160,6 +161,16 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, 
 }): React.ReactElement {
   const key = appComposerKey(slug);
   const [text, setTextState] = useState(() => peekDraft(slug));
+  const box = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (typedInto === undefined) return;
+    typedInto.current = (g) => {
+      setTextState((t) => t + g);
+      // The host opens Chat in the same turn; focus after that render makes its input visible.
+      requestAnimationFrame(() => box.current?.querySelector<HTMLTextAreaElement>('[data-testid="app-composer-input"]')?.focus());
+    };
+    return () => { typedInto.current = null; };
+  }, [typedInto]);
   useEffect(() => { dropDraft(slug); }, [slug]);
   /** Messages crew did not take while a newer one was typed: each kept whole, to put back (xreview r4: a list). */
   const [kept, setKept] = useState<Array<{ id: number; words: string; about: string[] }>>([]);
@@ -237,7 +248,7 @@ export function AppChat({ slug, detail, runs, framed, navigate, onSent, onUndo, 
   };
 
   return (
-    <section className="wk-appchat" data-testid="app-chat" aria-label={`Chat about ${detail?.name ?? 'this app'}`}>
+    <section ref={box} className="wk-appchat" data-testid="app-chat" aria-label={`Chat about ${detail?.name ?? 'this app'}`}>
       <header className="wk-appchat-head">
         <h2 className="wk-appchat-title">Chat</h2>
         <span className="wk-appchat-sub">{busy ? 'A change is being made' : 'Ask for a change'}</span>

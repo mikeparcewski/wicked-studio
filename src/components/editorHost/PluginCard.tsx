@@ -577,8 +577,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     if (a.verb === 'host:ask') { askFrom(fullRef.current); return; }
     const r = await hostRef.current?.action(a.id);
     if (!live.current) return;
-    if (r === null || r === undefined) setLine({ kind: 'status', text: `${a.label}: no answer from ${editor.title}` });
-    else if (r.status !== null) setLine({ kind: 'status', text: r.status });
+    if (r === null || r === undefined) setLine((cur) => statusOver(cur, `${a.label}: no answer from ${editor.title}`));
+    else if (r.status !== null) { const text = r.status; setLine((cur) => statusOver(cur, text)); }
   };
 
   /** Ask about this from the card or from full screen (plugins-complete G24). Full screen covers the page's composer
@@ -686,6 +686,9 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
         gateActions={gate}
         actions={full ? <>{actionButtons}{optionsButton}</> : null}
         chat={run?.renderChat?.()}
+        // studio#1140 (studio half): chat edits to a cut need crew's cut proposal and interactive's recut ops first; until
+        // then the drawer says how a video does change. The slice that adds chat cut edits deletes this line.
+        chatNote={binding.source === 'demo' ? <p className="wk-host-note wk-full-drawer-note" data-testid="host-video-chat-note">This chat can't change the video. Change it here by hand (rename, trims, captions), or use Record it again.</p> : undefined}
         onExit={onExit}
         onEscape={onEscape}
       >

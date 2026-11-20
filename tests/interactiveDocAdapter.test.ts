@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * change with `expect_head`, and a head that moved under it reported as `head_moved`.
  */
 const api = vi.hoisted(() => ({
+  theme: vi.fn(),
   manifests: [] as Array<{ head: number; versions: Array<{ version: number; parent: number | null; feedback_file: string | null; html_file: string; created_at: string }> }>,
   events: [] as unknown[],
   forks: [] as unknown[],
@@ -17,6 +18,7 @@ vi.mock('../src/api/interactive.js', () => {
   class HeadMovedError extends Error { head: number; constructor(head: number) { super('head_moved'); this.head = head; } }
   return {
     HeadMovedError,
+    putLearnedTheme: api.theme,
     UNFILED_MOUNT,
     getVersions: vi.fn(async () => api.manifests.length > 1 ? api.manifests.shift()! : api.manifests[0]!),
     interactiveDocUrl: (p: string, d: string, v: number) => `/api/v1/projects/${p}/interactive/d/${d}/doc/${v}`,
@@ -233,4 +235,12 @@ describe('InteractiveDocAdapter: the engine refused the edit (e2e-1105 P10)', ()
     expect(editRefusalWords({ rejected: [{ selector: 'a', reason: 'something-new:x' }], stale: [], unchanged: false })).toBe('the page refused this edit');
     expect(editRefusalWords({ rejected: [], stale: [], unchanged: true })).toBe('the page already says that, so nothing changed');
   });
+});
+
+it('uses interactive no_visible_change refusal words', async () => {
+  api.manifests = [{ head: 1, versions: [entry(1, null)] }];
+  const message = 'This theme changes nothing you can see. Draft it again to restyle it.';
+  api.theme.mockResolvedValue({ written: false, version: null, unchanged: true, reason: 'no_visible_change', message });
+  const a = new InteractiveDocAdapter('notes', 'plan', 'The plan');
+  expect(await a.theme(1, {})).toEqual({ error: 'refused', message });
 });

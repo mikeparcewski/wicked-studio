@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 // Unit tests for src/api/interactive.ts — DES-MERGE-001 slice 2.
 //
 // Three concerns, one per AC:
@@ -25,7 +26,6 @@ import {
   postEvent,
   postExport,
   postFork,
-  requestRecord,
   requestThemeLearn,
 } from '../src/api/interactive.js';
 import { apiBase } from '../src/api/client.js';
@@ -88,8 +88,6 @@ describe('interactive URL resolver', () => {
                                                        () => postEvent(PROJECT, { event_type: 'wicked.interactive.chat.posted' })],
     // The demo surface (corrected wire, DES-FEEDBACK-001 §7.4) — same mount, same rules.
     ['listDemos',  [],                                 () => listDemos(PROJECT)],
-    ['requestRecord', { ok: true, event_id: 'e1', correlation_id: 'c1' },
-                                                       () => requestRecord(PROJECT, DEMO)],
     // The theme surface (corrected wire, issue #65) — same mount, same rules.
     ['requestThemeLearn', { ok: true, event_id: 'e1', correlation_id: 'c1' },
        () => requestThemeLearn(PROJECT, DOC, { kind: 'url', url: 'https://acme.example' })],
@@ -353,25 +351,10 @@ describe('happy-path shapes', () => {
     );
   });
 
-  it('requestRecord speaks the CORRECTED wire: demo.requested over POST /api/events', async () => {
-    // The bridge has no /api/demo/record route; the real record trigger is the
-    // UI-emittable `wicked.interactive.demo.requested` bus command (§7.2/§7.4).
-    const calls = stubFetch({ ok: true, event_id: 'e1', correlation_id: 'c1' });
-    await expect(requestRecord(PROJECT, DEMO)).resolves.toEqual({ queued: true });
-    expect(calls[0]!.init?.method).toBe('POST');
-    expect(calls[0]!.url).toBe(
-      `${apiBase()}/projects/${PROJECT}/interactive/api/events`,
-    );
-    expect(calls[0]!.init?.body).toBe(JSON.stringify({
-      event_type: 'wicked.interactive.demo.requested',
-      payload: { document_id: DEMO },
-    }));
-  });
-
   it('requestThemeLearn speaks the CORRECTED wire: theme.requested over POST /api/events (issue #65)', async () => {
     // The bridge has no learn endpoint and no theme registry. The real learn trigger is
     // the UI-emittable `wicked.interactive.theme.requested` bus command
-    // (materializeThemeRequested), doc-scoped exactly like demo.requested; what it
+    // (materializeThemeRequested), doc-scoped; what it
     // produced is read back per-doc via getLearnedTheme (interactive#181, below).
     const calls = stubFetch({ ok: true, event_id: 'e1', correlation_id: 'c1' });
     await requestThemeLearn(PROJECT, DOC, { kind: 'url', url: 'https://acme.example' });
@@ -544,4 +527,8 @@ describe('deleteDoc — the governed delete route (studio#119 / crew#338)', () =
     expect(err).toBeInstanceOf(BridgeUnavailableError);
     expect((err as BridgeUnavailableError).hint).toBe('npm i -g wicked-interactive');
   });
+});
+
+it('does not produce the retired demo recording event', () => {
+  expect(readFileSync('src/api/interactive.ts', 'utf8')).not.toContain('wicked.interactive.demo.requested');
 });

@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '../src/api/client.js';
 import { MatchTheme } from '../src/components/editorPorts/MatchTheme.js';
 import { getLearnedTheme, putLearnedTheme } from '../src/api/interactive.js';
 import { learnThemeFromThread } from '../src/interactive/themeWire.js';
@@ -63,4 +64,19 @@ describe('Match theme cancellation', () => {
     await waitFor(() => expect(onVersion).toHaveBeenCalledWith(8));
     expect(putLearnedTheme).toHaveBeenCalledExactlyOnceWith('project', 'doc', learned.tokens, true);
   });
+});
+
+it('shows interactive no_visible_change words without an error tone', async () => {
+  const message = 'This theme changes nothing you can see. Draft it again to restyle it.';
+  vi.mocked(putLearnedTheme).mockResolvedValue({ document_id: 'doc', written: false, version: null, parent: null, kind: null, unchanged: true, ...{ reason: 'no_visible_change', message } });
+  const onVersion = vi.fn();
+  submit(onVersion);
+  await waitFor(() => expect(screen.getByText(message)).toBeTruthy());
+  expect(screen.getByText(message).className).not.toContain('--bad');
+  expect(onVersion).not.toHaveBeenCalled();
+});
+it('keeps a 422 theme_unverifiable refusal visible', async () => {
+  vi.mocked(putLearnedTheme).mockRejectedValue(new ApiError(422, 'theme_unverifiable: the rendered theme could not be checked'));
+  submit();
+  await waitFor(() => expect(screen.getByText(/theme_unverifiable: the rendered theme could not be checked/)).toBeTruthy());
 });

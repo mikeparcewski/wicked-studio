@@ -232,9 +232,6 @@ try:
         ("postEvent_chat",    "POST", "/api/events",
          {"event_type": "wicked.interactive.chat.posted",
           "payload": {"role": "user", "text": "hi", "document_id": DEMO, "source_message_id": "m1"}}),
-        # The CORRECTED record wire (§7.4): requestRecord speaks demo.requested.
-        ("requestRecord",     "POST", "/api/events",
-         {"event_type": "wicked.interactive.demo.requested", "payload": {"document_id": DEMO}}),
         # The batch contract step feedback rides (§7.4 "what is kept"). docfb2:
         # items are ADR-0002 schema items — the shape writeFeedback serializes and
         # applyFeedbackItems consumes ({selector, type, …}), which the client now sends.

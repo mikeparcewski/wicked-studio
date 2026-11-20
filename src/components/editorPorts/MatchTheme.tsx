@@ -88,7 +88,7 @@ export function MatchTheme({ projectId, docId, onVersion, apply }: {
         const r = await putLearnedTheme(projectId, docId, out.result.tokens, true).finally(done);
         if (ctl.signal.aborted) return;
         if (r.version !== null) onVersion?.(r.version);
-        setLine({ text: r.version !== null ? `Matched: version ${r.version} wears it` : 'Matched: this version already looks like that', bad: false });
+        setLine({ text: r.version !== null ? `Matched: version ${r.version} wears it` : typeof r.reason === 'string' && typeof r.message === 'string' && r.message.trim() !== '' ? r.message : 'Matched: this version already looks like that', bad: false });
       }
     } catch (e: unknown) {
       if (ctl.signal.aborted) return;

@@ -65,3 +65,10 @@ export function forwardedKey(k: string, frame: HTMLIFrameElement | null): void {
   else if (k.startsWith('Alt+')) pressInHost({ key: k.slice(4).toLowerCase(), code: `Key${k.slice(4)}`, altKey: true });
   else if (k === 'Tab' || k === 'Shift+Tab') focusBeside(frame, k === 'Shift+Tab');
 }
+
+/** Escape belongs to the focused frame; a background plugin cannot close the host's page or pane. */
+export function forwardedEscape(frame: HTMLIFrameElement | null): void {
+  if (frame === null || document.activeElement !== frame) return;
+  focusBeside(frame, false);
+  pressInHost({ key: 'Escape', code: 'Escape' });
+}

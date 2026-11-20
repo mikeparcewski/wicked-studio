@@ -53,6 +53,7 @@
 .wk-full-drawer { flex: 0 0 360px; display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--border); background: var(--surface-card); }
 .wk-full-drawer-head { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); font-size: var(--text-sm); color: var(--ink-muted); }
 .wk-full-drawer-head b { color: var(--ink-high); margin-right: 6px; }
+.wk-full-drawer-note { flex: none; }
 .wk-full-drawer-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: var(--space-3) var(--space-4); }
 /* Keep desktop controls at their natural width: shrinking the segment clips Advanced, and wrapping just
    the plugin actions strands Options. Below this width, reserve the first row for the title instead. */
@@ -162,3 +163,17 @@
 .wk-checks-notes { padding: 5px 0; border-top: 1px solid var(--border); }
 .wk-checks-notes-body { margin-top: 2px; overflow-wrap: anywhere; }
 .wk-checks-notes-body p { margin: 2px 0 0; }
+
+/* The test page stays usable on a phone: the artifact gets the width before its host controls. */
+@media (max-width: 639px) {
+  .wk-editor-page:not(.wk-editor-page--app) { grid-template-columns: minmax(0, 1fr); padding: 12px; overflow-y: auto; align-content: start; }
+  .wk-editor-page .wk-editor-side { width: 100%; }
+  .wk-editor-page .wk-surfaces { flex-direction: column; min-height: auto; overflow: visible; }
+  .wk-editor-page .wk-surfaces-thread { flex: none; padding: var(--space-3); overflow: visible; }
+  .wk-editor-page .wk-surfaces > .wk-hpanel { position: static; flex: none; width: 100%; max-width: 100%; border-left: 0; border-top: 1px solid var(--border); }
+  .wk-editor-page .wk-surfaces > .wk-hpanel-ribbon { width: 100%; writing-mode: horizontal-tb; }
+  .wk-editor-page .wk-pcard-head, .wk-editor-page .wk-editor-head { flex-wrap: wrap; }
+  .wk-editor-page .wk-pcard-title, .wk-editor-page .wk-editor-title { flex-basis: 100%; white-space: normal; overflow-wrap: break-word; }
+  .wk-editor-page .wk-host-btn, .wk-editor-page .wk-since-toggle { max-width: 100%; white-space: normal; }
+  .wk-editor-page a { overflow-wrap: break-word; }
+}

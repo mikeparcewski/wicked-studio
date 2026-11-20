@@ -31,3 +31,8 @@ export async function readSuggestionGrounds(projectId: string): Promise<Suggesti
   const readable = anyAppReadable(servers.ok, projectId);
   return { projectId, summary, data: dataSourcesFor(summary, servers.ok, projectId), readable, servers: null };
 }
+
+/** Keep the normal loading copy steady; only an answered read with no summary drops the knowledge promise. */
+export function knowledgeAvailable(summary: KnowledgeSummary | null | undefined): boolean {
+  return summary !== null;
+}

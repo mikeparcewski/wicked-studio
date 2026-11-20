@@ -13,6 +13,8 @@ import { AppSession } from '../src/editors/apps/appSession.js';
 import { FixedAppStore, PREVIEW_LIMIT, isAppSlug, loadAppsDirectory, publishedOf, snippetOf, tileHostPort } from '../src/editors/apps/appsDirectory.js';
 import { AppHostView } from '../src/components/editorHost/AppHostView.js';
 import { SAMPLE_APPS } from '../src/editors/apps/samples.js';
+import * as editorModel from '../src/editors/model.js';
+import * as editorsApi from '../src/api/editors.js';
 import { EditorHost } from '../src/editors/host.js';
 
 /**
@@ -686,5 +688,42 @@ describe('a tile’s host refuses everything a compromised frame could ask', () 
     expect(prepare.mock.calls.length === 0 || (await prepare.mock.results[0]!.value as { error?: string }).error === 'refused').toBe(true);
     expect(session.head).toBe(3);
     host.teardown('done');
+  });
+});
+
+describe('preview editor availability', () => {
+  it('keeps previews loading while the editors list is pending', async () => {
+    mockDaemon({
+      '/health': { status: 'ok', capabilities: { apps: { ...CAPS.apps, query: false } } },
+      '/apps': { apps: [{ slug: 'desk', name: 'Desk' }] }, '/apps/desk': crewDetail('desk', 'Desk'),
+    });
+    vi.spyOn(editorsApi, 'listEditors').mockReturnValue(new Promise(() => {}));
+    render(<AppsPage navigate={vi.fn()} />);
+    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(1));
+    expect(screen.queryByText('The App editor is not installed here')).toBeNull();
+    expect(screen.getByText('Loading preview')).toBeTruthy();
+  });
+  it('keeps previews loading until grants answer and resets on a project change', async () => {
+    mockDaemon({ '/health': { status: 'ok', capabilities: {} }, '/editors': EDITORS });
+    let resolve!: (grants: Awaited<ReturnType<typeof editorModel.fetchGrants>>) => void;
+    vi.spyOn(editorModel, 'fetchGrants').mockReturnValue(new Promise((done) => { resolve = done; }));
+    const view = render(<AppsPage navigate={vi.fn()} />);
+    await waitFor(() => expect(screen.getAllByText('Loading preview')).toHaveLength(2));
+    await waitFor(() => expect(editorModel.fetchGrants).toHaveBeenCalled());
+    resolve({ grants: [], note: null });
+    await waitFor(() => expect(screen.queryByText('Loading preview')).toBeNull());
+    vi.mocked(editorModel.fetchGrants).mockReturnValue(new Promise(() => {}));
+    view.rerender(<AppsPage navigate={vi.fn()} search="?project=p" />);
+    await waitFor(() => expect(screen.getAllByText('Loading preview')).toHaveLength(2));
+  });
+  it('says absent only after the editors list answers without the App editor', async () => {
+    mockDaemon({ '/health': { status: 'ok', capabilities: {} }, '/editors': { editors: [] } });
+    render(<AppsPage navigate={vi.fn()} />);
+    await waitFor(() => expect(screen.getAllByText('The App editor is not installed here')).toHaveLength(2));
+  });
+  it('says the editors list did not answer when its read fails', async () => {
+    mockDaemon({ '/health': { status: 'ok', capabilities: {} }, '/editors': new Error('offline') });
+    render(<AppsPage navigate={vi.fn()} />);
+    await waitFor(() => expect(screen.getAllByText('Preview not shown: the editors list did not answer')).toHaveLength(2));
   });
 });

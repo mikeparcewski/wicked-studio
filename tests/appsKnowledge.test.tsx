@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppSpec } from '../src/api/types.js';
 import { readKnowledgeSummary, type KnowledgeSummary } from '../src/api/knowledgeSummary.js';
+import { BuildDashboardSheet, resetBuildRun } from '../src/components/report/BuildDashboardSheet.js';
 import { AppChat } from '../src/components/apps/AppChat.js';
 import { AppsPage } from '../src/components/apps/AppsPage.js';
 import { anyAppReadable, dataSourcesFor } from '../src/editors/apps/appSeeds.js';
@@ -116,7 +117,7 @@ function page(summary: unknown, withOther = false, servers: unknown[] = SERVERS)
     if (path === '/editors') return { body: { editors: [] } };
     if (path === '/projects') return { body: { projects: [{ id: 'p', name: 'Billing' }] } };
     if (path === '/mcp/servers') return { body: { servers, discovered: [] } };
-    if (path === '/knowledge/summary') return summary === null ? { status: 403, body: { code: 'knowledge_summary_human_only' } } : { body: summary };
+    if (path === '/knowledge/summary') return summary === null ? { status: 404, body: { code: 'not_found' } } : { body: summary };
     return null;
   });
 }
@@ -407,5 +408,34 @@ describe('a knowledge tile renders like any tile', () => {
     expect((window as unknown as { __pwned?: unknown }).__pwned).toBeUndefined();
     const labels = [...root.querySelectorAll('[data-component="rules_by_type"] svg text')].map((t) => t.textContent);
     expect(labels).toEqual(expect.arrayContaining(['security', 'testing']));
+  });
+});
+
+describe('knowledge promises follow the summary read', () => {
+  it.each([null, SUMMARY])('Apps intro and subtitle follow the chosen project summary: %j', async (summary) => {
+    const { calls } = page(summary);
+    render(<AppsPage navigate={vi.fn()} />);
+    await settled(calls);
+    const intro = document.querySelector('.wk-page-intro')!;
+    const subtitle = document.querySelector('.wk-newapp-sub')!;
+    if (summary === null) {
+      expect(intro.textContent).not.toContain('what your projects know');
+      expect(subtitle.textContent).not.toContain('what this project knows');
+    } else {
+      expect(intro.textContent).toContain('what your projects know');
+      expect(subtitle.textContent).toContain('what this project knows');
+    }
+    expect(calls.filter((p) => p.startsWith('/knowledge/summary'))).toHaveLength(1);
+  });
+  it.each([null, SUMMARY])('Build sheet sub and foot follow its project summary: %j', async (summary) => {
+    const { calls } = page(summary);
+    resetBuildRun();
+    render(<BuildDashboardSheet projectId="p" period="Last 7 days" navigate={vi.fn()} onClose={vi.fn()} framed={false} />);
+    await settled(calls);
+    for (const el of [document.querySelector('.wk-rep-build-sub')!, screen.getByTestId('report-build-foot')]) {
+      if (summary === null) expect(el.textContent).not.toContain('what this project knows');
+      else expect(el.textContent).toContain('what this project knows');
+    }
+    expect(calls.filter((p) => p.startsWith('/knowledge/summary'))).toHaveLength(1);
   });
 });

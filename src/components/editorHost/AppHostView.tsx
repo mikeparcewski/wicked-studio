@@ -20,7 +20,7 @@ import { useTurnRulesHold } from '../../editors/apps/turnHold.js';
 import { addAboutChip, chipsOf, removeAboutChip, useComposerChips } from '../../store/composerChips.js';
 import { recordingPort } from '../../editors/apps/previewSnapshots.js';
 import { ShowOnReport } from '../apps/ShowOnReport.js';
-import { forwardedKey } from './composerBridge.js';
+import { forwardedEscape, forwardedKey } from './composerBridge.js';
 import { focusBeside } from '../../editors/focus.js';
 
 /**
@@ -215,9 +215,10 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
   const [viewer, setViewer] = useState<string | null>(null);
   /** (K5) crew runs chat turns for this app (health `capabilities.apps.turns`). */
   const [turnsOn, setTurnsOn] = useState(false);
+  const typedInto = useRef<((g: string) => void) | null>(null);
   /** (K5) The side panel: Chat (the default) or Properties; collapsed is remembered across sessions. */
   const [panelTab, setPanelTab] = useState<PanelTab>('chat');
-  const [collapsed, setCollapsed] = useState<boolean>(() => readCollapsed());
+  const [collapsed, setCollapsed] = useState<boolean>(() => narrowWindow || readCollapsed());
   // Bumped when the working spec changes (a Properties edit, a burst): the panel reads the session again.
   const [, setSpecTick] = useState(0);
   const [mountKey, setMountKey] = useState(0);
@@ -328,9 +329,14 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
             // icon shows the selection (xreview r4).
             if (c.some((x) => x.anchor.kind === 'element')) setPanelTab('properties');
           }, draft: () => {},
-            // No composer here: the first typed letter leaves the frame (so the rest is the page's, never three drops), and the chords reach the page.
-            typed: () => { focusBeside(frameBox.current?.querySelector('iframe') ?? null, false); },
-            key: (k) => forwardedKey(k, frameBox.current?.querySelector('iframe') ?? null), morph: () => {},
+          typed: (g) => {
+            if (store.kind === 'crew' && caps?.turns === true && !session.archived) {
+              setPanelTab('chat');
+              setCollapsed(false);
+              typedInto.current?.(g);
+            } else focusBeside(frameBox.current?.querySelector('iframe') ?? null, false);
+          },
+          key: (k) => { const frame = frameBox.current?.querySelector('iframe') ?? null; if (k === 'Escape') forwardedEscape(frame); else forwardedKey(k, frame); }, morph: () => {},
           status: (line) => setStatus(line), notes: () => {}, thread: () => {},
           writeFailed: (m) => setStatus(m),
           fullscreen: async () => false,
@@ -570,7 +576,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
               <AppSidePanel slug={slug} tab={tab} setTab={setPanelTab} collapsed={collapsed && !waiting} setCollapsed={setCollapsed}
                 busy={chatOn && detail.turn != null} unread={unread} dock={dock} phone={narrowWindow} selectedWhileCollapsed={collapsed && selId !== null}
                 chat={!chatOn ? null : (
-                  <AppChat slug={slug} detail={detail} runs={runs} publishRunId={publishRunId} framed={framed} navigate={navigate ?? ((p) => { window.location.assign(p); })}
+                  <AppChat typedInto={typedInto} slug={slug} detail={detail} runs={runs} publishRunId={publishRunId} framed={framed} navigate={navigate ?? ((p) => { window.location.assign(p); })}
                     onSent={() => { void sessionRef.current?.refresh(); }} prepareSend={prepareSend} pending={pending}
                     undoOff={phone || archived}
                     closedWhy={archived ? 'This app is archived: restore it to ask for changes.' : null}

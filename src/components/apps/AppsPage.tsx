@@ -6,11 +6,12 @@ import { originOf, useOriginTarget } from '../../editors/apps/appOrigin.js';
 import { PREVIEW_LIMIT, loadAppsDirectory, setArchived, type AppTileData, type AppsDirectory } from '../../editors/apps/appsDirectory.js';
 import { fetchGrants } from '../../editors/model.js';
 import { APPS_EDITOR } from '../../editors/protocol.js';
+import { knowledgeAvailable, type SuggestionGrounds } from '../../editors/apps/suggestionGrounds.js';
 import { TileScheduler, TILE_TICK_MS } from '../../editors/apps/liveTiles.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { useReportShown } from '../../store/reportShown.js';
 import { PageFrame } from '../ui/index.js';
-import { AppCard, appPath, type EditorEntry } from './AppCard.js';
+import { AppCard, appPath, type PreviewEditor } from './AppCard.js';
 import { NewAppChat } from './NewAppChat.js';
 import { ShareSheet } from './ShareSheet.js';
 import { ShowOnReport } from './ShowOnReport.js';
@@ -69,7 +70,10 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
   useEffect(() => { const p = useProjectsStore.getState(); if (filter !== null && p.projects.length === 0 && !p.loading) void p.load(); }, [filter]);
   const shown = useReportShown((s) => s.shown);
   const [dir, setDir] = useState<AppsDirectory | null>(null);
-  const [editor, setEditor] = useState<EditorEntry | null>(null);
+  const [editor, setEditor] = useState<PreviewEditor>({ kind: 'loading' });
+  const [chosenProject, setChosenProject] = useState<string | null>(null);
+  const [grounds, setGrounds] = useState<SuggestionGrounds | null>(null);
+  const knows = knowledgeAvailable(grounds !== null && grounds.projectId === chosenProject ? grounds.summary : undefined);
   const [sharing, setSharing] = useState<AppTileData | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [turnsOn, setTurnsOn] = useState(false);
@@ -97,6 +101,7 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
   useEffect(() => {
     let cancelled = false;
     setDir(null);
+    setEditor({ kind: 'loading' });
     void (async () => {
       // A daemon that can't be reached is an error to retry, never "no app store" (codex r9: samples stood in for
       // crew's apps when health failed).
@@ -109,13 +114,17 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
         if (!cancelled) setDir({ source: 'error', message: `the daemon did not answer (${e instanceof Error ? e.message : String(e)})` });
         return;
       }
-      const [d, editors] = await Promise.all([loadAppsDirectory(hasStore, filter, scope), listEditors().catch(() => null)]);
-      if (cancelled) return;
-      setDir(d);
-      const e = editors?.find((x) => x.id === APPS_EDITOR && x.enabled !== false) ?? null;
-      if (e === null) return;
-      const decided = await fetchGrants(e.id, e.version, e.sha256, null);
-      if (!cancelled) setEditor({ version: e.version, sha: e.sha256, grants: decided.grants });
+      void loadAppsDirectory(hasStore, filter, scope).then((d) => { if (!cancelled) setDir(d); });
+      try {
+        const editors = await listEditors();
+        if (cancelled) return;
+        const e = editors?.find((x) => x.id === APPS_EDITOR && x.enabled !== false);
+        if (e === undefined) { setEditor({ kind: 'absent' }); return; }
+        const decided = await fetchGrants(e.id, e.version, e.sha256, null);
+        if (!cancelled) setEditor({ kind: 'ready', entry: { version: e.version, sha: e.sha256, grants: decided.grants } });
+      } catch {
+        if (!cancelled) setEditor({ kind: 'unread', message: 'Preview not shown: the editors list did not answer' });
+      }
     })();
     return () => { cancelled = true; };
   }, [attempt, filter, scope]);
@@ -150,7 +159,7 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
   const keep = origin === null ? '' : `?from=${encodeURIComponent(origin.kind === 'report' ? 'report' : `project:${origin.id}`)}`;
   return (
     <PageFrame data-testid="apps-page" title={PAGE_NAMES.apps}
-      intro="Dashboards and tools over your data and what your projects know, built by chat. Open one to use it and to ask for changes; Edit is for fine-tuning by hand.">
+      intro={`Dashboards and tools over your data${knows ? ' and what your projects know' : ''}, built by chat. Open one to use it and to ask for changes; Edit is for fine-tuning by hand.`}>
       {(filter !== null || back !== null) && (
         <p className="wk-apps-filterline" data-testid="apps-filter">
           {filter !== null && (
@@ -182,7 +191,7 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
         </p>
       )}
       {turnsOn && dir !== null && dir.source === 'crew' && scope === 'active' && (
-        <NewAppChat navigate={navigate} projectOfApps={filter ?? dir.apps.find((a) => a.detail !== null)?.detail?.projectId ?? null} framed={framed} />
+        <NewAppChat onProject={setChosenProject} onGrounds={setGrounds} navigate={navigate} projectOfApps={filter ?? dir.apps.find((a) => a.detail !== null)?.detail?.projectId ?? null} framed={framed} />
       )}
       {dir === null && <div className="wk-apps-grid" data-testid="apps-loading">{[0, 1, 2].map((i) => <div key={i} className="wk-appcard wk-appcard--ghost" />)}</div>}
       {dir !== null && dir.source === 'error' && (
