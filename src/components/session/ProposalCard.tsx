@@ -1,5 +1,6 @@
 import { useGateActions } from '../../hooks/useGateActions.js';
 import { choicesForAction, listedGateAnswer } from '../../board/gateContract.js';
+import { noteOption } from '../../board/askModel.js';
 import { gateOffers, offerActions, OFFER_APPROVE, OFFER_REJECT, OFFER_REQUEST_CHANGES } from '../../board/gateOffers.js';
 import { useGateSkipQe } from '../../hooks/useGateSkipQe.js';
 import { SKIP_QE_ACTION, SKIP_QE_CONSEQUENCE, SKIP_QE_SEND } from '../../board/qeSkip.js';
@@ -308,10 +309,10 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
       .catch(() => { /* said in the shared action state */ })
       .finally(() => { sending.current = false; });
   };
-  // studio#1113: the listed send-back, with the person's note (required: it says what to change).
+  // The listed send-back carries words when the person gives them.
   const sendBack = (why: string): void => {
     const note = why.trim();
-    if (note === '' || sending.current || gate === undefined) return;
+    if (sending.current || gate === undefined) return;
     sending.current = true;
     commitGateDecision(runId, listedGateAnswer(OFFER_REQUEST_CHANGES, note, gate.ord),
       { receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: 'Sent back' } })
@@ -345,7 +346,8 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
       ...(rerun.state.kind === 'sending' ? { disabled: 'Starting it again…' } : {}), run: () => { void rerun.rerun(); } });
   }
   if (offered.has(SKIP_QE_ACTION)) {
-    ways.push({ id: 'skip-qe', token: SKIP_QE_ACTION, label: 'Skip QE with a reason…', consequence: SKIP_QE_CONSEQUENCE, needsReason: true, testid: 'session-proposal-skip-qe',
+    ways.push({ id: 'skip-qe', token: SKIP_QE_ACTION, label: 'Skip QE with a reason…', consequence: SKIP_QE_CONSEQUENCE,
+      ...noteOption(listed === undefined ? 'required' : listed.find((a) => a.action === SKIP_QE_ACTION)!.note), testid: 'session-proposal-skip-qe',
       ...(rerun.offer === null && deliverRefused ? { recommended: true } : {}), run: (r) => skipQe(r ?? '') });
   }
   if (offered.has(OFFER_APPROVE)) ways.push({
@@ -360,7 +362,8 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   });
   // studio#1113: a send-back the gate lists (a plan gate's: the plan goes back to its lead with your note) is drawn too.
   if (listed !== undefined && offered.has(OFFER_REQUEST_CHANGES)) {
-    ways.push({ id: 'send-back', token: OFFER_REQUEST_CHANGES, label: card.kind === 'plan' ? 'Send the plan back…' : 'Send back…', needsReason: true,
+    ways.push({ id: 'send-back', token: OFFER_REQUEST_CHANGES, label: card.kind === 'plan' ? 'Send the plan back…' : 'Send back…',
+      ...noteOption(listed.find((a) => a.action === OFFER_REQUEST_CHANGES)!.note),
       testid: 'session-proposal-send-back',
       consequence: card.kind === 'plan' ? 'The plan goes back to its lead with your note, and comes back here as a new revision. Nothing runs meanwhile.'
         : 'The work goes back to the builder with your note.',
@@ -374,7 +377,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     const [c] = choicesForAction(a, (cli) => cli);
     if (c === undefined) continue;
     ways.push({ id: `act:${a.action}`, token: a.action, label: c.label, consequence: c.title, testid: `session-proposal-act-${a.action}`,
-      ...(a.note !== 'none' ? { needsReason: true } : {}),
+      ...noteOption(a.note),
       run: (r) => listedAnswer(a.action, r) });
   }
   if (draft !== null) {
@@ -404,7 +407,8 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   // is built. The ask path's End and the hand-over's Stop the run are the card's own words.
   const endLabel = card.end ?? (card.kind === 'plan' && ask === null && gate !== undefined ? PLAN_STOP : undefined);
   if (endLabel !== undefined && offered.has(OFFER_REJECT)) {
-    ways.push({ id: 'end', token: 'reject', label: endLabel, tone: 'danger', needsReason: true, testid: 'session-proposal-end',
+    ways.push({ id: 'end', token: 'reject', label: endLabel, tone: 'danger',
+      ...noteOption(listed === undefined ? 'required' : listed.find((a) => a.action === OFFER_REJECT)!.note), testid: 'session-proposal-end',
       consequence: card.kind === 'deliver' ? 'The job stops here; nothing is pushed.'
         : ask === null ? 'The job stops before anything is built; nothing changes in the repository.' : 'The conversation ends; the helpers stand down.',
       run: (r) => end(r) });

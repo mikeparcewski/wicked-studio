@@ -92,7 +92,7 @@ describe('studio#547 — a team dispute sends back WITH the finding', () => {
     expect(m.reason).toBe('team');
     expect(m.choices.map((c) => c.label)).toEqual(['Approve', 'Send back', 'Reject']);
     const back = m.choices[1]!;
-    expect(back.needsNote).toBe(true);
+    expect(back.note).toBe('required');
     expect(back.decision).toEqual({ approve: false, action: 'request_changes' });
     expect(back.title).toMatch(/runs again with your note/);
     expect(m.recommended).toBe(1);
@@ -112,7 +112,7 @@ describe('studio#547 — a team dispute sends back WITH the finding', () => {
     const m = model(gate({ ord: 4, gateKind: 'def', choices: ['approve', 'request_changes', 'reject'] }))!;
     expect(m.reason).toBe('choices');
     expect(m.choices.map((c) => c.label)).toEqual(['Approve', 'Request changes', 'Reject']);
-    expect(m.choices[1]!.needsNote).toBe(false);
+    expect(m.choices[1]!.note).toBe('none');
     expect(m.noteDefault).toBe('');
   });
 });

@@ -1,3 +1,4 @@
+import { noteAsk } from '../../board/gateContract.js';
 import { useGateActions } from '../../hooks/useGateActions.js';
 import { SKIP_QE_KEY, SKIP_QE_PLACEHOLDER } from '../../board/qeSkip.js';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -6,7 +7,7 @@ import { QeRefusalWarning } from '../QeRefusalWarning.js';
 import { GATE_HASH, IDLE_GATE_ACTION, commitGateDecision, commitGateReassign, gateKeyOf, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
 import { FLOOR_FIX_LABEL, namedSendBackNote, SEND_BACK_NAMED_LABEL, sessionGateChoices, soonestBack, type DeadSeat, type GateRowChoice, type GateRowModel } from '../../board/gateRowModel.js';
 import { AskCard, AskRecord, type AskReason } from '../ask/AskCard.js';
-import { askFromGate, gateOption, REASON_KEYS } from '../../board/askModel.js';
+import { askFromGate, gateOption } from '../../board/askModel.js';
 import type { AskOption } from '../../api/ask.js';
 import { repoNameOf, stepNoun } from '../../board/deskWords.js';
 import { api } from '../../api/client.js';
@@ -181,9 +182,10 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   const signedIn = (roster ?? []).filter((r) => r.signed_in !== false).map((r) => r.key).join(',');
   const actions = useGateActions(runId, gate, signedIn);
   const model = useMemo<GateRowModel | null>(() => {
-    if (gate === undefined || events === null) return null;
+    if (gate === undefined || (events === null && actions === undefined)) return null;
+    const evidence = events ?? [];
     const read = gate.skipQe === undefined && liveSkipQe !== null ? { ...gate, skipQe: liveSkipQe } : gate;
-    const result = sessionGateChoices({ runId, gate: gateWithLogChoices(read, events), units: view.units, events, pool, roster, benched, rerun: rerunOffer, fullVerdict, rejudge, ...(actions !== undefined ? { actions } : {}) });
+    const result = sessionGateChoices({ runId, gate: gateWithLogChoices(read, evidence), units: view.units, events: evidence, pool, roster, benched, rerun: rerunOffer, fullVerdict, rejudge, ...(actions !== undefined ? { actions } : {}) });
     if (result === null) return null;
     const toBuilder = steerReachesBuilder(view.units, gate.ord);
     // Label each arm by its effect: the denied-step approve re-runs the step; a steer on a review gate
@@ -194,7 +196,8 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
       : choice.key === 'steer' && choice.label === 'Approve and steer' && !toBuilder
         ? { ...choice, label: 'Approve with a note for the next step', title: 'Approve, and your note goes to the next step — not to the builder. To have the builder change something, Send back.' }
         : choice;
-    return { ...result, choices: result.choices.map(effectLabel), overflow: result.overflow.map(effectLabel) };
+    // With the events unread, nothing is preselected: a recommendation is read from the evidence that is missing.
+    return { ...result, choices: result.choices.map(effectLabel), overflow: result.overflow.map(effectLabel), ...(events === null ? { recommended: null } : {}) };
   }, [runId, gate, liveSkipQe, view.units, events, pool, roster, benched, rerunOffer, fullVerdict, rejudge, actions]);
   // S16a-1b: the creator seat's record on Approve and the standing-order offer (review gates).
   const seat = useSeatTrust(view, gate, {
@@ -253,7 +256,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
     () => gateCause({ view, gate, events, model, roster, pool, benched }), [view, gate, events, model, roster, pool, benched]);
   // The action the gate's own words name is a button. Crew marked no suggestion: the gate describes the move.
   const derived = useMemo<DerivedLead | null>(() => {
-    if (model === null || model.recommended !== null || gate === undefined) return null;
+    if (model === null || model.recommended !== null || gate === undefined || events === null) return null;
     const all = [...model.choices, ...model.overflow];
     const signInLead = (): DerivedLead => {
       const out = (roster ?? []).find((r) => pool.includes(r.key) && r.signed_in === false);
@@ -267,7 +270,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
       const inJob = judges.inJob;
       if (inJob !== undefined && (actions === undefined || all.some((c) => c.reassignCli === inJob.cli))) {
         const name = seatName(inJob.cli, inJob.label);
-        return { choice: { key: `reassign:${inJob.cli}`, label: `Approve and retry with ${name}`, reassignCli: inJob.cli, decision: null, needsNote: false,
+        return { choice: { key: `reassign:${inJob.cli}`, label: `Approve and retry with ${name}`, reassignCli: inJob.cli, decision: null, note: actions === undefined ? 'none' : all.find((c) => c.reassignCli === inJob.cli)?.note ?? 'none',
           title: `${name} reviews the work as it stands; it did not build it. The step runs again there.` } };
       }
       // One is signed in but is not in this job: crew re-seats a step only within the job's own helpers (POST
@@ -302,7 +305,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
       return signInLead();
     }
     return null;
-  }, [model, gate, seatRefusal, judgeWait, roster, pool, view, signIn, navigate, fresh, builder, judges, actions]);
+  }, [model, gate, events, seatRefusal, judgeWait, roster, pool, view, signIn, navigate, fresh, builder, judges, actions]);
   const explain = model === null ? null : (
     <>
       {model.deadSeat !== undefined && (
@@ -713,7 +716,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   // leaves it selected), the reply box must not answer through Send back either.
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const selectedTakesNote = model !== null && selectedKey !== null && replyChoice !== null && selectedKey !== replyChoice.key
-    && [...model.choices, ...model.overflow].some((c) => c.key === selectedKey && (c.needsNote === true || REASON_KEYS.has(c.key)));
+    && [...model.choices, ...model.overflow].some((c) => c.key === selectedKey && noteAsk(c.note).box);
   useOfferReply(runId, replyChoice === null || chosen !== null || cardNoteOpen !== null || selectedTakesNote ? null : { label: replyChoice.label, send: (t) => replySend.current?.(t) });
 
   // A new gate instance is a fresh question — reset all state.
@@ -778,8 +781,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   }
 
   // Fail closed (security review, unit 10): the events read failed and nothing else hydrated the
-  // log, so no choice is offered on missing evidence; the operator retries the read from the row.
-  if (eventsUnavailable) {
+  // log. Without an engine answer list, choices depend on that evidence.
+  if (eventsUnavailable && model === null) {
     return (
       <div data-testid="session-gate-row" data-undo-host="gate-card" data-reason="events-unavailable" ref={rowRef} tabIndex={-1} className="wk-session-gate-row">
         <p data-testid="session-gate-question" className="wk-session-gate-question">{question}</p>
@@ -817,7 +820,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       else setChosen(null);
     };
     if (choice.reassignCli !== undefined) {
-      void commitGateReassign(runId, choice.reassignCli, choice.label).then(done, () => setChosen(null));
+      void commitGateReassign(runId, choice.reassignCli, choice.label, words).then(done, () => setChosen(null));
       return;
     }
     if (choice.decision === null) { setChosen(null); return; }
@@ -944,6 +947,12 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       {model.whyNot !== undefined && <p data-testid="session-gate-why-not" className="wk-session-gate-detail-item wk-gate2-why-not">{model.whyNot.join(' ')}</p>}
       {/* A refused hand-over says what Deliver again does BEFORE the choice that takes it. */}
       {refusalLines !== null && <p data-testid="session-gate-deliver-consent" className="wk-gate-consequence">{refusalLines.consent}</p>}
+      {eventsUnavailable && <>
+        <p data-testid="session-gate-events-error" role="alert" className="wk-session-gate-error">
+          The run's events could not be read, so this gate's evidence is missing; the answers are the engine's own list.
+        </p>
+        <button type="button" data-testid="session-gate-events-retry" className="wk-btn wk-btn--secondary" onClick={retryEvents}>Retry</button>
+      </>}
       {/* The guided ask (DES-GUIDED-CHAT): every choice a card, the one you are on says what happens, one primary. */}
       <div className="wk-gate2-decide">
       <AskCard

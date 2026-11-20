@@ -294,12 +294,12 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   const answerPlan = (token: string, words: string, planRev: number, rebind: JobReply | null): boolean => {
     const text = words.trim();
     const expect = gateExpect();
-    if (((token === 'request_changes' || rebind?.binds === true) && text === '') || runId === null || expect === null || inputs.plan?.planRev !== planRev || isQueued(runId)) { setError('The plan moved on, or an answer is already queued. Nothing was sent.'); return false; }
+    if ((rebind?.binds === true && rebind.optional !== true && text === '') || runId === null || expect === null || inputs.plan?.planRev !== planRev || isQueued(runId)) { setError('The plan moved on, or an answer is already queued. Nothing was sent.'); return false; }
     setError(null);
     const run0 = runId;
     const label = token === 'request_changes' ? 'Change' : token === 'reject' ? PLAN_STOP : rebind?.label ?? token;
     const notice = token === 'request_changes'
-      ? { preview: `Sends plan v${planRev} back with your words; nothing runs until you approve a new version.`, sent: `Sent plan v${planRev} back with your words.` }
+      ? { preview: `Sends plan v${planRev} back${text !== '' ? ' with your words' : ''}; nothing runs until you approve a new version.`, sent: `Sent plan v${planRev} back${text !== '' ? ' with your words' : ''}.` }
       : token === 'reject'
         ? { preview: 'The job stops before anything is built.', sent: 'Stopped the job; nothing was built.' }
         : { preview: `${label}: plan v${planRev}.`, sent: `${label}: answered plan v${planRev}.` };
@@ -383,6 +383,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
     const target = reply.target;
     useJobBinding.getState().bind({
       sessionId, replyKey: `${lineage.lineage}:${reply.id}`, label, placeholder, instance: target,
+      ...(reply.optional === true ? { optional: true } : {}),
       current: () => currentTarget.current.get(reply.id) ?? null,
       send,
     });
@@ -421,7 +422,8 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
     else if (r.id === 'change') {
       const rev = inputs.plan?.planRev;
       if (rev === undefined) return;
-      bindChange(r, rev);
+      if (r.binds) bindChange(r, rev);
+      else answerPlan('request_changes', '', rev, r);
     } else if (r.id === 'reject' || r.id.startsWith('act:')) {
       const rev = inputs.plan?.planRev;
       if (rev === undefined) return;

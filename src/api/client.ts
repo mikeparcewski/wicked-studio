@@ -948,10 +948,10 @@ export const api = {
    * daemon accepts it only while the run is `executing` (409 otherwise — an awaiting-human run
    * must be approved first), and `cli` must be in the run's own pool (`session.clis`; 400).
    */
-  reassignRun: (id: string, cli?: string) =>
+  reassignRun: (id: string, cli?: string, note?: string) =>
     apiFetch<{ status: string; ord: number; cli?: string }>(`/runs/${encodeURIComponent(id)}/reassign`, {
       method: 'POST',
-      body: JSON.stringify(cli === undefined ? {} : { cli }),
+      body: JSON.stringify({ ...(cli === undefined ? {} : { cli }), ...(note?.trim() ? { note: note.trim() } : {}) }),
     }),
 
   /**

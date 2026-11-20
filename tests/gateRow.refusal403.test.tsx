@@ -202,7 +202,7 @@ describe('a refused hand-over whose re-verify failed — the operator\'s judgmen
     expect(m.choices.map((c) => c.key)).toEqual(['retry', FLOOR_OVERRIDE_KEY, 'stop']);
     const own = m.choices[1]!;
     expect(own.label).toBe(OPERATOR_JUDGMENT_LABEL);
-    expect(own.needsNote).toBe(true);
+    expect(own.note).toBe('required');
     expect(own.decision).toEqual({ approve: true, action: 'operator_judgment' });
     // Without the engine's offer the row is unchanged.
     const plain = sessionGateChoices({ runId: RUN, gate: gate(IDENTITY_PROMPT), units: UNITS, events: [], pool: [], roster: null })!;
@@ -261,7 +261,7 @@ describe('a refused hand-over: the card\'s actions equal the gate\'s action list
       expect(offersDeliverFloorOverride(prompt)).toBe(true);
       const m = sessionGateChoices({ runId: RUN, gate: gate(prompt), units: UNITS, events: [], pool: [], roster: null })!;
       expect(m.choices.map((c) => c.key)).toEqual(['retry', FLOOR_OVERRIDE_KEY, 'stop']);
-      expect(m.choices[1]!.needsNote).toBe(true);
+      expect(m.choices[1]!.note).toBe('required');
       expect(m.choices[1]!.decision).toEqual({ approve: true, action: 'operator_judgment' });
     });
   }

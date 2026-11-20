@@ -65,7 +65,7 @@ describe('the judge-unavailable gate model', () => {
     const m = choices(AVAILABLE);
     expect(m.choices.map((c) => c.label)).toEqual([REJUDGE_LABEL, 'Send back', OPERATOR_JUDGMENT_LABEL, 'Stop']);
     expect(m.choices[0]!.decision).toEqual({ approve: true, action: 'rejudge' });
-    expect(m.choices[0]!.needsNote).toBe(false);
+    expect(m.choices[0]!.note).toBe('none');
     expect(m.choices[0]!.title).toMatch(/^Have pi, copilot check the work as it stands\. The step does not run again/);
     expect(m.recommended).toBe(0);
     const own = m.choices[2]!;

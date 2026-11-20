@@ -198,8 +198,8 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, consequence
     if (needs) {
       if (o.id !== sel || engaged !== o.id) { setSel(o.id); setEngaged(o.id); return; }
       const r = (reasons[o.id] ?? reasonFor?.(o).prefill ?? '').trim();
-      if (r === '') { setMissing(true); reasonRef.current?.focus(); return; }
-      onAnswer({ askId: ask.id, option: o.id, reason: r });
+      if (r === '' && o.reasonOptional !== true) { setMissing(true); reasonRef.current?.focus(); return; }
+      onAnswer({ askId: ask.id, option: o.id, ...(r !== '' ? { reason: r } : {}) });
       return;
     }
     onAnswer({ askId: ask.id, option: o.id });
@@ -309,7 +309,7 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, consequence
       {reasonCfg !== null && current !== null && (
         <div className="wk-ask-reason" data-testid="ask-reason">
           {reasonCfg.note}
-          <label htmlFor={boxId} data-testid={reasonCfg.labelTestId ?? tid(testIds, 'reasonLabel', /* testid */ 'ask-reason-label')}>{reasonCfg.label}</label>
+          <label htmlFor={boxId} data-testid={reasonCfg.labelTestId ?? tid(testIds, 'reasonLabel', /* testid */ 'ask-reason-label')}>{reasonCfg.label}{current.reasonOptional === true ? ' (optional)' : ''}</label>
           <textarea
             id={boxId}
             ref={reasonRef}
@@ -318,8 +318,8 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, consequence
             rows={3}
             value={reasonText}
             placeholder={reasonCfg.placeholder}
-            aria-required="true"
-            aria-invalid={missing && reasonText.trim() === '' ? true : undefined}
+            aria-required={current.reasonOptional !== true}
+            aria-invalid={current.reasonOptional !== true && missing && reasonText.trim() === '' ? true : undefined}
             onChange={(e) => { const v = e.target.value; setReasons((r) => ({ ...r, [current.id]: v })); setMissing(false); }}
             onKeyDown={(e) => {
               if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setEngaged(null); onCancelReason?.(); }
@@ -335,7 +335,7 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, consequence
               type="button"
               data-testid={open ? tid(testIds, 'send', /* testid */ 'ask-send') : tid(testIds, 'confirm', /* testid */ 'ask-confirm')}
               data-option={current?.id}
-              disabled={busy || current === null || current.disabled !== undefined || (open && reasonText.trim() === '')}
+              disabled={busy || current === null || current.disabled !== undefined || (open && current.reasonOptional !== true && reasonText.trim() === '')}
               title={current?.disabled}
               onClick={() => commit(current)}
               className={`wk-gate2-btn ${current?.tone === 'danger' ? 'wk-ask-btn--danger' : 'wk-gate2-btn--primary'}`}

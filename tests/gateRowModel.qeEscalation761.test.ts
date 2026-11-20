@@ -63,7 +63,7 @@ describe('studio#761/#762 — the QE review recorded no verdict', () => {
 
   it('offers "Retry the QE review" first and suggested — a plain approve that re-runs the QE unit only', () => {
     const m = model(events(NO_VERDICT), units('invalid'));
-    expect(m.choices[0]).toMatchObject({ key: 'retry', label: QE_RETRY_LABEL, decision: { approve: true }, needsNote: false });
+    expect(m.choices[0]).toMatchObject({ key: 'retry', label: QE_RETRY_LABEL, decision: { approve: true }, note: 'none' });
     expect(m.recommended).toBe(0);
     expect(m.consequence).toMatch(/Only the QE check and its review run again/);
     expect(m.choices[m.choices.length - 1]!.key).toBe('stop');

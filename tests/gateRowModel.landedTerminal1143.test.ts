@@ -38,7 +38,7 @@ const all = (m: ReturnType<typeof rowOf>) => [...m.choices, ...m.overflow];
 describe('studio#1143 — the terminal card after Land with carried items', () => {
   it('offers Approve completion first and recommended, and nothing labelled as a retry', () => {
     const m = rowOf(landed);
-    expect(m.choices[0]).toMatchObject({ key: 'approve', label: APPROVE_COMPLETION_LABEL, decision: { approve: true }, needsNote: false });
+    expect(m.choices[0]).toMatchObject({ key: 'approve', label: APPROVE_COMPLETION_LABEL, decision: { approve: true }, note: 'none' });
     expect(m.recommended).toBe(0);
     expect(m.choices.map((c) => c.key)).toEqual(['approve', 'stop']);
     for (const c of all(m)) {

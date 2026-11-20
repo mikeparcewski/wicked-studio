@@ -104,16 +104,16 @@ export function repeatChoicesOf(gate: OpenGate, events: readonly CoreEvent[] | n
     const mark = rec === i ? { isDefault: true } : {};
     if (t.startsWith('consent:')) {
       const label = labelOf(t, t.slice('consent:'.length));
-      out.push({ key: t, label, decision: { approve: true, action: t } as unknown as GateAnswer, needsNote: false, title: label, ...mark });
+      out.push({ key: t, label, decision: { approve: true, action: t } as unknown as GateAnswer, note: 'none', title: label, ...mark });
     } else if (t === 'approve') {
       const label = labelOf(t, 'Run it again');
-      out.push({ key: 'approve', label, decision: { approve: true }, needsNote: false, title: 'Run the step again.', ...mark });
+      out.push({ key: 'approve', label, decision: { approve: true }, note: 'none', title: 'Run the step again.', ...mark });
     } else if (t === 'reject') {
-      out.push({ key: 'stop', label: labelOf(t, 'Stop here'), decision: { approve: false }, needsNote: false, title: STOP_TITLE, ...mark });
+      out.push({ key: 'stop', label: labelOf(t, 'Stop here'), decision: { approve: false }, note: 'required', title: STOP_TITLE, ...mark });
     }
   });
   // Stop is always an answer, even if a producer's list left it out.
-  if (!out.some((c) => c.key === 'stop')) out.push({ key: 'stop', label: 'Stop here', decision: { approve: false }, needsNote: false, title: STOP_TITLE });
+  if (!out.some((c) => c.key === 'stop')) out.push({ key: 'stop', label: 'Stop here', decision: { approve: false }, note: 'required', title: STOP_TITLE });
   return out;
 }
 

@@ -15,6 +15,8 @@ export interface JobBinding {
   /** "Answering: what should change in plan v1". */
   label: string;
   placeholder: string;
+  /** The bound composer may send without words. */
+  optional?: true;
   /** The target the binding answers (a pid, or `plan:<run>:<ord>:<planRev>`). */
   instance: string;
   /** The target now, while its reply can be pressed (read at Send): a binding whose target moved, or whose reply is

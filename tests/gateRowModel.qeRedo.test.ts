@@ -63,7 +63,7 @@ describe('F23 — INCONCLUSIVE: redo the QE check first, named for what the revi
     expect(m.qe?.lead).toBe(`The QE reviewer couldn't run its checks (${WHAT}), so nothing was judged. Redo the QE check?`);
     expect(m.qe?.lead).not.toMatch(/didn't record a verdict/);
     expect(gateQuestion(m, 'a cause line', gate)).toBe(m.qe?.lead);
-    expect(m.choices[0]).toMatchObject({ key: QE_REDO_KEY, label: QE_REDO_LABEL, decision: { approve: true, action: 'retry_qe' }, needsNote: false });
+    expect(m.choices[0]).toMatchObject({ key: QE_REDO_KEY, label: QE_REDO_LABEL, decision: { approve: true, action: 'retry_qe' }, note: 'none' });
     expect(m.recommended).toBe(0);
     expect(m.consequence).toBe(QE_REDO_CONSEQUENCE);
     expect(m.choices[m.choices.length - 1]!.key).toBe('stop');

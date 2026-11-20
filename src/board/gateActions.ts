@@ -375,7 +375,7 @@ export function commitGateDecision(
  * leaves the gate open and the card that asked it on screen. Same undo window, same per-gate state
  * (no double submit with another approve path), and a refusal is also said as a notice.
  */
-export function commitGateReassign(runId: string, cli: string, seatLabel: string): Promise<DecisionOutcome> {
+export function commitGateReassign(runId: string, cli: string, seatLabel: string, note?: string): Promise<DecisionOutcome> {
   const cur = useGateActionStore.getState().byGate[runId] ?? IDLE_GATE_ACTION;
   if (cur.queued || cur.busy || cur.answered !== null) {
     reportDecision('not-sent', dropNotice(runId, cur), { keys: [gateKeyOf(runId)] });
@@ -395,7 +395,7 @@ export function commitGateReassign(runId: string, cli: string, seatLabel: string
         watched.delete(runId);
         patch(runId, { queued: false, busy: true });
         try {
-          await api.reassignRun(runId, cli);
+          await api.reassignRun(runId, cli, note);
           patch(runId, { busy: false, answered: 'approved', receipt: { kind: 'row', chosenLabel: seatLabel, sentAt: Date.now() } });
           useGateStore.getState().clearGate(runId);
           reportDecision('sent', `Moved ${label} to ${seatLabel}; the retry runs there.`, { keys: [gateKeyOf(runId)] });

@@ -56,7 +56,7 @@ describe('the floor-failure gate model', () => {
     expect(m.choices[m.choices.length - 1]!.key).toBe('stop');
     expect(own.label).toBe(OPERATOR_JUDGMENT_LABEL);
     expect(own.decision).toEqual({ approve: true, action: 'operator_judgment' });
-    expect(own.needsNote).toBe(true);
+    expect(own.note).toBe('required');
     expect(own.title.startsWith(FLOOR_OVERRIDE_CONSEQUENCE)).toBe(true);
     expect(FLOOR_OVERRIDE_CONSEQUENCE).toBe('Overrides the failed floor; recorded on the run and delivery; QE acceptance still required.');
   });
