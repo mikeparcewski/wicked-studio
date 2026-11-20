@@ -1,4 +1,5 @@
 import type { EntityMode, HumanConfirm } from '../api/types.js';
+import { COMPOSER_DEFAULT_GATE_POSTURE } from '../components/composerDefaults.js';
 
 /**
  * Retry-as-prefill (DES-UX-001 §4.3): a failed/cancelled run's Retry button
@@ -22,7 +23,7 @@ export interface RetryPrefill {
   workflowId: string | null;
   repoRef: string | null;
   entityMode: EntityMode;
-  humanConfirm: HumanConfirm;
+  humanConfirm?: HumanConfirm;
   /** From the DTO's `project_id` echo (CREW-UX-2); `null` = unfiled. */
   projectId: string | null;
   /**
@@ -84,6 +85,7 @@ export function clearRetryPrefill(): void {
 export function confirmModeOf(
   hc: HumanConfirm | undefined,
 ): { mode: 'none' | 'all' | 'before'; beforeOrd: number } {
+  if (hc === undefined) return COMPOSER_DEFAULT_GATE_POSTURE;
   if (hc === 'all') return { mode: 'all', beforeOrd: 1 };
   if (typeof hc === 'object' && hc !== null && typeof hc.before === 'number') {
     return { mode: 'before', beforeOrd: hc.before };
