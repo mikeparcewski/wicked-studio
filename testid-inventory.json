@@ -10400,6 +10400,12 @@
       ]
     },
     {
+      "testId": "mcp-add-address-tick",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
       "testId": "mcp-add-auth-into",
       "files": [
         "src/components/McpToolsPage.tsx"
