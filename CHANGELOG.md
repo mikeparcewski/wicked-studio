@@ -12,6 +12,8 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+- **A brief 503 no longer hides the skip-QE offer (studio#1203).** The in-place skip-QE read retries a failed gate read with the main gate read's backoff until it lands, instead of staying empty until the card remounts.
+
 ### Changed
 
 - **CI: the selftest pin moves to wicked-ci 3bd45ae (the advisory verdict now concludes, wicked-ci#76/#81).** The selftest job grants `checks: write` so the called workflow can publish its verdict check run; the advisory job still never blocks a merge.
