@@ -22,6 +22,8 @@
 .wk-schedule-projects { border: 0; margin: 0; padding: 4px 0 8px 28px; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: var(--text-body); color: var(--ink-body); }
 .wk-schedule-projects legend { padding: 0 0 6px; font-size: var(--text-body); color: var(--ink-muted); }
 .wk-schedules { display: flex; flex-direction: column; gap: 18px; }
+.wk-schedule-blocked { margin: 0 0 6px; padding: 0 0 0 28px; font-size: var(--text-body); line-height: 1.4; color: var(--ink-muted); }
+.wk-schedule-blocked a { color: var(--accent, currentColor); font-weight: var(--weight-strong); text-decoration: underline; text-underline-offset: 2px; }
 .wk-schedule-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 0 0 0 28px; }
 .wk-schedule-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-body); color: var(--ink-body); }
 .wk-schedule-controls select { width: auto; min-width: 140px; font-size: var(--text-body); padding: 6px 8px; }

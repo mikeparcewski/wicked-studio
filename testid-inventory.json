@@ -19058,6 +19058,12 @@
       ]
     },
     {
+      "testId": "schedule-blocked",
+      "files": [
+        "src/components/insights/SchedulesSection.tsx"
+      ]
+    },
+    {
       "testId": "schedule-cadence",
       "files": [
         "src/components/insights/SchedulesSection.tsx"
