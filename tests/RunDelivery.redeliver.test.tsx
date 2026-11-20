@@ -82,8 +82,9 @@ describe('RunDelivery rebase and re-deliver', () => {
     expect(result).toHaveTextContent('Re-delivered: 1234567 → abcdef0. Repo checks on the new tree: PASS (3 checks: lint, types, unit). Changelog conflicts resolved: CHANGELOG.md.');
     await waitFor(() => expect(client.api.runPullRequest).toHaveBeenCalledTimes(2));
     expect(screen.getByTestId('run-pr-status')).toHaveTextContent('mergeable CONFLICTING');
-    // The shown PR is still the pre-push read: no second POST can start off it.
+    // The shown PR is still the pre-push read: no second POST, and none of its conflict copy, until the re-read lands.
     expect(screen.queryByTestId('run-redeliver-button')).toBeNull();
+    expect(screen.queryByTestId('run-pr-conflict')).toBeNull();
     await act(async () => { refresh({ ...PR, mergeable: 'MERGEABLE', headSha: NEW, deliveredHead: NEW }); });
     expect(screen.getByTestId('run-pr-status')).toHaveTextContent('mergeable MERGEABLE');
   });
@@ -367,7 +368,8 @@ describe('RunDelivery rebase and re-deliver', () => {
 
   it('re-reads the PR after a refusal and drops the refusal once GitHub says the branch moved', async () => {
     vi.mocked(client.api.redeliverRun).mockRejectedValue(new ApiError(409, 'PR branch moved since delivery', { error: 'PR branch moved since delivery' }));
-    vi.mocked(client.api.runPullRequest).mockResolvedValueOnce(PR).mockResolvedValue({ ...PR, headMoved: true, headSha: NEW });
+    // GitHub recomputes mergeability after the push: the moved PR reads UNKNOWN, and the moved line still explains it.
+    vi.mocked(client.api.runPullRequest).mockResolvedValueOnce(PR).mockResolvedValue({ ...PR, mergeable: 'UNKNOWN', headMoved: true, headSha: NEW });
     render(<RunDelivery view={deliveredView()} />);
     await userEvent.setup().click(await screen.findByTestId('run-redeliver-button'));
     expect(await screen.findByTestId('run-pr-moved')).toHaveTextContent('now abcdef0, delivered 1234567');
@@ -399,6 +401,44 @@ describe('RunDelivery rebase and re-deliver', () => {
     await user.click(screen.getByTestId('run-redeliver-button'));
     expect(await screen.findByTestId('run-redeliver-error')).toHaveTextContent('rebase conflicts');
     expect(screen.queryByTestId('run-redeliver-conflicts')).toBeNull();
+  });
+
+  it('keeps a refusal when the re-read only says GitHub is recomputing mergeability (UNKNOWN) at the same head', async () => {
+    vi.mocked(client.api.redeliverRun).mockRejectedValue(new ApiError(409, 'repo checks failed on the rebased tree', { failingChecks: ['lint'] }));
+    vi.mocked(client.api.runPullRequest).mockResolvedValueOnce(PR).mockResolvedValue({ ...PR, mergeable: 'UNKNOWN' });
+    render(<RunDelivery view={deliveredView()} />);
+    await userEvent.setup().click(await screen.findByTestId('run-redeliver-button'));
+    await waitFor(() => expect(screen.getByTestId('run-pr-status')).toHaveTextContent('mergeable UNKNOWN'));
+    expect(screen.getByTestId('run-redeliver-failing')).toHaveTextContent('Repo checks failed on the rebased tree: lint. Nothing was pushed.');
+  });
+
+  it('drops a refusal once a read shows the PR at another head, or closed', async () => {
+    vi.mocked(client.api.redeliverRun).mockRejectedValue(new ApiError(409, 'rebase conflicts', { conflicts: ['a.ts'] }));
+    render(<RunDelivery view={deliveredView()} />);
+    await userEvent.setup().click(await screen.findByTestId('run-redeliver-button'));
+    await screen.findByTestId('run-redeliver-conflicts');
+    vi.mocked(client.api.runPullRequest).mockResolvedValue({ ...PR, headSha: NEW, deliveredHead: NEW });
+    act(() => { useRedeliverStore.getState().load(runId); });
+    await waitFor(() => expect(screen.queryByTestId('run-redeliver-conflicts')).toBeNull());
+    expect(screen.getByTestId('run-redeliver-button')).toBeEnabled();
+  });
+
+  it('discards a read that started before the refusal and waits for the fresh one', async () => {
+    let refuse!: (e: unknown) => void;
+    vi.mocked(client.api.redeliverRun).mockImplementation(() => new Promise((_, reject) => { refuse = reject; }));
+    const view = deliveredView();
+    const card = render(<RunDelivery view={view} />);
+    await userEvent.setup().click(await screen.findByTestId('run-redeliver-button'));
+    card.unmount();
+    let early!: (pr: RunPullRequest) => void;
+    vi.mocked(client.api.runPullRequest).mockReturnValueOnce(new Promise((resolve) => { early = resolve; }));
+    render(<RunDelivery view={view} />);
+    await act(async () => { refuse(new ApiError(409, 'rebase conflicts', { conflicts: ['a.ts'] })); });
+    // The early read answers a CLOSED PR it saw before the refusal: it must neither show nor clear anything.
+    await act(async () => { early({ ...PR, state: 'CLOSED' }); });
+    await waitFor(() => expect(client.api.runPullRequest).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(screen.getByTestId('run-pr-status')).toHaveTextContent('GitHub: OPEN'));
+    expect(screen.getByTestId('run-redeliver-conflicts')).toBeInTheDocument();
   });
 });
 

@@ -26,7 +26,6 @@ export function PrRedeliver({ runId, onRevise }: Props): React.ReactElement | nu
   const conflicts = refusal?.conflicts;
   const failingChecks = refusal?.failingChecks;
   const reviseChecks = (names: string[]) => onRevise?.(names.length > 0 ? `fix the failing checks: ${names.join(', ')}` : 'fix the repo checks that failed on the rebased tree');
-  // Right after a re-delivery the shown PR can still be the pre-push read: no second POST off that snapshot.
   const staleAfterPush = result !== undefined && pr !== undefined && pr.headSha === result.oldHead;
 
   return (
@@ -40,30 +39,32 @@ export function PrRedeliver({ runId, onRevise }: Props): React.ReactElement | nu
       {pr !== undefined && (
         <>
           <p data-testid="run-pr-status" className="font-mono" style={{ color: 'var(--ink-muted)' }}>GitHub: {pr.state} · mergeable {pr.mergeable} · merge state {pr.mergeStateStatus}</p>
-          {pr.state === 'OPEN' && pr.mergeable === 'CONFLICTING' && (
-            <>
-              <p data-testid="run-pr-conflict" style={{ color: 'var(--status-warn)' }}>This PR conflicts with {pr.baseRefName} (mergeable {pr.mergeable}).</p>
-              {pr.deliveredHead === undefined ? (
-                <p data-testid="run-pr-no-delivered-head" style={{ color: 'var(--status-warn)' }}>Crew has no recorded delivered head for this PR, so it cannot re-deliver it.</p>
-              ) : pr.headMoved ? (
-                <p data-testid="run-pr-moved" style={{ color: 'var(--status-warn)' }}>The PR branch moved since crew delivered it (now {pr.headSha.slice(0, 7)}, delivered {pr.deliveredHead.slice(0, 7)}); crew will not re-deliver over it.</p>
-              ) : staleAfterPush ? null : (
-                <div>
-                  <button
-                    type="button"
-                    data-testid="run-redeliver-button"
-                    className={buttonClass}
-                    style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
-                    disabled={delivery?.phase === 'running'}
-                    onClick={() => useRedeliverStore.getState().redeliver(runId)}
-                  >
-                    {delivery?.phase === 'running' ? 'Rebasing and re-delivering…' : 'Rebase and re-deliver'}
-                  </button>
-                </div>
-              )}
-            </>
+          {/* After a re-delivery the shown PR can still be the pre-push read: only its status line until the re-read lands. */}
+          {!staleAfterPush && pr.state === 'OPEN' && pr.mergeable === 'CONFLICTING' && (
+            <p data-testid="run-pr-conflict" style={{ color: 'var(--status-warn)' }}>This PR conflicts with {pr.baseRefName} (mergeable {pr.mergeable}).</p>
           )}
-          {pr.failingChecks.length > 0 && (
+          {!staleAfterPush && pr.state === 'OPEN' && pr.headMoved && pr.deliveredHead !== undefined && (
+            <p data-testid="run-pr-moved" style={{ color: 'var(--status-warn)' }}>The PR branch moved since crew delivered it (now {pr.headSha.slice(0, 7)}, delivered {pr.deliveredHead.slice(0, 7)}); crew will not re-deliver over it.</p>
+          )}
+          {!staleAfterPush && pr.state === 'OPEN' && pr.mergeable === 'CONFLICTING' && !pr.headMoved && (
+            pr.deliveredHead === undefined ? (
+              <p data-testid="run-pr-no-delivered-head" style={{ color: 'var(--status-warn)' }}>Crew has no recorded delivered head for this PR, so it cannot re-deliver it.</p>
+            ) : (
+              <div>
+                <button
+                  type="button"
+                  data-testid="run-redeliver-button"
+                  className={buttonClass}
+                  style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+                  disabled={delivery?.phase === 'running'}
+                  onClick={() => useRedeliverStore.getState().redeliver(runId)}
+                >
+                  {delivery?.phase === 'running' ? 'Rebasing and re-delivering…' : 'Rebase and re-deliver'}
+                </button>
+              </div>
+            )
+          )}
+          {!staleAfterPush && pr.failingChecks.length > 0 && (
             <>
               <p data-testid="run-pr-checks-failing" style={{ color: 'var(--status-fail)' }}>Failing checks on GitHub: {pr.failingChecks.join(', ')}</p>
               {onRevise !== undefined && (

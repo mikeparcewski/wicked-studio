@@ -11,7 +11,7 @@ type PrState =
 type RedeliverState =
   | { phase: 'running' }
   | { phase: 'done'; result: RedeliverRunResult }
-  | { phase: 'refused'; error: string; base?: string; conflicts?: string[]; failingChecks?: string[] };
+  | { phase: 'refused'; error: string; base?: string; head?: string; conflicts?: string[]; failingChecks?: string[] };
 
 interface RunRedelivery {
   pr?: PrState;
@@ -32,8 +32,10 @@ function stringArray(value: unknown): value is string[] {
 /** The distinct non-empty names crew sent (a repeated path would repeat a line and a React key). */
 const names = (value: string[]) => [...new Set(value.filter((v) => v !== ''))];
 
-/** A refusal stops describing the PR once a newer read says it is no longer an open, conflicting PR at that head. */
-const actionable = (pr: RunPullRequest) => pr.state === 'OPEN' && pr.mergeable === 'CONFLICTING' && !pr.headMoved;
+/** A refusal is about the PR at the head it was asked on; a read showing the PR closed or at another head supersedes it.
+ *  `mergeable` does not: GitHub answers UNKNOWN while it recomputes, which says nothing about the attempt. */
+const supersedes = (pr: RunPullRequest, refusal: RedeliverState | undefined) =>
+  refusal?.phase === 'refused' && refusal.head !== undefined && (pr.state !== 'OPEN' || pr.headSha !== refusal.head);
 
 const readsInFlight = new Set<string>();
 /** A fresh read asked for while one was in flight (the post-redelivery re-read) runs once that one settles. */
@@ -56,11 +58,14 @@ export const useRedeliverStore = create<RedeliverStore>((set, get) => {
       };
       api.runPullRequest(runId).then(
         (pr) => {
-          const stale = get().byRun[runId]?.redeliver?.phase === 'refused' && !actionable(pr);
+          // A read that started before a redelivery answered is superseded by the queued fresh one: drop it.
+          if (readsQueued.has(runId)) { settle(); return; }
+          const stale = supersedes(pr, get().byRun[runId]?.redeliver);
           update(runId, { pr: { phase: 'loaded', pr }, ...(stale ? { redeliver: undefined } : {}) });
           settle();
         },
         (err: unknown) => {
+          if (readsQueued.has(runId)) { settle(); return; }
           update(runId, {
             pr: isRouteAbsent(err) ? { phase: 'absent' } : { phase: 'error', error: err instanceof Error ? err.message : String(err) },
           });
@@ -73,6 +78,7 @@ export const useRedeliverStore = create<RedeliverStore>((set, get) => {
       if (get().byRun[runId]?.redeliver?.phase === 'running') return;
       const read = get().byRun[runId]?.pr;
       const base = read?.phase === 'loaded' ? read.pr.baseRefName : undefined;
+      const head = read?.phase === 'loaded' ? read.pr.headSha : undefined;
       update(runId, { redeliver: { phase: 'running' } });
       api.redeliverRun(runId).then(
         (result) => {
@@ -86,6 +92,7 @@ export const useRedeliverStore = create<RedeliverStore>((set, get) => {
             redeliver: {
               phase: 'refused', error: err instanceof Error ? err.message : String(err),
               ...(base !== undefined ? { base } : {}),
+              ...(head !== undefined ? { head } : {}),
               ...(stringArray(body.conflicts) && names(body.conflicts).length > 0 ? { conflicts: names(body.conflicts) } : {}),
               // An empty list is still crew's "checks failed" refusal (a floor that refused names no check).
               ...(stringArray(body.failingChecks) ? { failingChecks: names(body.failingChecks) } : {}),
