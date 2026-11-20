@@ -11,7 +11,7 @@ export function AgentsCount(): React.ReactElement | null {
   if (attention === null || attention.count === 0 || attention.tone === null) return null;
   const n = attention.count;
   return (
-    <span data-testid="agents-count" data-tone={attention.tone} className="wk-agents-rail-n" title={`${n} ${n === 1 ? 'agent needs' : 'agents need'} a look`}>
+    <span data-testid="agents-count" data-tone={attention.tone} className="wk-agents-rail-n" title={`${n} ${n === 1 ? 'helper needs' : 'helpers need'} a look`}>
       <span aria-hidden className={`wk-agents-rail-dot wk-agents-rail-dot--${attention.tone}`} />
       <span className="sr-only">{` (${n} ${n === 1 ? 'needs' : 'need'} a look)`}</span>
       <span aria-hidden>{n}</span>

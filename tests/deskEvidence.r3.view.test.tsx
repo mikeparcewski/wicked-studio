@@ -98,7 +98,7 @@ describe('Desk r3 evidence on screen', () => {
     await act(async () => { ({ rerender } = render(<DeskV2 {...p} view="runs" />)); });
     fireEvent.change(screen.getByTestId('desk-refine-workflow'), { target: { value: 'fix-bug' } });
     rerender(<DeskV2 {...p} view="understand" />);
-    expect(screen.getByTestId('desk-und-agents-unread')).toHaveTextContent('Agent numbers can’t be split by workflow yet');
+    expect(screen.getByTestId('desk-und-agents-unread')).toHaveTextContent('Helper numbers can’t be split by workflow yet');
     expect(screen.queryByTestId('desk-compare-card')).not.toBeInTheDocument();
     expect(screen.queryByTestId('desk-insights-generate')).not.toBeInTheDocument();
     expect(screen.getByTestId('desk-analyze-start')).toBeDisabled();

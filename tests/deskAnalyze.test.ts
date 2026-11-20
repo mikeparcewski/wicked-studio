@@ -12,6 +12,9 @@ describe('Desk v2 Analyze: an existing workflow, one unique intent per kind', ()
     expect('deliver' in body).toBe(false);
     expect('clisJson' in body).toBe(false);
     expect(body.problem).toContain('Claude Code (claude)');
+    expect(body.problem).toContain('Analyze one helper:');
+    expect(body.problem).toContain('Selected helpers: Claude Code (claude).');
+    expect(body.problem).toContain('How does each helper perform:');
   });
   it('writes a different intent per kind, each naming its questions', () => {
     const kinds: AnalyzeKind[] = ['agents', 'workflows', 'jobs', 'projects'];
@@ -47,6 +50,9 @@ describe('Edit and past analyses', () => {
     const { isAnalysisRun } = await import('../src/board/deskAnalyze.js');
     expect(isAnalysisRun(analysisIntent({ ...base, kind: 'jobs', items: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }] }), 'learn')).toBe(true);
     expect(isAnalysisRun('Analyze one agent: x', 'bug')).toBe(false);
+    expect(isAnalysisRun('Analyze one helper: x', 'learn')).toBe(true);
+    expect(isAnalysisRun('Analyze 2 helpers: x', 'learn')).toBe(true);
+    expect(isAnalysisRun('Analyze one agent: x', 'learn')).toBe(true);
     expect(isAnalysisRun('Research rust async', 'learn')).toBe(false);
   });
 });

@@ -87,7 +87,7 @@ function assignedClis(view: SessionView): string[] {
 }
 
 function agentsWord(n: number): string {
-  return n === 1 ? '1 agent' : `${n} agents`;
+  return n === 1 ? '1 helper' : `${n} helpers`;
 }
 
 function spendWords(view: SessionView): string | null {
@@ -380,7 +380,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
       <Section id="agents" {...fold} summary={`${agentsWord(clis.length)}${spend !== null ? ` · ${spend}` : ''}`}>
         <div data-testid="run-tab-agents" className="wk-run-tab-block">
           <TeamRosterLines runId={id} roster={roster} />
-          {clis.length === 0 ? <p className="wk-run-tab-muted">No agent has been assigned yet.</p> : (
+          {clis.length === 0 ? <p className="wk-run-tab-muted">No helper has been assigned yet.</p> : (
             <ul className="wk-run-tab-list">
               {clis.map((cli) => {
                 const seat = roster?.find((entry) => entry.key === cli);
@@ -418,7 +418,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
           <summary>Tech details</summary>
           <p className="wk-run-tab-line">Run: <code>{id}</code></p>
           {typeof session.base_commit === 'string' && <p className="wk-run-tab-line">Base commit: <code>{session.base_commit}</code></p>}
-          <p className="wk-run-tab-line">Agents: <code>{session.clis.join(', ')}</code></p>
+          <p className="wk-run-tab-line">Helpers: <code>{session.clis.join(', ')}</code></p>
         </details>
       </Section>
     ),

@@ -282,7 +282,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
         </div>
       ))}
       {leadWithSignIn && (
-        <p data-testid="desk-signin-lead" className="wk-inbox-chore-lead">No AI agent is signed in yet, so nothing can run. Pick one below and Sign in shows the one command to run.</p>
+        <p data-testid="desk-signin-lead" className="wk-inbox-chore-lead">No helper is signed in yet, so nothing can run. Pick one below and Sign in shows the one command to run.</p>
       )}
       <DeskStateRows frozen={states.frozen} away={states.away} />
       {(dead !== null || replaying) && (
@@ -293,7 +293,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
       )}
       {choresGrouped && (
         <div data-testid="desk-chore-group" data-count={chores.length} className="wk-inbox-chore">
-          <span className="wk-inbox-chore-body"><span className="wk-inbox-chore-title">{`${chores.length} agents need signing in`}</span><span className="wk-inbox-chore-line">Nothing they would do can start until each one is signed in.</span></span>
+          <span className="wk-inbox-chore-body"><span className="wk-inbox-chore-title">{`${chores.length} helpers need signing in`}</span><span className="wk-inbox-chore-line">Nothing they would do can start until each one is signed in.</span></span>
           <button type="button" data-testid="desk-chore-group-toggle" aria-expanded={choresOpen} onClick={() => setChoresOpen((v) => !v)} className="wk-need-act">{choresOpen ? 'Fold' : 'Show each'}</button>
         </div>
       )}
@@ -363,10 +363,10 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
         <DeskStat icon={CircleAlert} tone="fail" label="Failed" testId="desk-block-failed" href={jobsPath('failed')} navigate={navigate}
           value={runsShown ? String(workFailed.inWindow.length) : null}
           note={workFailed.inWindow.length === 0 ? (workFailed.older > 0 ? `none new · ${workFailed.older} older still open` : 'none in the last 30 days') : `last 30 days, not retried${workFailed.retried > 0 ? ` · ${workFailed.retried} retried` : ''}`} />
-        <DeskStat icon={Bot} tone="accent" label="Agents ready" testId="desk-block-agents" href={tabPath('agents')} navigate={navigate}
+        <DeskStat icon={Bot} tone="accent" label="Helpers ready" testId="desk-block-agents" href={tabPath('agents')} navigate={navigate}
           value={agentsView.hasRoster ? `${agentsTile.ready} of ${agentsTile.total}` : null}
           loading={!agentsView.hasRoster && agentsView.rosterState !== 'failed'}
-          note={agentsView.hasRoster ? readyNote(agentsTile) : 'couldn’t read the agents'} />
+          note={agentsView.hasRoster ? readyNote(agentsTile) : 'couldn’t read the helpers'} />
         <DeskStat icon={Wallet} tone="accent" label="Spend" testId="desk-block-spend" href={`${tabPath('report')}&focus=spend`} navigate={navigate}
           value={projectId === 'default' ? '—' : workSpend.phase === 'loading' ? null : workSpend.current === null ? '—' : `${workSpend.truncated || workSpend.partial ? 'at least ' : ''}${moneyWords(workSpend.current)}`}
           note={projectId === 'default' ? 'Spend is counted per project' : workSpend.truncated ? 'Partial: last 30 days · newest jobs only; older ones were not read' : workSpend.current !== null && workSpend.previous !== null ? deltaWords(workSpend.current, workSpend.previous, (d) => moneyWords(Math.abs(d)), 30) : workSpend.partial ? 'last 30 days · priced usage only' : 'last 30 days'} />
@@ -455,7 +455,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
         options={RANGES.map((d) => ({ value: String(d) as `${RangeDays}`, label: `${d} days`, testId: `desk-range-${d}` }))}
         onChange={(v) => set('days', Number(v) as RangeDays)} />
       {projectId === undefined && withProject && <RefineSelect label="Project" all="All projects" value={refine.project} options={projectOpts} onChange={(v) => set('project', v)} testId="desk-refine-project" />}
-      <RefineSelect label="Agent" all="All agents" value={refine.agent} options={agentOpts} onChange={(v) => set('agent', v)} testId="desk-refine-agent" />
+      <RefineSelect label="Helper" all="All helpers" value={refine.agent} options={agentOpts} onChange={(v) => set('agent', v)} testId="desk-refine-agent" />
       <RefineSelect label="Workflow" all="All workflows" value={refine.workflow} options={workflowOpts} onChange={(v) => set('workflow', v)} testId="desk-refine-workflow" />
       {refined(refine) && <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="desk-refine-reset" onClick={() => setRefine((r) => ({ ...DEFAULT_REFINE, days: r.days, groupBy: r.groupBy }))}>Clear filters</button>}
       {withGroup && (
@@ -490,7 +490,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
       {/* The calm page: one question box and Recent answers; the comparison is folded away under it. */}
       <UnderstandPage project={projectId ?? null} navigate={navigate} now={now} runs={runs} search={search} compare={<DeskUnderstand runsShown={runsShown} agents={agents} agentsRead={record.phase} agentsTruncated={record.truncated}
         filterAgent={refine.agent} filterWorkflow={refine.workflow}
-        filters={[refine.agent !== null ? `agent ${agentName(refine.agent)}` : null, refine.workflow !== null ? `workflow ${workflowLabel(refine.workflow)}` : null].filter((x): x is string => x !== null).join(', ') || null}
+        filters={[refine.agent !== null ? `helper ${agentName(refine.agent)}` : null, refine.workflow !== null ? `workflow ${workflowLabel(refine.workflow)}` : null].filter((x): x is string => x !== null).join(', ') || null}
         workflows={flows} kept={kept} allRuns={runs} days={refine.days} onDays={(d) => set('days', d)} project={scope}
         projectLabel={scope === null ? null : projectName(scope)} projectName={projectName} agentName={agentName} governance={governance}
         navigate={navigate} pathOf={pathOfRun} now={now} />} />

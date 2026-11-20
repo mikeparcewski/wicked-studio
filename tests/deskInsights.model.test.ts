@@ -56,6 +56,7 @@ describe('Desk v2 model', () => {
     const steps = v.rows.indexOf('Steps run');
     expect(v.cards.some((c) => c.cells[steps]!.best)).toBe(false);
     const p = insightPrompt('agents', v, 30, ['http://x/roster']);
+    expect(p).toContain('Compare these helpers from my studio');
     expect(p).toMatch(/\| Passed checks first time \| (2 of 2 \| 1 of 2|1 of 2 \| 2 of 2) \|/);
     expect(p).toContain('- http://x/roster');
     expect(p).toMatch(/Do not invent numbers/);

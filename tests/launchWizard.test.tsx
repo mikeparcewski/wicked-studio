@@ -327,6 +327,7 @@ describe('the Lead agent (DES-TEAMING-002 §8.1)', () => {
     await toOptions();
     const pick = screen.getByTestId('launch-wizard-lead') as HTMLSelectElement;
     expect(pick.value).toBe('');
+    expect(screen.getByRole('combobox', { name: /^Lead helper/ })).toBe(pick);
     expect([...pick.options].map((o) => o.textContent)).toEqual(['Random', 'claude', 'codex', 'pi', 'copilot']);
     fireEvent.change(pick, { target: { value: 'codex' } });
     next();

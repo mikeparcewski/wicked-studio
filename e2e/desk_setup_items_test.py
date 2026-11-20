@@ -9,7 +9,7 @@ States, each on a fresh Desk at 1440x700 (light and dark captured):
               the card is "Set up your helpers — none can work yet (0 of N ready)" [Set up agents → the Agents
               tab's setup] (the memory item waits behind it);
   memory-empty agents fine, no memories → "Your memory is empty — …" [Build memory];
-  one-agent   only claude can work → "Only claude can work — jobs need a second agent to review the work" [Sign in another];
+  one-agent   only claude can work → "Only claude can work — jobs need a second helper to review the work" [Sign in another];
   memory-down the memory read refused → "Memory isn't reachable — …" with the daemon's reason;
   healthy     two agents, 267 memories, every repository indexed → none of these items.
 
@@ -83,12 +83,12 @@ with sync_playwright() as p:
     f = seen["fresh"]
     keys = [s["key"] for s in f["setup"]]
     check("fresh", keys == ["agents"]
-          and "none can work yet (0 of 4 ready)" in f["setup"][0]["text"] and f["setup"][0]["act"] == "Set up agents", fresh=f)
+          and "none can work yet (0 of 4 ready)" in f["setup"][0]["text"] and f["setup"][0]["act"] == "Set up helpers", fresh=f)
     e = seen["memory-empty"]
     check("memory-empty", [x["key"] for x in e["setup"]] == ["memory-empty"] and e["setup"][0]["act"] == "Build memory", empty=e)
     o = seen["one-agent"]
     check("one-agent", [s["key"] for s in o["setup"]] == ["second-agent"]
-          and "Only claude can work — jobs need a second agent to review the work" in o["setup"][0]["text"]
+          and "Only claude can work — jobs need a second helper to review the work" in o["setup"][0]["text"]
           and o["setup"][0]["act"] == "Sign in another", one=o)
     m = seen["memory-down"]
     check("memory-down", [s["key"] for s in m["setup"]] == ["memory-down"] and "Memory isn’t reachable" in m["setup"][0]["text"]

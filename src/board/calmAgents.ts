@@ -45,7 +45,7 @@ export function agentWeekLine(row: AgentRow): string | null {
 export function agentsSentence(rows: readonly AgentRow[]): string {
   if (rows.length === 0) return 'No helpers found on this computer yet.';
   const t = agentTiles(rows);
-  if (rows.length === 1) return t.ready === 1 ? 'Your one agent is ready to work.' : 'Your one agent isn’t ready to work yet.';
+  if (rows.length === 1) return t.ready === 1 ? 'Your one helper is ready to work.' : 'Your one helper isn’t ready to work yet.';
   if (t.ready === rows.length) return `All ${rows.length} are ready to work.`;
   return `${t.ready} of ${rows.length} are ready to work.`;
 }

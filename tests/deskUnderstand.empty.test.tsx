@@ -59,9 +59,15 @@ describe('Understand empty state and insights', () => {
     render(<DeskUnderstand {...props()} />);
     expect(screen.getByTestId('desk-und-empty')).toHaveTextContent('Nothing picked yet');
     expect(screen.getByTestId('desk-und-intro')).toHaveTextContent('Set things side by side');
+    expect(screen.getByRole('group', { name: 'Picked helpers' })).toBeInTheDocument();
     expect(screen.queryByTestId('desk-compare-card')).not.toBeInTheDocument();
     expect(screen.queryByTestId('desk-insights-generate')).not.toBeInTheDocument();
     expectNoRequests();
+  });
+
+  it('names helpers in the empty comparison', () => {
+    render(<DeskUnderstand {...props()} agents={[]} />);
+    expect(screen.getByTestId('desk-und-empty')).toHaveTextContent('No helpers in the last 30 days.');
   });
 
   it.each([2, 4])('suggests up to three agents from %i available, with insights idle until clicked', (count) => {
@@ -75,21 +81,21 @@ describe('Understand empty state and insights', () => {
     expectNoRequests();
     fireEvent.click(screen.getByTestId('desk-insights-generate'));
     // The key is kind|days|project|[agent ID, workflow ID]|selection|<the numbers on the cards>.
-    expect(mocks.generate).toHaveBeenCalledExactlyOnceWith(expect.stringContaining(`agents|30||[null,null]|${selected.join(',')}|`), expect.stringContaining('Compare these agents'));
+    expect(mocks.generate).toHaveBeenCalledExactlyOnceWith(expect.stringContaining(`agents|30||[null,null]|${selected.join(',')}|`), expect.stringContaining('Compare these helpers'));
     expect(mocks.fetch).not.toHaveBeenCalled();
     expect(mocks.launch).not.toHaveBeenCalled();
   });
 
   it('labels partial agent comparisons and carries the caveat into generated insights', () => {
     render(<DeskUnderstand {...props()} agentsTruncated />);
-    expect(screen.getByText('Partial: the agent record left out older runs')).toBeInTheDocument();
+    expect(screen.getByText('Partial: the helper record left out older runs')).toBeInTheDocument();
     suggest('agents');
     const card = screen.getAllByTestId('desk-compare-card')[0]!;
     expect(within(card).getByText('Cost per priced use')).toHaveAttribute('title', 'Cost divided by priced usage records.');
     fireEvent.click(screen.getByTestId('desk-insights-generate'));
-    expect(mocks.generate).toHaveBeenCalledWith(expect.stringMatching(/\|partial$/), expect.stringContaining('Partial: the agent record left out older runs'));
+    expect(mocks.generate).toHaveBeenCalledWith(expect.stringMatching(/\|partial$/), expect.stringContaining('Partial: the helper record left out older runs'));
     fireEvent.click(screen.getByRole('radio', { name: 'Workflows' }));
-    expect(screen.queryByText('Partial: the agent record left out older runs')).not.toBeInTheDocument();
+    expect(screen.queryByText('Partial: the helper record left out older runs')).not.toBeInTheDocument();
   });
 
   it('suggests one failed and one finished job, excluding a working job', async () => {
@@ -118,7 +124,7 @@ describe('Understand empty state and insights', () => {
     rerender(<DeskUnderstand {...p} />);
     const done = screen.getByTestId('desk-insights-done');
     expect(done).toHaveTextContent('Claude passes more checks on the first attempt.');
-    expect(done).toHaveTextContent(/Generated .+ by an agent/);
+    expect(done).toHaveTextContent(/Generated .+ by a helper/);
     expect(screen.queryByTestId('desk-insights-generate')).not.toBeInTheDocument();
     fireEvent.click(within(done).getByTestId('desk-insights-regenerate'));
     expect(mocks.generate).toHaveBeenCalledTimes(2);
@@ -146,7 +152,7 @@ describe('Understand empty state and insights', () => {
     expect(screen.getAllByTestId('desk-compare-card')).toHaveLength(3);
     mocks.state = { phase: 'done', text: 'An earlier agent comparison.', at: NOW };
     rerender(<DeskUnderstand {...p} filterWorkflow="bug-fix" filters="workflow Bug fix" />);
-    expect(screen.getByTestId('desk-und-agents-unread')).toHaveTextContent('Agent numbers can’t be split by workflow yet');
+    expect(screen.getByTestId('desk-und-agents-unread')).toHaveTextContent('Helper numbers can’t be split by workflow yet');
     expect(screen.getByTestId('desk-und-agents-unread')).toHaveTextContent('needs crew data');
     expect(screen.queryByTestId('desk-compare-card')).not.toBeInTheDocument();
     expect(screen.queryByTestId('desk-compare-differ')).not.toBeInTheDocument();

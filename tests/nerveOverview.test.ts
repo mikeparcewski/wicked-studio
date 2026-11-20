@@ -164,6 +164,6 @@ describe('a CLI nobody set up (operator 2026-11-05)', () => {
     expect(notSetUpWords(LIVE.clis, [])).toBe('Signed out: opencode — optional');
     expect(notSetUpWords(LIVE.clis.map((c) => (c.key === 'opencode' ? { ...c, units: 0 } : c)), [])).toBe('Not set up: opencode — optional');
     expect(notSetUpWords(LIVE.clis, [att('cli:one-reviewer', 'clis')])).toBeNull();
-    expect(systemSummary(att('cli:one-reviewer', 'clis', 'yellow', { text: 'Sign in a second agent so a different one can review' }))).toBe('sign in a second agent');
+    expect(systemSummary(att('cli:one-reviewer', 'clis', 'yellow', { text: 'Sign in a second agent so a different one can review' }))).toBe('sign in a second helper');
   });
 });

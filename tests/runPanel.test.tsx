@@ -27,6 +27,7 @@ describe('the grouping', () => {
     for (const t of SHEET_TABS.session) expect(items).toContain(t.id);
     for (const t of RUN_SECTION_TABS) expect(panelPlaceOf(t.id).item).toBe(t.id);
     expect(PANEL_SECTIONS.map((s) => s.id)).toEqual(['now', 'plan', 'changes', 'checks', 'agents', 'record']);
+    expect(PANEL_SECTIONS.find((s) => s.id === 'agents')?.label).toBe('Helpers and spend');
   });
 
   it('a sheet tab lands in its section; no tab (or an unknown one) lands on Now', () => {

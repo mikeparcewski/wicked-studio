@@ -137,6 +137,7 @@ describe('Report page (ui-v2)', () => {
   it('by agent: steps, pass rate, median step, 429s and cost; sortable', () => {
     page(runs());
     const table = screen.getByTestId('report-agents-table');
+    expect(within(table).getByRole('columnheader', { name: 'Helper' })).toBeInTheDocument();
     const first = within(table).getAllByRole('row')[1]!;
     expect(first).toHaveTextContent('Claude Code');
     expect(first).toHaveTextContent('2.0 min');

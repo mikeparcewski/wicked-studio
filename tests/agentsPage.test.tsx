@@ -64,14 +64,14 @@ describe('the page and its states (§3.3)', () => {
     expect(screen.getByTestId('agents-foot')).toHaveTextContent('Steps count the last 7 days (32 jobs)');
     // No agent's quality checks are reported yet: said once, in the footnote, not on every row.
     expect(within(rows[0]!).queryByTestId('agents-qe')).toBeNull();
-    expect(screen.getByTestId('agents-foot')).toHaveTextContent('doesn’t report yet which agents can run quality checks');
+    expect(screen.getByTestId('agents-foot')).toHaveTextContent('doesn’t report yet which helpers can run quality checks');
   });
 
   it('loading: skeleton rows and no count', () => {
     getRoster.mockReturnValue(new Promise(() => {}));
     renderPage();
     expect(screen.getByTestId('agents-loading')).toBeInTheDocument();
-    expect(screen.getByTestId('agents-sentence')).toHaveTextContent('Asking each agent…');
+    expect(screen.getByTestId('agents-sentence')).toHaveTextContent('Asking each helper…');
     expect(screen.queryByTestId('agents-tiles')).toBeNull();
     expect(screen.queryByTestId('agents-check-all')).toBeNull();
   });
@@ -93,7 +93,7 @@ describe('the page and its states (§3.3)', () => {
     getRoster.mockResolvedValue({ roster: [] });
     renderPage();
     expect(await screen.findByTestId('agents-empty')).toHaveTextContent('No helpers found on this computer.');
-    expect(screen.getByRole('link', { name: 'How to install an agent' })).toHaveAttribute('href', expect.stringContaining('wicked-crew'));
+    expect(screen.getByRole('link', { name: 'How to install a helper' })).toHaveAttribute('href', expect.stringContaining('wicked-crew'));
   });
 
   it('partial: diagnostics failed — the table renders, a banner names what is missing', async () => {
