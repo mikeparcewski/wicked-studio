@@ -3,7 +3,7 @@ import type { SessionView } from '../../api/types.js';
 import type { ArtifactSize } from '../../board/artifactMorph.js';
 import type { ChainModel } from '../../board/chainModel.js';
 import { draftLine, draftSteps, draftTarget, heldPoolsOf, slashItems, wordOf, type DraftRunState } from '../../board/planDraft.js';
-import { FIXED_WORD, gateRows, midRunRows, moveStep, plannedRun, orderContext, poolCeilings, poolChoices, poolRefusal, type Fixed, type OrderRow } from '../../board/planOrder.js';
+import { FIXED_WORD, gateRows, midRunRows, moveStep, takesPlanEdit, orderContext, poolCeilings, poolChoices, poolRefusal, type Fixed, type OrderRow } from '../../board/planOrder.js';
 import { gateInstance } from '../../board/proposalCard.js';
 import { useGateStore } from '../../store/gates.js';
 import { loadCatalog, usePlanCatalog } from '../../store/planCatalog.js';
@@ -43,7 +43,7 @@ export function PlanOrderEditor({ view, chain, size }: { view: SessionView; chai
   const state: DraftRunState = {
     runId,
     status,
-    planned: plannedRun(view),
+    planned: takesPlanEdit(view, gate),
     // Seeded only from a view read for THIS gate instance (codex r1/r2), as the composer does.
     planGate: planGate.isPlanGate && planGate.view !== null && planGate.fresh ? { seed: planGate.view.editSeed } : null,
     gatePending: planGate.pending || planGate.reading,

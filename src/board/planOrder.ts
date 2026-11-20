@@ -1,4 +1,5 @@
 import type { SessionView } from '../api/types.js';
+import type { OpenGate } from '../store/gates.js';
 import { distinctLabels, planStepLabel, stepLabelOf, type ChainModel } from './chainModel.js';
 import { draftSteps, heldPoolsOf, type DraftStep, type GateDraft } from './planDraft.js';
 import { DELIVER_STEP, PA_SCOPE_STEP, type PlanGateView } from './planModel.js';
@@ -235,9 +236,15 @@ export function plannedRun(v: SessionView): boolean {
   return typeof id === 'object' && id !== null && (id.kind === 'preset' || id.kind === 'user_plan');
 }
 
-/** Whether a run gets the plan artifact at all: a planned run (`run_identity`, as S7 decides) that is
+/** Whether the run's plan can be edited now: a planned run (`run_identity`), or a run whose open plan gate LISTS
+ *  `edit_plan` (studio#1175: the engine lists it at any plan gate whose unit has not run, a fixed workflow's too). */
+export function takesPlanEdit(v: SessionView, gate: Pick<OpenGate, 'gateKind' | 'actions'> | undefined): boolean {
+  return plannedRun(v) || (gate?.gateKind === 'plan_approval' && (gate.actions ?? []).some((a) => a.action === 'edit_plan'));
+}
+
+/** Whether a run gets the plan artifact at all: a run that takes plan edits (see {@link takesPlanEdit}) that is
  *  still going. The chain's source does not decide it: when the team plan cannot be read the chain is
  *  the run's own units, and the chain line already says so. */
-export function hasPlanEditor(v: SessionView, chain: ChainModel | undefined): boolean {
-  return chain !== undefined && plannedRun(v) && !TERMINAL.has(v.session.status);
+export function hasPlanEditor(v: SessionView, chain: ChainModel | undefined, gate?: Pick<OpenGate, 'gateKind' | 'actions'>): boolean {
+  return chain !== undefined && takesPlanEdit(v, gate) && !TERMINAL.has(v.session.status);
 }

@@ -370,7 +370,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   }
   // studio#1113: every other answer the gate lists is drawn too (an intent amendment on a hand-over, a named arm), worded
   // by its intent and sent as `{approve: true, action}` with the person's words where it takes them. An edited plan needs
-  // the plan editor, which only a chat's card opens (`onEdit`).
+  // the plan editor (`onEdit`, drawn below when `edit_plan` is listed).
   for (const a of listed ?? []) {
     if (DRAWN_HERE.has(a.action)) continue;
     const [c] = choicesForAction(a, (cli) => cli);
@@ -383,7 +383,8 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     ways.push({ id: 'drop', token: 'drop', label: 'Drop the changes', consequence: 'Your edits are dropped and the plan stays as proposed. Nothing is sent.', testid: 'session-proposal-drop-draft',
       run: () => dropGateDraft(runId, draft.gateKey) });
   }
-  if (chat && card.kind === 'plan' && onEdit !== undefined) {
+  // studio#1175: the plan editor is offered exactly where the engine lists `edit_plan` (no list, an older daemon: as before).
+  if (chat && card.kind === 'plan' && onEdit !== undefined && (listed === undefined || offered.has('edit_plan'))) {
     ways.push({ id: 'edit', token: 'edit', label: editing ? 'Done editing' : 'Change something', testid: 'session-proposal-edit',
       consequence: editing ? 'Closes the plan editor; your changes stay on this card until you approve or drop them.'
         : 'Opens the plan editor under this message: change, add or reorder steps. Nothing is sent until you approve.',
