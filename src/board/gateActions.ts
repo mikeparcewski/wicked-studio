@@ -492,8 +492,86 @@ export function refreshGate(runId: string): Promise<void> {
 }
 
 /** F31: a gate read is abandoned after this long, so a hung request cannot hold a run's card, or one of the runs
- *  list's read slots, forever. An abandoned read applies nothing; the next pass reads again. */
+ *  list's read slots, forever. An abandoned read applies nothing. studio#1197: a read that misses its deadline is
+ *  retried (`scheduleGateRetry`) with a longer deadline each time, up to `GATE_READ_DEADLINE_MAX_MS`: crew's gate
+ *  answer takes 2.5 s on a loaded host and 15 s for a 40 KB plan gate, so a fixed 10 s never lands it. */
 export const GATE_READ_DEADLINE_MS = 10_000;
+export const GATE_READ_DEADLINE_MAX_MS = 60_000;
+/** studio#1197: the wait before a failed read is tried again: doubles per consecutive failure, capped. */
+export const GATE_RETRY_BASE_MS = 2_000;
+export const GATE_RETRY_MAX_MS = 30_000;
+
+/** studio#1197: consecutive failed (non-404) reads per run; absent = none failed since the last answer. A card
+ *  with no gate in hand says so and offers a retry while this holds a count. */
+export const useGateReadStore = create<{ failed: Record<string, number> }>(() => ({ failed: {} }));
+function setFailed(runId: string, n: number): void {
+  useGateReadStore.setState((s) => {
+    if ((s.failed[runId] ?? 0) === n) return s;
+    const failed = { ...s.failed };
+    if (n === 0) delete failed[runId]; else failed[runId] = n;
+    return { failed };
+  });
+}
+
+/** F31: how many late-join gate reads are on their way at once (98 parked runs read one by one took ~28 s on the rig). */
+export const GATE_READS_IN_FLIGHT = 4;
+
+/**
+ * F31: the late-join passes' shared read slots. At most `GATE_READS_IN_FLIGHT` reads are on their way across every
+ * pass (a refresh that replaces a pass does not add four more). A slot is held until its read ends; a hydration read
+ * ends by its deadline at the latest (`GATE_READ_DEADLINE_MS`), so a hung request cannot stall the passes after it.
+ */
+let slotsBusy = 0;
+const slotWaiters: Array<() => void> = [];
+export async function inGateSlot(fn: () => Promise<void>): Promise<void> {
+  // A freed slot is handed to the longest waiter (first in, first out), never taken by a newcomer.
+  if (slotsBusy < GATE_READS_IN_FLIGHT) slotsBusy += 1;
+  else await new Promise<void>((r) => slotWaiters.push(r));
+  try {
+    await fn();
+  } finally {
+    const next = slotWaiters.shift();
+    if (next !== undefined) next();
+    else slotsBusy -= 1;
+  }
+}
+
+/** Test seam: a test that abandons a hung read must not leave its slot held for the next. */
+export function resetGateSlotsForTest(): void {
+  slotsBusy = 0;
+  slotWaiters.length = 0;
+}
+
+const retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+function clearRetry(runId: string): void {
+  const t = retryTimers.get(runId);
+  if (t !== undefined) { clearTimeout(t); retryTimers.delete(runId); }
+}
+/** Bumped when a run stops waiting: a read begun before that never schedules a retry (its failure is not news). */
+const retryEpoch = new Map<string, number>();
+const epochOf = (runId: string): number => retryEpoch.get(runId) ?? 0;
+function scheduleGateRetry(runId: string, failures: number): void {
+  clearRetry(runId);
+  const wait = Math.min(GATE_RETRY_BASE_MS * 2 ** (failures - 1), GATE_RETRY_MAX_MS);
+  const epoch = epochOf(runId);
+  retryTimers.set(runId, setTimeout(() => {
+    retryTimers.delete(runId);
+    // Through the runs list's shared read slots, so many runs retrying at once never read all at once; eligibility is
+    // rechecked once a slot is held (the run may have stopped waiting, or its gate arrived, meanwhile).
+    void inGateSlot(async () => { if (epochOf(runId) === epoch) await ensureGate(runId); });
+  }, wait));
+}
+/** studio#1197: stop retrying the gate reads of every run that no longer waits on a person (`waiting` = the ids
+ *  that do), and forget their failures. */
+export function reconcileGateRetries(waiting: readonly string[]): void {
+  const keep = new Set(waiting);
+  for (const id of new Set([...retryTimers.keys(), ...Object.keys(useGateReadStore.getState().failed), ...retryEpoch.keys(), ...gateReads.keys()])) {
+    if (keep.has(id)) continue;
+    clearRetry(id);
+    setFailed(id, 0);
+    retryEpoch.set(id, epochOf(id) + 1);
+  }
+}
 
 interface GateRead {
   ticket: GateReadTicket;
@@ -507,13 +585,27 @@ function startGateRead(runId: string): GateRead {
   const read: GateRead = { ticket, promise: Promise.resolve() };
   read.promise = (async () => {
     const store = useGateStore.getState();
+    const failures = useGateReadStore.getState().failed[runId] ?? 0;
+    const epoch = epochOf(runId);
     const deadline = new AbortController();
-    const timer = setTimeout(() => deadline.abort(), GATE_READ_DEADLINE_MS);
+    const timer = setTimeout(() => deadline.abort(), Math.min(GATE_READ_DEADLINE_MS * 2 ** failures, GATE_READ_DEADLINE_MAX_MS));
     try {
       store.applyGateRead(ticket, gateFromInfo(await api.getGate(runId, deadline.signal)));
+      // An answer ends the retrying only when it is the newest read's, for a run still waiting: an obsolete read's
+      // answer (after a reconnect) applies by its ticket as before but must not cancel a newer read's retry.
+      if (gateReads.get(runId) === read && epochOf(runId) === epoch) { clearRetry(runId); setFailed(runId, 0); }
     } catch (e) {
-      // crew's 404: no open gate. Any other failure (network, the deadline) leaves the store as it was.
-      if (e instanceof ApiError && e.status === 404) store.applyGateRead(ticket, null);
+      // crew's 404: no open gate, an answer. Any other failure (network, the deadline) leaves the store as it was and
+      // is tried again, later and for longer (studio#1197), until a read lands or the run stops waiting.
+      if (e instanceof ApiError && e.status === 404) {
+        store.applyGateRead(ticket, null);
+        if (gateReads.get(runId) === read && epochOf(runId) === epoch) { clearRetry(runId); setFailed(runId, 0); }
+      } else if (gateReads.get(runId) === read && epochOf(runId) === epoch && useGateStore.getState().gates[runId] === undefined) {
+        // Only the newest read counts, for a run still waiting that holds no gate: a read that was replaced, one begun
+        // before the run stopped waiting, and a forced refresh of a gate already in hand schedule nothing.
+        setFailed(runId, failures + 1);
+        scheduleGateRetry(runId, failures + 1);
+      }
     } finally {
       clearTimeout(timer);
       if (gateReads.get(runId) === read) gateReads.delete(runId);
@@ -529,7 +621,11 @@ function startGateRead(runId: string): GateRead {
  * write is obsolete: it will be dropped, so it cannot stand in); else one new read.
  */
 export function ensureGate(runId: string): Promise<void> {
-  if (useGateStore.getState().gates[runId] !== undefined) return Promise.resolve();
+  if (useGateStore.getState().gates[runId] !== undefined) {
+    clearRetry(runId);
+    setFailed(runId, 0);
+    return Promise.resolve();
+  }
   const on = gateReads.get(runId);
   if (on !== undefined && on.ticket.gen === gateGen(runId)) return on.promise;
   return startGateRead(runId).promise;

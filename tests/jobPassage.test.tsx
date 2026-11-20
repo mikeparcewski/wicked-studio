@@ -21,6 +21,7 @@ const { useCapabilities } = await import('../src/store/capabilities.js');
 const { useAskThreadStore } = await import('../src/store/askThread.js');
 const { useTeamPlanStore } = await import('../src/store/teamPlan.js');
 const { useGateStore } = await import('../src/store/gates.js');
+const { useGateReadStore } = await import('../src/board/gateActions.js');
 const { usePlanGateStore } = await import('../src/store/planGates.js');
 const { useSheets } = await import('../src/store/sheets.js');
 const { useJobBinding } = await import('../src/store/jobBinding.js');
@@ -70,6 +71,7 @@ beforeEach(() => {
   useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set(), creatorAccepted: {}, chatClosed: {}, turnGates: {}, replySeq: {}, paByChat: {}, retiredByChat: {}, answerOrds: {} });
   useTeamPlanStore.setState({ byRun: {}, refs: {} });
   useGateStore.setState({ gates: {}, approaching: {} });
+  useGateReadStore.setState({ failed: {} });
   usePlanGateStore.setState({ byRun: {}, readFor: {} });
   useSheets.setState({ open: null, pointed: null, stopping: {} });
   setCachedRoster([{ key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true } as never, { key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true } as never]);
@@ -463,6 +465,21 @@ describe('review round 2 folds', () => {
     expect(reply('approve').disabled).toBe(true);
     expect(screen.queryByTestId('job-passage-gate')).toBeNull();
     expect(await screen.findByTestId('job-passage-plan-unread')).toBeTruthy();
+  });
+
+  it('studio#1197: the plan is known from the team record but the gate read has not landed: Approve is held and the card says so, with Retry', async () => {
+    useGateStore.setState({ gates: {}, approaching: {} });
+    useGateReadStore.setState({ failed: { [RUN]: 1 } });
+    page([run()]);
+    await waitFor(() => expect(screen.getByTestId('job-passage').dataset['phase']).toBe('planHeld'));
+    expect(reply('approve').disabled).toBe(true);
+    expect((await screen.findByTestId('job-passage-plan-unread')).textContent).toMatch(/gate hasn’t loaded yet/);
+    // Retry reads the gate again, and the card draws once it lands.
+    const gateRead = vi.spyOn(api, 'getGate').mockResolvedValue({ runId: RUN, ord: 1, lifecycle: 'open', receivedAt: new Date(7).toISOString(), gateKind: 'plan_approval', prompt: 'Approve the plan' } as never);
+    fireEvent.click(screen.getByTestId('job-passage-plan-retry'));
+    await waitFor(() => expect(gateRead).toHaveBeenCalled());
+    await waitFor(() => expect(useGateStore.getState().gates[RUN]).toBeDefined());
+    await waitFor(() => expect(screen.queryByTestId('job-passage-plan-unread')).toBeNull());
   });
 
   it('a gate on a step whose last attempt was refused still unfolds under its step', async () => {

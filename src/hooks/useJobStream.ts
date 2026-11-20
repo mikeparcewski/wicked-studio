@@ -1,7 +1,7 @@
 import { powerOf } from '../api/power.js';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client.js';
-import { IDLE_GATE_ACTION, useGateActionStore } from '../board/gateActions.js';
+import { IDLE_GATE_ACTION, ensureGate, useGateActionStore, useGateReadStore } from '../board/gateActions.js';
 import { useCapabilities } from '../store/capabilities.js';
 import { create } from 'zustand';
 import type { SessionView } from '../api/types.js';
@@ -151,7 +151,10 @@ export function useJobView(lineage: JobLineage, runs: readonly SessionView[], no
   const view = useMemo(() => jobView(lineage, inputs, { stepName: unitStepName, swapPending, deciding, starting: deciding, now }),
     [lineage, inputs, swapPending, deciding, now]);
   // The plan gate is held but nothing readable came back for it: a failed read (either reader), not "still reading".
-  const planUnread = waiting && (teamError !== null || (plan.view === null && !plan.pending && !plan.reading && (gate?.gateKind === 'plan_approval' || !classified)));
-  const planRetry = planUnread && runId !== null ? () => { teamRetry(); void loadPlanGate(runId); } : null;
+  // studio#1197: or the gate itself has not come (its read missed the deadline or failed, and is being retried): the
+  // plan can be known from the team record while Approve stays held for want of the gate, so say that and offer a retry.
+  const gateReadFailed = useGateReadStore((s) => (runId === null ? 0 : s.failed[runId] ?? 0)) > 0;
+  const planUnread = waiting && ((gate === undefined && gateReadFailed) || teamError !== null || (plan.view === null && !plan.pending && !plan.reading && (gate?.gateKind === 'plan_approval' || !classified)));
+  const planRetry = planUnread && runId !== null ? () => { teamRetry(); void loadPlanGate(runId); void ensureGate(runId); } : null;
   return { view, run, inputs, planRetry, runRetry: runReadFailed ? () => setReadTry((n) => n + 1) : null };
 }
