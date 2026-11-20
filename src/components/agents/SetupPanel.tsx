@@ -113,7 +113,7 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
             {checks.runtimeRequired === false ? 'Done. Helpers run on this computer without containers.'
               : checks.runtime === null || checks.runtimeRequired === null ? 'Not checked yet.'
               : checks.runtime ? 'Done. The container runtime is running.'
-              : `Not done. ${checks.downReason !== null ? `${checks.downReason.replace(/[.!]$/, '')}: start it` : 'Start Docker Desktop or Rancher Desktop'}, then check again.`}{' '}
+              : `Not done. ${checks.downReason !== null ? `${checks.downReason.replace(/[.!]$/, '')}: start it` : 'Start Rancher Desktop'}, then check again.`}{' '}
             <button type="button" className="wk-btn wk-btn--link" onClick={() => navigate('/watch')}>Open Nerve Center</button>
           </Step>
           <Step n={5} done={false} testId="agents-setup-step-defaults">

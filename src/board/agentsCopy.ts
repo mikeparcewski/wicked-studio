@@ -99,8 +99,8 @@ export function helperRuntimeDown(row: AgentRow): string | null {
  *  Kubernetes ("Kubernetes isn't running"); the container runtime's need Docker or Rancher. */
 export function runtimeStart(message: string): { what: string; button: string; step: string } {
   return /kubernetes/i.test(message)
-    ? { what: 'Kubernetes is stopped', button: 'Start Kubernetes', step: 'Start Rancher Desktop or Docker Desktop with Kubernetes on,' }
-    : { what: 'Docker or Rancher is stopped', button: 'Start Docker or Rancher', step: 'Start Docker Desktop or Rancher Desktop,' };
+    ? { what: 'Kubernetes is stopped', button: 'Start Kubernetes', step: 'Start Rancher Desktop with Kubernetes on,' }
+    : { what: 'Docker or Rancher is stopped', button: 'Start Docker or Rancher', step: 'Start Rancher Desktop,' };
 }
 
 /**
