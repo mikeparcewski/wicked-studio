@@ -11,7 +11,7 @@ vi.mock('../src/api/client.js', () => ({ api: {
 beforeEach(() => {
   useNewWorkSeatsStore.setState({ seats: null, state: 'idle', loaded: false, saving: false, error: null });
   getSettings.mockReset().mockResolvedValue({ settings: {} });
-  updateSettings.mockReset().mockResolvedValue({ settings: {} });
+  updateSettings.mockReset().mockImplementation(async (patch: { newWorkSeats: string[] }) => ({ settings: patch }));
 });
 
 describe('crew’s new-work seat pool', () => {
@@ -55,6 +55,22 @@ describe('crew’s new-work seat pool', () => {
     await useNewWorkSeatsStore.getState().set([]);
     expect(updateSettings).toHaveBeenLastCalledWith({ newWorkSeats: [] });
     expect(useNewWorkSeatsStore.getState()).toMatchObject({ seats: [], state: 'ok', error: null });
+  });
+
+  it.each([undefined, null, [], ['codex']].map((answer) => ({ answer })))('rolls back when the daemon does not accept the sent pool: $answer', async ({ answer }) => {
+    await useNewWorkSeatsStore.getState().load();
+    updateSettings.mockResolvedValue({ settings: answer === undefined ? {} : { newWorkSeats: answer } });
+    await useNewWorkSeatsStore.getState().set(['pi']);
+    expect(useNewWorkSeatsStore.getState()).toMatchObject({
+      seats: null, loaded: true, state: 'failed', saving: false,
+      error: expect.stringMatching(/this daemon did not accept.*may need an upgrade/i),
+    });
+  });
+
+  it('accepts an echoed pool with the same members in a different order', async () => {
+    updateSettings.mockResolvedValue({ settings: { newWorkSeats: ['codex', 'pi'] } });
+    await useNewWorkSeatsStore.getState().set(['pi', 'codex']);
+    expect(useNewWorkSeatsStore.getState()).toMatchObject({ seats: ['pi', 'codex'], loaded: true, state: 'ok', error: null });
   });
 
   it('an earlier refresh cannot overwrite a subsequent save', async () => {

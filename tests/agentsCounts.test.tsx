@@ -1,3 +1,4 @@
+import { useNewWorkSeatsStore } from '../src/store/newWorkSeats.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import type { RosterSeat } from '../src/api/types.js';
@@ -48,6 +49,7 @@ const ROSTER: RosterSeat[] = [
 ];
 
 beforeEach(() => {
+  useNewWorkSeatsStore.setState({ seats: null, state: 'idle', loaded: false, saving: false, error: null });
   resetAgentsReads();
   clearCachedRoster();
   // Each read answers a fresh list, as a real fetch does.

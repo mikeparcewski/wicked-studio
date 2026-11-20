@@ -1,3 +1,4 @@
+import { useNewWorkSeatsStore } from '../src/store/newWorkSeats.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -20,7 +21,7 @@ const rerunOnboarding = vi.fn();
 const apiFetch = vi.fn();
 
 vi.mock('../src/api/client.js', () => ({
-  api: {
+  api: { getSettings: () => Promise.resolve({ settings: {} }),
     openChat: (...a: unknown[]) => openChat(...a),
     sendChatMessage: (...a: unknown[]) => sendChatMessage(...a),
     getRoster: (...a: unknown[]) => getRoster(...a),
@@ -51,6 +52,7 @@ const lastBody = (): Body => openChat.mock.calls.at(-1)![0] as Body;
 const scopeOf = (bound: boolean) => ({ kind: 'repos', repos: [{ id: 'r1', name: 'alpha', rootPath: '/srv/alpha' }], cwd: '/x', graph: { bound, reason: bound ? 'bound' : 'no graph' }, dangling: [] });
 
 beforeEach(() => {
+  useNewWorkSeatsStore.setState({ seats: null, state: 'idle', loaded: false, saving: false, error: null });
   cleanup();
   vi.clearAllMocks();
   sessionStorage.clear();

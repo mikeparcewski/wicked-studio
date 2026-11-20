@@ -51,7 +51,7 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
   const steps = setupSteps(facts);
   const counted = setupAgents(rows);
   const helperReadingKnown = helpersKnown && (steps.agentsDone || rows.every((r) => authOf(r.seat) !== 'unknown'));
-  const ready = newWorkSeats.loaded && newWorkSeats.state === 'ok' && !newWorkSeats.saving && helperReadingKnown && f.state === 'ok' && f.counted && goodEnough(facts);
+  const ready = newWorkSeats.loaded && !newWorkSeats.saving && helperReadingKnown && f.state === 'ok' && f.counted && goodEnough(facts);
   // Good enough, reached here: persist it once (§5.1); from then on studio opens on the Desk.
   // A failed write is not retried on its own (no loop): the steps say so, and the next app load tries again.
   useEffect(() => {

@@ -259,6 +259,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   /** Whether `GET /workflows` has answered (or failed): before it, the `/` menu says it is reading. */
   const [workflowsRead, setWorkflowsRead] = useState(false);
   const [selectedClis, setSelectedClis] = useState<Set<string>>(new Set());
+  const clisTouched = useRef(false);
   const [repos, setRepos] = useState<RepoEntry[]>([]);
   const [repoRefs, setRepoRefs] = useState<string[]>(prefill?.repoRef ? [prefill.repoRef] : []);
   const [entityMode, setEntityMode] = useState<EntityMode>(prefill?.entityMode ?? 'shared');
@@ -607,8 +608,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   useEffect(() => {
     const settings = useNewWorkSeatsStore.getState();
     const defaultsReady = settings.state === 'idle' ? settings.load() : Promise.resolve();
-    Promise.all([api.getRoster(), defaultsReady])
-      .then(([{ roster: seats }]) => {
+    api.getRoster()
+      .then(async ({ roster: seats }) => {
         // Deposit for Chat's default chips (§6.1: cached, never fetched on mount).
         setCachedRoster(seats);
         setRoster(seats);
@@ -623,7 +624,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           setSelectedClis(pickable(prefill.clis));
           return;
         }
-        const stored = useNewWorkSeatsStore.getState().seats;
+        await defaultsReady;
+        if (clisTouched.current) return;
+        const savedSettings = useNewWorkSeatsStore.getState();
+        const stored = savedSettings.loaded ? savedSettings.seats : null;
         if (stored !== null) {
           setSelectedClis(pickable(stored));
           return;
@@ -786,6 +790,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   function toggleCli(key: string): void {
+    clisTouched.current = true;
     setSelectedClis((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
@@ -795,6 +800,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   }
 
   function resetCliSelection(): void {
+    clisTouched.current = true;
     setSelectedClis(
       new Set(userSeats(roster).filter((s) => s.enabled_for_council && defaultOn(s.key)).map((s) => s.key)),
     );

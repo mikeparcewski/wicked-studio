@@ -47,7 +47,12 @@ export const useNewWorkSeatsStore = create<NewWorkSeatsStore>((set, get) => ({
     set({ seats: next, saving: true, error: null });
     try {
       const { api } = await import('../api/client.js');
-      await api.updateSettings({ newWorkSeats: next });
+      const { settings } = await api.updateSettings({ newWorkSeats: next });
+      const accepted = settings.newWorkSeats;
+      if (!Array.isArray(accepted) || new Set(accepted).size !== new Set(next).size || next.some((key) => !accepted.includes(key))) {
+        set({ seats: previous, state: 'failed', saving: false, error: 'Couldn’t save your helpers for new work. This daemon did not accept the setting and may need an upgrade. Your previous choice is still in use.' });
+        return;
+      }
       set({ state: 'ok', loaded: true, saving: false });
     } catch {
       set({ seats: previous, state: 'failed', saving: false, error: 'Couldn’t save your helpers for new work. Your previous choice is still in use. Try again.' });

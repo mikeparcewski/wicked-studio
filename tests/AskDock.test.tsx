@@ -284,6 +284,22 @@ describe('the chat-launch wire — the GroupChat seat machinery, one warm sessio
     }
   });
 
+  it.each(['idle', 'failed'] as const)('a failed settings read from %s still lets a fresh Send open its chat', async (state) => {
+    getSettings.mockRejectedValue(new Error('offline'));
+    useNewWorkSeatsStore.setState({ state });
+    wireDiagnostics('present');
+    dock();
+    const user = userEvent.setup();
+    if (state === 'idle') await waitFor(() => expect(useNewWorkSeatsStore.getState().state).toBe('failed'));
+    const readsBeforeSend = getSettings.mock.calls.length;
+    await user.type(screen.getByTestId('assist-input'), 'hello');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
+    expect(getSettings).toHaveBeenCalledTimes(readsBeforeSend + 1);
+    expect(openChat.mock.calls[0]![0].clis).toEqual(['claude']);
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+  });
+
   it('waits for crew’s saved default before opening a new chat', async () => {
     const user = userEvent.setup();
     let answer!: (value: unknown) => void;

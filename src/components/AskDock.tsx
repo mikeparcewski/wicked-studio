@@ -798,8 +798,9 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
           // open itself, no helper able to answer) frees the page's Send; the panel says why.
           try {
             const settings = useNewWorkSeatsStore.getState();
-            if (settings.state === 'idle') await settings.load();
-            if (!useNewWorkSeatsStore.getState().loaded) throw new Error(useNewWorkSeatsStore.getState().error ?? 'Couldn’t read your helpers for new work.');
+            if (!settings.loaded) await settings.load();
+            const savedSettings = useNewWorkSeatsStore.getState();
+            const savedSeats = savedSettings.loaded ? savedSettings.seats : null;
             // The chat-capable roster (EC44's derivation, reused verbatim) — cached when any
             // surface already fetched it; one GET /roster otherwise.
             let roster = getCachedRoster();
@@ -813,7 +814,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             // DES-SYSTEM-CHAT §5: ONE CLI answers — the picker's. A CLI that cannot answer is never
             // sent; when none can, the refusal says why (the daemon's own words per CLI).
             const options = cliOptions(roster, scoped);
-            const pick = cliRef.current !== null && options.some((o) => o.key === cliRef.current && o.ok) ? cliRef.current : defaultChatCli(options, undefined, useNewWorkSeatsStore.getState().seats);
+            const pick = cliRef.current !== null && options.some((o) => o.key === cliRef.current && o.ok) ? cliRef.current : defaultChatCli(options, undefined, savedSeats);
             if (pick === null) {
               // B-C6a: ONE plain line, no per-helper list in the words (the drawer's notice carries the
               // Sign-one-in link and the reasons under a disclosure); nothing is sent.

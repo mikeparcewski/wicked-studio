@@ -49,7 +49,7 @@ beforeEach(() => {
   resetAgentsReads(); resetFirstUseReads(); clearCachedRoster(); localStorage.clear();
   getRoster.mockReset().mockResolvedValue({ roster: [signedOut('claude', 'Claude Code'), CODEX] });
   getSeatSettings.mockReset().mockResolvedValue({ settings: {} });
-  updateSeatSettings.mockReset().mockResolvedValue({ settings: {} });
+  updateSeatSettings.mockReset().mockImplementation(async (patch: { newWorkSeats: string[] }) => ({ settings: patch }));
   getSettings.mockReset().mockResolvedValue({ settings: {} });
   listRepos.mockReset().mockResolvedValue({ repos: [] });
   listProjects.mockReset().mockResolvedValue({ projects: [{ id: 'default' }] });
@@ -169,6 +169,20 @@ describe('the setup steps (§5.2)', () => {
     expect(await screen.findByTestId('agents-setup-desk')).toHaveTextContent('go to the Desk');
     await waitFor(() => expect(putSetup).toHaveBeenCalledWith({ completedAt: expect.any(Number) }));
     expect(screen.getByTestId('agents-setup-step-project')).toHaveAttribute('data-done', 'true');
+  });
+
+  it('a failed toggle PUT after a good read keeps setup complete and ready', async () => {
+    getRoster.mockResolvedValue({ roster: [ready('claude', 'Claude Code')] });
+    listProjects.mockResolvedValue({ projects: [{ id: 'p1' }] });
+    updateSeatSettings.mockRejectedValue(new Error('offline'));
+    render(<AgentsPage search="?setup=1" navigate={vi.fn()} />);
+    expect(await screen.findByTestId('agents-setup-desk')).toBeEnabled();
+    await waitFor(() => expect(putSetup).toHaveBeenCalledTimes(1));
+    await act(async () => { await useNewWorkSeatsStore.getState().set([]); });
+    expect(useNewWorkSeatsStore.getState()).toMatchObject({ seats: null, loaded: true, state: 'failed', saving: false });
+    expect(screen.getByTestId('agents-setup-desk')).toBeEnabled();
+    expect(screen.queryByTestId('agents-setup-skip')).toBeNull();
+    expect(putSetup).toHaveBeenCalledTimes(1);
   });
 
   it('the Setup guide reads real counts and can explicitly skip an incomplete saved setup', async () => {

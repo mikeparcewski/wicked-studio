@@ -1,3 +1,4 @@
+import { useNewWorkSeatsStore } from '../src/store/newWorkSeats.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StrictMode } from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react';
@@ -18,6 +19,8 @@ import { useProvenanceStore } from '../src/store/provenance.js';
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  useNewWorkSeatsStore.setState({ seats: null, state: 'idle', loaded: false, saving: false, error: null });
+  vi.spyOn(client.api, 'getSettings').mockResolvedValue({ settings: { graphNodeLimit: 150 } });
   takeRetryPrefill(); // drain any leftover deposit between tests
   useProvenanceStore.setState({ byRun: {}, launchedHere: {} });
   vi.spyOn(client.api, 'getRoster').mockResolvedValue({
@@ -77,6 +80,40 @@ describe('ChatInput — retry-as-prefill (§4.3)', () => {
     expect(seats.map((s) => s.key)).toEqual(['claude']);
     // The launch is marked as studio-witnessed for the provenance channel.
     expect(useProvenanceStore.getState().launchedHere['r-new']).toBe(true);
+  });
+
+  it.each([false, true])('shows the roster without waiting for settings (prefill: %s)', async (prefilled) => {
+    let answer!: (value: Awaited<ReturnType<typeof client.api.getSettings>>) => void;
+    vi.mocked(client.api.getSettings).mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+    if (prefilled) depositPrefill();
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    try {
+      await userEvent.setup().click(screen.getByRole('button', { name: 'Open launch options' }));
+      expect(await screen.findByTestId('launch-seat-claude')).toBeInTheDocument();
+      expect(screen.getByTestId('launch-seat-codex')).toBeInTheDocument();
+      if (prefilled) {
+        expect(screen.getByTestId('launch-seat-claude')).toBeChecked();
+        expect(screen.getByTestId('launch-seat-codex')).not.toBeChecked();
+      }
+      expect(useNewWorkSeatsStore.getState().loaded).toBe(false);
+    } finally {
+      await act(async () => { answer({ settings: { graphNodeLimit: 150 } }); });
+    }
+  });
+
+  it('keeps an explicit helper choice made while settings are still loading', async () => {
+    let answer!: (value: Awaited<ReturnType<typeof client.api.getSettings>>) => void;
+    vi.mocked(client.api.getSettings).mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    try {
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: 'Open launch options' }));
+      await user.click(await screen.findByTestId('launch-seat-codex'));
+    } finally {
+      await act(async () => { answer({ settings: { graphNodeLimit: 150, newWorkSeats: ['claude'] } }); });
+    }
+    expect(screen.getByTestId('launch-seat-codex')).toBeChecked();
+    expect(screen.getByTestId('launch-seat-claude')).not.toBeChecked();
   });
 
   it('preserves an explicit none posture when retrying', async () => {

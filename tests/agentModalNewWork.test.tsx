@@ -54,7 +54,7 @@ beforeEach(() => {
   getRoster.mockReset().mockResolvedValue({ roster: [codex, opencode] });
   seatLogout.mockReset();
   getSettings.mockReset().mockResolvedValue({ settings: {} });
-  updateSettings.mockReset().mockResolvedValue({ settings: {} });
+  updateSettings.mockReset().mockImplementation(async (patch: { newWorkSeats: string[] }) => ({ settings: patch }));
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
