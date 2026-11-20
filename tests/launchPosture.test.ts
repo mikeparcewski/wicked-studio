@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  launchPosture,
   launchPostureFields,
   postureFieldsOfBody,
   postureKey,
@@ -50,6 +51,82 @@ describe('launchPostureFields', () => {
         expect(postureKey(postureFieldsOfBody(body), choice)).toBe(postureKey(fields, choice));
       }
     }
+  });
+});
+
+describe('launchPosture: shown words and launch payload (studio#1179)', () => {
+  const cases = (['before', 'all', 'none'] as const).flatMap((confirmMode) =>
+    (['balanced', 'autonomous', 'ask'] as const).flatMap((mode) =>
+      (['on', 'off', 'unsupported', 'failed'] as const).flatMap((power) =>
+        ([true, null] as const).flatMap((daemonDeliverGate) =>
+          [true, false].flatMap((deliverOn) =>
+            [true, false].map((revising) => ({ confirmMode, mode, power, daemonDeliverGate, deliverOn, revising })))))));
+
+  it.each(cases)('$confirmMode / $mode / power=$power / health=$daemonDeliverGate / deliver=$deliverOn / revising=$revising', (s) => {
+    const unattended = s.mode === 'autonomous' || (s.mode !== 'ask' && s.confirmMode === 'none');
+    // Preserve main's ordering: the toggle decides the gate before a revision forces delivery.
+    const auto = s.deliverOn && unattended && s.daemonDeliverGate === true;
+    const deliver = s.deliverOn || s.revising ? 'pr' : 'none';
+    const ready = s.power === 'on' || s.power === 'off';
+    const { shown, payload } = launchPosture({
+      ...base, ...s,
+      beforeOrd: 1,
+      deliverNoticeOn: s.deliverOn,
+      powerCap: true,
+      powerChoice: s.power === 'off' ? false : undefined,
+      takesPower: true,
+      previewAnswer: ready
+        ? { status: 'ready', posture: { power: s.power === 'on', deliver, autoDeliver: auto } }
+        : { status: s.power === 'failed' ? 'failed' : 'none' },
+    });
+
+    expect(payload.fields).toEqual({ workflow: 'feature', repoRef: 'wicked-studio', deliver, ...(auto ? { deliverGate: 'auto' } : {}) });
+    expect(payload.power).toBe(s.power === 'on');
+    expect(shown.selector === 'power').toBe(payload.power === true);
+    expect(shown.gateWords.includes('(power mode)')).toBe(payload.power === true);
+    const phasedWords = s.mode === 'ask' || s.confirmMode === 'all' && s.mode !== 'autonomous'
+      ? 'every unit' : s.mode === 'autonomous' ? 'no human gates' : s.confirmMode === 'before' ? 'first gate' : 'no gates';
+    expect(shown.gateWords).toBe(s.power === 'on'
+      ? deliver === 'pr' && !auto
+        ? 'at hand-off, plus any pause policy requires (power mode)'
+        : 'no step gates, only a pause policy requires (power mode)'
+      : phasedWords);
+    // Without crew's answer main uses the notice, even when a revision forces a PR on the wire.
+    expect(shown.delivers).toBe(ready ? payload.fields.deliver === 'pr' : s.deliverOn);
+    expect(shown.deliverGateWord).toBe((ready ? auto : unattended && s.daemonDeliverGate === true) ? 'auto' : 'human');
+    if (ready || s.deliverOn) expect(shown.deliverGateWord === 'auto').toBe(payload.fields.deliverGate === 'auto');
+    expect(shown.powerSwitch).toBe(ready);
+    expect(shown.unchecked).toBe(s.power === 'failed' ? 'failed' : s.power === 'unsupported' ? 'unsupported' : null);
+  });
+
+  it('keeps crew authoritative when its preparation drops delivery or changes its gate', () => {
+    const input = {
+      ...base, mode: 'autonomous' as const, confirmMode: 'before' as const, beforeOrd: 2,
+      deliverNoticeOn: true, powerCap: true, powerChoice: undefined, takesPower: true,
+    };
+    const { shown, payload } = launchPosture({
+      ...input, previewAnswer: { status: 'ready', posture: { power: true, deliver: 'none', autoDeliver: false } },
+    });
+    expect(payload.fields).toMatchObject({ deliver: 'pr', deliverGate: 'auto' });
+    expect(shown).toMatchObject({ selector: 'power', delivers: false, deliverGateWord: 'human' });
+  });
+
+  it.each([
+    { takesPower: true, status: 'loading', powerChoice: undefined, unchecked: null, powerSwitch: false, power: false },
+    { takesPower: true, status: 'failed', powerChoice: false, unchecked: 'failed', powerSwitch: true, power: false },
+    { takesPower: true, status: 'none', powerChoice: false, unchecked: null, powerSwitch: true, power: false },
+    { takesPower: null, status: 'none', powerChoice: undefined, unchecked: null, powerSwitch: false, power: false },
+    { takesPower: false, status: 'none', powerChoice: undefined, unchecked: null, powerSwitch: false, power: undefined },
+  ] as const)('pending/unknown/older daemon: $takesPower / $status / choice=$powerChoice', (s) => {
+    const { shown, payload } = launchPosture({
+      ...base, mode: undefined, confirmMode: 'before', beforeOrd: 3, deliverNoticeOn: true,
+      daemonDeliverGate: false, powerCap: s.takesPower === true, powerChoice: s.powerChoice,
+      takesPower: s.takesPower, previewAnswer: { status: s.status },
+    });
+    expect(shown).toEqual({ selector: 'select', gateWords: 'before unit #3', delivers: true,
+      deliverGateWord: 'unsupported', powerSwitch: s.powerSwitch, unchecked: s.unchecked });
+    expect(payload.power).toBe(s.power);
+    expect(payload.fields).not.toHaveProperty('deliverGate');
   });
 });
 

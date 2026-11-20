@@ -13,6 +13,10 @@
  * studio#1176 modelled crew's rules here and drifted six times; nothing here re-derives one.
  */
 import type { LaunchPlan } from '../api/teamPlan.js';
+import type { PostureAnswer } from '../hooks/usePosturePreview.js';
+import type { ConfirmMode } from '../components/ContextPopover.js';
+import { describeGate } from '../components/launchTarget.js';
+import type { RunMode } from '../components/runMode.js';
 
 /** `POST /runs/preview`'s body (api-types 0.212.0 `LaunchPreviewBody`; the form never sends `humanConfirm`). */
 export interface LaunchPreviewBody {
@@ -142,6 +146,49 @@ export function powerGateWords(p: LaunchPreviewPosture): string {
   return p.deliver === 'pr' && !p.autoDeliver
     ? 'at hand-off, plus any pause policy requires (power mode)'
     : 'no step gates, only a pause policy requires (power mode)';
+}
+
+export interface LaunchPostureInput extends Omit<PostureFormState, 'autoDeliver'> {
+  mode: RunMode | undefined;
+  confirmMode: ConfirmMode;
+  beforeOrd: number;
+  deliverNoticeOn: boolean;
+  powerCap: boolean;
+  powerChoice: boolean | undefined;
+  previewAnswer: PostureAnswer;
+  takesPower: boolean | null;
+}
+
+/** The form's words and wire fields together; crew's preview remains the authority on power. */
+export function launchPosture(s: LaunchPostureInput): {
+  shown: {
+    selector: 'power' | 'select';
+    gateWords: string;
+    delivers: boolean;
+    deliverGateWord: 'human' | 'auto' | 'unsupported';
+    powerSwitch: boolean;
+    unchecked: 'failed' | 'unsupported' | null;
+  };
+  payload: { fields: LaunchPostureFields; power: boolean | undefined };
+} {
+  const autoDeliver = s.mode === 'autonomous' || (s.mode !== 'ask' && s.confirmMode === 'none');
+  const fields = launchPostureFields({ ...s, autoDeliver });
+  const answer = s.previewAnswer.status === 'ready' ? s.previewAnswer.posture : null;
+  const powerShown = answer?.power === true;
+  return {
+    shown: {
+      selector: powerShown ? 'power' : 'select',
+      gateWords: answer !== null && answer.power ? powerGateWords(answer) : describeGate(s.mode, s.confirmMode, s.beforeOrd),
+      delivers: answer !== null ? answer.deliver === 'pr' : s.deliverNoticeOn,
+      // Keep main's notice-based words without a preview, including revision/toggle ordering.
+      deliverGateWord: answer !== null ? (answer.autoDeliver ? 'auto' : 'human')
+        : s.daemonDeliverGate === false ? 'unsupported' : autoDeliver && s.daemonDeliverGate === true ? 'auto' : 'human',
+      powerSwitch: s.powerCap && (powerShown || s.powerChoice === false),
+      unchecked: !s.powerCap ? null : s.previewAnswer.status === 'failed' ? 'failed'
+        : s.powerChoice !== false && s.previewAnswer.status === 'none' ? 'unsupported' : null,
+    },
+    payload: { fields, power: powerToSend(s.takesPower, answer) },
+  };
 }
 
 /** The gate-deciding fields of a launch body as built (what Send carries), for its {@link postureKey}. */
