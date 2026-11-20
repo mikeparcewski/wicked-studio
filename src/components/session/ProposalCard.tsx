@@ -25,7 +25,7 @@ import { useOfferReply } from './DecisionDock.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { Tech } from '../Tech.js';
 import { draftLine, heldPoolsOf } from '../../board/planDraft.js';
-import { planStepWords } from '../../board/planOrder.js';
+import { planStepWords, plannedRun } from '../../board/planOrder.js';
 import { usePlanGate } from '../../store/planGates.js';
 import { dropGateDraft, gateDraftFor, gateDraftPlan, usePlanDrafts } from '../../store/planDrafts.js';
 import { gateVerdictFor, checkOutcome } from '../gateVerdictModel.js';
@@ -165,6 +165,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   // studio#1170: when crew's gate read lists every answer the engine takes now, THAT is the card's list (crew drops a
   // hand-over approve its delivery checks refuse, keeping the in-place skip). Without it, the gate's own offers, as before.
   // A QE acceptance that passes (or stops passing) changes what the hand-over takes: it re-reads the list.
+  const served = useCapabilities((c) => c.gateActions);
   const listed = useGateActions(runId, gate, `${acceptance?.required ?? ''}:${acceptance?.satisfied ?? ''}`);
   const offered = listed !== undefined ? new Set(listed.map((a) => a.action))
     : new Set(offerActions(gateOffers(gate === undefined ? {} : { choices: gate.choices ?? undefined, skipQe: deliverRefused ? skipQeOffer : undefined })));
@@ -370,7 +371,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   }
   // studio#1113: every other answer the gate lists is drawn too (an intent amendment on a hand-over, a named arm), worded
   // by its intent and sent as `{approve: true, action}` with the person's words where it takes them. An edited plan needs
-  // the plan editor, which only a chat's card opens (`onEdit`).
+  // the plan editor (`onEdit`, drawn below when `edit_plan` is listed).
   for (const a of listed ?? []) {
     if (DRAWN_HERE.has(a.action)) continue;
     const [c] = choicesForAction(a, (cli) => cli);
@@ -383,7 +384,12 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     ways.push({ id: 'drop', token: 'drop', label: 'Drop the changes', consequence: 'Your edits are dropped and the plan stays as proposed. Nothing is sent.', testid: 'session-proposal-drop-draft',
       run: () => dropGateDraft(runId, draft.gateKey) });
   }
-  if (chat && card.kind === 'plan' && onEdit !== undefined) {
+  // studio#1175: the plan editor is offered exactly where the engine lists `edit_plan` (no list, an older daemon: as before).
+  // While a capable daemon's list is still being read the control waits (it never flashes for a gate that will not list it); a
+  // run that is not a planned one needs the held plan read first (when the engine lists the edit), or the editor would only say it cannot open.
+  const listPending = listed === undefined && served && gate?.actionsRead !== true;
+  const editListed = listed !== undefined ? offered.has('edit_plan') : !listPending;
+  if (chat && card.kind === 'plan' && onEdit !== undefined && (editing || (editListed && (plannedRun(view) || listed === undefined || planGate.view !== null)))) {
     ways.push({ id: 'edit', token: 'edit', label: editing ? 'Done editing' : 'Change something', testid: 'session-proposal-edit',
       consequence: editing ? 'Closes the plan editor; your changes stay on this card until you approve or drop them.'
         : 'Opens the plan editor under this message: change, add or reorder steps. Nothing is sent until you approve.',

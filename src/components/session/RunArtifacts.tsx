@@ -19,6 +19,7 @@ import { repoNameOf } from '../../board/deskWords.js';
 import { hasPlanEditor } from '../../board/planOrder.js';
 import { artifactKey } from '../../store/artifactSizes.js';
 import { useCapabilities } from '../../store/capabilities.js';
+import { useGateStore } from '../../store/gates.js';
 import { ArtifactMorph } from './ArtifactMorph.js';
 import { PlanOrderEditor } from './PlanOrderEditor.js';
 import { WalkthroughEditor } from './WalkthroughEditor.js';
@@ -201,7 +202,8 @@ export function RunArtifacts({ view, composerKey, chain, only, frame }: {
   const insights = made && isReviewRun(view);
   const app = made && isAppTurnRun(view);
   // S10: a planned run's plan is its artifact too — the ordered editor, while the run is going.
-  const plan = only !== 'made' && hasPlanEditor(view, chain);
+  const openGate = useGateStore((s) => s.gates[runId]);
+  const plan = only !== 'made' && hasPlanEditor(view, chain, openGate);
   const count = mine.length + (walkStep !== null ? 1 : 0) + (demo ? 1 : 0) + (plan ? 1 : 0) + (insights ? 1 : 0) + (app ? 1 : 0);
   const roster = useRoster();
   // A step crew ran itself with a program (a review's tool step names its executable, `/…/bin/node`) is crew's, not a
