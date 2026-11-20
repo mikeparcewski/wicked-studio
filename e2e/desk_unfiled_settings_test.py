@@ -6,7 +6,7 @@ The operator's paths, through the real buttons:
   1. Rail › General: the page has no agents block (no "Helpers and sign-in", no per-agent switches, no
      "Save CLI defaults"); everything else it had is there.
   2. Desk › Agents › an agent: its modal carries what the block did — "Use <agent> for new work" (it
-     writes the composers' defaults) and "Sign <agent> out here".
+     writes crew's newWorkSeats setting) and "Sign <agent> out here".
   3. Rail › "Not in a project" › its open icon: lands on `/projects/default`, the SAME dashboard a
      project has — the project desk with its header actions, the Desk's tabs, the inbox, the tiles and
      the unfiled job in its Runs tab — on a daemon that serves the synthesized project (crew) and on one
@@ -111,13 +111,14 @@ with sync_playwright() as p:
     toggle = dialog.get_by_test_id("agents-new-work-toggle")
     toggle.wait_for(state="visible", timeout=5000)
     before = toggle.get_attribute("aria-checked")
-    toggle.click()
-    page.wait_for_timeout(200)
-    stored = page.evaluate("() => localStorage.getItem('wicked_default_clis')")
+    with page.expect_response(lambda r: r.url.endswith("/api/v1/settings") and r.request.method == "PUT") as saved:
+        toggle.click()
+    check("agent-modal-new-work-saved", saved.value.ok, status=saved.value.status)
+    stored = page.request.get(f"{origin}/api/v1/settings").json()["settings"].get("newWorkSeats")
     after = dialog.get_by_test_id("agents-new-work-toggle").get_attribute("aria-checked")
     dialog.get_by_test_id("agents-new-work").scroll_into_view_if_needed()
     page.screenshot(path=str(SHOTS / "desk-unfiled-settings-agent-modal.png"))
-    check("agent-modal-new-work", before in ("true", "false") and after != before and stored is not None, before=before, after=after, stored=stored)
+    check("agent-modal-new-work", before in ("true", "false") and after != before and isinstance(stored, list) and (("claude" in stored) == (after == "true")), before=before, after=after, stored=stored)
     page.keyboard.press("Escape")
 
     # 3. Rail › Not in a project › open: the project dashboard (stand-in: the fixture serves no project detail).

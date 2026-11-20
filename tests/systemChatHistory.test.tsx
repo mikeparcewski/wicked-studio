@@ -1,3 +1,4 @@
+import { useNewWorkSeatsStore } from '../src/store/newWorkSeats.js';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -21,7 +22,7 @@ const uploadChatAttachments = vi.fn();
 const apiFetch = vi.fn();
 
 vi.mock('../src/api/client.js', () => ({
-  api: {
+  api: { getSettings: () => Promise.resolve({ settings: {} }),
     openChat: (...a: unknown[]) => openChat(...a),
     sendChatMessage: (...a: unknown[]) => sendChatMessage(...a),
     getChat: (...a: unknown[]) => getChat(...a),
@@ -64,6 +65,7 @@ function caps(on: boolean): void {
 const dock = (pathname = '/'): ReturnType<typeof render> => render(<AskDock runs={[]} pathname={pathname} onClose={() => undefined} />);
 
 beforeEach(() => {
+  useNewWorkSeatsStore.setState({ seats: null, state: 'idle', loaded: false, saving: false, error: null });
   cleanup();
   for (const f of [openChat, sendChatMessage, getChat, listChatHistory, getChatMessages, endChat, closeChat, uploadChatAttachments, apiFetch]) f.mockReset();
   apiFetch.mockRejectedValue(new Error('no diagnostics in this rig'));

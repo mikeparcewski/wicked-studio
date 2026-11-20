@@ -26,7 +26,6 @@ export interface CliOption {
 }
 
 export const CHAT_CLI_KEY = 'wicked.chat.cli';
-const DEFAULT_CLIS_KEY = 'wicked_default_clis';
 
 function readJson(key: string): unknown {
   try {
@@ -45,12 +44,6 @@ export function storedChatCli(): string | null {
 
 export function saveChatCli(key: string): void {
   try { globalThis.localStorage?.setItem(CHAT_CLI_KEY, JSON.stringify(key)); } catch { /* this page only */ }
-}
-
-/** The user's saved default seats for new work (Agents › defaults). */
-export function storedDefaultClis(): string[] {
-  const v = readJson(DEFAULT_CLIS_KEY);
-  return Array.isArray(v) ? v.filter((k): k is string => typeof k === 'string') : [];
 }
 
 /** Why a seat cannot answer, or `null` when it can. */
@@ -101,11 +94,11 @@ export function cliOptions(roster: readonly RosterSeat[] | null, scoped: boolean
 export function defaultChatCli(
   options: readonly CliOption[],
   stored: string | null = storedChatCli(),
-  defaults: readonly string[] = storedDefaultClis(),
+  defaults: readonly string[] | null = null,
 ): string | null {
   const usable = (k: string | null): k is string => k !== null && options.some((o) => o.key === k && o.ok);
   if (usable(stored)) return stored;
-  const saved = defaults.find((k) => usable(k));
+  const saved = defaults?.find((k) => usable(k));
   if (saved !== undefined) return saved;
   return options.find((o) => o.ok && !o.optIn)?.key ?? null;
 }

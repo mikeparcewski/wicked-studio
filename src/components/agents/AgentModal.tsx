@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useNewWorkSeats } from '../../store/newWorkSeats.js';
 import { createPortal } from 'react-dom';
 import { AlertCircle, AlertTriangle, Info } from 'lucide-react';
 import { helperNotInstalled, helperRuntimeDown, issueCopy, SEVERITY_WORD, type CopyCommand } from '../../board/agentsCopy.js';
@@ -199,6 +200,7 @@ export function AgentModal({ agentKey, onClose, intent }: {
 }): React.ReactElement | null {
   const titleId = useId();
   const { rows, rosterState } = useAgentRows();
+  const newWorkSeats = useNewWorkSeats();
   const row: AgentRow | undefined = rowForKey(rows, agentKey);
   const [ownOutcome, setOutcome] = useState<Outcome>({ kind: 'idle' });
   const live = useRef(true);
@@ -462,8 +464,12 @@ export function AgentModal({ agentKey, onClose, intent }: {
                   chats and jobs by default, and its free tier when it has one. */}
               <section data-testid="agents-new-work" aria-label="New work" className="wk-agents-new-work">
                 <Switch label={`Use ${name} for new work`} data-testid="agents-new-work-toggle" checked={row.picked}
+                  disabled={!newWorkSeats.loaded ? 'Reading your helpers for new work…' : newWorkSeats.saving ? 'Saving…' : null}
                   onChange={(on) => setPickedForNewWork(rows, row.key, on)}
                   hint={row.picked ? 'Picked for new chats and jobs. You can still change the helpers on each one.' : 'Not picked for new chats and jobs. You can still add it to one.'} />
+                {newWorkSeats.error !== null && <p role="alert" className="wk-field-note">{newWorkSeats.error}{' '}
+                  {!newWorkSeats.loaded && <button type="button" className="wk-btn wk-btn--link" onClick={() => void newWorkSeats.load()}>Try again</button>}
+                </p>}
                 {typeof row.seat.free_tier === 'string' && row.seat.free_tier !== '' && <p data-testid="agents-free-tier" className="wk-field-note">{row.seat.free_tier}</p>}
                 {/* Free without an account, but a provider account is still an option (General offered it). */}
                 {authOf(row.seat) === 'not_required' && row.login !== null && (

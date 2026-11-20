@@ -1,3 +1,4 @@
+import { useNewWorkSeatsStore } from '../src/store/newWorkSeats.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { RosterSeat } from '../src/api/types.js';
@@ -11,7 +12,7 @@ const getRoster = vi.fn();
 const getSeatRecord = vi.fn();
 const getDiagnostics = vi.fn();
 vi.mock('../src/api/client.js', () => ({
-  api: { getRoster: (refresh?: string) => getRoster(refresh), getSeatRecord: () => getSeatRecord() },
+  api: { getSettings: () => Promise.resolve({ settings: {} }), getRoster: (refresh?: string) => getRoster(refresh), getSeatRecord: () => getSeatRecord() },
   apiFetch: () => Promise.resolve({}),
 }));
 vi.mock('../src/api/diagnostics.js', () => ({ getDiagnostics: () => getDiagnostics(), isDiagnosticsUnsupported: () => false }));
@@ -39,6 +40,7 @@ const navigate = vi.fn();
 const renderPage = (search = ''): ReturnType<typeof render> => render(<AgentsPage search={search} navigate={navigate} />);
 
 beforeEach(() => {
+  useNewWorkSeatsStore.setState({ seats: null, state: 'idle', loaded: false, saving: false, error: null });
   useAuthOps.setState({ pending: {}, checking: {} });
   resetAgentsReads();
   clearCachedRoster();

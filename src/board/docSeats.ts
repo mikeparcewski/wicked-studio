@@ -5,7 +5,7 @@ import { healthText } from './rowHeadline.js';
 
 // studio#302: the New document council, chosen before Create.
 //
-// The default is the Build composer's (the stored `wicked_default_clis`, else every seat the roster
+// The default is the Build composer's (crew's `newWorkSeats` setting, else every seat the roster
 // enables for councils), minus the seats the roster says will not answer: a seat the daemon would
 // bench (`council_eligible: false`, e.g. quota exhausted) or one with no sign-in. Those start
 // unchecked and are named, so the form says why; the user can still check one.
@@ -15,20 +15,7 @@ export interface LeftOutSeat { key: string; detail: string }
 
 export interface DocSeatDefault { selected: ReadonlySet<string>; leftOut: readonly LeftOutSeat[] }
 
-export const DEFAULT_CLIS_KEY = 'wicked_default_clis';
-
-function storedDefault(): string[] | null {
-  try {
-    const raw = localStorage.getItem(DEFAULT_CLIS_KEY);
-    if (raw === null) return null;
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === 'string') : null;
-  } catch {
-    return null;
-  }
-}
-
-export function defaultDocSeats(roster: readonly RosterSeat[], stored: string[] | null = storedDefault()): DocSeatDefault {
+export function defaultDocSeats(roster: readonly RosterSeat[], stored: readonly string[] | null): DocSeatDefault {
   // (operator ruling 2026-10-11) With no saved default, opt-in seats (opencode) sit out unless picked.
   const wanted = stored !== null ? roster.filter((s) => stored.includes(s.key)) : roster.filter((s) => s.enabled_for_council && defaultOn(s.key));
   const selected = new Set<string>();

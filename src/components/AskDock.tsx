@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useNewWorkSeats, useNewWorkSeatsStore } from '../store/newWorkSeats.js';
 import { chatOpened, chatOpenFailed } from '../store/chatFlow.js';
 import { api } from '../api/client.js';
 import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js';
@@ -580,6 +581,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   // DES-SYSTEM-CHAT §5 — the ONE answering CLI: the user's pick, else the default rule. Fixed once
   // the chat is open (a resumed chat keeps the CLI it was opened with).
   const roster = useRoster();
+  const { seats: newWorkSeats, loaded: newWorkSeatsLoaded } = useNewWorkSeats();
   // An Unfiled document's chat whose repositories crew will seed is admitted as the scoped chat it will be.
   const seedPlanned = aboutSeed !== null && aboutSeed.projectId === null && aboutSeed.seed && chips.some((c) => c.key === askAboutDocChip(aboutSeed).key && c.on);
   const scoped = chipsScoped(chips) || seedPlanned;
@@ -587,9 +589,10 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   const [cliPick, setCliPick] = useState<string | null>(() => sendPrimary ?? resumed?.cli ?? null);
   // review r2: a failed start belongs to the helper and scope it tried; another pick or scope starts clean.
   useEffect(() => { setStartFail(null); }, [cliPick, pathname]);
+  const defaultCli = newWorkSeatsLoaded ? defaultChatCli(clis, undefined, newWorkSeats) : null;
   const cli = openedScope !== undefined
     ? cliPick
-    : cliPick !== null && clis.some((o) => o.key === cliPick && o.ok) ? cliPick : defaultChatCli(clis);
+    : cliPick !== null && clis.some((o) => o.key === cliPick && o.ok) ? cliPick : defaultCli;
   const cliRef = useRef(cli);
   cliRef.current = cli;
   const cliLabel = cli === null ? null : cliName(cli, roster);
@@ -794,6 +797,10 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
           // codex r1: a fresh chat page's open that fails anywhere here (no CLI, the roster, the
           // open itself, no helper able to answer) frees the page's Send; the panel says why.
           try {
+            const settings = useNewWorkSeatsStore.getState();
+            if (!settings.loaded) await settings.load();
+            const savedSettings = useNewWorkSeatsStore.getState();
+            const savedSeats = savedSettings.loaded ? savedSettings.seats : null;
             // The chat-capable roster (EC44's derivation, reused verbatim) — cached when any
             // surface already fetched it; one GET /roster otherwise.
             let roster = getCachedRoster();
@@ -807,7 +814,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             // DES-SYSTEM-CHAT §5: ONE CLI answers — the picker's. A CLI that cannot answer is never
             // sent; when none can, the refusal says why (the daemon's own words per CLI).
             const options = cliOptions(roster, scoped);
-            const pick = cliRef.current !== null && options.some((o) => o.key === cliRef.current && o.ok) ? cliRef.current : defaultChatCli(options);
+            const pick = cliRef.current !== null && options.some((o) => o.key === cliRef.current && o.ok) ? cliRef.current : defaultChatCli(options, undefined, savedSeats);
             if (pick === null) {
               // B-C6a: ONE plain line, no per-helper list in the words (the drawer's notice carries the
               // Sign-one-in link and the reasons under a disclosure); nothing is sent.
