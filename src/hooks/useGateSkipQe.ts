@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { ApiError } from '../api/client.js';
-import { GATE_RETRY_BASE_MS, GATE_RETRY_MAX_MS } from '../board/gateActions.js';
+import { GATE_RETRY_BASE_MS, GATE_RETRY_MAX_MS, inGateSlot } from '../board/gateActions.js';
 import type { SkipQeOffer } from '../api/types.js';
 
 /**
@@ -18,18 +18,18 @@ export function useGateSkipQe(runId: string, instance: string | null, ord: numbe
     if (!on) return;
     let live = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const attempt = (failures: number): void => {
+    const attempt = (failures: number): Promise<void> =>
       api.getGate(runId).then(
         (info) => { if (live) setRead({ key, offer: info.ord === ord && info.skipQe !== undefined ? info.skipQe : null }); },
         (e: unknown) => {
           if (!live) return;
-          // crew's 404 is an answer (no open gate); anything else is tried again.
+          // crew's 404 is an answer (no open gate); anything else is tried again, through the shared read slots so
+          // many cards retrying never read at once; eligibility is rechecked once a slot is held.
           if (e instanceof ApiError && e.status === 404) { setRead({ key, offer: null }); return; }
-          timer = setTimeout(() => attempt(failures + 1), Math.min(GATE_RETRY_BASE_MS * 2 ** failures, GATE_RETRY_MAX_MS));
+          timer = setTimeout(() => { void inGateSlot(async () => { if (live) await attempt(failures + 1); }); }, Math.min(GATE_RETRY_BASE_MS * 2 ** failures, GATE_RETRY_MAX_MS));
         },
       );
-    };
-    attempt(0);
+    void attempt(0);
     return () => { live = false; if (timer !== undefined) clearTimeout(timer); };
   }, [runId, ord, on, key]);
   return on && read?.key === key ? read.offer : null;

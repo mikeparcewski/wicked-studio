@@ -6,14 +6,14 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as client from '../src/api/client.js';
 import { ApiError } from '../src/api/errors.js';
-import { GATE_RETRY_BASE_MS } from '../src/board/gateActions.js';
+import { GATE_READS_IN_FLIGHT, GATE_RETRY_BASE_MS, resetGateSlotsForTest } from '../src/board/gateActions.js';
 import { useGateSkipQe } from '../src/hooks/useGateSkipQe.js';
 
 const OFFER = { action: 'skip_qe', reasonRequired: true };
 const info = { runId: 'r', ord: 2, prompt: 'p', lifecycle: 'open', receivedAt: '', skipQe: OFFER };
 
 beforeEach(() => { vi.useFakeTimers(); });
-afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+afterEach(() => { resetGateSlotsForTest(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('useGateSkipQe retries a failed read (studio#1203)', () => {
   it('shows the offer once a read after a 503 lands', async () => {
@@ -42,5 +42,22 @@ describe('useGateSkipQe retries a failed read (studio#1203)', () => {
     unmount();
     await vi.advanceTimersByTimeAsync(GATE_RETRY_BASE_MS * 10);
     expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it('never has more than the shared slots in flight when many cards retry (the read slots)', async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const release: Array<() => void> = [];
+    let calls = 0;
+    vi.spyOn(client.api, 'getGate').mockImplementation(() => {
+      if (calls++ < 12) return Promise.reject(new ApiError(503, 'x'));
+      inFlight += 1; peak = Math.max(peak, inFlight);
+      return new Promise((_r, rej) => { release.push(() => { inFlight -= 1; rej(new ApiError(503, 'x')); }); });
+    });
+    for (let i = 0; i < 12; i++) renderHook(() => useGateSkipQe(`r${i}`, 'i', 2, true));
+    await vi.advanceTimersByTimeAsync(GATE_RETRY_BASE_MS + 1);
+    expect(inFlight).toBe(GATE_READS_IN_FLIGHT);
+    expect(peak).toBe(GATE_READS_IN_FLIGHT);
+    expect(release).toHaveLength(GATE_READS_IN_FLIGHT);
   });
 });

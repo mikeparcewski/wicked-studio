@@ -12,7 +12,7 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
-- **A brief 503 no longer hides the skip-QE offer (studio#1203).** The in-place skip-QE read retries a failed gate read with the main gate read's backoff until it lands, instead of staying empty until the card remounts.
+- **A brief 503 no longer hides the skip-QE offer (studio#1203).** The in-place skip-QE read retries a failed gate read, through the shared read slots, with the main gate read's backoff until it lands, instead of staying empty until the card remounts.
 
 ### Changed
 
