@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppSpec } from '../src/api/types.js';
 import { navCurrent, navGroups } from '../src/board/navModel.js';
@@ -70,14 +70,48 @@ const crewDetail = (slug: string, name: string, description = '', extra: Record<
 const EDITORS = { editors: [{ id: 'wicked-apps', version: '0.13.0', sha256: 'a'.repeat(64), kinds: ['app'], enabled: true, first_party: true, title: 'App', protocol: [1, 2], sizes: ['inline', 'pane', 'full'], permissions: [] }] };
 
 describe('/apps: a dashboard of the apps', () => {
+  it('mounts a preview beyond PREVIEW_LIMIT once the card scrolls into view, without a first-24 notice', async () => {
+    const watching = new Set<{ node: Element; show: () => void }>();
+    let visible = false;
+    vi.stubGlobal('IntersectionObserver', class {
+      private entries: Array<{ node: Element; show: () => void }> = [];
+      constructor(private cb: IntersectionObserverCallback) {}
+      observe(node: Element): void {
+        const entry = { node, show: () => this.cb([{ target: node, isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver) };
+        this.entries.push(entry); watching.add(entry);
+        if (visible && node.getAttribute('data-slug') === `app-${PREVIEW_LIMIT}`) entry.show();
+      }
+      disconnect(): void { this.entries.forEach((entry) => watching.delete(entry)); }
+    });
+    const list = Array.from({ length: PREVIEW_LIMIT + 1 }, (_, i) => ({ slug: `app-${i}`, name: `App ${i}` }));
+    const routes: Routes = { '/health': { capabilities: CAPS }, '/apps': { apps: list }, '/editors': EDITORS, '/editors/wicked-apps/grants': { grants: [] } };
+    for (const app of list) routes[`/apps/${app.slug}`] = crewDetail(app.slug, app.name);
+    const { urls } = mockDaemon(routes);
+    const mounted: EditorHost[] = [];
+    const mount = vi.spyOn(EditorHost.prototype, 'mount').mockImplementation(function (this: EditorHost) { mounted.push(this); });
+    const view = render(<AppsPage navigate={vi.fn()} />);
+    await waitFor(() => expect(screen.getAllByTestId('apps-tile')).toHaveLength(PREVIEW_LIMIT + 1));
+    expect(urls).not.toContain(`/apps/app-${PREVIEW_LIMIT}`);
+    expect(mount).not.toHaveBeenCalled();
+    act(() => {
+      visible = true;
+      [...watching].filter((entry) => entry.node.getAttribute('data-slug') === `app-${PREVIEW_LIMIT}`).forEach((entry) => entry.show());
+    });
+    await waitFor(() => expect(urls).toContain(`/apps/app-${PREVIEW_LIMIT}`));
+    await waitFor(() => expect(mounted.some((host) => host.frame.title === `Preview of App ${PREVIEW_LIMIT}`)).toBe(true));
+    expect(screen.queryByTestId('apps-preview-limit')).toBeNull();
+    expect(screen.queryByText(/The first 24/)).toBeNull();
+    view.unmount();
+  });
+
   it('without an app store: the two sample apps, labelled, with their KPI values; every card opens its app; no query sent; no style attribute', async () => {
     const { urls } = mockDaemon({ '/health': { status: 'ok', capabilities: {} }, '/editors': EDITORS, '/editors/wicked-apps/grants': { grants: [] } });
     const navigate = vi.fn();
     render(<AppsPage navigate={navigate} />);
-    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByTestId('apps-tile')).toHaveLength(2));
     expect(screen.getByTestId('apps-samples-note').textContent).toMatch(/sample apps/);
     expect(screen.getAllByTestId('apps-card-sample')).toHaveLength(2);
-    const esc = screen.getAllByTestId('apps-card').find((c) => c.getAttribute('data-slug') === 'escalations')!;
+    const esc = screen.getAllByTestId('apps-tile').find((c) => c.getAttribute('data-slug') === 'escalations')!;
     expect([...esc.querySelectorAll('.wk-appcard-kpi dd')].map((d) => d.textContent)).toStrictEqual(['214', '37', '2h 41m']);
     expect(esc.querySelector('[data-testid="apps-card-version"]')!.textContent).toBe('v1 · reviewed');
     expect(esc.querySelector('[data-testid="apps-card-sources"]')!.textContent).toBe('Reads support-pg, support-pg-writer');
@@ -108,7 +142,7 @@ describe('/apps: a dashboard of the apps', () => {
       '/editors': EDITORS, '/editors/wicked-apps/grants': { grants: [] },
     });
     render(<AppsPage navigate={vi.fn()} />);
-    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByTestId('apps-tile')).toHaveLength(2));
     expect(screen.getAllByTestId('apps-card-name')[0]!.textContent).toBe(hostile);
     expect(screen.getAllByTestId('apps-card-desc')[0]!.textContent).toBe('<script>window.__pwned=2</script> what it does');
     expect(document.querySelectorAll('[data-testid="apps-page"] img, [data-testid="apps-page"] script')).toHaveLength(0);
@@ -140,7 +174,7 @@ describe('/apps: crew’s records are data (codex r9)', () => {
       '/apps/desk': crewDetail('desk', 'Desk'), '/editors': EDITORS, '/editors/wicked-apps/grants': { grants: [] },
     });
     render(<AppsPage navigate={vi.fn()} />);
-    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(1));
+    await waitFor(() => expect(screen.getAllByTestId('apps-tile')).toHaveLength(1));
     expect(screen.getByTestId('apps-skipped').textContent).toMatch(/^2 apps crew lists have an address studio can’t open/);
     expect(urls.filter((u) => u.startsWith('/apps')).sort()).toStrictEqual(['/apps', '/apps/desk']);
     expect(urls).not.toContain('/');
@@ -157,8 +191,8 @@ describe('/apps: crew’s records are data (codex r9)', () => {
       '/editors': EDITORS, '/editors/wicked-apps/grants': { grants: [] },
     });
     render(<AppsPage navigate={vi.fn()} />);
-    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(4));
-    const card = (slug: string) => screen.getAllByTestId('apps-card').find((c) => c.getAttribute('data-slug') === slug)!;
+    await waitFor(() => expect(screen.getAllByTestId('apps-tile')).toHaveLength(4));
+    const card = (slug: string) => screen.getAllByTestId('apps-tile').find((c) => c.getAttribute('data-slug') === slug)!;
     expect(card('desk').querySelector('[data-testid="apps-card-note"]')!.textContent).toMatch(/^Its details could not be read: /);
     expect(card('desk').querySelector('[data-testid="apps-card-version"]')!.textContent).toBe('v2 · you');
     expect(card('desk').querySelector('[data-testid="apps-card-share"]')).toBeNull();
@@ -187,11 +221,11 @@ describe('/apps: crew’s records are data (codex r9)', () => {
     render(<AppsPage navigate={vi.fn()} />);
     await waitFor(() => expect(screen.getByTestId('apps-error')).toBeTruthy());
     expect(screen.queryByTestId('apps-samples-note')).toBeNull();
-    expect(screen.queryAllByTestId('apps-card')).toHaveLength(0);
+    expect(screen.queryAllByTestId('apps-tile')).toHaveLength(0);
     vi.restoreAllMocks();
     mockDaemon({ '/health': { status: 'ok', capabilities: {} }, '/editors': EDITORS, '/editors/wicked-apps/grants': { grants: [] } });
     fireEvent.click(screen.getByTestId('apps-retry'));
-    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByTestId('apps-tile')).toHaveLength(2));
   });
 });
 
@@ -222,7 +256,7 @@ describe('crew’s records are data (codex r10)', () => {
     (d.app.spec.queries[0] as unknown as { source: unknown }).source = { toString: 5 };
     mockDaemon({ '/health': { status: 'ok', capabilities: CAPS }, '/apps': { apps: [{ slug: 'desk', name: 'Desk' }] }, '/apps/desk': d, '/editors': EDITORS, '/editors/wicked-apps/grants': { grants: [] } });
     render(<AppsPage navigate={vi.fn()} />);
-    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(1));
+    await waitFor(() => expect(screen.getAllByTestId('apps-tile')).toHaveLength(1));
     expect(screen.getByTestId('apps-card-sources').textContent).toMatch(/^Reads support-pg/);
     expect(screen.queryByTestId('apps-card-note')).toBeNull();
   });
@@ -504,6 +538,36 @@ describe('Edit: a component’s own words, in place on the canvas', () => {
     expect((document.querySelector('[data-testid="apps-inline"]') as HTMLInputElement).value).toBe('Open');
   });
 
+  it('ui.gesture comes only from inline keydown/input and is throttled across fields to 100ms', async () => {
+    const b = await boot(SPEC());
+    let now = 1_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const gestures = () => b.seen.filter((m) => m.type === 'ui.gesture');
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+    dbl(document.querySelector('[data-component="k"] .wk-cell-title')!);
+    const field = document.querySelector('[data-testid="apps-inline"]') as HTMLInputElement;
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+    field.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await vi.waitFor(() => expect(gestures()).toHaveLength(1));
+    expect(gestures()[0]!.payload).toEqual({});
+    now = 1_099;
+    field.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    // Let the port deliver any duplicate events before checking the throttle.
+    b.send('host.theme', { theme: {} });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(gestures()).toHaveLength(1);
+    now = 1_100;
+    field.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await vi.waitFor(() => expect(gestures()).toHaveLength(2));
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    dbl(document.querySelector('[data-component="note"] .wk-text')!);
+    const next = document.querySelector('[data-testid="apps-inline"]')!;
+    next.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(gestures()).toHaveLength(2);
+    next.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  });
+
   it('codex r9: the person’s own version landing keeps the open field and its words; the commit goes on the newest version', async () => {
     const b = await boot(SPEC());
     dbl(document.querySelector('[data-component="k"] .wk-cell-title')!);
@@ -699,7 +763,7 @@ describe('preview editor availability', () => {
     });
     vi.spyOn(editorsApi, 'listEditors').mockReturnValue(new Promise(() => {}));
     render(<AppsPage navigate={vi.fn()} />);
-    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(1));
+    await waitFor(() => expect(screen.getAllByTestId('apps-tile')).toHaveLength(1));
     expect(screen.queryByText('The App editor is not installed here')).toBeNull();
     expect(screen.getByText('Loading preview')).toBeTruthy();
   });

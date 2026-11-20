@@ -1,6 +1,6 @@
 import { apiFetch } from '../../api/client.js';
 import { ApiError } from '../../api/errors.js';
-import type { AppAction, AppCell, AppOutputColumn, AppQueryResponse, AppSpec, AppValue, AppsCapabilities } from '../../api/types.js';
+import type { AppAction, AppActionCard, AppActionCardValue, AppActionPrepareResponse, AppActionRunResponse, AppCell, AppOutputColumn, AppQueryResponse, AppSpec, AppValue, AppsCapabilities } from '../../api/types.js';
 
 /**
  * THE DATA SEAM (DES-APPS-001 §7.2-§7.3; slice K4). Every live value an app shows, and every write it asks for, goes
@@ -14,10 +14,8 @@ import type { AppAction, AppCell, AppOutputColumn, AppQueryResponse, AppSpec, Ap
  *    drawn locally from the action's declaration and labelled a sample, and a run that writes nothing but the
  *    sample's rows in this tab.
  *
- * WHERE K2b PLUGS IN: crew turning `capabilities.apps.query` and `.actions` on is the whole switch; nothing else in
- * studio changes. Until K2b publishes the prepare/run bodies in `wicked-crew-api-types`, the {@link PreparedAction} /
- * {@link ActionOutcome} shapes below are studio's reading of DES §7.3, parsed defensively (strings only, bounded); when
- * the published types land they replace these two names and {@link parseCard}.
+ * Crew's prepare/run responses use the published wire contract. {@link parseCard} validates the whole
+ * {@link AppActionCard} before mapping it into the host's display rows; an incomplete card offers no action.
  */
 
 export interface AppRows { columns: AppOutputColumn[]; rows: AppCell[][]; truncated: boolean; hasMore: boolean; ms: number; cachedAt: number | null; sample: boolean }
@@ -25,7 +23,7 @@ export type DataError = { error: 'refused' | 'unavailable' | 'rate_limited' | 'n
 
 /** One line of the card: what it is, its value as text, and where the value comes from. */
 export interface CardRow { label: string; value: string; from: string | null }
-/** The card crew generates from the resolved operation (DES §7.3). PROVISIONAL until K2b's api-types. */
+/** The host's display of a resolved operation, mapped from crew's published card (DES §7.3). */
 export interface ActionCard {
   action: string;
   kind: 'api' | 'row-write';
@@ -83,33 +81,49 @@ const line = (v: unknown, max: number): string | null => (typeof v === 'string' 
 export const CARD_LIMITS = { request: 64_000, value: 16_000, label: 200, rows: 260, line: 1_000 } as const;
 
 /**
- * crew's card, read WHOLE or not at all (DES §7.3): the person must see everything that will run. A missing or
- * mistyped field, a row that is not a `{label, value, from?}` of strings, an unknown kind, or anything over
- * {@link CARD_LIMITS} refuses the card, and the action is not offered. Control characters are shown as spaces; the
- * text is otherwise exactly crew's.
+ * Crew's published card, read WHOLE or not at all: a missing, mistyped or oversized field refuses the action.
+ * The host shows every resolved value. Control characters are shown as spaces, as on the other host cards.
  */
 export function parseCard(raw: unknown, action: string): ActionCard | null {
-  if (typeof raw !== 'object' || raw === null) return null;
-  const c = raw as Record<string, unknown>;
   const str = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max;
-  const optional = (v: unknown, max: number): v is string | null | undefined => v === undefined || v === null || str(v, max);
-  if (c['kind'] !== 'row-write' && c['kind'] !== 'api') return null;
-  if (!str(c['source'], CARD_LIMITS.line) || c['source'] === '' || !str(c['operation'], CARD_LIMITS.line) || c['operation'] === '') return null;
-  if (!str(c['request'], CARD_LIMITS.request) || c['request'] === '') return null;
-  if (!Array.isArray(c['rows']) || c['rows'].length > CARD_LIMITS.rows) return null;
-  if (!optional(c['key'], CARD_LIMITS.line) || !optional(c['checks'], CARD_LIMITS.line) || !optional(c['says'], CARD_LIMITS.line)) return null;
-  if (c['kind'] === 'row-write' && (typeof c['key'] !== 'string' || c['key'] === '')) return null;
-  const rows: CardRow[] = [];
-  for (const r of c['rows']) {
-    if (typeof r !== 'object' || r === null) return null;
+  const required = (v: unknown, max: number = CARD_LIMITS.line): v is string => str(v, max) && v !== '';
+  const scalar = (v: unknown): v is string | number | boolean => typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v));
+  const valueText = (v: AppActionCardValue['value']): string => Array.isArray(v) ? v.join(', ') : String(v);
+  const values = (v: unknown): v is AppActionCardValue[] => Array.isArray(v) && v.length <= CARD_LIMITS.rows && v.every((r: unknown) => {
+    if (typeof r !== 'object' || r === null) return false;
     const o = r as Record<string, unknown>;
-    if (!str(o['label'], CARD_LIMITS.label) || o['label'] === '' || !str(o['value'], CARD_LIMITS.value) || !optional(o['from'], CARD_LIMITS.label)) return null;
-    rows.push({ label: line(o['label'], CARD_LIMITS.label)!, value: (o['value'] as string).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, ' '), from: typeof o['from'] === 'string' ? line(o['from'], CARD_LIMITS.label) : null });
-  }
-  const text = (v: unknown): string | null => (typeof v === 'string' ? v.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, ' ') : null);
+    const val = o['value'];
+    return required(o['name'], CARD_LIMITS.label) && str(o['label'], CARD_LIMITS.label)
+      && ['param', 'app', 'viewer', 'crew'].includes(o['from'] as string)
+      && (val === null || scalar(val) || (Array.isArray(val) && val.every(scalar)))
+      && valueText(val as AppActionCardValue['value']).length <= CARD_LIMITS.value;
+  });
+  const published = (v: unknown): v is AppActionCard => {
+    if (typeof v !== 'object' || v === null) return false;
+    const c = v as Record<string, unknown>;
+    if (!required(c['app']) || !required(c['action']) || c['action'] !== action || !required(c['source'])
+      || (c['appSays'] !== undefined && !str(c['appSays'], CARD_LIMITS.line))) return false;
+    if (c['kind'] === 'api') return required(c['sourceKind']) && required(c['operation']) && values(c['args']) && required(c['request'], CARD_LIMITS.request);
+    return c['kind'] === 'row-write' && required(c['login']) && ['INSERT', 'UPDATE', 'DELETE'].includes(c['verb'] as string)
+      && required(c['table']) && values(c['columns']) && c['columns'].length + 1 <= CARD_LIMITS.rows && values(c['key'])
+      && required(c['rows']) && required(c['checks']) && required(c['statement'], CARD_LIMITS.request);
+  };
+  if (!published(raw)) return null;
+  const text = (v: string): string => v.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, ' ');
+  const row = (v: AppActionCardValue): CardRow => ({ label: line(v.name, CARD_LIMITS.label)!, value: text(valueText(v.value)), from: line(v.label, CARD_LIMITS.label)! });
+  const source = raw.kind === 'api' ? `${raw.source} (${raw.sourceKind})` : raw.source;
+  const operation = raw.kind === 'api' ? raw.operation : `${raw.verb} ${raw.table}`;
+  // An insert has no key (crew sends `key: []`): no Row line rather than an empty one.
+  const key = raw.kind === 'api' || raw.key.length === 0 ? null : raw.key.map((v) => `${v.name} = ${valueText(v.value)}`).join(' and ');
+  const checks = raw.kind === 'api' ? null : `${raw.rows}. ${raw.checks}`;
+  // Combined display fields must fit too: never crop away any part of a resolved operation.
+  if (!str(source, CARD_LIMITS.line) || !str(operation, CARD_LIMITS.line)
+    || (key !== null && !str(key, CARD_LIMITS.line)) || (checks !== null && !str(checks, CARD_LIMITS.line))) return null;
   return {
-    action, kind: c['kind'], source: line(c['source'], CARD_LIMITS.line)!, operation: line(c['operation'], CARD_LIMITS.line)!, rows,
-    key: typeof c['key'] === 'string' ? line(c['key'], CARD_LIMITS.line) : null, checks: text(c['checks']), request: text(c['request'])!, says: text(c['says']), sample: false,
+    action: raw.action, kind: raw.kind, source: line(source, CARD_LIMITS.line)!, operation: line(operation, CARD_LIMITS.line)!,
+    rows: raw.kind === 'api' ? raw.args.map(row) : [{ label: 'Runs as', value: line(raw.login, CARD_LIMITS.line)!, from: null }, ...raw.columns.map(row)],
+    key: key === null ? null : line(key, CARD_LIMITS.line), checks: checks === null ? null : text(checks),
+    request: text(raw.kind === 'api' ? raw.request : raw.statement), says: raw.appSays === undefined ? null : text(raw.appSays), sample: false,
   };
 }
 
@@ -136,7 +150,7 @@ export function crewAppData(slug: string): AppDataPort {
     },
     async prepare(version, action, params) {
       try {
-        const r = await apiFetch<{ record?: unknown; card?: unknown; expiresAt?: unknown }>(`${base}/actions/${encodeURIComponent(action)}/prepare`, { method: 'POST', body: JSON.stringify({ version, params }) });
+        const r = await apiFetch<AppActionPrepareResponse>(`${base}/actions/${encodeURIComponent(action)}/prepare`, { method: 'POST', body: JSON.stringify({ version, params }) });
         const card = parseCard(r.card, action);
         if (typeof r.record !== 'string' || r.record === '' || card === null || typeof r.expiresAt !== 'number') return { error: 'unavailable', message: 'crew answered without a card studio can show; nothing was run' };
         return { record: r.record, card, expiresAt: r.expiresAt };
@@ -144,7 +158,7 @@ export function crewAppData(slug: string): AppDataPort {
     },
     async run(action, record) {
       try {
-        const r = await apiFetch<{ state?: unknown; reason?: unknown }>(`${base}/actions/${encodeURIComponent(action)}/run`, { method: 'POST', body: JSON.stringify({ record }) });
+        const r = await apiFetch<AppActionRunResponse>(`${base}/actions/${encodeURIComponent(action)}/run`, { method: 'POST', body: JSON.stringify({ record }) });
         const state = r.state === 'succeeded' || r.state === 'failed' ? r.state : 'unknown';
         return { state, reason: line(r.reason, 400), sample: false };
       } catch (e) {

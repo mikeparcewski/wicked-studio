@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AppSpec } from '../src/api/types.js';
+import type { AppActionCard, AppSpec } from '../src/api/types.js';
 import { EditorHost, linkOf, paramsRefusal, type HostUi } from '../src/editors/host.js';
 import { AppAdapter, type AppHostPort, type AppMode } from '../src/editors/apps/appAdapter.js';
 import { parseCard, sampleAppData, type AppDataPort, type PreparedAction } from '../src/editors/apps/appData.js';
@@ -161,19 +161,19 @@ interface Rig {
   data: { query: ReturnType<typeof vi.fn>; prepare: ReturnType<typeof vi.fn>; run: ReturnType<typeof vi.fn> };
   confirm: ReturnType<typeof vi.fn>;
   openLink: ReturnType<typeof vi.fn>;
-  state: { framed: boolean; mode: AppMode; click: boolean };
+  state: { framed: boolean; mode: AppMode; click: boolean; focus: boolean };
   session: AppSession;
   ask: (type: string, payload: unknown) => Promise<Rig['replies'][number]>;
 }
 
-async function rig(opts: { editor?: string; firstParty?: boolean; grants?: PermissionId[]; confirm?: (p: PreparedAction) => Promise<boolean>; burstMs?: number } = {}): Promise<Rig> {
+async function rig(opts: { editor?: string; firstParty?: boolean; grants?: PermissionId[]; confirm?: (p: PreparedAction) => Promise<boolean>; burstMs?: number; now?: () => number } = {}): Promise<Rig> {
   const store: AppStorePort = new SampleAppStore('esc', SPEC(), new MemStorage());
   const session = new AppSession(store, { burstMs: opts.burstMs ?? 5 });
   await session.load();
   const real = sampleAppData(() => session.landedSpec!, SAMPLE_APPS['escalations']!.data);
   const data = { query: vi.fn(real.query), prepare: vi.fn(real.prepare), run: vi.fn(real.run) };
   const port: AppDataPort = { kind: 'sample', ...data, viewer: real.viewer } as unknown as AppDataPort;
-  const state = { framed: false, mode: 'preview' as AppMode, click: true };
+  const state = { framed: false, mode: 'preview' as AppMode, click: true, focus: true };
   const confirm = vi.fn(opts.confirm ?? (async () => true));
   const openLink = vi.fn(async () => true);
   const app: AppHostPort = { session, data: port, framed: () => state.framed, mode: () => state.mode, viewer: () => 'priya@example.com', confirm, openLink };
@@ -185,7 +185,7 @@ async function rig(opts: { editor?: string; firstParty?: boolean; grants?: Permi
     container, src: 'about:blank', editor, version: '0.13.0', name: 'App', title: 'App', size: 'full', surface: 'full',
     grants: opts.grants ?? ['artifact.read', 'artifact.write', 'selection.chip'], theme: {}, prefs: { reducedMotion: false, techDetails: false, locale: 'en' },
     firstParty: opts.firstParty ?? true, adapter: new AppAdapter(session, 'Escalations'), ui, app,
-    activation: () => state.click, focusInFrame: () => state.click,
+    activation: () => state.click, focusInFrame: () => state.click && state.focus, ...(opts.now === undefined ? {} : { now: opts.now }),
   });
   host.mount();
   let p: MessagePort | null = null;
@@ -287,6 +287,31 @@ describe('the app host: data.read / data.write are its own, for wicked-apps only
     r.host.teardown('done');
   });
 
+  it.each([
+    { gesture: true, focus: true, activation: true, accepted: true },
+    { gesture: false, focus: true, activation: true, accepted: false },
+    { gesture: true, focus: false, activation: true, accepted: false },
+    { gesture: true, focus: true, activation: false, accepted: false },
+  ])('short inline gesture: event=$gesture focus=$focus activation=$activation accepts=$accepted after leaving for 1.2s', async ({ gesture, focus, activation, accepted }) => {
+    // Freeze intervals only: the focus poll cannot observe the short gesture; port replies still use real timers.
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let now = 10_000;
+    const r = await rig({ now: () => now });
+    try {
+      r.state.mode = 'edit';
+      r.state.focus = focus;
+      r.state.click = activation;
+      if (gesture) r.port.postMessage(env('ui.gesture', {}));
+      // A read on the same port is a barrier after the event, without noting an app-request gesture.
+      await r.ask('artifact.read', {});
+      r.state.focus = false;
+      r.state.click = true;
+      now += 1_200;
+      expect(await r.ask('spec.edit', { base: 1, ops: [{ op: 'component-set', id: 'weekly', prop: 'title', value: 'Changed' }] }))
+        .toMatchObject(accepted ? { ok: true } : { ok: false, error: { code: 'refused' } });
+    } finally { r.host.teardown('done'); }
+  });
+
   it('link.open: https to a listed host only, after a click; the host asks first', async () => {
     const spec = SPEC();
     expect(linkOf('javascript:alert(1)', spec)).toMatch(/^!only https/);
@@ -304,6 +329,11 @@ describe('the app host: data.read / data.write are its own, for wicked-apps only
 });
 
 describe('the protocol and the live card', () => {
+  it('ui.gesture accepts only an empty payload', () => {
+    expect(parseInbound(env('ui.gesture', {}), 2)).toMatchObject({ ok: true });
+    expect(parseInbound(env('ui.gesture', { at: 10_000 }), 2)).toMatchObject({ ok: false });
+  });
+
   it('app requests are protocol 2 and exact-keyed', () => {
     expect(parseInbound(env('data.query', { query: 'q' }, 'a'), 1)).toMatchObject({ ok: false });
     expect(parseInbound(env('data.query', { query: 'q' }, 'a'), 2)).toMatchObject({ ok: true });
@@ -312,17 +342,36 @@ describe('the protocol and the live card', () => {
     expect(parseInbound(env('spec.edit', { base: 1, ops: [{ op: 'component-add', page: 'p', type: 'script', box: { x: 0, y: 0, w: 1, h: 1 } }] }, 'a'), 2)).toMatchObject({ ok: false });
   });
 
-  it('crew’s card is read whole or not at all: a malformed row, an unknown kind, a missing key, an oversized request', () => {
-    const good = { kind: 'row-write', source: 's', operation: 'UPDATE t', key: 'id = 4821', request: 'UPDATE …', rows: [{ label: 'id', value: '4821', from: 'from the app' }] };
-    expect(parseCard(good, 'a')).toMatchObject({ kind: 'row-write', rows: [{ label: 'id', value: '4821', from: 'from the app' }], sample: false });
-    expect(parseCard({ ...good, rows: [{ label: 'owner', value: { html: '<b>' } }, good.rows[0]] }, 'a')).toBeNull();
-    expect(parseCard({ ...good, kind: 'shell' }, 'a')).toBeNull();
-    expect(parseCard({ ...good, key: null }, 'a')).toBeNull();
-    expect(parseCard({ ...good, rows: undefined }, 'a')).toBeNull();
-    expect(parseCard({ ...good, request: 'x'.repeat(64_001) }, 'a')).toBeNull();
-    // A request at the published mutation size is shown whole, never cropped.
-    expect(parseCard({ ...good, kind: 'api', request: 'm'.repeat(16_384) }, 'a')!.request).toHaveLength(16_384);
-    expect(parseCard({ source: 's', operation: 'UPDATE t' }, 'a')).toBeNull();
+  it('maps the published api card, including every argument and value type', () => {
+    const card: AppActionCard = { kind: 'api', app: 'desk', action: 'ping', source: 'ops', sourceKind: 'rest', operation: 'POST /ping',
+      args: [
+        { name: 'note', value: 'hello', from: 'app', label: 'fixed by the app' },
+        { name: 'count', value: 2, from: 'param', label: 'you entered it' },
+        { name: 'enabled', value: true, from: 'app', label: 'fixed by the app' },
+        { name: 'empty', value: null, from: 'app', label: 'fixed by the app' },
+        { name: 'groups', value: ['ops', 3, false], from: 'viewer', label: 'your sign-in' },
+      ], request: 'POST https://ops.example.com/ping', appSays: 'Pings the channel.' };
+    expect(parseCard(card, 'ping')).toEqual({ action: 'ping', kind: 'api', source: 'ops (rest)', operation: 'POST /ping',
+      rows: card.args.map((arg, i) => ({ label: arg.name, value: ['hello', '2', 'true', 'null', 'ops, 3, false'][i], from: arg.label })),
+      key: null, checks: null, request: card.request, says: card.appSays, sample: false });
+    expect(parseCard({ ...card, request: 'm'.repeat(16_384) }, 'ping')!.request).toHaveLength(16_384);
+    expect(parseCard({ ...card, action: 'other' }, 'ping')).toBeNull();
+    expect(parseCard({ ...card, args: [{ ...card.args[0], value: {} }] }, 'ping')).toBeNull();
+  });
+
+  it('maps the published row-write card whole or refuses missing columns and oversized statements', () => {
+    const card: AppActionCard = { kind: 'row-write', app: 'desk', action: 'assign', source: 'support-pg-writer', login: 'operator',
+      verb: 'UPDATE', table: 'support.tickets', columns: [{ name: 'owner', value: 'you', from: 'viewer', label: 'your sign-in' }],
+      key: [{ name: 'id', value: 4821, from: 'param', label: 'you entered it' }, { name: 'open', value: true, from: 'app', label: 'fixed by the app' }],
+      rows: 'exactly 1 row, verified', checks: 'plain table', statement: 'UPDATE ONLY support.tickets …' };
+    expect(parseCard(card, 'assign')).toEqual({ action: 'assign', kind: 'row-write', source: 'support-pg-writer', operation: 'UPDATE support.tickets',
+      rows: [{ label: 'Runs as', value: 'operator', from: null }, { label: 'owner', value: 'you', from: 'your sign-in' }],
+      key: 'id = 4821 and open = true', checks: 'exactly 1 row, verified. plain table', request: card.statement, says: null, sample: false });
+    for (const field of Object.keys(card)) expect(parseCard({ ...card, [field]: undefined }, 'assign')).toBeNull();
+    expect(parseCard({ ...card, statement: 'x'.repeat(64_001) }, 'assign')).toBeNull();
+    expect(parseCard({ ...card, key: null }, 'assign')).toBeNull();
+    expect(parseCard({ ...card, columns: [{ ...card.columns[0], from: 'made-up' }] }, 'assign')).toBeNull();
+    expect(parseCard({ ...card, login: 'op\u0000erator' }, 'assign')!.rows[0]!.value).toBe('op erator');
   });
 
   it('the inventory lists every component once with its page', () => {
