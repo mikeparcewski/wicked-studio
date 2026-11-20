@@ -95,8 +95,10 @@ export function VoiceFullScreen(): React.ReactElement {
           <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="voice-exit" onClick={closeVoice}>Leave voice</button>
         </div>
         <VoiceSetup />
-        <div className="wk-voice-trans" ref={trans} role="log" aria-live="polite" aria-label="Transcript" data-testid="voice-trans" tabIndex={0}>
-          {((undoLines) => v.lines.map((l) => <Line key={l.id} l={l} undoHere={undoLines.has(l.id)} />))(latestUndoLine(v.lines))}
+        <div className="wk-voice-trans-frame" data-testid="voice-trans-frame">
+          <div className="wk-voice-trans" ref={trans} role="log" aria-live="polite" aria-label="Transcript" data-testid="voice-trans" tabIndex={0}>
+            {((undoLines) => v.lines.map((l) => <Line key={l.id} l={l} undoHere={undoLines.has(l.id)} />))(latestUndoLine(v.lines))}
+          </div>
         </div>
         <div className="wk-voice-foot" data-testid="voice-foot">
           <span className="wk-voice-dot" data-tone={v.mode !== null ? 'run' : 'idle'} aria-hidden /> {foot}

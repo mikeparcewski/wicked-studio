@@ -25294,6 +25294,12 @@
       ]
     },
     {
+      "testId": "voice-trans-frame",
+      "files": [
+        "src/components/voice/VoiceFullScreen.tsx"
+      ]
+    },
+    {
       "testId": "voice-type",
       "files": [
         "src/components/voice/VoiceFullScreen.tsx"
