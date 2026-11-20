@@ -4,7 +4,7 @@ import { ApiError, apiWire } from '../api/errors.js';
 import { qeRefusalOf } from './qeRefusal.js';
 import { isDeliveriesFrozen } from '../api/deliveryFreeze.js';
 import { useDeliveryFreezeStore } from '../store/deliveryFreeze.js';
-import type { GateDecision, SessionView } from '../api/types.js';
+import type { GateDecision, GateInfo, SessionView } from '../api/types.js';
 import { jobTitle, plainGateQuestion } from './deskWords.js';
 import type { LaunchPlan } from '../api/teamPlan.js';
 import { sessionPath } from './sessionModel.js';
@@ -580,6 +580,21 @@ interface GateRead {
 /** The newest gate read of each run while it is on its way. */
 const gateReads = new Map<string, GateRead>();
 
+/** One gate read bounded by the shared deadline (it grows with `failures`), and by `outer` when given: aborting
+ *  `outer` ends the request, so a read inside a slot can always let it go (studio#1203). */
+export async function getGateBounded(runId: string, failures: number, outer?: AbortSignal): Promise<GateInfo> {
+  const deadline = new AbortController();
+  const timer = setTimeout(() => deadline.abort(), Math.min(GATE_READ_DEADLINE_MS * 2 ** failures, GATE_READ_DEADLINE_MAX_MS));
+  const onOuter = (): void => deadline.abort();
+  if (outer?.aborted) deadline.abort(); else outer?.addEventListener('abort', onOuter);
+  try {
+    return await api.getGate(runId, deadline.signal);
+  } finally {
+    clearTimeout(timer);
+    outer?.removeEventListener('abort', onOuter);
+  }
+}
+
 function startGateRead(runId: string): GateRead {
   const ticket = beginGateRead(runId);
   const read: GateRead = { ticket, promise: Promise.resolve() };
@@ -587,10 +602,8 @@ function startGateRead(runId: string): GateRead {
     const store = useGateStore.getState();
     const failures = useGateReadStore.getState().failed[runId] ?? 0;
     const epoch = epochOf(runId);
-    const deadline = new AbortController();
-    const timer = setTimeout(() => deadline.abort(), Math.min(GATE_READ_DEADLINE_MS * 2 ** failures, GATE_READ_DEADLINE_MAX_MS));
     try {
-      store.applyGateRead(ticket, gateFromInfo(await api.getGate(runId, deadline.signal)));
+      store.applyGateRead(ticket, gateFromInfo(await getGateBounded(runId, failures)));
       // An answer ends the retrying only when it is the newest read's, for a run still waiting: an obsolete read's
       // answer (after a reconnect) applies by its ticket as before but must not cancel a newer read's retry.
       if (gateReads.get(runId) === read && epochOf(runId) === epoch) { clearRetry(runId); setFailed(runId, 0); }
@@ -607,7 +620,6 @@ function startGateRead(runId: string): GateRead {
         scheduleGateRetry(runId, failures + 1);
       }
     } finally {
-      clearTimeout(timer);
       if (gateReads.get(runId) === read) gateReads.delete(runId);
     }
   })();

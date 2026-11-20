@@ -12,14 +12,15 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
-- **A brief 503 no longer hides the skip-QE offer (studio#1203).** The in-place skip-QE read retries a failed gate read, through the shared read slots, with the main gate read's backoff until it lands, instead of staying empty until the card remounts.
-
 ### Changed
 
 - **CI: the selftest pin moves to wicked-ci 3bd45ae (the advisory verdict now concludes, wicked-ci#76/#81).** The selftest job grants `checks: write` so the called workflow can publish its verdict check run; the advisory job still never blocks a merge.
 
 ### Fixed
 
+- The New job form derives its gate words and launch payload together in one pure posture function, preserving crew's
+  preview decisions and the existing request fields (studio#1179). The launch panel now points to the form for what
+  it will ask before Send, instead of promising plan approval for every launch posture (studio#1173).
 - Adding an HTTP MCP server or REST API now offers the same loopback/private address confirmation as Data sources (studio#1198). Ticking a range retries the preview with that range allowed; confirmations apply only to the kind, server URL and OpenAPI URL they were given for.
 - A waiting run's plan card no longer stays on "reading the plan…" when the gate read is slow (studio#1197). A `GET /runs/:id/gate` that
   missed its 10 s deadline was dropped and never read again until a live frame refreshed the runs list; on a loaded host a large plan

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { ApiError } from '../api/client.js';
-import { GATE_RETRY_BASE_MS, GATE_RETRY_MAX_MS, inGateSlot } from '../board/gateActions.js';
+import { GATE_RETRY_BASE_MS, GATE_RETRY_MAX_MS, getGateBounded, inGateSlot } from '../board/gateActions.js';
 import type { SkipQeOffer } from '../api/types.js';
 
 /**
@@ -18,8 +18,9 @@ export function useGateSkipQe(runId: string, instance: string | null, ord: numbe
     if (!on) return;
     let live = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const stop = new AbortController();
     const attempt = (failures: number): Promise<void> =>
-      api.getGate(runId).then(
+      (failures === 0 ? api.getGate(runId) : getGateBounded(runId, failures, stop.signal)).then(
         (info) => { if (live) setRead({ key, offer: info.ord === ord && info.skipQe !== undefined ? info.skipQe : null }); },
         (e: unknown) => {
           if (!live) return;
@@ -30,7 +31,7 @@ export function useGateSkipQe(runId: string, instance: string | null, ord: numbe
         },
       );
     void attempt(0);
-    return () => { live = false; if (timer !== undefined) clearTimeout(timer); };
+    return () => { live = false; stop.abort(); if (timer !== undefined) clearTimeout(timer); };
   }, [runId, ord, on, key]);
   return on && read?.key === key ? read.offer : null;
 }
