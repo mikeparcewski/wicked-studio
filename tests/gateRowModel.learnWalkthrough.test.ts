@@ -40,7 +40,7 @@ describe('learn walkthrough gate — a multi-turn loop', () => {
     const units = learnUnits();
     const model = sessionGateChoices({ runId: RUN, gate: gate(5), units, events: [], pool: ['claude'], roster: null })!;
     const byKey = Object.fromEntries([...model.choices, ...model.overflow].map((c) => [c.key, c]));
-    expect(byKey['send-back']).toMatchObject({ label: 'Ask a follow-up', decision: { approve: false, action: 'request_changes' }, needsNote: true });
+    expect(byKey['send-back']).toMatchObject({ label: 'Ask a follow-up', decision: { approve: false, action: 'request_changes' }, note: 'required' });
     expect(byKey['approve']).toBeDefined();
     expect(byKey['stop']).toBeDefined();
     expect(conversationStep(units, 5)?.id).toBe(`${RUN}:walkthrough`);

@@ -42,20 +42,20 @@ describe('sessionGateChoices — def gate (reason=def)', () => {
     expect(model!.choices.map((c) => c.key)).toEqual(['approve', 'steer', 'send-back', 'stop']);
   });
 
-  it('Approve has decision {approve:true} and needsNote=false', () => {
+  it('Approve has decision {approve:true} and note=none', () => {
     const gate = plainGate();
     const model = sessionGateChoices(input(gate))!;
     const approve = model.choices.find((c) => c.key === 'approve')!;
     expect(approve.decision).toEqual({ approve: true });
-    expect(approve.needsNote).toBe(false);
+    expect(approve.note).toBe('none');
   });
 
-  it('Approve and steer (no later creator) has needsNote=true and decision={approve:true} — no amendScope (gate 13 Item 1)', () => {
+  it('Approve and steer (no later creator) has note=required and decision={approve:true} — no amendScope (gate 13 Item 1)', () => {
     // plainGate() uses empty units → steerScopeTarget returns null → no amendScope
     const gate = plainGate();
     const model = sessionGateChoices(input(gate))!;
     const steer = model.choices.find((c) => c.key === 'steer')!;
-    expect(steer.needsNote).toBe(true);
+    expect(steer.note).toBe('required');
     expect(steer.decision).toEqual({ approve: true });
   });
 
@@ -68,24 +68,24 @@ describe('sessionGateChoices — def gate (reason=def)', () => {
     ];
     const model = sessionGateChoices({ runId: gate.runId, gate, units, events: [], pool: [], roster: null })!;
     const steer = model.choices.find((c) => c.key === 'steer')!;
-    expect(steer.needsNote).toBe(true);
+    expect(steer.note).toBe('required');
     expect(steer.decision).toEqual({ approve: true, amendScope: 'creator' });
   });
 
-  it('Send back has needsNote=true and decision={approve:false, action:request_changes}', () => {
+  it('Send back has note=required and decision={approve:false, action:request_changes}', () => {
     const gate = plainGate();
     const model = sessionGateChoices(input(gate))!;
     const sendBack = model.choices.find((c) => c.key === 'send-back')!;
-    expect(sendBack.needsNote).toBe(true);
+    expect(sendBack.note).toBe('required');
     expect(sendBack.decision).toEqual({ approve: false, action: 'request_changes' });
   });
 
-  it('Stop has decision {approve:false} and needsNote=false', () => {
+  it('Stop has decision {approve:false} and note=required', () => {
     const gate = plainGate();
     const model = sessionGateChoices(input(gate))!;
     const stop = model.choices.find((c) => c.key === 'stop')!;
     expect(stop.decision).toEqual({ approve: false });
-    expect(stop.needsNote).toBe(false);
+    expect(stop.note).toBe('required');
   });
 
   it('recommended is 0 (Approve)', () => {
@@ -157,7 +157,7 @@ describe('sessionGateChoices — the suggestion is recommendGateMove\'s, every k
     expect(model.noteDefault).toContain('- test — exit 1');
   });
 
-  const choice = (key: string, disabled = false): GateRowChoice => ({ key, label: key, decision: { approve: true }, needsNote: false, title: key, ...(disabled ? { disabled } : {}) });
+  const choice = (key: string, disabled = false): GateRowChoice => ({ key, label: key, decision: { approve: true }, note: 'none', title: key, ...(disabled ? { disabled } : {}) });
   const move = (kind: GateMove['kind']): GateMove => ({ kind, label: kind, consequence: '', prefill: null, items: [] });
 
   it('approve: an approve-plan or deliver move suggests Approve', () => {
@@ -186,7 +186,7 @@ describe('sessionGateChoices — team/free-text/choices → real choices', () =>
     const send = model!.choices[0]!;
     expect(send.key).toBe('free-text-send');
     expect(send.label).toBe('Send');
-    expect(send.needsNote).toBe(true);
+    expect(send.note).toBe('required');
     expect(send.decision).toEqual({ approve: true });
     expect(model!.overflow).toHaveLength(0);
   });
@@ -231,11 +231,11 @@ describe('sessionGateChoices — reassign candidates for escalation', () => {
     const reassignKeys = model!.choices.filter((c) => c.key.startsWith('reassign:')).map((c) => c.key);
     // At least one reassign choice (claude is offerable for the codex-failed escalation)
     expect(reassignKeys.length).toBeGreaterThan(0);
-    // All reassign choices have reassignCli set and needsNote=false
+    // All reassign choices have reassignCli set and note=none
     for (const key of reassignKeys) {
       const c = model!.choices.find((ch) => ch.key === key)!;
       expect(c.reassignCli).toBeDefined();
-      expect(c.needsNote).toBe(false);
+      expect(c.note).toBe('none');
     }
   });
 
@@ -310,7 +310,7 @@ describe('sessionGateChoices — unknown engine choices are disabled', () => {
     expect(stop!.decision).toEqual({ approve: false });
     expect(sendNote).toBeDefined();
     expect(sendNote!.disabled).toBeFalsy();
-    expect(sendNote!.needsNote).toBe(true);
+    expect(sendNote!.note).toBe('required');
     expect(sendNote!.decision).toEqual({ approve: false, action: 'request_changes' });
   });
 });
@@ -373,7 +373,7 @@ describe('sessionGateChoices — escalation steer uses steerScopeTarget (gate 13
     const model = sessionGateChoices({ runId: MOVE_RUN, gate, units: MOVE_UNITS, events: NOT_PASS_EVENTS, pool: [], roster: null })!;
     const steer = model.choices.find((c) => c.key === 'steer')!;
     expect(steer.decision).toEqual({ approve: true });
-    expect(steer.needsNote).toBe(true);
+    expect(steer.note).toBe('required');
   });
 });
 
@@ -458,7 +458,7 @@ describe('sessionGateChoices — escalation offers (gate 15 Item 1)', () => {
     const allChoices = [...model.choices, ...model.overflow];
     const extend = allChoices.find((c) => c.key === 'offer:extend')!;
     expect(extend.decision).toMatchObject({ approve: true, action: 'extend' });
-    expect(extend.needsNote).toBe(false);
+    expect(extend.note).toBe('none');
   });
 
   const timeoutModel = (prompt: string) => {
@@ -593,7 +593,7 @@ describe('sessionGateChoices — a denied unit re-runs: Approve (suggested) · s
     expect(model.overflow).toEqual([]);
     const approve = model.choices[0]!;
     expect(approve.decision).toEqual({ approve: true });
-    expect(approve.needsNote).toBe(false);
+    expect(approve.note).toBe('none');
     expect(approve.title).toMatch(/re-run/i);
     // No reviewer finding to return: the steer note starts empty, not with "Fix the reviewer's failing items".
     expect(model.noteDefault).toBe('');

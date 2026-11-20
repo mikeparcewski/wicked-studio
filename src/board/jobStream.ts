@@ -1,5 +1,5 @@
 import type { ArtifactProposal, CatalogGateId, ChatPlanOffer, ProposalQuestion, ProposalResult, ProposalRevisionEdits, ProposalSuggestion, ProposalToken, SessionView } from '../api/types.js';
-import { choicesForAction, type GateAction } from './gateContract.js';
+import { choicesForAction, noteAsk, type GateAction } from './gateContract.js';
 import { PLAN_STOP } from './proposalCard.js';
 
 /**
@@ -500,6 +500,8 @@ export interface JobReply {
   tone: 'go' | 'plain' | 'quiet';
   /** It binds the composer instead of sending (Change, a typed question answer). */
   binds?: true;
+  /** The bound reply may be sent without words. */
+  optional?: true;
 }
 
 export interface JobStepRow { ord: number; label: string; seat: string | null; state: 'done' | 'skipped' | 'failed' | 'now' | 'waiting' | 'todo' }
@@ -770,12 +772,14 @@ export function jobView(l: JobLineage, run: JobRunInputs, opts: {
     ];
     // Keep the engine's order, with the refusal last as on the other gate rows.
     for (const a of [...actions.filter((a) => a.action !== 'reject'), ...actions.filter((a) => a.action === 'reject')]) {
+      const ask = noteAsk(a.note);
+      const words = { ...(ask.box ? { binds: true as const } : {}), ...(ask.optional ? { optional: true as const } : {}) };
       if (a.action === 'approve') replies.push({ ...common, id: 'approve', label: p === null ? 'Approve plan' : `Approve plan v${p.planRev}`, tone: 'go' });
-      else if (a.action === 'request_changes') replies.push({ ...common, id: 'change', label: 'Change', tone: 'plain', binds: true });
-      else if (a.action === 'reject') replies.push({ ...common, id: 'reject', label: PLAN_STOP, tone: 'quiet' });
+      else if (a.action === 'request_changes') replies.push({ ...common, id: 'change', label: 'Change', tone: 'plain', ...words });
+      else if (a.action === 'reject') replies.push({ ...common, id: 'reject', label: PLAN_STOP, tone: 'quiet', ...words });
       else if (a.action !== 'edit_plan' && a.action !== 'reassign') {
         const [choice] = choicesForAction(a, (cli) => cli);
-        if (choice !== undefined) replies.push({ ...common, id: `act:${a.action}`, label: choice.label, tone: 'plain', ...(a.note !== 'none' ? { binds: true } : {}) });
+        if (choice !== undefined) replies.push({ ...common, id: `act:${a.action}`, label: choice.label, tone: 'plain', ...words });
       }
     }
   } else if (phase === 'replanning') {

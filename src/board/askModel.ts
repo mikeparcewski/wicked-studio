@@ -1,3 +1,4 @@
+import { noteAsk, type NotePolicy } from './gateContract.js';
 import type { Ask, AskAnswer, AskOption, ElicitationMulti } from '../api/ask.js';
 import type { GateRowChoice } from './gateRowModel.js';
 
@@ -113,11 +114,17 @@ export function elicitationContent(ask: Ask, answer: AskAnswer): { response: str
   return o === undefined ? null : { response: o.token };
 }
 
-/** The gate choices that ask for a reason as they are taken (DES-GUIDED-CHAT §4 "Reasons for danger"): Stop. The
- *  note-bearing choices (send back, steer, the floor override, skip QE) already ask for their words. */
-export const REASON_KEYS = new Set(['stop']);
 /** The gate choices drawn as danger. */
 export const DANGER_KEYS = new Set(['stop', 'reject', 'decline']);
+
+/** The engine's note policy as an ask option's reason fields. */
+export function noteOption(note: NotePolicy): { needsReason?: true; reasonOptional?: true } {
+  const ask = noteAsk(note);
+  return {
+    ...(ask.box ? { needsReason: true } : {}),
+    ...(ask.optional ? { reasonOptional: true } : {}),
+  };
+}
 
 /** One gate choice as an ask option: its words, its consequence, and whether it asks for words first. */
 export function gateOption(choice: GateRowChoice, opts: { label?: string; sub?: string; consequence?: string | null; recommended?: boolean }): AskOption {
@@ -130,7 +137,7 @@ export function gateOption(choice: GateRowChoice, opts: { label?: string; sub?: 
     ...(consequence !== undefined && consequence !== null ? { consequence } : {}),
     ...(DANGER_KEYS.has(choice.key) || choice.key.startsWith('reject') ? { tone: 'danger' as const } : {}),
     ...(opts.recommended === true ? { recommended: true } : {}),
-    ...(choice.needsNote || REASON_KEYS.has(choice.key) ? { needsReason: true } : {}),
+    ...noteOption(choice.note),
     ...(choice.disabled === true ? { disabled: 'Studio does not know what this answer does, so it is not offered.' } : {}),
     ...(choice.isDefault === true ? { meta: 'default' } : {}),
   };

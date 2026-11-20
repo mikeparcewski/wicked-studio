@@ -632,3 +632,98 @@ describe('the session page reads a run\'s events once (#558)', () => {
     expect(getRunEvents).toHaveBeenCalledTimes(1);
   });
 });
+
+
+describe('studio#1177: listed notes and missing evidence', () => {
+  it('an optional send-back opens a box and sends without words', async () => {
+    const gate = plainGate({ actions: [{ action: 'request_changes', intent: 'send_back', note: 'optional' }] });
+    render(<GateRow view={view()} gate={gate} />);
+    fireEvent.click(screen.getByTestId('session-gate-choice'));
+    expect(screen.getByTestId('session-gate-note')).toBeDefined();
+    expect(screen.getByTestId('session-gate-send')).toBeEnabled();
+    expect(screen.getByLabelText(/optional/)).toBe(screen.getByTestId('session-gate-note'));
+    fireEvent.click(screen.getByTestId('session-gate-send'));
+    await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, { approve: false, action: 'request_changes' }));
+  });
+
+  it('a listed reject has no reason box and queues from the primary', async () => {
+    render(<GateRow view={view()} gate={plainGate({ actions: [{ action: 'reject', intent: 'cancel', note: 'none' }] })} />);
+    fireEvent.click(screen.getByTestId('session-gate-choice'));
+    expect(screen.queryByTestId('session-gate-note')).toBeNull();
+    fireEvent.click(screen.getByTestId('session-gate-confirm'));
+    await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, { approve: false }));
+  });
+
+  it.each(['  try the focused check  ', '   '])('a listed optional reassign carries only nonblank words: %j', async (words) => {
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ status: 'ok', ord: 1 }), { status: 200 }));
+    render(<GateRow view={view()} gate={plainGate({ actions: [{ action: 'reassign', intent: 'retry', note: 'optional', seats: ['codex'] }] })} />);
+    fireEvent.click(screen.getByTestId('session-gate-choice'));
+    fireEvent.change(screen.getByTestId('session-gate-note'), { target: { value: words } });
+    fireEvent.click(screen.getByTestId('session-gate-send'));
+    await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).endsWith(`/runs/${RUN}/reassign`))).toBe(true));
+    const call = fetch.mock.calls.find(([url]) => String(url).endsWith(`/runs/${RUN}/reassign`))!;
+    expect(call[1]?.method).toBe('POST');
+    expect(JSON.parse(String(call[1]?.body))).toEqual({ cli: 'codex', ...(words.trim() ? { note: words.trim() } : {}) });
+  });
+
+  it('listed answers survive a failed events read, and Retry restores evidence', async () => {
+    useRunEventStore.setState({ byRun: {} });
+    vi.spyOn(client.api, 'getRunEvents').mockRejectedValueOnce(new Error('503')).mockResolvedValueOnce({ events: [] });
+    const gate = plainGate({ actions: [
+      { action: 'approve', intent: 'continue', note: 'none' },
+      { action: 'request_changes', intent: 'send_back', note: 'optional' },
+      { action: 'reject', intent: 'cancel', note: 'none' },
+    ] });
+    render(<GateRow view={view()} gate={gate} />);
+    await screen.findByTestId('session-gate-events-error');
+    expect(screen.getAllByTestId('session-gate-choice')).toHaveLength(3);
+    fireEvent.click(screen.getByTestId('session-gate-events-retry'));
+    await waitFor(() => expect(screen.queryByTestId('session-gate-events-error')).toBeNull());
+    chooseGate('approve');
+    await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, { approve: true }));
+  });
+
+  it('missing evidence preselects nothing: the listed answers are drawn, none recommended', async () => {
+    useRunEventStore.setState({ byRun: {} });
+    vi.spyOn(client.api, 'getRunEvents').mockRejectedValue(new Error('503'));
+    const gate = plainGate({ prompt: 'Approve before the build step runs?', actions: [
+      { action: 'approve', intent: 'continue', note: 'none' },
+      { action: 'reject', intent: 'stop', note: 'none' },
+    ] });
+    render(<GateRow view={view()} gate={gate} />);
+    await screen.findByTestId('session-gate-events-error');
+    const choices = screen.getAllByTestId('session-gate-choice');
+    expect(choices).toHaveLength(2);
+    expect(choices.map((c) => c.getAttribute('aria-checked'))).toEqual(['false', 'false']);
+    expect(screen.queryByText('Recommended')).toBeNull();
+  });
+
+  it('Approve from a listed row still sends while evidence is unavailable', async () => {
+    useRunEventStore.setState({ byRun: {} });
+    vi.spyOn(client.api, 'getRunEvents').mockRejectedValue(new Error('503'));
+    render(<GateRow view={view()} gate={plainGate({ actions: [{ action: 'approve', intent: 'continue', note: 'none' }] })} />);
+    await screen.findByTestId('session-gate-events-error');
+    chooseGate('approve');
+    await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, { approve: true }));
+  });
+
+  it('ProposalCard sends an optional send-back without words', async () => {
+    useGateStore.setState({ gates: { [RUN]: plainGate({ gateKind: 'plan_approval', actions: [{ action: 'request_changes', intent: 'send_back', note: 'optional' }] }) } });
+    render(<ProposalCard view={view()} chain={EMPTY_CHAIN} />);
+    fireEvent.click(screen.getByTestId('session-proposal-send-back'));
+    expect(screen.getByTestId('session-proposal-reason-text')).toBeDefined();
+    const send = screen.queryByTestId('session-proposal-go') ?? screen.getByTestId('session-proposal-primary');
+    expect(send).toBeEnabled();
+    fireEvent.click(send);
+    await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, { approve: false, action: 'request_changes', ord: 1 }));
+  });
+
+  it('ProposalCard listed end does not ask a reason', async () => {
+    useGateStore.setState({ gates: { [RUN]: plainGate({ gateKind: 'plan_approval', actions: [{ action: 'reject', intent: 'cancel', note: 'none' }] }) } });
+    render(<ProposalCard view={view()} chain={EMPTY_CHAIN} />);
+    fireEvent.click(screen.getByTestId('session-proposal-end'));
+    expect(screen.queryByTestId('session-proposal-reason-text')).toBeNull();
+    fireEvent.click(screen.queryByTestId('session-proposal-go') ?? screen.getByTestId('session-proposal-primary'));
+    await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, { approve: false, ord: 1 }));
+  });
+});

@@ -81,7 +81,7 @@ describe('studio#832 — a verify FAIL escalation\'s approve-with-note re-runs t
   it('labels the steer arm "Retry this step with a note", never an approve that moves on', () => {
     const model = sessionGateChoices({ runId: JUDGE_RUN, gate, units: JUDGE_UNITS, events: judgeEvents('FAIL'), pool: [], roster: null })!;
     const steer = [...model.choices, ...model.overflow].find((c) => c.key === 'steer')!;
-    expect(steer).toMatchObject({ label: RETRY_NOTE_LABEL, title: RETRY_NOTE_TITLE, needsNote: true, decision: { approve: true } });
+    expect(steer).toMatchObject({ label: RETRY_NOTE_LABEL, title: RETRY_NOTE_TITLE, note: 'required', decision: { approve: true } });
     expect(steer.title).not.toMatch(/next step/);
     expect(model.choices.map((c) => c.label)).toEqual(['Send back', RETRY_NOTE_LABEL, 'Stop']);
   });
@@ -116,7 +116,7 @@ describe('PRODUCT-WORKS J6 — an escalation\'s note goes to the step that re-ru
     expect(approveRetriesPhase(J6_PROMPT)).toBe(false); // the phrase test alone missed it
     const model = sessionGateChoices({ runId: J6_RUN, gate, units: J6_UNITS, events: J6_EVENTS, pool: ['claude', 'codex'], roster: null })!;
     const steer = [...model.choices, ...model.overflow].find((c) => c.key === 'steer')!;
-    expect(steer).toMatchObject({ label: RETRY_NOTE_LABEL, title: RETRY_NOTE_TITLE, needsNote: true, decision: { approve: true } });
+    expect(steer).toMatchObject({ label: RETRY_NOTE_LABEL, title: RETRY_NOTE_TITLE, note: 'required', decision: { approve: true } });
     // The amendment lands on the cursor unit (no amendScope), which is the step that re-runs.
     expect(steer.decision).not.toHaveProperty('amendScope');
     for (const c of [...model.choices, ...model.overflow]) expect(`${c.label} ${c.title}`).not.toMatch(/next step/);
@@ -203,7 +203,7 @@ describe('studio#612 — "Fix with a note" on a read-only phase\'s floor gate', 
     const gate: OpenGate = { runId: FLOOR_RUN, ord: 2, prompt: FLOOR_FIX_PROMPT, lifecycle: 'open', receivedAt: NOW, gateKind: 'escalation' };
     const model = sessionGateChoices({ runId: FLOOR_RUN, gate, units: floorUnits(false), events: FLOOR_EVENTS, pool: [], roster: null })!;
     const fix = [...model.choices, ...model.overflow].find((c) => c.key === 'steer')!;
-    expect(fix).toMatchObject({ label: FLOOR_FIX_LABEL, title: FLOOR_FIX_TITLE, needsNote: true, decision: { approve: true } });
+    expect(fix).toMatchObject({ label: FLOOR_FIX_LABEL, title: FLOOR_FIX_TITLE, note: 'required', decision: { approve: true } });
     // The suggested move is that fix, and its consequence says what happens — never "reruns with".
     expect(model.choices[model.recommended!]!.key).toBe('steer');
     expect(model.consequence).toMatch(/A seat other than this phase makes the fix .*only the floor re-runs/);

@@ -30,6 +30,14 @@ export interface GateAction {
   humanOnly?: true;
 }
 
+/** Whether the engine refuses, accepts or requires words with an answer. */
+export type NotePolicy = GateAction['note'];
+
+/** The engine's note policy decides whether to ask for words and whether they may be empty. */
+export function noteAsk(note: NotePolicy): { box: boolean; optional: boolean } {
+  return { box: note !== 'none', optional: note === 'optional' };
+}
+
 /** The list off a `GET /runs/:id/gate` answer: `undefined` when the daemon sends none (fall back), else the list. */
 export function gateActionsOf(info: unknown): GateAction[] | undefined {
   const raw = (info as { actions?: unknown } | null | undefined)?.actions;
@@ -43,7 +51,7 @@ export function gateActionsOf(info: unknown): GateAction[] | undefined {
 export function listedGateAnswer(token: string, words: string | undefined, ord: number): GateAnswer {
   const note = words?.trim() ?? '';
   if (token === 'reject') return { approve: false, ...(note !== '' ? { amend: note } : {}) };
-  if (token === 'request_changes') return { approve: false, action: 'request_changes', amend: note, ord } as GateAnswer;
+  if (token === 'request_changes') return { approve: false, action: 'request_changes', ...(note !== '' ? { amend: note } : {}), ord } as GateAnswer;
   return { approve: true, action: token, ...(note !== '' ? { amend: note } : {}), ord } as GateAnswer;
 }
 
@@ -99,7 +107,7 @@ export function choicesForAction(a: GateAction, seatLabel: (cli: string) => stri
   if (a.action === 'reassign') {
     const benched = new Set(a.benchedSeats ?? []);
     return (a.seats ?? []).map((cli) => ({
-      key: `reassign:${cli}`, label: `Reassign to ${seatLabel(cli)}${benched.has(cli) ? ' (benched)' : ''}`, decision: null, reassignCli: cli, needsNote: false,
+      key: `reassign:${cli}`, label: `Reassign to ${seatLabel(cli)}${benched.has(cli) ? ' (benched)' : ''}`, decision: null, reassignCli: cli, note: a.note,
       title: benched.has(cli)
         ? `${seatLabel(cli)} was benched in this job; move this step to it only if it is signed in again. It runs again there.`
         : `Move this step to ${seatLabel(cli)}; it runs again there.`,
@@ -108,12 +116,13 @@ export function choicesForAction(a: GateAction, seatLabel: (cli: string) => stri
   if (a.action === 'approve') {
     const [plain, noted, title] = APPROVE_WORDS[a.intent] ?? ['Approve', 'Approve with a note', 'Approve the gate.'];
     const out: GateRowChoice[] = [];
-    if (a.note !== 'required') out.push({ key: 'approve', label: plain, decision: decisionFor(a), needsNote: false, title });
-    if (a.note !== 'none') {
+    const ask = noteAsk(a.note);
+    if (!ask.box || ask.optional) out.push({ key: 'approve', label: plain, decision: decisionFor(a), note: 'none', title });
+    if (ask.box) {
       const fix = a.noteIntent === 'floor_fix';
       // A note that sends the work back (a team dispute's noted approve) is worded as the send-back it is.
       const back = a.noteIntent === 'send_back';
-      out.push({ key: 'steer', label: fix ? FLOOR_FIX_WORDS[0] : back ? 'Send back with a note' : noted, decision: decisionFor(a), needsNote: true,
+      out.push({ key: 'steer', label: fix ? FLOOR_FIX_WORDS[0] : back ? 'Send back with a note' : noted, decision: decisionFor(a), note: 'required',
         title: fix ? FLOOR_FIX_WORDS[1] : back ? 'Your note sends the work back to be done again.' : title });
     }
     return out;
@@ -121,16 +130,16 @@ export function choicesForAction(a: GateAction, seatLabel: (cli: string) => stri
   if (a.action === 'skip_rules') {
     const ids = a.rules ?? [];
     return [{
-      key: 'skip-rules', label: ids.length === 1 ? `Skip ${ids[0]!}` : `Skip ${ids.length} rules`, decision: decisionFor(a), needsNote: true,
+      key: 'skip-rules', label: ids.length === 1 ? `Skip ${ids[0]!}` : `Skip ${ids.length} rules`, decision: decisionFor(a), note: a.note,
       skipRuleIds: ids, title: `Skip ${ids.join(', ')}, each with your reason. Recorded as skipped by you, on the run, the gate and the delivery.`,
     }];
   }
   if (a.action.startsWith('consent:')) {
     const id = a.action.slice('consent:'.length);
-    return [{ key: `choice:${a.action}`, label: id, decision: decisionFor(a), needsNote: false, title: `Answer with “${id}”.` }];
+    return [{ key: `choice:${a.action}`, label: id, decision: decisionFor(a), note: a.note, title: `Answer with “${id}”.` }];
   }
   const [label, title] = NAMED_WORDS[a.action] ?? [a.action.replace(/_/g, ' '), `Answer the gate with ${a.action}.`];
-  return [{ key: KEYS[a.action] ?? `offer:${a.action}`, label, decision: decisionFor(a), needsNote: a.note !== 'none', title }];
+  return [{ key: KEYS[a.action] ?? `offer:${a.action}`, label, decision: decisionFor(a), note: a.note, title }];
 }
 
 /** The listed answers as row controls: at most three inline before Stop (always the last inline), the rest under ⋯. */

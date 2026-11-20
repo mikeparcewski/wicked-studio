@@ -49,7 +49,7 @@ import { engineNamesFloorOverride, FLOOR_OVERRIDE_ACTION, FLOOR_OVERRIDE_CONSEQU
 import { offersSkipQeHere, skipQeAtDelivery, SKIP_QE_ACTION, SKIP_QE_GATE_TITLE, SKIP_QE_KEY, SKIP_QE_LABEL } from './qeSkip.js';
 import { FACE_MAX, failingOnFace, failingSplit, standingFloor, type FailingOnFace, type FailingSplit } from './failingChecks.js';
 import { deliverLift } from '../components/deliverLiftModel.js';
-import { choiceTokens, contractChoices, type GateAction } from './gateContract.js';
+import { choiceTokens, contractChoices, type GateAction, type NotePolicy } from './gateContract.js';
 
 /**
  * SESSION GATE ROW MODEL (S15e): pure classification and choice set for the session thread's
@@ -77,8 +77,8 @@ export interface GateRowChoice {
   decision: GateAnswer | null;
   /** The seat to hand the unit to instead of re-running the same seat. */
   reassignCli?: string;
-  /** Whether clicking opens the note field before sending. */
-  needsNote: boolean;
+  /** Whether this answer takes words, and whether they are required. */
+  note: NotePolicy;
   /** (DES-RULE-CHECK-001) The unchecked steering rules this choice skips: the note is each one's reason
    *  (`skipRules`), never an `amend`. */
   skipRuleIds?: string[];
@@ -142,7 +142,7 @@ export function consentChoicesOf(gate: OpenGate, events: readonly CoreEvent[] | 
   tokens.forEach((t, i) => {
     if (typeof t !== 'string') return;
     if (t === 'reject') {
-      out.push({ key: 'decline', label: 'Decline', decision: { approve: false }, needsNote: false, title: 'Cancel the run; nothing is installed and nothing in this phase runs.' });
+      out.push({ key: 'decline', label: 'Decline', decision: { approve: false }, note: 'none', title: 'Cancel the run; nothing is installed and nothing in this phase runs.' });
       return;
     }
     if (!t.startsWith('consent:')) return;
@@ -161,14 +161,14 @@ export function consentChoicesOf(gate: OpenGate, events: readonly CoreEvent[] | 
     out.push({
       key: t, label,
       decision: { approve: true, action: t } as unknown as GateAnswer,
-      needsNote: false,
+      note: 'none',
       title: `Install now: writes ${writes.length} file${writes.length === 1 ? '' : 's'}${own > 0 ? `, ${own} of them your own` : ''}.`,
       writes,
       ...(rec === i ? { isDefault: true } : {}),
     });
   });
   // Decline is always an answer, even if a producer's list left it out.
-  if (!out.some((c) => c.key === 'decline')) out.push({ key: 'decline', label: 'Decline', decision: { approve: false }, needsNote: false, title: 'Cancel the run; nothing is installed and nothing in this phase runs.' });
+  if (!out.some((c) => c.key === 'decline')) out.push({ key: 'decline', label: 'Decline', decision: { approve: false }, note: 'none', title: 'Cancel the run; nothing is installed and nothing in this phase runs.' });
   return out;
 }
 
@@ -503,8 +503,12 @@ export function sessionGateChoices(input: SessionGateInput): GateRowModel | null
 function withListed(model: GateRowModel, actions: readonly GateAction[], roster: readonly RosterSeat[] | null): GateRowModel {
   const listed = new Set(actions.map((a) => a.action));
   const keep = (c: GateRowChoice): boolean => listed.has(choiceTokens([c])[0]!);
-  const choices = model.choices.filter(keep);
-  const overflow = model.overflow.filter(keep);
+  const listedNote = (c: GateRowChoice): GateRowChoice => {
+    const a = actions.find((a) => a.action === choiceTokens([c])[0]);
+    return a !== undefined ? { ...c, note: a.note } : c;
+  };
+  const choices = model.choices.filter(keep).map(listedNote);
+  const overflow = model.overflow.filter(keep).map(listedNote);
   // A listed answer the template has no control for (a consent choice its install frame does not name, a free-text
   // gate's Reject) gets the contract's own control, so the list is drawn whole.
   const drawn = new Set(choiceTokens([...choices, ...overflow]));
@@ -516,8 +520,19 @@ function withListed(model: GateRowModel, actions: readonly GateAction[], roster:
   const all = [...choices, ...overflow, ...added];
   const ordered = [...all.filter((c) => c.key !== 'decline' && c.key !== 'stop'), ...all.filter((c) => c.key === 'decline' || c.key === 'stop')];
   const inline = ordered.slice(0, 4);
-  const at = rec === undefined ? -1 : inline.indexOf(rec);
+  const at = rec === undefined ? -1 : inline.findIndex((c) => c.key === rec.key);
   return { ...model, choices: inline, overflow: ordered.slice(4), recommended: at >= 0 ? at : null };
+}
+
+/**
+ * (studio#1177) The run's events could not be read but the gate lists its answers: the row is the list alone. Nothing is
+ * read from the missing log (no verdict, no consent plan, no recommendation, no default), so nothing claims evidence.
+ */
+export function listedOnlyChoices(gate: OpenGate, actions: readonly GateAction[], roster: readonly RosterSeat[] | null): GateRowModel {
+  return withContract({
+    reason: 'unknown', question: gate.prompt, choices: [], overflow: [], noteDefault: '', recommended: null,
+    detailItems: [shownPrompt(gate.prompt)], consequence: null, source: null, failing: [], reviewedOrd: null,
+  }, actions, roster);
 }
 
 /** Rows whose answers are the payload's own (a consent plan's choices, free text): drawn by their renderer, as before. */
@@ -624,7 +639,7 @@ function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
   const sendsBack = [...base.choices, ...base.overflow].some((c) => c.key === 'send-back');
   if (offer !== null && sendsBack) {
     overflow.push({
-      key: 'rerun', label: `Rerun from ${offer.phase}`, decision: offer.decision, needsNote: false,
+      key: 'rerun', label: `Rerun from ${offer.phase}`, decision: offer.decision, note: 'none',
       title: offer.consequence,
     });
   }
@@ -644,18 +659,18 @@ export const REFUSAL_JUDGMENT_TITLE = `${FLOOR_OVERRIDE_CONSEQUENCE} Approving r
 function refusalChoice(offer: GateOffer): GateRowChoice {
   switch (offer.action) {
     case OFFER_APPROVE:
-      return { key: 'retry', label: 'Deliver again', decision: { approve: true }, needsNote: false, title: 'Re-run the deliver phase: it re-checks the work and pushes again.' };
+      return { key: 'retry', label: 'Deliver again', decision: { approve: true }, note: 'none', title: 'Re-run the deliver phase: it re-checks the work and pushes again.' };
     case FLOOR_OVERRIDE_ACTION:
       // wicked-core: the deliver phase's own re-verify failed (a lift moved the tree onto a red base);
       // the operator's judgment over exactly that result, then the deliver phase re-runs on it.
       // Not FLOOR_OVERRIDE_TITLE: here the deliver phase DOES run again, on the tree the judgment covers.
-      return { key: FLOOR_OVERRIDE_KEY, label: OPERATOR_JUDGMENT_LABEL, decision: { approve: true, action: FLOOR_OVERRIDE_ACTION } as unknown as GateAnswer, needsNote: true, title: REFUSAL_JUDGMENT_TITLE };
+      return { key: FLOOR_OVERRIDE_KEY, label: OPERATOR_JUDGMENT_LABEL, decision: { approve: true, action: FLOOR_OVERRIDE_ACTION } as unknown as GateAnswer, note: 'required', title: REFUSAL_JUDGMENT_TITLE };
     case SKIP_QE_ACTION:
-      return { key: SKIP_QE_KEY, label: SKIP_QE_LABEL, decision: { approve: true, action: SKIP_QE_ACTION } as unknown as GateAnswer, needsNote: true, title: SKIP_QE_GATE_TITLE };
+      return { key: SKIP_QE_KEY, label: SKIP_QE_LABEL, decision: { approve: true, action: SKIP_QE_ACTION } as unknown as GateAnswer, note: 'required', title: SKIP_QE_GATE_TITLE };
     case OFFER_REJECT:
-      return { key: 'stop', label: 'Stop', decision: { approve: false }, needsNote: false, title: 'Cancel the run and keep the worktree; nothing is pushed.' };
+      return { key: 'stop', label: 'Stop', decision: { approve: false }, note: 'required', title: 'Cancel the run and keep the worktree; nothing is pushed.' };
     default:
-      return { key: `offer-${offer.action}`, label: mapChoiceLabel(offer.action), decision: null, needsNote: false, title: 'No wire for this choice yet — send a note instead', disabled: true };
+      return { key: `offer-${offer.action}`, label: mapChoiceLabel(offer.action), decision: null, note: 'none', title: 'No wire for this choice yet — send a note instead', disabled: true };
   }
 }
 
@@ -666,8 +681,8 @@ function refusalChoice(offer: GateOffer): GateRowChoice {
  * it keeps the engine's plain pair.
  */
 function consentFallbackChoices(gate: OpenGate, events: readonly CoreEvent[] | null): GateRowChoice[] {
-  const approve: GateRowChoice = { key: 'approve', label: 'Approve', decision: { approve: true }, needsNote: false, title: 'Give consent: the phase runs now. Nothing in it has run yet.' };
-  const decline: GateRowChoice = { key: 'decline', label: 'Decline', decision: { approve: false }, needsNote: false, title: 'Cancel the run without running this phase.' };
+  const approve: GateRowChoice = { key: 'approve', label: 'Approve', decision: { approve: true }, note: 'none', title: 'Give consent: the phase runs now. Nothing in it has run yet.' };
+  const decline: GateRowChoice = { key: 'decline', label: 'Decline', decision: { approve: false }, note: 'none', title: 'Cancel the run without running this phase.' };
   let frame: Record<string, unknown> | null = null;
   for (let i = (events ?? []).length - 1; i >= 0; i--) {
     const e = events![i] as unknown as Record<string, unknown>;
@@ -684,7 +699,7 @@ function consentFallbackChoices(gate: OpenGate, events: readonly CoreEvent[] | n
     if (t === OFFER_REJECT) return [decline];
     if (!t.startsWith('consent:')) return [];
     const label = typeof labels[t] === 'string' && labels[t] !== '' ? (labels[t] as string) : t.slice('consent:'.length);
-    return [{ key: t, label, decision: { approve: true, action: t } as unknown as GateAnswer, needsNote: false, title: `Give consent: the phase runs now with ${label}.` }];
+    return [{ key: t, label, decision: { approve: true, action: t } as unknown as GateAnswer, note: 'none', title: `Give consent: the phase runs now with ${label}.` }];
   });
   return drawn.length > 0 ? drawn : [approve, decline];
 }
@@ -756,8 +771,8 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       reason: 'def',
       question: gate.prompt,
       choices: [
-        { key: 'approve', label: APPROVE_COMPLETION_LABEL, decision: { approve: true }, needsNote: false, title: APPROVE_COMPLETION_TITLE },
-        { key: 'stop', label: 'Stop', decision: { approve: false }, needsNote: false, title: 'Cancel the run; the work stops here.' },
+        { key: 'approve', label: APPROVE_COMPLETION_LABEL, decision: { approve: true }, note: 'none', title: APPROVE_COMPLETION_TITLE },
+        { key: 'stop', label: 'Stop', decision: { approve: false }, note: 'required', title: 'Cancel the run; the work stops here.' },
       ],
       overflow: [],
       noteDefault: '',
@@ -810,7 +825,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
           key: `choice-${i}`,
           label: mapChoiceLabel(v),
           decision: null,
-          needsNote: false,
+          note: 'none',
           title: 'No wire for this choice yet — send a note instead',
           disabled: true,
         };
@@ -818,16 +833,16 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       // studio#547: on a team dispute Send back reworks the unit WITH the finding — the note opens
       // pre-filled from it; Approve counts the work past the finding (the engine's own arms).
       if (dispute && v === 'request_changes') {
-        return { key: `choice-${i}`, label: 'Send back', decision, needsNote: true, title: 'Rework the step: its creator runs again with your note and the finding.' };
+        return { key: `choice-${i}`, label: 'Send back', decision, note: 'required', title: 'Rework the step: its creator runs again with your note and the finding.' };
       }
       if (dispute && v === 'approve') {
-        return { key: `choice-${i}`, label: 'Approve', decision, needsNote: false, title: 'The work counts as it is; the run continues past the finding.' };
+        return { key: `choice-${i}`, label: 'Approve', decision, note: 'none', title: 'The work counts as it is; the run continues past the finding.' };
       }
       return {
         key: `choice-${i}`,
         label: mapChoiceLabel(v),
         decision,
-        needsNote: false,
+        note: 'none',
         title: mapChoiceTitle(v),
       };
     });
@@ -835,9 +850,9 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // escape hatch so the operator is never stranded. Item 3 (gate 11 operator ruling).
     const allUnknown = all.length > 0 && all.every((c) => c.disabled === true);
     if (allUnknown) {
-      all.push({ key: 'stop', label: 'Stop', decision: { approve: false }, needsNote: false, title: 'Cancel the run; the work stops here.' });
+      all.push({ key: 'stop', label: 'Stop', decision: { approve: false }, note: 'required', title: 'Cancel the run; the work stops here.' });
       // studio#627 (codex r1): the note escape hatch IS a request_changes — only where it lands.
-      if (sendBackAccepted(units, gate.ord)) all.push({ key: 'send-note-instead', label: 'Send a note instead', decision: { approve: false, action: 'request_changes' }, needsNote: true, title: 'Send a note and cancel the run.' });
+      if (sendBackAccepted(units, gate.ord)) all.push({ key: 'send-note-instead', label: 'Send a note instead', decision: { approve: false, action: 'request_changes' }, note: 'required', title: 'Send a note and cancel the run.' });
     }
     const r = gate.recommended;
     const recommended = typeof r === 'number' && r >= 0 && r < offered.length && keep[r] === true
@@ -859,7 +874,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     return {
       reason, question,
       choices: offerActions(gateOffers(gate)).includes(OFFER_ANSWER)
-        ? [{ key: 'free-text-send', label: 'Send', decision: { approve: true }, needsNote: true, title: 'Send your answer to the engine.' }] : [],
+        ? [{ key: 'free-text-send', label: 'Send', decision: { approve: true }, note: 'required', title: 'Send your answer to the engine.' }] : [],
       overflow: [],
       noteDefault: '',
       recommended: null,
@@ -872,8 +887,8 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     return {
       reason, question,
       choices: [
-        { key: 'approve', label: 'Approve', decision: { approve: true }, needsNote: false, title: 'Continue the run.' },
-        { key: 'stop', label: 'Stop', decision: { approve: false }, needsNote: false, title: 'Cancel the run; the work stops here.' },
+        { key: 'approve', label: 'Approve', decision: { approve: true }, note: 'none' as const, title: 'Continue the run.' },
+        { key: 'stop', label: 'Stop', decision: { approve: false }, note: 'required' as const, title: 'Cancel the run; the work stops here.' },
       ].filter((c) => offerActions(rowOffers(gate, false, [])).includes(decisionAction(c.decision) ?? '')),
       overflow: [],
       noteDefault: '',
@@ -928,17 +943,17 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // steerScopeTarget: only include amendScope:'creator' when a later creator phase exists
     // (same rule the retired gate card uses). Gate 13 Item 1.
     const scopeTarget = steerScopeTarget(units, gate.ord);
-    if (listed.has(OFFER_APPROVE)) choices.push({ key: 'approve', label: 'Approve', decision: { approve: true }, needsNote: false, title: 'Continue the run.' });
-    if (listed.has(OFFER_APPROVE)) choices.push({ key: 'steer', label: 'Approve and steer', decision: scopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: 'Approve and add a note to steer the next phase.' });
+    if (listed.has(OFFER_APPROVE)) choices.push({ key: 'approve', label: 'Approve', decision: { approve: true }, note: 'none', title: 'Continue the run.' });
+    if (listed.has(OFFER_APPROVE)) choices.push({ key: 'steer', label: 'Approve and steer', decision: scopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, note: 'required', title: 'Approve and add a note to steer the next phase.' });
     // studio#627: Send back only where the engine accepts it — a creator at or before this unit.
     if (!listed.has(OFFER_REQUEST_CHANGES)) { /* the gate does not list a send back */ } else if (conversationStep(units, gate.ord) !== null) {
       // learn's walkthrough (F-LEARN-2): the same send-back, read as a question — the step answers
       // it with the conversation so far and this gate returns; Approve ends the loop.
-      choices.push({ key: 'send-back', label: 'Ask a follow-up', decision: { approve: false, action: 'request_changes' }, needsNote: true, title: 'Ask this step a question; it answers with the conversation so far and stops here again.' });
+      choices.push({ key: 'send-back', label: 'Ask a follow-up', decision: { approve: false, action: 'request_changes' }, note: 'required', title: 'Ask this step a question; it answers with the conversation so far and stops here again.' });
     } else if (sendBackAccepted(units, gate.ord)) {
-      choices.push({ key: 'send-back', label: 'Send back', decision: { approve: false, action: 'request_changes' }, needsNote: true, title: 'Return to the creator with your note.' });
+      choices.push({ key: 'send-back', label: 'Send back', decision: { approve: false, action: 'request_changes' }, note: 'required', title: 'Return to the creator with your note.' });
     }
-    if (listed.has(OFFER_REJECT)) choices.push({ key: 'stop', label: 'Stop', decision: { approve: false }, needsNote: false, title: 'Cancel the run; the work stops here.' });
+    if (listed.has(OFFER_REJECT)) choices.push({ key: 'stop', label: 'Stop', decision: { approve: false }, note: 'required', title: 'Cancel the run; the work stops here.' });
     return { reason, question, choices, overflow: [], noteDefault, recommended: 0, detailItems };
   }
 
@@ -1007,26 +1022,26 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       if (token === null || listed.has(token)) coreWithoutStop.push(c);
     };
     if (qeRedo) {
-      addArm({ key: QE_REDO_KEY, label: QE_REDO_LABEL, decision: { approve: true, action: QE_REDO_ACTION } as unknown as GateAnswer, needsNote: false, title: QE_REDO_TITLE });
+      addArm({ key: QE_REDO_KEY, label: QE_REDO_LABEL, decision: { approve: true, action: QE_REDO_ACTION } as unknown as GateAnswer, note: 'none', title: QE_REDO_TITLE });
     }
     // (DES-RULE-CHECK-001) The steering-rule actions, where the engine takes them ({@link ruleChoicesAt}): first when
     // a held rule is the gate's own cause, after Send back when another layer (or a broken rule) is.
     if (!rulesHold.behind) ruleChoices.forEach(addArm);
     if (rejudgeOffered) {
-      addArm({ key: 'rejudge', label: REJUDGE_LABEL, decision: { approve: true, action: REJUDGE_ACTION } as unknown as GateAnswer, needsNote: false, title: rejudgeTitle(input.rejudge!, (k) => input.roster?.find((r) => r.key === k)?.display_name ?? k) });
+      addArm({ key: 'rejudge', label: REJUDGE_LABEL, decision: { approve: true, action: REJUDGE_ACTION } as unknown as GateAnswer, note: 'none', title: rejudgeTitle(input.rejudge!, (k) => input.roster?.find((r) => r.key === k)?.display_name ?? k) });
     }
     if (deadSeat === null && deniedUnit) {
-      addArm({ key: 'approve', label: 'Approve', decision: { approve: true }, needsNote: false, title: 'Re-run the step from the start under the same policies; the captured output is not accepted.' });
+      addArm({ key: 'approve', label: 'Approve', decision: { approve: true }, note: 'none', title: 'Re-run the step from the start under the same policies; the captured output is not accepted.' });
     } else if (deadSeat === null && noVerdictGate) {
       // studio#761: nothing was judged, so no Send back; with the engine's redo offered it IS the retry (fresh evidence).
-      if (!qeRedo) addArm({ key: 'retry', label: QE_RETRY_LABEL, decision: { approve: true }, needsNote: false, title: QE_RETRY_TITLE });
+      if (!qeRedo) addArm({ key: 'retry', label: QE_RETRY_LABEL, decision: { approve: true }, note: 'none', title: QE_RETRY_TITLE });
     } else if (deadSeat === null && sendBackAccepted(units, gate.ord)) {
-      addArm({ key: 'send-back', label: 'Send back', decision: { approve: false, action: 'request_changes' }, needsNote: true, title: 'Return to the creator with the reviewer\'s failing items.' });
+      addArm({ key: 'send-back', label: 'Send back', decision: { approve: false, action: 'request_changes' }, note: 'required', title: 'Return to the creator with the reviewer\'s failing items.' });
     }
     if (rulesHold.behind) ruleChoices.forEach(addArm);
     // A QE FAIL keeps Send back first (the work is what failed), and offers the review again beside it.
     if (qe?.outcome === 'fail') {
-      addArm({ key: 'retry', label: QE_RETRY_LABEL, decision: { approve: true }, needsNote: false, title: QE_RETRY_TITLE });
+      addArm({ key: 'retry', label: QE_RETRY_LABEL, decision: { approve: true }, note: 'none', title: QE_RETRY_TITLE });
     }
 
     // Escalation arms: timeout (extend / targeted / accept_partial) or adopted suggestion.
@@ -1037,7 +1052,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
         label: offer.label,
         title: offer.consequence,
         decision: { approve: true, action: offer.action } as unknown as GateAnswer,
-        needsNote: false,
+        note: 'none',
       });
     }
 
@@ -1054,14 +1069,14 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // layer stands (`rule_layers_open`): it is withheld, and the row says why, until the rule is re-checked or skipped.
     const landHeld = deadSeat === null && rulesHold.held && !floorFix && !qeRetryNote && !operatorJudgment && isReviewAdjudication(gate);
     if (deadSeat === null && !landHeld) addArm(floorFix
-      ? { key: 'steer', label: FLOOR_FIX_LABEL, decision: { approve: true }, needsNote: true, title: FLOOR_FIX_TITLE }
+      ? { key: 'steer', label: FLOOR_FIX_LABEL, decision: { approve: true }, note: 'required', title: FLOOR_FIX_TITLE }
       : qeRetryNote
-        ? { key: 'steer', label: QE_RETRY_NOTE_LABEL, decision: { approve: true }, needsNote: true, title: QE_RETRY_NOTE_TITLE }
+        ? { key: 'steer', label: QE_RETRY_NOTE_LABEL, decision: { approve: true }, note: 'required', title: QE_RETRY_NOTE_TITLE }
         : operatorJudgment
-          ? { key: 'steer', label: OPERATOR_JUDGMENT_LABEL, decision: { approve: true }, needsNote: true, title: OPERATOR_JUDGMENT_TITLE }
+          ? { key: 'steer', label: OPERATOR_JUDGMENT_LABEL, decision: { approve: true }, note: 'required', title: OPERATOR_JUDGMENT_TITLE }
           // wicked-core#761: a capped review's approve lands the work and moves on — never a retry.
           : isReviewAdjudication(gate)
-          ? { key: 'steer', label: LAND_NOTE_LABEL, decision: { approve: true }, needsNote: true, title: LAND_NOTE_TITLE }
+          ? { key: 'steer', label: LAND_NOTE_LABEL, decision: { approve: true }, note: 'required', title: LAND_NOTE_TITLE }
           // PRODUCT-WORKS J6: the engine's approve at an escalation amends the CURSOR unit — the
           // escalated step itself — and re-runs it (every escalation but a judge-unavailable one and a
           // capped review's adjudication, both handled above). So when no later creator takes the note, it is a retry of this step,
@@ -1069,19 +1084,19 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
           // missed the phrase test and read "Approve with a note for the next step", and the note
           // went to the same step, which ran again.
           : approveRetriesPhase(gate.prompt) || escalationScopeTarget === null
-          ? { key: 'steer', label: RETRY_NOTE_LABEL, decision: escalationScopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: RETRY_NOTE_TITLE }
-          : { key: 'steer', label: 'Approve and steer', decision: escalationScopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: 'Approve and add a note to steer the next creator phase.' });
+          ? { key: 'steer', label: RETRY_NOTE_LABEL, decision: escalationScopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, note: 'required', title: RETRY_NOTE_TITLE }
+          : { key: 'steer', label: 'Approve and steer', decision: escalationScopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, note: 'required', title: 'Approve and add a note to steer the next creator phase.' });
     // (crew api-types 0.135.0) A failed repo-checks floor: the operator's own judgment, with a
     // required rationale — offered where the engine's prompt names the arm. Inline (it is the way
     // on when retries loop on flakes); a reassign then rides the ⋯.
     if (overrideOffered) {
-      addArm({ key: FLOOR_OVERRIDE_KEY, label: OPERATOR_JUDGMENT_LABEL, decision: { approve: true, action: FLOOR_OVERRIDE_ACTION } as unknown as GateAnswer, needsNote: true, title: FLOOR_OVERRIDE_TITLE });
+      addArm({ key: FLOOR_OVERRIDE_KEY, label: OPERATOR_JUDGMENT_LABEL, decision: { approve: true, action: FLOOR_OVERRIDE_ACTION } as unknown as GateAnswer, note: 'required', title: FLOOR_OVERRIDE_TITLE });
     }
 
     // studio#923 / J4 0.16.6: the engine takes the QE skip AT this gate (a QE-only denial, or a failed floor with QE behind
     // it): offered here with a required reason, never only by starting the job again.
     if (skipHere) {
-      addArm({ key: SKIP_QE_KEY, label: SKIP_QE_LABEL, decision: { approve: true, action: SKIP_QE_ACTION } as unknown as GateAnswer, needsNote: true, title: SKIP_QE_GATE_TITLE });
+      addArm({ key: SKIP_QE_KEY, label: SKIP_QE_LABEL, decision: { approve: true, action: SKIP_QE_ACTION } as unknown as GateAnswer, note: 'required', title: SKIP_QE_GATE_TITLE });
     }
     // (J4 0.16.6) The override paths the engine did not offer, and why, in one line each: the operator read engine source
     // to learn why "Approve as your own judgment" was missing.
@@ -1115,7 +1130,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       const candidates = reassignCandidates(pool, failedCli ?? null, roster, reassignRefusedOf(units, gate.ord), benched, now);
       for (const c of candidates) {
         if (isOfferable(c)) {
-          reassignList.push({ key: `reassign:${c.cli}`, label: `Reassign to ${c.label}`, decision: null, reassignCli: c.cli, needsNote: false, title: `Move the failed unit to ${c.label}; it retries there.` });
+          reassignList.push({ key: `reassign:${c.cli}`, label: `Reassign to ${c.label}`, decision: null, reassignCli: c.cli, note: 'none', title: `Move the failed unit to ${c.label}; it retries there.` });
         }
       }
       detailItems.push(...refusedSeatLines(candidates));
@@ -1129,7 +1144,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       overflow.push(...reassignList);
     }
     // Stop is always the last inline choice.
-    if (listed.has(OFFER_REJECT)) escInline.push({ key: 'stop', label: 'Stop', decision: { approve: false }, needsNote: false, title: 'Cancel the run; the work stops here.' });
+    if (listed.has(OFFER_REJECT)) escInline.push({ key: 'stop', label: 'Stop', decision: { approve: false }, note: 'required', title: 'Cancel the run; the work stops here.' });
 
     // Use recommendGateMove for the recommended choice
     const escalationGate = isEscalationGate(gate.prompt, verdict);
@@ -1188,11 +1203,11 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     const retryOffers = escalationOffers(verdict, gate.ord, units, runId, gate.prompt);
     const ruleArms = ruleChoicesAt(rulesHoldAt(events, units, gate.ord));
     const listed = new Set(offerActions(rowOffers(gate, false, [...retryOffers.map((o) => o.action), ...ruleArms.map((c) => decisionAction(c.decision as { approve?: boolean; action?: string } | null)).filter((t): t is string => t !== null)])));
-    if (listed.has(OFFER_APPROVE)) choices.push({ key: 'retry', label: 'Retry', decision: { approve: true }, needsNote: false, title: 'Try the same unit again with the same seat.' });
+    if (listed.has(OFFER_APPROVE)) choices.push({ key: 'retry', label: 'Retry', decision: { approve: true }, note: 'none', title: 'Try the same unit again with the same seat.' });
     // studio#600: the restored-tree gate's other engine arm — adopt the evaluator's pinned edit —
     // when the engine pinned it (`escalationOffers` mirrors the engine's own acceptance check).
     for (const offer of retryOffers) {
-      choices.push({ key: `offer:${offer.action}`, label: offer.label, title: offer.consequence, decision: { approve: true, action: offer.action } as unknown as GateAnswer, needsNote: false });
+      choices.push({ key: `offer:${offer.action}`, label: offer.label, title: offer.consequence, decision: { approve: true, action: offer.action } as unknown as GateAnswer, note: 'none' });
     }
     // A rule layer behind the restored-tree denial: its re-check and confirm-or-skip, after the gate's own arms.
     choices.push(...ruleArms.filter((c) => listed.has(decisionAction(c.decision as { approve?: boolean; action?: string } | null) ?? '')));
@@ -1214,7 +1229,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
             label: `Reassign to ${c.label}`,
             decision: null,
             reassignCli: c.cli,
-            needsNote: false,
+            note: 'none',
             title: `Move the failed unit to ${c.label}; it retries there.`,
           };
           if (!inlineReassignDone) {
@@ -1226,7 +1241,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
         }
       }
     }
-    if (listed.has(OFFER_REJECT)) choices.push({ key: 'stop', label: 'Stop', decision: { approve: false }, needsNote: false, title: 'Cancel the run; the work stops here.' });
+    if (listed.has(OFFER_REJECT)) choices.push({ key: 'stop', label: 'Stop', decision: { approve: false }, note: 'required', title: 'Cancel the run; the work stops here.' });
     return { reason, question, choices, overflow: retryOverflow, noteDefault, recommended: 0, detailItems, ...(retryWithheld.length > 0 ? { withheldSeats: retryWithheld } : {}) };
   }
 
@@ -1265,7 +1280,7 @@ export function namedSendBackNote(fresh: readonly string[]): string {
  */
 function ruleChoicesAt(hold: { held: boolean; rows: readonly RuleRow[]; behind: boolean; otherCause?: boolean }): GateRowChoice[] {
   if (!hold.held) return [];
-  const out: GateRowChoice[] = [{ key: 'retry-rules', label: RETRY_RULES_LABEL, decision: { approve: true, action: 'retry_rules' } as unknown as GateAnswer, needsNote: false, title: 'Run the steering-rule check again on the same work (a disputed rule goes to the council again). The step does not run again, and every verdict on an unchanged rule and evidence is kept.' }];
+  const out: GateRowChoice[] = [{ key: 'retry-rules', label: RETRY_RULES_LABEL, decision: { approve: true, action: 'retry_rules' } as unknown as GateAnswer, note: 'none', title: 'Run the steering-rule check again on the same work (a disputed rule goes to the council again). The step does not run again, and every verdict on an unchanged rule and evidence is kept.' }];
   const skippable = hold.rows.filter(ruleSkippable);
   const held = skippable.map((r) => r.ruleId);
   if (held.length > 0) {
@@ -1283,7 +1298,7 @@ function ruleChoicesAt(hold: { held: boolean; rows: readonly RuleRow[]; behind: 
       key: 'skip-rules',
       label: held.length === 1 ? `${verb} ${held[0]!}` : `${verb} ${held.length} rules`,
       decision: { approve: true, action: 'skip_rules' } as unknown as GateAnswer,
-      needsNote: true,
+      note: 'required',
       skipRuleIds: held,
       ...(brokenOnly ? { notePlaceholder: SKIP_WARNING_PLACEHOLDER } : {}),
       title: `${verb} ${held.join(', ')}. ${confirmable ? 'A rule waived by your instruction is confirmed; any other is recorded as skipped by you.' : 'Recorded as skipped by you.'} Labelled on the run, the gate and the delivery.${broken ? ' A broken warning can be skipped, a broken error or critical rule cannot.' : ''}${othersOpen ? ' Every other reason this step was stopped still stands.' : ''}`,

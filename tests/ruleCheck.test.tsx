@@ -75,12 +75,12 @@ describe('the gate held on rules offers the re-check and the confirm-or-skip', (
 
   it('offers both, the skip carrying the held rules and needing your reason', () => {
     const m = sessionGateChoices({ runId: RUN, gate, units, events, pool: ['pi', 'claude'], roster: null })!;
-    const all = [...m.choices, ...(m.overflow ?? [])] as Array<{ key: string; label: string; decision: unknown; needsNote: boolean; skipRuleIds?: string[] }>;
+    const all = [...m.choices, ...(m.overflow ?? [])] as Array<{ key: string; label: string; decision: unknown; note: 'none' | 'optional' | 'required'; skipRuleIds?: string[] }>;
     const retry = all.find((c) => c.key === 'retry-rules');
     expect(retry?.label).toBe(RETRY_RULES_LABEL);
     expect(retry?.decision).toEqual({ approve: true, action: 'retry_rules' });
     const skip = all.find((c) => c.key === 'skip-rules');
-    expect(skip).toMatchObject({ needsNote: true, skipRuleIds: ['DEV-TINYMATH-2'], decision: { approve: true, action: 'skip_rules' } });
+    expect(skip).toMatchObject({ note: 'required', skipRuleIds: ['DEV-TINYMATH-2'], decision: { approve: true, action: 'skip_rules' } });
   });
 
   it('any other gate offers neither', () => {
@@ -782,14 +782,14 @@ describe('(e2e-1105 CJ9) a broken warning the engine marks waivable is skipped w
   ] as unknown as CoreEvent[];
   const offered = (events: CoreEvent[]) => {
     const m = sessionGateChoices({ runId: RUN, gate, units, events, pool: ['claude', 'codex'], roster: null })!;
-    return [...m.choices, ...(m.overflow ?? [])] as Array<{ key: string; label: string; needsNote: boolean; skipRuleIds?: string[]; decision: unknown }>;
+    return [...m.choices, ...(m.overflow ?? [])] as Array<{ key: string; label: string; note: 'none' | 'optional' | 'required'; skipRuleIds?: string[]; decision: unknown }>;
   };
 
   it('offers "Skip learn-linked-issue" with your reason beside the re-check', () => {
     const all = offered(log([row('learn-small-prs', 'kept'), { ...row('learn-linked-issue', 'broken', 'names no issue it closes'), waivable: true }]));
     expect(all.map((c) => c.key)).toEqual(expect.arrayContaining(['retry-rules', 'skip-rules']));
     const skip = all.find((c) => c.key === 'skip-rules')!;
-    expect(skip).toMatchObject({ label: 'Skip learn-linked-issue', needsNote: true, skipRuleIds: ['learn-linked-issue'], decision: { approve: true, action: 'skip_rules' } });
+    expect(skip).toMatchObject({ label: 'Skip learn-linked-issue', note: 'required', skipRuleIds: ['learn-linked-issue'], decision: { approve: true, action: 'skip_rules' } });
   });
 
   it('a broken rule the engine did not mark waivable (error or critical, or an older engine) gets only the re-check', () => {

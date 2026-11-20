@@ -27,6 +27,8 @@ export interface AskOption {
   recommended?: boolean;
   /** Taking it asks for a reason first. */
   needsReason?: boolean;
+  /** The reason box may be sent without words. */
+  reasonOptional?: true;
   /** Shown, not choosable; the words say why. */
   disabled?: string;
   meta?: string;

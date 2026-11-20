@@ -368,6 +368,31 @@ describe('review round 1 folds (the run half)', () => {
     expect(posts).toEqual([{ path: `/runs/${RUN}/gate`, body: { approve: false, ord: 1, planRev: 2 } }]);
   });
 
+  it('studio#1177: an optional Change binds a composer that sends empty words', async () => {
+    useGateStore.setState((s) => ({ gates: { ...s.gates, [RUN]: { ...s.gates[RUN]!, actions: [{ action: 'request_changes', intent: 'send_back', note: 'optional' }] } } }));
+    page([run()]);
+    await waitFor(() => expect(reply('change').disabled).toBe(false));
+    fireEvent.click(reply('change'));
+    expect(screen.getByTestId('job-binding-label')).toHaveTextContent('Answering: what should change in plan v2 (words optional)');
+    expect(screen.getByTestId('session-composer-send')).toBeEnabled();
+    fireEvent.click(screen.getByTestId('session-composer-send'));
+    await screen.findByTestId('inline-undo-button');
+    expect(screen.getByTestId('inline-undo-headline')).not.toHaveTextContent('with your words');
+    await act(async () => { await flushDecisionsForTest(); });
+    expect(posts).toEqual([{ path: `/runs/${RUN}/gate`, body: { approve: false, action: 'request_changes', ord: 1, planRev: 2 } }]);
+  });
+
+  it('studio#1177: no-list Change still refuses empty words', async () => {
+    page([run()]);
+    await waitFor(() => expect(reply('change').disabled).toBe(false));
+    fireEvent.click(reply('change'));
+    expect(screen.getByTestId('session-composer-send')).toBeDisabled();
+    fireEvent.keyDown(screen.getByTestId('session-composer-input'), { key: 'Enter' });
+    await act(async () => { await flushDecisionsForTest(); });
+    expect(posts).toEqual([]);
+    expect(screen.getByTestId('job-binding-label')).not.toHaveTextContent('(words optional)');
+  });
+
   it('a listed request_changes sends the composer words with ord and the shown planRev', async () => {
     useGateStore.setState((s) => ({ gates: { ...s.gates, [RUN]: { ...s.gates[RUN]!, actions: [{ action: 'request_changes', intent: 'send_back', note: 'required' }] } } }));
     page([run()]);
@@ -409,7 +434,7 @@ describe('review round 1 folds (the run half)', () => {
     expect(reply('act:retry_rules').textContent).toBe('Re-check the rules');
     fireEvent.click(reply('act:retry_rules'));
     if (note !== 'none') {
-      expect(screen.getByTestId('job-binding-label').textContent).toBe('Answering: Re-check the rules for plan v2');
+      expect(screen.getByTestId('job-binding-label').textContent).toBe(`Answering: Re-check the rules for plan v2${note === 'optional' ? ' (words optional)' : ''}`);
       const box = screen.getByTestId('session-composer-input');
       fireEvent.change(box, { target: { value: '  check the updated rule  ' } });
       fireEvent.keyDown(box, { key: 'Enter' });

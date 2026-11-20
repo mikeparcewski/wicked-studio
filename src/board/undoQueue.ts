@@ -615,7 +615,7 @@ export function describeDecision(
   if ((decision as { action?: string }).action === 'request_changes') {
     return {
       verb: 'request-changes',
-      preview: 'The run rewinds to its last creator phase and redoes it with your note.',
+      preview: `The run rewinds to its last creator phase and redoes it${note ? ' with your note' : ''}.`,
     };
   }
   return { verb: 'reject', preview: decisionPreview('reject', count, note) };

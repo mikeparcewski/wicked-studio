@@ -175,7 +175,7 @@ const SEAT_REFUSAL = /no seat in the roster|every seat is signed out|signed out 
 
 export function Composer({
   composerKey, text, setText, onSend, runs = [], started = false, placeholder, ariaLabel, variant, className = '',
-  inputRef, hint = false, footer = null, suggestions = [], navigate, contextProjectId = null, answerOnly = false, jobChatId = null,
+  inputRef, hint = false, footer = null, suggestions = [], navigate, contextProjectId = null, answerOnly = false, answerOptional = false, jobChatId = null,
 }: {
   /** DES-CATALOG-002 §4.6 (Lane E2): the chat this composer stands in, live on the daemon. A job picked here is posted
    *  into it (`POST /chats/:id/proposals`); with none (the Desk, a fresh chat's page) it seeds a new chat. */
@@ -183,6 +183,8 @@ export function Composer({
   /** The box answers one thing (a job's bound reply, DES-CATALOG-002 §2.4): Send hands over the typed words alone —
    *  no workflow chip, `/` command or about-chip context starts or decorates anything. */
   answerOnly?: boolean;
+  /** An answer-only composer may send without words. */
+  answerOptional?: boolean;
   /** `desk`, or the session id. */
   composerKey: string;
   text: string;
@@ -456,7 +458,7 @@ export function Composer({
   const [jobBusy, setJobBusy] = useState(false);
   const jobBusyRef = useRef(false);
 
-  const canSend = answerOnly ? text.trim() !== ''
+  const canSend = answerOnly ? answerOptional || text.trim() !== ''
     // A job's proposal is not a message to a seat: the seat refusals do not gate it (crew's proposal names its seats).
     : jobChip !== null || commandLine ? !jobBusy
       : (text.trim() !== '' || (wfChip !== null && wordsOptional)) && refusal === null && seatRefusal === null
@@ -584,7 +586,7 @@ export function Composer({
 
   const send = (): void => {
     if (answerOnly) {
-      if (text.trim() === '') return;
+      if (!answerOptional && text.trim() === '') return;
       onSend(text, {});
       return;
     }

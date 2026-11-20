@@ -448,3 +448,17 @@ describe('ElicitationPrompt as a guided ask', () => {
     expect(respond).toHaveBeenCalledWith('r2', { elicitationId: 'e2', action: 'decline' });
   });
 });
+
+
+describe('studio#1177: optional reason', () => {
+  it('labels the box optional and answers empty without a reason', () => {
+    const { onAnswer } = renderAsk({ ...PAUSE, options: [{ id: 'note', token: 'note', label: 'Send back', needsReason: true, reasonOptional: true }] });
+    fireEvent.click(opt('note'));
+    expect(screen.getByTestId('ask-reason-label')).toHaveTextContent('(optional)');
+    expect(screen.getByTestId('ask-reason-text')).toHaveAttribute('aria-required', 'false');
+    expect(screen.getByTestId('ask-send')).toBeEnabled();
+    fireEvent.keyDown(screen.getByTestId('ask-reason-text'), { key: 'Enter', ctrlKey: true });
+    expect(screen.getByTestId('ask-reason-text')).not.toHaveAttribute('aria-invalid');
+    expect(onAnswer).toHaveBeenCalledWith({ askId: 'p1', option: 'note' });
+  });
+});

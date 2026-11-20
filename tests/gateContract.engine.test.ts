@@ -39,8 +39,8 @@ describe('every engine gate shape renders exactly its listed answers (studio#117
       for (const a of shape.actions) {
         const drawn = all.filter((c) => (c.decision as { action?: string } | null)?.action === a.action
           || (a.action === 'approve' && (c.key === 'approve' || c.key === 'steer')) || (a.action === 'reject' && c.key === 'stop'));
-        if (a.note === 'none') expect(drawn.every((c) => !c.needsNote), `${name}/${a.action}`).toBe(true);
-        if (a.note === 'required') expect(drawn.every((c) => c.needsNote), `${name}/${a.action}`).toBe(true);
+        if (a.note === 'none') expect(drawn.every((c) => c.note === 'none'), `${name}/${a.action}`).toBe(true);
+        if (a.note === 'required') expect(drawn.every((c) => c.note === 'required'), `${name}/${a.action}`).toBe(true);
       }
     });
 
@@ -73,5 +73,15 @@ describe('every engine gate shape renders exactly its listed answers (studio#117
     const words = (intent: string, noteIntent?: string) => Object.values(contractChoices([{ action: 'approve', intent, note: 'optional', ...(noteIntent !== undefined ? { noteIntent } : {}) }], seat)).flat().map((c) => c.label);
     expect(words('accept_work', 'send_back')).toEqual(['Accept the work as it stands', 'Send back with a note']);
     expect(words('continue_team')).toEqual(['Continue', 'Continue with a note']);
+  });
+});
+
+
+describe('studio#1177: listed note policies', () => {
+  it.each([
+    ['retry_rules', 'optional'], ['reject', 'none'], ['reassign', 'optional'],
+  ] as const)('%s keeps its %s note policy', (action, note) => {
+    const [choice] = contractChoices([{ action, intent: action, note, seats: ['codex'] }], seat).choices;
+    expect(choice).toHaveProperty('note', note);
   });
 });
