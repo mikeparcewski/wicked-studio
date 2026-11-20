@@ -18,6 +18,7 @@ npm publish dates. Every version listed here exists on
 
 ### Fixed
 
+- Adding an HTTP MCP server or REST API now offers the same loopback/private address confirmation as Data sources (studio#1198). Ticking a range retries the preview with that range allowed; confirmations apply only to the kind, server URL and OpenAPI URL they were given for.
 - A waiting run's plan card no longer stays on "reading the plan…" when the gate read is slow (studio#1197). A `GET /runs/:id/gate` that
   missed its 10 s deadline was dropped and never read again until a live frame refreshed the runs list; on a loaded host a large plan
   gate takes longer than 10 s every time. A missed or failed read of a run that holds no gate is now retried, 2 s doubling to 30 s,
