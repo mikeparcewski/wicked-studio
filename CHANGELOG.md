@@ -12,6 +12,10 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.16.15] — 2026-11-20
+
+Patch release on main fc451b69, carrying 15 PRs since 0.16.14: #1199, #1200, #1201, #1202, #1204, #1205, #1206, #1207, #1208, #1209, #1210, #1211, #1212, #1215, #1216.
+
 ### Changed
 
 - **CI: the selftest pin moves to wicked-ci 3bd45ae (the advisory verdict now concludes, wicked-ci#76/#81).** The selftest job grants `checks: write` so the called workflow can publish its verdict check run; the advisory job still never blocks a merge.
@@ -30,6 +34,30 @@ npm publish dates. Every version listed here exists on
   Known limits: retries live in the open tab and start only after the first read fails (nothing retries in a closed tab); a retry
   holds a read slot for up to 60 s; a failed forced refresh of a gate already in hand is not retried; crew's own slow gate answer is
   wicked-crew#1629.
+
+### Merged since the last release (from each pull request's changelog entry)
+
+- Decks keep Alt+A, Alt+R and Alt+X inside the editor, and typing while a part is selected on a deck card leaves the message box alone, so a stray Enter no longer sends a message. Selecting another part replaces the previous selection's chips (Refs studio#1109; studio#1138).
+
+- **A brief 503 no longer hides the skip-QE offer (studio#1203).** The in-place skip-QE read retries a failed gate read, through the shared read slots (bounded by the gate read deadline, released on unmount), with the main gate read's backoff until it lands, instead of staying empty until the card remounts.
+
+- Under Fixed: "Revise this PR" opens with the composer's default gate posture instead of inheriting the original run's "Ask me: Never" setting. Prefills without a gate posture use that default; Retry still preserves an explicit original posture (studio#1145).
+
+- Fixed: a consent or free-text gate card now draws only the answers the engine lists, and a chat's gate card follows its list too (studio#1177).
+
+- Voice setup no longer asks you to speak when it cannot hear: with the speech engine or model missing it says to tap or type, shows the mic as not listening, and the engine step now mentions the model download that follows. The Agents setup steps are no longer covered by the Ask bubble on a phone (studio#1163, studio#1162).
+
+- A plan card offers Change something exactly when the engine lists `edit_plan`, and it opens the plan editor for a fixed-workflow run too (Revise this PR) (studio#1175).
+
+- A job that started from a possibly stale base (the daemon could not fetch origin) now says so in its thread: one warning line (wicked-crew#1566).
+
+- Voice full screen: the setup banner no longer leaves a cut-off first line of the transcript; the transcript sits in its own frame and scrolls inside it (#1162).
+
+- Fixed: the bundled Apps, Doc, Page, Insights and Video editors now pass more of the third-party editor conformance contract: typing in them (and in the Slides style panel) reaches the chat box, Insights and Apps forward Escape and Cmd/Ctrl+K, Insights sizes its card, and Video's style tabs show their values when no video is loaded (studio#1109).
+
+- Deck: the speaker-notes field carries `data-wicked-save` so editor conformance can find the control that saves.
+
+- One name for the coding CLIs: the Helpers page, Desk, Your setup and the chat copy now say "helpers" instead of "agents" (#1164).
 
 ## [0.16.14] — 2026-11-19
 
