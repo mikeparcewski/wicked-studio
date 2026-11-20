@@ -21,6 +21,8 @@ export interface WorkflowCatalogProps {
   view: CatalogView | null;
   /** The daemon serves a catalog but this read failed, and there is none to show. */
   failed?: boolean;
+  /** The registered repository this dialog was opened from. */
+  contextRepoName?: string | undefined;
   /** The draft's workflow, when one is picked (Change job): its card is pressed and focused. */
   pickedId: string | null;
   /** The card picked, when the pick came from the catalog (two cards may launch one workflow). */
@@ -35,7 +37,7 @@ export interface WorkflowCatalogProps {
 type Place = 'fit' | 'top' | 'cat' | 'result';
 const BEST_FIT_MAX = 3;
 
-export function WorkflowCatalog({ view, failed = false, pickedId, pickedEntryId = null, intent, now, onPick, onChat }: WorkflowCatalogProps): React.ReactElement {
+export function WorkflowCatalog({ view, failed = false, contextRepoName, pickedId, pickedEntryId = null, intent, now, onPick, onChat }: WorkflowCatalogProps): React.ReactElement {
   const isPicked = (en: CatalogEntry): boolean =>
     pickedId !== null && en.launchId === pickedId && (pickedEntryId === null || en.id === pickedEntryId);
   const [query, setQuery] = useState('');
@@ -239,6 +241,7 @@ export function WorkflowCatalog({ view, failed = false, pickedId, pickedEntryId 
         {view === null ? '' : searching ? `${results.length} ${results.length === 1 ? 'workflow matches' : 'workflows match'}` : ''}
       </p>
 
+      {contextRepoName !== undefined && <p data-testid="launch-catalog-context-repo" className="wk-field-note">Opened from {contextRepoName}: a job that needs a repository starts on it.</p>}
       <div className="wk-catalog-panel" ref={panelRef} data-testid="launch-catalog-results" onKeyDown={onPanelKey}>
         {view === null && failed && (
           <div className="wk-catalog-empty" data-testid="launch-catalog-failed" role="alert">

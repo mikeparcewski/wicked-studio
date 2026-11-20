@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { RepoEntry, RosterSeat } from '../../api/types.js';
+import { qeAcceptanceSetting, workflowRequiresQe } from '../../board/assuranceModel.js';
 import { workflowLaunchBody } from '../../board/launchModel.js';
 import { sessionPath } from '../../board/sessionModel.js';
-import { entryOffered, entryWords, needsProject, needsRepo, type CatalogEntry } from '../../board/workflowCatalog.js';
+import { entryOffered, entryWords, jobCatalogView, needsProject, needsRepo, type CatalogEntry } from '../../board/workflowCatalog.js';
 import { notOfferedLine } from '../../board/slashCatalog.js';
 import { WORKFLOWS_FAILED_LINE, WORKFLOWS_LOADING_LINE } from '../../board/workflowCommand.js';
 import { registerRepoPath } from '../../hooks/ambientProject.js';
@@ -15,11 +16,13 @@ import { startAppByChat } from '../../store/inlineStart.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { useProvenanceStore } from '../../store/provenance.js';
 import { fetchReposCached, getCachedRepos } from '../../store/repoCache.js';
+import { catalogProjectOf, readWorkflowCatalog, useWorkflowCatalog } from '../../store/workflowCatalog.js';
 import { useWorkflowDefs } from '../../store/workflowCache.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from '../composerDefaults.js';
 import { launchChatId } from '../launch/launchChatId.js';
-import { ReducedAssuranceOptIn } from './AssuranceReceipt.js';
+import { QeOffNote } from '../QeOffNote.js';
+import { QeAcceptanceOptions, ReducedAssuranceOptIn } from './AssuranceReceipt.js';
 import { Switch } from '../ui/Switch.js';
 import { chatStartPower, readPowerDefault, usePowerDefaultOn, useReviewPlan } from '../../store/reviewPlan.js';
 
@@ -54,7 +57,7 @@ const realProject = (p: string | null | undefined): string | null => (p === unde
  * The choices are client state; the only write is the start itself.
  */
 export function InlineStart({
-  composerKey, entry, catalogState, sessionRepo, projectId: projectIn, seatKeys, words, navigate, handle, onBlocker,
+  composerKey, entry: composerEntry, catalogState, sessionRepo, projectId: projectIn, seatKeys, words, navigate, handle, onBlocker,
 }: {
   composerKey: string;
   /** The card on the composer, or null while the catalog is read (or the card is gone). */
@@ -77,6 +80,19 @@ export function InlineStart({
   const chatIdOnLaunch = useCapabilities((s) => s.chatIdOnLaunch);
   const reducedCap = useCapabilities((s) => s.reducedAssurance);
   const [reduced, setReduced] = useState(false);
+  const [qeCap, setQeCap] = useState(false);
+  const [qeOff, setQeOff] = useState(false);
+  const [skipQe, setSkipQe] = useState(false);
+  const [skipQeReason, setSkipQeReason] = useState('');
+  const [forceQe, setForceQe] = useState(false);
+  useEffect(() => {
+    let live = true;
+    Promise.resolve().then(() => api.getHealth()).then((h) => {
+      const caps = (h as unknown as { capabilities?: Record<string, unknown> }).capabilities ?? {};
+      if (live) { setQeCap(caps['qeAcceptanceOverride'] === true); setQeOff(qeAcceptanceSetting(caps) === 'off'); }
+    }).catch(() => { /* no override offered */ });
+    return () => { live = false; };
+  }, []);
   // Power mode (operator ruling 2026-11-06): with the default on, the chat box asks whether to review the plan first.
   const powerDefaultOn = usePowerDefaultOn();
   const reviewPlan = useReviewPlan((s) => s.on);
@@ -89,9 +105,26 @@ export function InlineStart({
   /** The repository picker is open over a default (the session's, a sole one): codex r1, a default must be changeable. */
   const [choosing, setChoosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const entryId = entry?.id ?? null;
+  const entryId = composerEntry?.id ?? null;
   // Another card, or another chat's composer (the page is reused across chats), starts its own choices and consent.
-  useEffect(() => { setPickedRepo(null); setPickedProject(null); setError(null); setReduced(false); setChoosing(false); setAllChoices(false); }, [entryId, composerKey]);
+  useEffect(() => { setPickedRepo(null); setPickedProject(null); setError(null); setReduced(false); setSkipQe(false); setSkipQeReason(''); setForceQe(false); setChoosing(false); setAllChoices(false); }, [entryId, composerKey]);
+
+  // The project: the composer's (its chip, its chat), else the one picked here, else a sole project.
+  const filed = projects.filter((p) => p.id !== 'default');
+  const projectId = realProject(projectIn);
+  const project = projectId ?? pickedProject ?? (composerEntry !== null && needsProject(composerEntry) && filed.length === 1 ? filed[0]!.id : null);
+  const projectName = project === null ? null : filed.find((p) => p.id === project)?.name ?? project;
+  const presetsState = usePlanCatalog((s) => s.presets[project ?? '']);
+  const checkProject = project !== projectId;
+  const catalogLoad = useWorkflowCatalog(catalogProjectOf(project), checkProject);
+  const projectCatalog = jobCatalogView(catalogLoad, defs, Array.isArray(presetsState) ? presetsState : null);
+  const entry = checkProject && projectCatalog !== null
+    ? projectCatalog.entries.find((e) => e.id === composerEntry?.id && e.launchId === composerEntry.launchId) ?? null : composerEntry;
+  const projectBlocker = !checkProject ? null
+    : catalogLoad.state === 'loading' ? `Checking this workflow for ${projectName}…`
+      : catalogLoad.state === 'error' ? `Couldn't check this workflow for ${projectName}. Try again.`
+        : entry === null ? `This workflow is not listed in ${projectName}. Remove it and pick another.`
+          : !entryOffered(entry) ? notOfferedLine(entry) : null;
 
   const wantsRepo = entry !== null && entry.launchKind === 'run' && needsRepo(entry);
   const wantsProject = entry !== null && needsProject(entry);
@@ -110,11 +143,6 @@ export function InlineStart({
   const repoRef = !wantsRepo || (choosing && pickedRepo === null) ? null
     : pickedRepo ?? contextRepo?.id ?? (registered.length === 1 ? registered[0]!.id : null);
   const repoName = repoRef === null ? null : registered.find((r) => r.id === repoRef)?.name ?? repoRef;
-  // The project: the composer's (its chip, its chat), else the one picked here, else a sole project.
-  const filed = projects.filter((p) => p.id !== 'default');
-  const projectId = realProject(projectIn);
-  const project = projectId ?? pickedProject ?? (wantsProject && filed.length === 1 ? filed[0]!.id : null);
-  const projectName = project === null ? null : filed.find((p) => p.id === project)?.name ?? project;
 
   const def = entry !== null && entry.launchKind === 'run' ? (defs ?? []).find((d) => d.id === entry.launchId) ?? null : null;
   // New job's rule: a job with a repository whose workflow may change code delivers a pull request, behind its gate.
@@ -124,7 +152,6 @@ export function InlineStart({
   // a scoped preset's "before step 1" would land on its scope step and the first work step would run unconfirmed.
   // A failed read is not "no presets": a scoped preset's gate could land on its scope step, so the start holds and
   // offers a retry (codex r3 P1). Fail closed. A daemon that serves no presets route (`unsupported`) has none to shift.
-  const presetsState = usePlanCatalog((s) => s.presets[project ?? '']);
   const presetsRead = Array.isArray(presetsState) || presetsState === 'unsupported';
   const presetsFailed = presetsState === 'failed';
   const preview = useLaunchPreview({
@@ -137,6 +164,9 @@ export function InlineStart({
   const seats: RosterSeat[] = seatKeys.flatMap((key) => (roster ?? []).filter((x) => x.key === key));
 
   const offerReduced = reducedCap && entry !== null && entry.launchKind === 'run' && seats.length === 1;
+  const offerQe = qeCap && entry !== null && entry.launchKind === 'run' && workflowRequiresQe(def);
+  const skipReason = offerQe && !qeOff && skipQe ? skipQeReason : null;
+  const forceAcceptance = offerQe && forceQe && (qeOff || !skipQe);
   const offerReview = powerDefaultOn === true && entry !== null && entry.launchKind === 'run';
   // What the box shows now (the setting and the person's choice), for the start to check against.
   const shownDefault = useRef<boolean | null>(powerDefaultOn);
@@ -144,7 +174,7 @@ export function InlineStart({
   const reviewNow = useRef(reviewPlan);
   reviewNow.current = reviewPlan;
   const { label: wordsLabel, optional: wordsOptional } = entry === null ? { label: 'What do you want done?', optional: false } : entryWords(entry);
-  const blocker: string | null = entry === null
+  const blocker: string | null = projectBlocker ?? (entry === null
     ? (catalogState === 'loading' ? WORKFLOWS_LOADING_LINE : catalogState === 'error' ? WORKFLOWS_FAILED_LINE : 'This workflow is not listed now. Remove it and pick another.')
     : !entryOffered(entry) ? notOfferedLine(entry)
       : words.trim() === '' && !wordsOptional ? `${wordsLabel} Say it in the box.`
@@ -154,14 +184,15 @@ export function InlineStart({
             : entry.launchKind === 'run' && presetsFailed ? 'This workflow’s steps could not be read, so its plan gate cannot be placed. Try again.'
               : entry.launchKind === 'run' && !presetsRead ? 'Checking this workflow…'
               : entry.launchKind === 'run' && seats.length === 0 ? 'Turn on at least one helper.'
-                : null;
+                : offerQe && !qeOff && skipQe && skipQeReason.trim() === '' ? 'Say why QE acceptance is skipped.'
+                  : null);
   useEffect(() => { onBlocker(blocker); }, [blocker, onBlocker]);
   // The request as checked: a launch whose request changed while its gate was placed stops for a fresh look (New
   // job's rule, codex r1), and one whose card was removed meanwhile sends nothing.
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const requestNow = useRef('');
-  requestNow.current = JSON.stringify([entry?.id ?? null, entry?.launchId ?? null, repoRef, project, words.trim(), seats, deliver, offerReduced && reduced]);
+  requestNow.current = JSON.stringify([entry?.id ?? null, entry?.launchId ?? null, repoRef, project, words.trim(), seats, deliver, offerReduced && reduced, offerQe, qeOff, skipQe, skipQeReason, forceQe]);
   const blockerNow = useRef<string | null>(null);
   blockerNow.current = blocker;
 
@@ -202,6 +233,10 @@ export function InlineStart({
         } catch (e) {
           throw new Error(`the daemon did not say what it can do (${e instanceof Error ? e.message : String(e)}); try again`);
         }
+        if ((skipReason !== null || forceAcceptance) && caps['qeAcceptanceOverride'] !== true) {
+          setQeCap(false);
+          throw new Error('The daemon no longer accepts QE acceptance overrides.');
+        }
         const chatId = launchChatId(composerKey, caps['chatIdOnLaunch'] === true);
         // The Power-mode default, read NOW and before the last checks (operator ruling 2026-11-06). It must be the one
         // the box showed: a setting that changed since (or that can't be read) starts nothing, and the box redraws
@@ -238,13 +273,14 @@ export function InlineStart({
           autoDeliverGate: false,
           // New job's rule: with one helper the creator's seat would review its own work, so the person opts in (said).
           reducedAssurance: offerReduced && reduced,
-          skipQeReason: null,
+          skipQeReason: skipReason,
           chatId,
           primary: null,
           // The Power-mode default, with the person's Review plan choice (operator ruling 2026-11-06): read NOW; a
           // failed read of the setting is no default, and the start holds at its plan (phased), never guesses a power run.
           power: chatStartPower(powerCapNow, defaultNow, reviewAsked),
         });
+        if (forceAcceptance) body.forceQeAcceptance = true;
         const { runId } = await api.launchRun(body);
         useProvenanceStore.getState().markLaunchedHere(runId);
         spend();
@@ -303,6 +339,12 @@ export function InlineStart({
             </button>
           )}
         </span>
+      )}
+      {offerQe && qeOff && <QeOffNote force={forceQe} onForce={setForceQe} testId="composer-start-qe-off" />}
+      {offerQe && !qeOff && <QeAcceptanceOptions skip={skipQe} reason={skipQeReason} force={forceQe}
+        onSkip={setSkipQe} onReason={setSkipQeReason} onForce={setForceQe} testId="composer-start-qe" />}
+      {checkProject && catalogLoad.state === 'error' && (
+        <button type="button" data-testid="composer-start-catalog-retry" className="wk-btn wk-btn--link wk-btn--sm" onClick={() => { void readWorkflowCatalog(catalogProjectOf(project)); }}>Try again</button>
       )}
       {offerReduced && <ReducedAssuranceOptIn checked={reduced} onChange={setReduced} testId="composer-start-reduced" />}
       {offerReview && (

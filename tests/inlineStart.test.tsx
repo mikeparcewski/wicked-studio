@@ -59,6 +59,8 @@ let holdHealth = false;
 /** What `GET /health` answers: power mode on the daemon, or a failed read. */
 let healthPower = true;
 let healthFails = false;
+let qeOverride = false;
+let qeSetting = 'required';
 /** `GET /settings`: the Power-mode default (operator ruling 2026-11-06). Off here = today's chat start. */
 let powerModeDefault: boolean | undefined = false;
 /** A `/settings` read that waits until released (the start's own read of the setting). */
@@ -85,7 +87,7 @@ function stubWire(): void {
     read.push(path);
     if (path === '/settings' && settingsGate !== null) return settingsGate.then(() => json({ settings: powerModeDefault === undefined ? {} : { powerModeDefault } }));
     if (path === '/health' && holdHealth) return new Promise<Response>(() => {});
-    if (path === '/health') return healthFails ? json({ error: 'down' }, 503) : json({ capabilities: { powerMode: healthPower, chatIdOnLaunch: true } });
+    if (path === '/health') return healthFails ? json({ error: 'down' }, 503) : json({ capabilities: { powerMode: healthPower, chatIdOnLaunch: true, qeAcceptanceOverride: qeOverride, qeAcceptance: qeSetting } });
     if (path === '/workflows/catalog') return json(CATALOG);
     return json(path === '/workflows' ? { workflows: ['bug', 'feature', 'domain-extraction', 'review-recent-work'].map(def) }
       : path === '/roster' ? { roster: SEATS } : path === '/repos' ? { repos }
@@ -126,6 +128,8 @@ beforeEach(() => {
   holdHealth = false;
   healthPower = true;
   healthFails = false;
+  qeOverride = false;
+  qeSetting = 'required';
   powerModeDefault = false;
   settingsGate = null;
   resetPowerDefault();
@@ -462,6 +466,7 @@ describe('Apps and Add a repository from the / menu', () => {
     expect(wfChip('chat-1')).toMatchObject({ entryId: 'apps' });
     expect(screen.queryByTestId('composer-seats')).toBeNull();
     type('Open tickets by region');
+    await waitFor(() => expect(screen.getByTestId('session-composer-send')).toBeEnabled());
     enter();
     await waitFor(() => expect(nav).toHaveBeenCalledTimes(1));
     expect(posts.map((p) => p.path)).toEqual(['/apps', expect.stringMatching(/^\/apps\/[^/]+\/turns$/)]);
@@ -624,4 +629,121 @@ describe('Review plan: round 2 folds', () => {
     await waitFor(() => expect(launches()).toHaveLength(1), { timeout: 10_000 });
     expect(gets().filter((g) => g === '/settings').length).toBeGreaterThan(before);
   }, 30_000);
+});
+
+
+describe('inline QE choices and project catalog (#990)', () => {
+  async function qeBug(): Promise<void> {
+    qeOverride = true;
+    setCachedWorkflows([{ ...def('bug'), required_instruments: ['qe_acceptance'] }]);
+    render(<Harness navigate={() => {}} />);
+    await pick('bug', 'bug');
+    type('fix the charge');
+  }
+
+  it('sends a QE skip with its reason as skipQeAcceptance', async () => {
+    await qeBug();
+    fireEvent.click(await screen.findByTestId('composer-start-qe-skip'));
+    fireEvent.change(screen.getByTestId('composer-start-qe-skip-reason'), { target: { value: 'Covered by the release checks' } });
+    enter();
+    await waitFor(() => expect(launches()).toHaveLength(1));
+    expect(launches()[0]!['skipQeAcceptance']).toEqual({ reason: 'Covered by the release checks' });
+    expect(launches()[0]).not.toHaveProperty('forceQeAcceptance');
+  });
+
+  it('forces QE acceptance on a QE-off daemon', async () => {
+    qeSetting = 'off';
+    await qeBug();
+    fireEvent.click(await screen.findByTestId('composer-start-qe-off-force'));
+    enter();
+    await waitFor(() => expect(launches()).toHaveLength(1));
+    expect(launches()[0]!['forceQeAcceptance']).toBe(true);
+    expect(launches()[0]).not.toHaveProperty('skipQeAcceptance');
+  });
+
+  it('blocks Enter when QE skip is ticked without a reason', async () => {
+    await qeBug();
+    fireEvent.click(await screen.findByTestId('composer-start-qe-skip'));
+    expect(screen.getByTestId('session-composer-send')).toBeDisabled();
+    enter();
+    expect(screen.getByTestId('composer-start-error')).toHaveTextContent('Say why QE acceptance is skipped.');
+    expect(launches()).toEqual([]);
+  });
+
+  async function pickProject(catalogAnswer: (url: URL) => Promise<Response>): Promise<void> {
+    useProjectsStore.setState({ projects: [PROJECT, { ...PROJECT, id: 'p2', name: 'Web' }] as never });
+    const base = globalThis.fetch;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const parsed = new URL(url, 'http://x');
+      if (parsed.pathname.endsWith('/workflows/catalog')) return catalogAnswer(parsed);
+      return base(url, init);
+    }));
+    render(<Harness navigate={() => {}} />);
+    await pick('bug', 'bug');
+    type('fix the charge');
+    fireEvent.click(await screen.findByRole('button', { name: 'Web' }));
+  }
+  const projectCatalog = (unavailable = false): unknown => ({ ...CATALOG, entries: CATALOG.entries.map((e) => e['id'] === 'bug'
+    ? { ...e, needs: ['repo', 'project'], inputs: [{ id: 'project', kind: 'project', required: true }],
+      ...(unavailable ? { status: 'unavailable', statusNote: 'Connect Web first' } : {}) } : e) });
+  const catalogJson = (body: unknown): Promise<Response> => Promise.resolve(new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } }));
+
+  it('blocks a workflow unavailable in the project picked inline', async () => {
+    await pickProject((url) => catalogJson(projectCatalog(url.searchParams.get('projectId') === 'p2')));
+    await waitFor(() => expect(gets().filter((path) => path === '/presets').length).toBeGreaterThan(0));
+    await act(async () => { await Promise.resolve(); });
+    enter();
+    await waitFor(() => expect(screen.getByTestId('composer-start-error')).toHaveTextContent('Connect Web first'));
+    expect(screen.getByTestId('session-composer-send')).toBeDisabled();
+    expect(launches()).toEqual([]);
+  });
+
+  it('blocks a picked-project card retargeted to another workflow', async () => {
+    await pickProject((url) => {
+      const catalog = projectCatalog() as typeof CATALOG;
+      return catalogJson(url.searchParams.get('projectId') === 'p2'
+        ? { ...catalog, entries: catalog.entries.map((e) => e['id'] === 'bug'
+          ? { ...e, launch: { kind: 'run', workflow: 'feature' } } : e) }
+        : catalog);
+    });
+    await act(async () => { await Promise.resolve(); });
+    enter();
+    await waitFor(() => expect(screen.getByTestId('composer-start-error')).toHaveTextContent('This workflow is not listed in Web.'));
+    expect(screen.getByTestId('session-composer-send')).toBeDisabled();
+    expect(launches()).toEqual([]);
+  });
+
+  it('retries a failed picked-project catalog through its named button', async () => {
+    let failed = true;
+    await pickProject((url) => url.searchParams.get('projectId') === 'p2' && failed
+      ? Promise.resolve(new Response('{}', { status: 503 })) : catalogJson(projectCatalog()));
+    const retry = await screen.findByTestId('composer-start-catalog-retry');
+    expect(screen.getByTestId('session-composer-send')).toBeDisabled();
+    failed = false;
+    fireEvent.click(retry);
+    await waitFor(() => expect(screen.queryByTestId('composer-start-catalog-retry')).toBeNull());
+    await waitFor(() => expect(screen.getByTestId('session-composer-send')).toBeEnabled());
+    enter();
+    await waitFor(() => expect(launches()).toHaveLength(1));
+    expect(launches()[0]).toMatchObject({ workflow: 'bug', projectId: 'p2' });
+  });
+
+  it('uses the composer catalog without rereading it when its start row opens', async () => {
+    render(<Harness navigate={() => {}} />);
+    type('/bug');
+    await waitFor(() => expect(row('bug')).not.toBeNull());
+    const before = gets().filter((path) => path === '/workflows/catalog').length;
+    fireEvent.mouseDown(row('bug'));
+    await screen.findByTestId('composer-start-line');
+    await act(async () => { await Promise.resolve(); });
+    expect(gets().filter((path) => path === '/workflows/catalog')).toHaveLength(before);
+  });
+
+  it('holds Enter while the inline project catalog is loading', async () => {
+    await pickProject((url) => url.searchParams.get('projectId') === 'p2' ? new Promise<Response>(() => {}) : catalogJson(projectCatalog()));
+    enter();
+    await waitFor(() => expect(screen.getByTestId('composer-start-error')).toHaveTextContent('Checking this workflow for Web…'));
+    expect(screen.getByTestId('session-composer-send')).toBeDisabled();
+    expect(launches()).toEqual([]);
+  });
 });

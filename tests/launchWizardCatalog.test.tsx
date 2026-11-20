@@ -865,3 +865,17 @@ describe('round 7 (agy r7): a card picked from today’s list that is gone block
     expect(screen.getByTestId('launch-wizard-next')).toBeDisabled();
   });
 });
+
+
+describe('catalog repository context (#1053)', () => {
+  it('names the registered repository the dialog was opened from', async () => {
+    await openCatalog({ contextRepo: REPO.id });
+    expect(await screen.findByTestId('launch-catalog-context-repo')).toHaveTextContent('Opened from svc: a job that needs a repository starts on it.');
+    expect(screen.getByTestId('launch-catalog-repo')).toHaveValue('any');
+  });
+
+  it('has no repository context note when opened without a repository', async () => {
+    await openCatalog();
+    expect(screen.queryByTestId('launch-catalog-context-repo')).toBeNull();
+  });
+});

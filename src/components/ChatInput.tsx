@@ -555,10 +555,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     daemonDeliverGate,
     revising: revisesPr !== null && daemonRevisesPr === true && targetRepoRef !== null && selection.plan === null,
   };
-  // The form's own reading, before any crew answer: what the deliver notice says.
+  // The form's fields before crew answers the preview.
   const formPosture = launchPosture({ ...postureInput, previewAnswer: { status: 'none' } });
   const previewFields = formPosture.payload.fields;
-  const posturePreview = usePosturePreview(previewFields, powerChoice, postureInput.powerCap);
+  const posturePreview = usePosturePreview(previewFields, powerChoice, healthSettled);
   const { shown, payload } = launchPosture({ ...postureInput, previewAnswer: posturePreview.answer });
 
   function loadProjects(): void {
@@ -1307,8 +1307,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         // warn about. The no-PR notice is for a BUILD launch without a repo (below), only.
         return null;
       case 'build':
-        // The SAME resolution the submit site puts on the wire (`targetRepoRef`)
-        // — the notice's whole contract is that it cannot disagree with the body.
+        // Resolve the repository as submit does; crew's preview decides delivery once it answers.
         if (target.kind === 'ambiguous') {
           // F-028: several repos attached, none chosen — the launch is held
           // (Send disabled) and the notice says WHY there is no PR yet.
@@ -1329,7 +1328,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
               }
             : null;
         }
-        if (deliverOn) {
+        const answered = posturePreview.answer.status === 'ready' ? posturePreview.answer.posture : null;
+        if (deliverOn && answered?.deliver === 'none') {
+          return { state: 'not-delivered', text: 'No PR when this finishes: this job does not deliver a change.' };
+        }
+        if (answered?.deliver === 'pr' || (answered === null && deliverOn)) {
           // R3: WHAT the push does comes from crew's origin preflight — the deliver gate's own
           // sentence ("Pushes the run branch to <owner/repo> on GitHub and opens a pull request
           // there…", "…a local path, so no pull request can be opened against it…"). A daemon
@@ -1350,11 +1353,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             // approves, or, under an explicitly unattended posture, with no gate at all —
             // named "auto-deliver", never implied.
             text:
-              daemonDeliverGate === false
+              answered === null && daemonDeliverGate === false
                 ? `When this finishes it ${what} — this daemon delivers WITHOUT a deliver gate (upgrade crew to 0.7.33+ to confirm the push first).${merging}`
-                // studio#763: the wording is what is SENT — the opt-out rides the body only when this
-                // daemon says it keeps the gate (codex r1), so the same config reads the same every load.
-                : formPosture.shown.deliverGateWord === 'auto'
+                // Crew's answer decides the gate; without one use the form's posture.
+                : (answered !== null ? answered.autoDeliver : formPosture.shown.deliverGateWord === 'auto')
                     ? `When this finishes it ${what} — with NO deliver gate: this posture is auto-deliver.${merging}`
                     : `When this finishes it pauses at the deliver gate; approve it and the run ${what}.${merging}`,
           };
@@ -1843,11 +1845,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           data-deliver-state={deliverNotice.state}
           data-deliver-repo={targetRepoRef ?? ''}
           data-deliver-origin={deliverNotice.state === 'on' ? (deliverTargetView?.origin ?? 'unknown') : ''}
-          data-deliver-gate={deliverNotice.state === 'on' ? formPosture.shown.deliverGateWord : ''}
+          data-deliver-gate={deliverNotice.state === 'on' ? shown.deliverGateWord : ''}
           className="text-xs px-1"
           style={{
             color:
-              deliverNotice.state === 'on' || deliverNotice.state === 'off'
+              deliverNotice.state === 'on' || deliverNotice.state === 'off' || deliverNotice.state === 'not-delivered'
                 ? 'var(--ink-muted)'
                 : 'var(--status-gate)',
           }}
