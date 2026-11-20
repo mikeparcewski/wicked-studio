@@ -851,7 +851,7 @@ export function start(): void {
       return;
     }
     if (e.altKey && !mod && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); moveBy(e.key === 'ArrowUp' ? -1 : 1); return; }
-    if (e.altKey && !mod && /^Key[A-Z]$/.test(e.code)) { e.preventDefault(); send('ui.key', { key: `Alt+${e.code.slice(3)}` }); return; }
+    if (e.altKey && !mod && /^Key[A-Z]$/.test(e.code) && isForwardable(`Alt+${e.code.slice(3)}`)) { e.preventDefault(); send('ui.key', { key: `Alt+${e.code.slice(3)}` }); return; }
     if (e.key === 'Tab') {
       e.preventDefault();
       const r = ring();
@@ -885,6 +885,7 @@ export function start(): void {
     if (e.key.length !== 1) return;
     e.preventDefault();
     if (size !== 'inline' && !present && selected !== null && !busy) { beginEdit(selected, e.key); return; }
+    if (selected !== null) return;
     // A digit is a slide number only while the FILMSTRIP has the focus — a focused composite's own key
     // (§5.10 rule 1). Anywhere else it is typing, and goes to the composer like any other (codex r1).
     if (/^[0-9]$/.test(e.key) && onThumb) { goto(e.key); return; }

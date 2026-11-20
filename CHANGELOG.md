@@ -18,6 +18,8 @@ npm publish dates. Every version listed here exists on
 
 ### Fixed
 
+- Decks keep Alt+A, Alt+R and Alt+X inside the editor, and typing while a part is selected on a deck card leaves the message box alone. Selecting another part replaces the previous selection's chips and keeps chips you added elsewhere (Refs studio#1109; studio#1138).
+  You can select parts of a slide without adding stray text to your message or piling up old selections.
 - The New job form derives its gate words and launch payload together in one pure posture function, preserving crew's
   preview decisions and the existing request fields (studio#1179). The launch panel now points to the form for what
   it will ask before Send, instead of promising plan approval for every launch posture (studio#1173).

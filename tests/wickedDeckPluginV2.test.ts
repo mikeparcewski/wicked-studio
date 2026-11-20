@@ -101,6 +101,7 @@ describe('wicked-deck protocol 2 card and full', () => {
     stageFrame().dispatchEvent(new Event('load'));
     bridge({ v: 1, type: 'wid-inventory', widMap: { 'slide-0-heading-1': { x: 10, y: 20, top: 20, left: 10, right: 210, bottom: 50, width: 200, height: 30 } }, blocks: { 'slide-0-heading-1': { text: 'Library room booking', composite: false } }, scrollX: 0, scrollY: 0 });
     const writes = messages('version.write').length;
+    const typed = messages('ui.typed').length;
     for (const wid of ['section-0', 'slide-0-heading-1']) {
       bridge({ v: 1, type: 'wid-click', wid });
       await vi.waitFor(() => expect(messages('selection.set').at(-1)?.payload).toEqual({ anchors: [{ kind: 'element', id: wid }] }));
@@ -110,8 +111,25 @@ describe('wicked-deck protocol 2 card and full', () => {
       { key: 'd', metaKey: true }, { key: 'Backspace', metaKey: true },
       { key: 'ArrowUp', altKey: true }, { key: 'ArrowDown', altKey: true },
     ]) node('deck-handle').dispatchEvent(new KeyboardEvent('keydown', { ...init, bubbles: true, cancelable: true }));
-    await vi.waitFor(() => expect(messages('ui.typed').at(-1)?.payload).toEqual({ grapheme: 'x' }));
+    send('host.ping', {}, 'card-selected-keys');
+    await vi.waitFor(() => expect(seen.some((m) => m.re === 'card-selected-keys')).toBe(true));
     expect(node('deck-edit-input').hidden).toBe(true); expect(messages('version.write')).toHaveLength(writes);
+    expect(messages('ui.typed')).toHaveLength(typed);
+  });
+  it('forwards typing from the card when no element is selected', async () => {
+    const typed = messages('ui.typed').length;
+    node('deck-handle').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    node('deck-handle').dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(messages('ui.typed').slice(typed).map((m) => m.payload)).toEqual([{ grapheme: 'x' }]));
+    expect(node('deck-edit-input').hidden).toBe(true);
+  });
+  it('keeps Alt+A/R/X in the deck and still forwards Alt+G', async () => {
+    const before = messages('ui.key').length;
+    for (const letter of ['A', 'R', 'X', 'G']) {
+      node('deck-handle').dispatchEvent(new KeyboardEvent('keydown', { key: letter.toLowerCase(), code: `Key${letter}`, altKey: true, bubbles: true, cancelable: true }));
+    }
+    await vi.waitFor(() => expect(messages('ui.key').at(-1)?.payload).toEqual({ key: 'Alt+G' }));
+    expect(messages('ui.key').slice(before).map((m) => m.payload)).toEqual([{ key: 'Alt+G' }]);
   });
   it('answers next/prev with status, relays the stable slide anchor, and shows the CURRENT slide', async () => {
     expect(await action('prev')).toEqual({ handled: false });
