@@ -6,6 +6,7 @@ import { ApiError } from '../../api/errors.js';
 import { proposalRefusal } from '../../board/artifactProposal.js';
 import { inputTokenChoices, type InputTokenChoice, type InputTokenUnavailable } from '../../board/jobInputs.js';
 import { commitGateDecision, gateKeyOf, type GateAnswer } from '../../board/gateActions.js';
+import { listedGateAnswer } from '../../board/gateContract.js';
 import { InlineUndo } from '../InlineUndo.js';
 import { anchorOutOfView, clipAncestors, clipBounds, swapPlacement } from '../../board/swapPlacement.js';
 import {
@@ -13,7 +14,7 @@ import {
   type JobLineage, type JobReply, type JobView,
 } from '../../board/jobStream.js';
 import { newRequestId } from '../../board/planModel.js';
-import { deliverySummary, handedOf, outcomeLine } from '../../board/proposalCard.js';
+import { deliverySummary, handedOf, outcomeLine, PLAN_STOP } from '../../board/proposalCard.js';
 import { seatResponder } from '../../board/responder.js';
 import { isQueued, takeRestoredNote, useUndoQueue } from '../../board/undoQueue.js';
 import { jobRunId, useJobLocal, useJobView } from '../../hooks/useJobStream.js';
@@ -290,29 +291,38 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
     }).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
   };
   const composerFree = (): boolean => (useSessionDrafts.getState().drafts[sessionId] ?? '').trim() === '' && useJobBinding.getState().binding === null;
-  const sendBack = (words: string, planRev: number, rebind: JobReply | null): boolean => {
+  const answerPlan = (token: string, words: string, planRev: number, rebind: JobReply | null): boolean => {
     const text = words.trim();
     const expect = gateExpect();
-    if (text === '' || runId === null || expect === null || inputs.plan?.planRev !== planRev || isQueued(runId)) { setError('The plan moved on, or an answer is already queued. Nothing was sent.'); return false; }
+    if (((token === 'request_changes' || rebind?.binds === true) && text === '') || runId === null || expect === null || inputs.plan?.planRev !== planRev || isQueued(runId)) { setError('The plan moved on, or an answer is already queued. Nothing was sent.'); return false; }
     setError(null);
     const run0 = runId;
-    commitGateDecision(run0, { approve: false, action: 'request_changes', amend: text, planRev } as GateAnswer, {
+    const label = token === 'request_changes' ? 'Change' : token === 'reject' ? PLAN_STOP : rebind?.label ?? token;
+    const notice = token === 'request_changes'
+      ? { preview: `Sends plan v${planRev} back with your words; nothing runs until you approve a new version.`, sent: `Sent plan v${planRev} back with your words.` }
+      : token === 'reject'
+        ? { preview: 'The job stops before anything is built.', sent: 'Stopped the job; nothing was built.' }
+        : { preview: `${label}: plan v${planRev}.`, sent: `${label}: answered plan v${planRev}.` };
+    commitGateDecision(run0, { ...listedGateAnswer(token, text, expect.ord), planRev }, {
       expect,
-      notice: { preview: `Sends plan v${planRev} back with your words; nothing runs until you approve a new version.`, sent: `Sent plan v${planRev} back with your words.` },
-      receipt: { kind: 'plan', chosenLabel: 'Change' },
+      notice,
+      receipt: { kind: 'plan', chosenLabel: label },
     }).then((outcome) => {
-      if (outcome === 'sent') local.setSentBack(run0, planRev);
+      if (outcome === 'sent' && token === 'request_changes') local.setSentBack(run0, planRev);
       // Undo hands the words back to the box, bound again to the SAME plan version (never a newer one), and only into an
       // empty box (a newer draft is never overwritten).
       // Undo, or the world cancelling it (the gate moved): the words come back, only into a box nobody else owns now
       // (no newer draft, no other binding); otherwise they stay where the queue left them and nothing is rebound. Only
       // an Undo rebinds, and only to the same plan version.
-      if (outcome !== 'sent') {
+      if (outcome !== 'sent' && text !== '') {
         if (!composerFree()) return;
         // The queue hands an Undo's or a cancel's words back; a send refused before it queued (dropped) has them here.
         const back = takeRestoredNote(run0) || text;
         if (back !== '') useSessionDrafts.getState().setDraft(sessionId, back);
-        if (outcome === 'undone' && rebind !== null && currentTarget.current.get(rebind.id) === rebind.target) bindChange(rebind, planRev);
+        if (outcome === 'undone' && rebind !== null && currentTarget.current.get(rebind.id) === rebind.target) {
+          if (token === 'request_changes') bindChange(rebind, planRev);
+          else if (rebind.binds) bindListed(rebind, token, planRev);
+        }
       }
     }).catch((e: unknown) => {
       // The send failed: crew's words say why, and the person's words are not lost.
@@ -321,6 +331,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
     });
     return true;
   };
+  const sendBack = (words: string, planRev: number, rebind: JobReply | null): boolean => answerPlan('request_changes', words, planRev, rebind);
   const reshape = (o: ChatPlanOffer): void => {
     const r = o.reshape;
     // Never beside an answer already queued or being sent for this plan (the reshape answers the same plan).
@@ -384,6 +395,9 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   const bindChange = (r: JobReply, rev: number): void => {
     bind(r, `Answering: what should change in plan v${rev}`, `Tell ${leadName} what to change in plan v${rev}…`, (t) => sendBack(t, rev, r));
   };
+  const bindListed = (r: JobReply, token: string, rev: number): void => {
+    bind(r, `Answering: ${r.label} for plan v${rev}`, 'Your words go with this answer…', (t) => answerPlan(token, t, rev, r));
+  };
 
   const act = (r: JobReply): void => {
     if (r.id === 'start' || r.id === 'go_again') decide('go');
@@ -408,6 +422,12 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       const rev = inputs.plan?.planRev;
       if (rev === undefined) return;
       bindChange(r, rev);
+    } else if (r.id === 'reject' || r.id.startsWith('act:')) {
+      const rev = inputs.plan?.planRev;
+      if (rev === undefined) return;
+      const token = r.id === 'reject' ? 'reject' : r.id.slice('act:'.length);
+      if (r.binds) bindListed(r, token, rev);
+      else answerPlan(token, '', rev, r);
     } else if (r.id === 'stop' && runId !== null) setConfirmStop(runId);
   };
   const changedWords = v.plan !== null ? `Plan changed to v${v.plan.planRev}. Read it, then approve.` : `The job changed to v${v.version}. Read it, then press again.`;

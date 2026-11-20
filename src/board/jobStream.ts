@@ -1,4 +1,6 @@
 import type { ArtifactProposal, CatalogGateId, ChatPlanOffer, ProposalQuestion, ProposalResult, ProposalRevisionEdits, ProposalSuggestion, ProposalToken, SessionView } from '../api/types.js';
+import { choicesForAction, type GateAction } from './gateContract.js';
+import { PLAN_STOP } from './proposalCard.js';
 
 /**
  * THE JOB STREAM (DES-CATALOG-002 rev 7 §2.8.3): one client-side projection that gives one state per job, read by
@@ -297,6 +299,8 @@ export interface JobRunInputs {
   view: SessionView | null;
   /** The run's open gate (the gate store's), or `null`. */
   gate: { ord: number; receivedAt: number; gateKind?: string | undefined; prompt: string } | null;
+  /** Absent on an older daemon; an empty list offers no answers. */
+  actions?: readonly GateAction[];
   /** The plan the open plan gate holds (`usePlanGate`), with whether the read was made for THIS gate instance. */
   plan: { ord: number; planRev: number; steps: JobPlanStep[]; changed?: string | null; fresh: boolean } | null;
   /** The plan gate is known open but its read for this instance is still on its way. */
@@ -481,7 +485,7 @@ function runTicks(lineage: string, runId: string, rows: readonly Row[], lead: st
 }
 
 /** The press target a reply is bound to (§2.7.3 rule 6): a press counts only for what it began on. */
-export type JobReplyId = 'start' | 'not_now' | 'go_again' | `suggestion:${number}` | `choice:${number}` | 'approve' | 'change' | 'stop'
+export type JobReplyId = 'start' | 'not_now' | 'go_again' | `suggestion:${number}` | `choice:${number}` | 'approve' | 'change' | 'reject' | `act:${string}` | 'stop'
   | `offer:${string}:${'send_back' | 'reshape' | 'dismiss'}` | 'undo';
 
 export interface JobReply {
@@ -759,8 +763,21 @@ export function jobView(l: JobLineage, run: JobRunInputs, opts: {
     const p = run.plan;
     const key = p === null ? `plan:${run.view.session.id}:?` : `plan:${run.view.session.id}:${p.ord}:${p.planRev}`;
     const held = planHold(run);
-    replies.push({ id: 'approve', label: p === null ? 'Approve plan' : `Approve plan v${p.planRev}`, target: key, enabled: held === undefined, ...(held !== undefined ? { held } : {}), tone: 'go' });
-    replies.push({ id: 'change', label: 'Change', target: key, enabled: held === undefined, ...(held !== undefined ? { held } : {}), tone: 'plain', binds: true });
+    const common = { target: key, enabled: held === undefined, ...(held !== undefined ? { held } : {}) };
+    const actions: readonly GateAction[] = run.actions ?? [
+      { action: 'approve', intent: 'approve_plan', note: 'none' },
+      { action: 'request_changes', intent: 'send_back', note: 'required' },
+    ];
+    // Keep the engine's order, with the refusal last as on the other gate rows.
+    for (const a of [...actions.filter((a) => a.action !== 'reject'), ...actions.filter((a) => a.action === 'reject')]) {
+      if (a.action === 'approve') replies.push({ ...common, id: 'approve', label: p === null ? 'Approve plan' : `Approve plan v${p.planRev}`, tone: 'go' });
+      else if (a.action === 'request_changes') replies.push({ ...common, id: 'change', label: 'Change', tone: 'plain', binds: true });
+      else if (a.action === 'reject') replies.push({ ...common, id: 'reject', label: PLAN_STOP, tone: 'quiet' });
+      else if (a.action !== 'edit_plan' && a.action !== 'reassign') {
+        const [choice] = choicesForAction(a, (cli) => cli);
+        if (choice !== undefined) replies.push({ ...common, id: `act:${a.action}`, label: choice.label, tone: 'plain', ...(a.note !== 'none' ? { binds: true } : {}) });
+      }
+    }
   } else if (phase === 'replanning') {
     const n = run.plan?.planRev ?? run.sentBack ?? 0;
     const key = run.view === null ? pt : `plan:${run.view.session.id}:${run.plan?.ord ?? -1}:${n}`;

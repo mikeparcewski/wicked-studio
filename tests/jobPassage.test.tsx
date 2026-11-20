@@ -28,6 +28,7 @@ const { useJobBinding } = await import('../src/store/jobBinding.js');
 const { JobPassage, useHandOff } = await import('../src/components/session/JobPassage.js');
 const { useElicitationStore } = await import('../src/store/elicitations.js');
 const { useSessionDrafts } = await import('../src/store/sessionDrafts.js');
+const { resetGateActionReadsForTest } = await import('../src/hooks/useGateActions.js');
 const { resetJobLocal, useJobLocal } = await import('../src/hooks/useJobStream.js');
 const { flushDecisionsForTest, resetDecisionsForTest, setUndoWindowForTest } = await import('../src/board/undoQueue.js');
 const { makeUnit, makeView } = await import('./factories.js');
@@ -61,13 +62,14 @@ beforeEach(() => {
   team = { teamed: false, rows: [], units: [] };
   reviseAnswer = () => ok({ view: {} }, 201);
   resetJobLocal();
+  resetGateActionReadsForTest();
   resetRunAcceptanceForTest();
   resetDecisionsForTest();
   useJobBinding.setState({ binding: null });
   useHandOff.setState({ intent: null });
   useElicitationStore.setState({ elicitations: {}, generations: {} });
   useSessionDrafts.setState({ drafts: {}, scroll: {} });
-  useCapabilities.setState({ loaded: true, runChatId: true, askPath: false, chatProposals: true, chatList: true, chatJobProposals: true, reshapeRun: true });
+  useCapabilities.setState({ loaded: true, gateActions: false, runChatId: true, askPath: false, chatProposals: true, chatList: true, chatJobProposals: true, reshapeRun: true });
   useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set(), creatorAccepted: {}, chatClosed: {}, turnGates: {}, replySeq: {}, paByChat: {}, retiredByChat: {}, answerOrds: {} });
   useTeamPlanStore.setState({ byRun: {}, refs: {} });
   useGateStore.setState({ gates: {}, approaching: {} });
@@ -353,6 +355,73 @@ describe('review round 1 folds (the run half)', () => {
   });
   afterEach(() => { setUndoWindowForTest(0); });
 
+  it('a reject-only plan draws Don’t start and queues its versioned refusal', async () => {
+    useGateStore.setState((s) => ({ gates: { ...s.gates, [RUN]: { ...s.gates[RUN]!, actions: [{ action: 'reject', intent: 'cancel', note: 'none' }] } } }));
+    page([run()]);
+    const stop = await screen.findByRole('button', { name: 'Don’t start' });
+    await waitFor(() => expect((stop as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.getAllByTestId('job-passage-reply').map((b) => b.dataset['reply'])).toEqual(['reject']);
+    fireEvent.click(stop);
+    await screen.findByTestId('inline-undo-button');
+    expect(posts).toEqual([]);
+    await act(async () => { await flushDecisionsForTest(); });
+    expect(posts).toEqual([{ path: `/runs/${RUN}/gate`, body: { approve: false, ord: 1, planRev: 2 } }]);
+  });
+
+  it('a listed request_changes sends the composer words with ord and the shown planRev', async () => {
+    useGateStore.setState((s) => ({ gates: { ...s.gates, [RUN]: { ...s.gates[RUN]!, actions: [{ action: 'request_changes', intent: 'send_back', note: 'required' }] } } }));
+    page([run()]);
+    await waitFor(() => expect(reply('change').disabled).toBe(false));
+    expect(screen.getAllByTestId('job-passage-reply').map((b) => b.dataset['reply'])).toEqual(['change']);
+    fireEvent.click(reply('change'));
+    const box = screen.getByTestId('session-composer-input');
+    fireEvent.change(box, { target: { value: 'add a rollback step' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await screen.findByTestId('inline-undo-button');
+    expect(posts).toEqual([]);
+    await act(async () => { await flushDecisionsForTest(); });
+    expect(posts).toEqual([{ path: `/runs/${RUN}/gate`, body: { approve: false, action: 'request_changes', amend: 'add a rollback step', ord: 1, planRev: 2 } }]);
+  });
+
+  it('reads a live plan gate’s answer list through the shared gate reader', async () => {
+    useCapabilities.setState({ gateActions: true });
+    const readGate = vi.spyOn(api, 'getGate').mockResolvedValue({
+      runId: RUN, ord: 1, prompt: 'Approve the plan', lifecycle: 'open', receivedAt: new Date(7).toISOString(), gateKind: 'plan_approval',
+      actions: [{ action: 'reject', intent: 'cancel', note: 'none' }],
+    } as never);
+    page([run()]);
+    await screen.findByRole('button', { name: 'Don’t start' });
+    expect(readGate).toHaveBeenCalledWith(RUN, expect.any(AbortSignal));
+    expect(screen.getAllByTestId('job-passage-reply').map((b) => b.dataset['reply'])).toEqual(['reject']);
+  });
+
+  it('an empty plan list draws no answers', async () => {
+    useGateStore.setState((s) => ({ gates: { ...s.gates, [RUN]: { ...s.gates[RUN]!, actions: [] } } }));
+    page([run()]);
+    await screen.findByTestId('job-passage-plan');
+    expect(screen.queryAllByTestId('job-passage-reply')).toEqual([]);
+  });
+
+  it.each(['none', 'optional', 'required'] as const)('a listed named answer with note %s uses the shared versioned submit path', async (note) => {
+    useGateStore.setState((s) => ({ gates: { ...s.gates, [RUN]: { ...s.gates[RUN]!, actions: [{ action: 'retry_rules', intent: 'retry_rules', note }] } } }));
+    page([run()]);
+    await waitFor(() => expect(reply('act:retry_rules').disabled).toBe(false));
+    expect(reply('act:retry_rules').textContent).toBe('Re-check the rules');
+    fireEvent.click(reply('act:retry_rules'));
+    if (note !== 'none') {
+      expect(screen.getByTestId('job-binding-label').textContent).toBe('Answering: Re-check the rules for plan v2');
+      const box = screen.getByTestId('session-composer-input');
+      fireEvent.change(box, { target: { value: '  check the updated rule  ' } });
+      fireEvent.keyDown(box, { key: 'Enter' });
+    }
+    await screen.findByTestId('inline-undo-button');
+    expect(posts).toEqual([]);
+    await act(async () => { await flushDecisionsForTest(); });
+    expect(posts).toEqual([{ path: `/runs/${RUN}/gate`, body: {
+      approve: true, action: 'retry_rules', ...(note !== 'none' ? { amend: 'check the updated rule' } : {}), ord: 1, planRev: 2,
+    } }]);
+  });
+
   it('Undo of a send-back hands the words back to the box, bound again to the same plan version', async () => {
     page([run()]);
     await waitFor(() => expect(reply('change').disabled).toBe(false));
@@ -487,6 +556,20 @@ describe('review round 2 folds', () => {
     useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 1, prompt: 'The build was refused. Retry?', lifecycle: 'open', receivedAt: 7, gateKind: 'escalation' } }, approaching: {} });
     page([run('awaiting_human', 'rejected')]);
     expect((await screen.findByTestId('job-passage-gate')).dataset['kind']).toBe('gate');
+  });
+
+  it('reads a non-plan gate without a list only once through its gate row', async () => {
+    useCapabilities.setState({ gateActions: true });
+    team = { teamed: true, rows: [{ event_id: 9, event_type: 'wicked.team.gate.decided', payload: { kind: 'plan_approval', gate_id: 'g2', decision: 'human_approved' } }], units: [] };
+    useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 1, prompt: 'The build was refused. Retry?', lifecycle: 'open', receivedAt: 7, gateKind: 'escalation' } }, approaching: {} });
+    const readGate = vi.spyOn(api, 'getGate').mockResolvedValue({
+      runId: RUN, ord: 1, prompt: 'The build was refused. Retry?', lifecycle: 'open', receivedAt: new Date(7).toISOString(), gateKind: 'escalation',
+      actions: [{ action: 'approve', intent: 'approve', note: 'none' }],
+    } as never);
+    page([run('awaiting_human', 'rejected')]);
+    await screen.findByTestId('job-passage-gate');
+    await act(async () => { await Promise.resolve(); });
+    expect(readGate).toHaveBeenCalledTimes(1);
   });
 
   for (const walkthrough of [false, true]) {

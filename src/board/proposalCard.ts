@@ -30,6 +30,9 @@ import type { AskProposal } from './askThread.js';
 export type ProposalKind = 'plan' | 'deliver';
 export type ProposalState = 'ask' | 'confirm' | 'run' | 'done' | 'cancelled' | 'fail' | 'no';
 
+/** A plan gate's reject arm, as its card says it. */
+export const PLAN_STOP = 'Don’t start';
+
 /** A step's label in words: never the engine's instruction segment (` ||| …`, `INSTRUCTION_SEP`). */
 export function stepWords(label: string): string {
   const cut = label.indexOf(' ||| ');
