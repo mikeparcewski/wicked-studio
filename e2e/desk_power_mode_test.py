@@ -30,6 +30,8 @@ against the `power_mode` corpus (e2e/power_mode_corpus.py, the api-types 0.149.0
      ("Waiting on you · checkpoint 3 paused …"), attributed "Phase report (plugin)", marked not saved yet (no document
      is started on this run).
   9. LOOK: every corpus run at 1440x900 and 390x844, dark and light, no horizontal scroll; 0 page errors.
+  9b. STICKY BAR (studio#1227): at 1440x700, 1280x800 and 390x844, the scrolling pause card paints no content
+      below its sticky action bar, at the top and halfway down.
 
 Captures: e2e/shots/desk-power-mode-*.png. Env: FEEDBACK_PORT (default 4671).
 """
@@ -277,6 +279,41 @@ with sync_playwright() as p:
                 page.screenshot(path=str(SHOTS / f"desk-power-mode-{rid}-{w}-{theme}.png"))
             ctx.close()
     check("look", not any(x["hscroll"] for x in looks), looks=[x for x in looks if x["hscroll"]])
+
+    # ── 9b. sticky bar ends the scroll area (studio#1227) ────────────────────────────────────────
+    sticky = []
+    for w, h in ((1440, 700), (1280, 800), (390, 844)):
+        ctx, page = new_page(browser, w, h, "dark")
+        open_run(page, "r-pm-pause")
+        page.locator('[data-testid="decision-dock"] [data-testid="power-pause"]').wait_for(timeout=15000)
+        handle = page.locator('[data-testid="decision-dock-handle"]')
+        if w == 390 and handle.get_attribute("aria-expanded") == "false":
+            handle.click()
+            page.wait_for_timeout(400)
+        more = page.locator('[data-testid="power-pause-more"]')
+        if more.count():
+            more.evaluate("el => { el.open = true; }")
+        rows = page.evaluate("""async () => {
+          const s = document.querySelector('[data-testid="decision-dock"] .wk-dock-surface'), go = s.querySelector('.wk-ask-go'), rows = [];
+          for (const at of ['top', 'middle']) {
+            s.scrollTop = at === 'top' ? 0 : (s.scrollHeight - s.clientHeight) / 2;
+            await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame);
+            const r = s.getBoundingClientRect(), portBottom = r.top + s.clientTop + s.clientHeight, g = go.getBoundingClientRect();
+            const row = { at, stuckGap: g.bottom <= portBottom + 0.5 ? portBottom - g.bottom : null, hits: 0, samples: [] };
+            if (s.scrollHeight <= s.clientHeight + 40 || getComputedStyle(go).position !== 'sticky') row.why = 'the card does not scroll enough or the bar is not sticky; the check would pass vacuously';
+            for (let y = Math.ceil(g.bottom) + 1; y < portBottom - 1; y += 2) for (const f of [0.3, 0.5, 0.7]) {
+              const el = document.elementFromPoint(r.left + r.width * f, y);
+              if (el && s.contains(el) && el !== go && !go.contains(el) && !el.contains(go)) {
+                row.hits++; if (row.samples.length < 3) row.samples.push({ y, cls: el.className, text: (el.innerText || '').slice(0, 40) });
+              }
+            }
+            rows.push(row);
+          }
+          return rows;
+        }""")
+        sticky.extend({"w": w, "h": h, **row} for row in rows)
+        ctx.close()
+    check("sticky-bar-ends-the-scroll-area", all(not x.get("why") and x["hits"] == 0 and (x["stuckGap"] is None or x["stuckGap"] <= 1) for x in sticky), viewports=sticky)
 
     # Round-3 look on :7721: with every plugin section in the Details panel, the run page's DOCUMENT scrolled (1000 px
     # at a 700 px window): absolutely placed words inside the sections escaped the panel's scroll container. Only the

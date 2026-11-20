@@ -35,7 +35,7 @@
 }
 .wk-dock-next:hover { background: var(--dock-hover); text-decoration: underline; text-underline-offset: 3px; }
 .wk-dock-next:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
-.wk-dock-slot { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.wk-dock-slot { display: flex; flex-direction: column; gap: 14px; min-width: 0; padding-bottom: 18px; }
 .wk-dock-slot[hidden] { display: none; }
 
 /* The renderers in the dock lose their in-thread chrome: no bordered box, no bubble. */
@@ -186,7 +186,8 @@
 .wk-gate2-about-body .wk-gate-consequence { font-size: var(--text-body); }
 .wk-gate2-about-body .wk-gate2-foot { padding-top: 4px; }
 /* Compact by default: the dock holds the eyebrow, headline, one sentence and the buttons (about 240 px). */
-.wk-dock-surface { padding-top: 18px; padding-bottom: 18px; gap: 10px; }
+/* No bottom padding on the scroller (the slot carries it): sticky bottom: 0 is measured inside its padding, so the bar stuck 18px above the edge and content scrolling under it showed again below it (studio#1227). */
+.wk-dock-surface { padding-top: 18px; padding-bottom: 0; gap: 10px; }
 .wk-dock .wk-gate2 { gap: 10px; }
 .wk-dock .wk-gate2-q { font-size: var(--text-section); }
 .wk-dock .wk-gate2-decide { padding-top: 12px; gap: 10px; }
