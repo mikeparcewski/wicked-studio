@@ -492,7 +492,7 @@ export function sessionGateChoices(input: SessionGateInput): GateRowModel | null
   if (base === null) return null;
   const model = withDepth(base, input);
   if (input.actions === undefined) return model;
-  return CONTRACT_EXEMPT.has(model.reason) ? withListed(model, input.actions) : withContract(model, input.actions, input.roster ?? null);
+  return CONTRACT_EXEMPT.has(model.reason) ? withListed(model, input.actions, input.roster ?? null) : withContract(model, input.actions, input.roster ?? null);
 }
 
 /**
@@ -500,14 +500,24 @@ export function sessionGateChoices(input: SessionGateInput): GateRowModel | null
  * labels; free text's Send) keeps drawing them, but only the ones the engine lists now: a control whose answer is not
  * on the list (a consent card's Approve or Decline when only Reject is listed) is not drawn.
  */
-function withListed(model: GateRowModel, actions: readonly GateAction[]): GateRowModel {
+function withListed(model: GateRowModel, actions: readonly GateAction[], roster: readonly RosterSeat[] | null): GateRowModel {
   const listed = new Set(actions.map((a) => a.action));
   const keep = (c: GateRowChoice): boolean => listed.has(choiceTokens([c])[0]!);
   const choices = model.choices.filter(keep);
   const overflow = model.overflow.filter(keep);
+  // A listed answer the template has no control for (a consent choice its install frame does not name, a free-text
+  // gate's Reject) gets the contract's own control, so the list is drawn whole.
+  const drawn = new Set(choiceTokens([...choices, ...overflow]));
+  const label = (cli: string): string => roster?.find((r) => r.key === cli)?.display_name ?? cli;
+  const extra = contractChoices(actions.filter((a) => !drawn.has(a.action)), label);
+  const added = [...extra.choices, ...extra.overflow];
   const rec = model.recommended !== null ? model.choices[model.recommended] : undefined;
-  const at = rec === undefined ? -1 : choices.indexOf(rec);
-  return { ...model, choices, overflow, recommended: at >= 0 ? at : null };
+  // The refusal stays last (the card's convention), the rest in the template's order.
+  const all = [...choices, ...overflow, ...added];
+  const ordered = [...all.filter((c) => c.key !== 'decline' && c.key !== 'stop'), ...all.filter((c) => c.key === 'decline' || c.key === 'stop')];
+  const inline = ordered.slice(0, 4);
+  const at = rec === undefined ? -1 : inline.indexOf(rec);
+  return { ...model, choices: inline, overflow: ordered.slice(4), recommended: at >= 0 ? at : null };
 }
 
 /** Rows whose answers are the payload's own (a consent plan's choices, free text): drawn by their renderer, as before. */
