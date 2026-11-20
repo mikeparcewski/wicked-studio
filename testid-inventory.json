@@ -20024,6 +20024,12 @@
       ]
     },
     {
+      "testId": "session-proposal-deliver-identity",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "session-proposal-deliver-repo",
       "files": [
         "src/components/session/ProposalCard.tsx"

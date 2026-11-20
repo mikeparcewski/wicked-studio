@@ -611,19 +611,18 @@ export type StepName = (u: SessionView['units'][number]) => string;
 export function progressOf(view: SessionView, stepName: StepName, gateOrd: number | null): JobProgress {
   const units = [...view.units].sort((a, b) => a.ord - b.ord);
   const cursor = view.session.status === 'executing' ? units[view.session.unit_ix] : undefined;
-  const nowOrd = gateOrd ?? (cursor !== undefined && cursor.status !== 'done' && cursor.status !== 'rejected' ? cursor.ord : null);
+  const nowOrd = gateOrd ?? (cursor !== undefined && cursor.status !== 'done' ? cursor.ord : null);
   const rows: JobStepRow[] = units.map((u) => {
     const skipped = u.phase_status === 'skipped';
     // The step a gate waits at is waiting, whatever its last attempt's outcome (a retry or an escalation on a refused
     // step): the gate is anchored to its recorded ord.
-    const state: JobStepRow['state'] = gateOrd !== null && u.ord === gateOrd ? 'waiting' : skipped ? 'skipped' : u.status === 'done' ? 'done' : u.status === 'rejected' ? 'failed'
-      : u.ord === nowOrd ? 'now' : 'todo';
+    const state: JobStepRow['state'] = gateOrd !== null && u.ord === gateOrd ? 'waiting' : skipped ? 'skipped' : u.status === 'done' ? 'done' : u.ord === nowOrd ? 'now'
+      : u.status === 'rejected' ? 'failed' : 'todo';
     return { ord: u.ord, label: stepName(u), seat: u.assigned_cli ?? null, state };
   });
-  // The counts and the last outcome are the units' recorded outcomes, whatever the rows show as current (a refused step
-  // a gate now waits at is still counted as failed).
+  // studio#1088: a rejected cursor is being worked on again; at an open gate it still counts as failed.
   const outcome = (u: SessionView['units'][number]): 'done' | 'skipped' | 'failed' | null =>
-    u.phase_status === 'skipped' ? 'skipped' : u.status === 'done' ? 'done' : u.status === 'rejected' ? 'failed' : null;
+    u.phase_status === 'skipped' ? 'skipped' : u.status === 'done' ? 'done' : u.status === 'rejected' && (gateOrd !== null || u.ord !== nowOrd) ? 'failed' : null;
   const finished = units.filter((u) => outcome(u) !== null);
   const current = rows.find((r) => r.state === 'now' || r.state === 'waiting') ?? null;
   const after = rows.filter((r) => r.state === 'todo' && (current === null || r.ord > current.ord));

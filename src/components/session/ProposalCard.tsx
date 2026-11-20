@@ -30,7 +30,7 @@ import { planStepWords, plannedRun } from '../../board/planOrder.js';
 import { usePlanGate } from '../../store/planGates.js';
 import { dropGateDraft, gateDraftFor, gateDraftPlan, usePlanDrafts } from '../../store/planDrafts.js';
 import { gateVerdictFor, checkOutcome } from '../gateVerdictModel.js';
-import { diffstatOf, unitAmendmentsOf } from '../gateMoveModel.js';
+import { deliverIdentityOf, diffstatOf, unitAmendmentsOf } from '../gateMoveModel.js';
 import { PlanGateSummary } from '../PlanGateSummary.js';
 import { useSeatTrust } from './GateDepth.js';
 import { DriftLine } from './GateRow.js';
@@ -524,6 +524,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
                 // Branch: prefer session.run_branch; fall back to the diff's branch field (source:'branch').
                 const branch = (view.session as unknown as { run_branch?: string }).run_branch ?? runDiff?.branch;
                 const repoName = repoNameOf(view);
+                const identity = deliverIdentityOf(view.units, gate?.ord);
                 // Primary diffstat: parse GET /runs/:id/diff?base=merge-base (files changed / +lines / −lines).
                 // Fallback: changed-file count from repoChecksEvaluated event when diff is unavailable.
                 let diffstatText: string | null = runDiff !== null && typeof runDiff.diff === 'string' ? diffstatOf(runDiff.diff) : null;
@@ -561,6 +562,13 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
                     )}
                     {repoName !== null && (
                       <p data-testid="session-proposal-deliver-repo">Repository: <code>{repoName}</code></p>
+                    )}
+                    {identity !== null && (
+                      <p data-testid="session-proposal-deliver-identity">
+                        {identity.login !== null
+                          ? <>Pushes as: <code>{identity.login}</code> ({identity.source})</>
+                          : identity.text}
+                      </p>
                     )}
                     {floorView !== null && (floorView.checks.length > 0 || floorView.skipped.length > 0) && (
                       <div data-testid="session-proposal-deliver-checks">

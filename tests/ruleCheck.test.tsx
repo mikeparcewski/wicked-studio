@@ -5,8 +5,12 @@
  * offers "Re-check the rules" and a confirm-or-skip with the person's reason.
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { CoreEvent, WorkUnit } from '../src/api/types.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CoreEvent, GateDecision, WorkUnit } from '../src/api/types.js';
+import { api } from '../src/api/client.js';
+import { commitGateDecision, rememberWorkTitles } from '../src/board/gateActions.js';
+import { resetDecisionsForTest, setUndoWindowForTest, UNDO_WINDOW_MS, useUndoQueue } from '../src/board/undoQueue.js';
+import { useGateStore } from '../src/store/gates.js';
 import { deliveryReceiptOf, receiptOf, rulesSummary, worstRules, type RuleRow } from '../src/board/assuranceModel.js';
 import { sessionGateChoices, LAND_NOTE_LABEL, RETRY_RULES_LABEL, SKIP_WARNING_PLACEHOLDER } from '../src/board/gateRowModel.js';
 import { AssuranceReceipt as ReceiptView, RulesChecked } from '../src/components/session/AssuranceReceipt.js';
@@ -19,6 +23,60 @@ const row = (ruleId: string, status: string, reason = 'src/math.js:3'): Record<s
   ruleId, status, how: status === 'n_a' ? 'fact' : status === 'skipped' ? 'operator' : status === 'unchecked' ? 'none' : 'judge', reason, ruleKey: 'k',
 });
 const base = { mode: 'full', required: ['judge'], ran: ['judge', 'rule_check'], skipped: [], creator: 'pi', evaluator: 'claude', judge: 'codex', tree: 't', attempt: 1 };
+
+describe('studio#1088 — the sent rule-hold answer', () => {
+  const RUN = 'r-rule-notice';
+  beforeEach(() => {
+    vi.useFakeTimers();
+    resetDecisionsForTest();
+    setUndoWindowForTest(null);
+    useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 6, prompt: 'Check the rules', gateKind: 'escalation', lifecycle: 'open', receivedAt: 1 } } });
+    rememberWorkTitles([makeView({ id: RUN, problem: 'Fixes #1468' })]);
+    vi.spyOn(api, 'confirmGate').mockResolvedValue({ status: 'ok' });
+  });
+  afterEach(() => {
+    resetDecisionsForTest();
+    setUndoWindowForTest(0);
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it.each([13, 1])('committing skip_rules reports %i skipped rules with the reason and re-check', async (count) => {
+    const skipRules = Array.from({ length: count }, (_, i) => ({ id: `RULE-${i}`, reason: 'Covered elsewhere' }));
+    const decision: GateDecision = { approve: true, action: 'skip_rules', skipRules };
+    const outcome = commitGateDecision(RUN, decision);
+    expect(api.confirmGate).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS);
+    expect(await outcome).toBe('sent');
+    expect(api.confirmGate).toHaveBeenCalledWith(RUN, { ...decision, ord: 6 });
+    expect(useUndoQueue.getState().results.at(-1)?.text).toBe(`Skipped ${count} rule${count === 1 ? '' : 's'} on “Fixes #1468” with your reason; the rule check runs again.`);
+  });
+
+  it('committing retry_rules reports a rule check without another step run', async () => {
+    const outcome = commitGateDecision(RUN, { approve: true, action: 'retry_rules' });
+    await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS);
+    expect(await outcome).toBe('sent');
+    expect(useUndoQueue.getState().results.at(-1)?.text).toBe('Asked for the rule check again on “Fixes #1468”; the step does not run again.');
+  });
+
+  it.each([
+    [{ approve: true }, 'Approved “Fixes #1468”.'],
+    [{ approve: false }, 'Rejected “Fixes #1468”.'],
+    [{ approve: false, action: 'request_changes' }, 'Requested changes on “Fixes #1468”.'],
+  ] satisfies Array<[GateDecision, string]>)('keeps the sent line for %j', async (decision, expected) => {
+    const outcome = commitGateDecision(RUN, decision);
+    await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS);
+    expect(await outcome).toBe('sent');
+    expect(useUndoQueue.getState().results.at(-1)?.text).toBe(expected);
+  });
+
+  it('keeps a caller’s notice', async () => {
+    const outcome = commitGateDecision(RUN, { approve: true, action: 'retry_rules' }, { notice: { preview: 'Check again.', sent: 'Your check was requested.' } });
+    await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS);
+    expect(await outcome).toBe('sent');
+    expect(useUndoQueue.getState().results.at(-1)?.text).toBe('Your check was requested.');
+  });
+});
 
 describe('the receipt carries every rule', () => {
   it('parses rows, and the line counts them', () => {

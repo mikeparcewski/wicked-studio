@@ -13,7 +13,7 @@ import { beginGateRead, gateFromInfo, gateGen, useGateStore, type GateReadTicket
 import { recordShown } from '../store/gateDiffSeen.js';
 import { useMembershipStore } from '../store/membership.js';
 import {
-  cancelDecision, describeDecision, onDecisionTestReset, queueDecision, reportDecision, restoreNote, runOfKey,
+  cancelDecision, decisionSent, describeDecision, onDecisionTestReset, queueDecision, reportDecision, restoreNote, runOfKey,
   type DeliverTarget,
 } from './undoQueue.js';
 
@@ -255,8 +255,6 @@ function dropNotice(runId: string, cur: GateActionState): string {
   return `Not sent: ${gateLabel(runId)} already has a decision that ${state}.`;
 }
 
-const PAST: Record<string, string> = { approve: 'Approved', reject: 'Rejected', 'request-changes': 'Requested changes on', 'edit-plan': 'Added', stop: 'Stopped' };
-
 /**
  * THE decision path, for callers that own their own UI around it (the thread's
  * gate card, the dashboard, the steer composer, the reassign control, the unit
@@ -344,7 +342,7 @@ export function commitGateDecision(
           if (opts.receipt !== undefined) {
             patch(runId, { receipt: { ...opts.receipt, sentAt: Date.now() } });
           }
-          reportDecision('sent', opts.notice?.sent ?? `${PAST[verb] ?? 'Answered'} ${label}.`, { keys: [gateKeyOf(runId)] });
+          reportDecision('sent', opts.notice?.sent ?? decisionSent(decision, label), { keys: [gateKeyOf(runId)] });
           resolve('sent');
         } else {
           reportDecision('failed', `Not sent: ${label} — ${error}`, { keys: [gateKeyOf(runId)], qe: useGateActionStore.getState().byGate[runId]?.qeRefusal === true });

@@ -253,6 +253,43 @@ describe('ProposalCard — deliver diffstat keyed by runId', () => {
     vi.spyOn(client.api, 'listRepos').mockResolvedValue({ repos: [] });
   });
 
+  it('studio#1086: Delivery details show the push identity from crew’s shape-1 sentence', async () => {
+    vi.spyOn(client.api, 'getRunDiff').mockResolvedValue({ diff: '', truncated: false });
+    const gate = plainGate({ gateKind: 'deliver' });
+    useGateStore.setState({ gates: { [RUN]: gate } });
+    const units = [makeUnit({
+      ord: gate.ord, phase_ref: 'deliver', structured_description: true,
+      instructions: "Pushes the run branch wicked/r1 to origin (github.com/acme/shop) and opens a pull request there. Push identity: mikeparcewski (the deliver identity setting) — the phase pushes and opens the pull request with mikeparcewski's own gh token, whatever account gh has active. git pushes with the same token, not its own configured credential.",
+    })];
+    render(<ProposalCard view={makeView({ id: RUN, status: 'awaiting_human' }, units)} chain={EMPTY_CHAIN} />);
+    const detail = await screen.findByTestId('session-proposal-deliver-detail');
+    detail.setAttribute('open', '');
+    const identity = screen.getByTestId('session-proposal-deliver-identity');
+    expect(detail.contains(identity)).toBe(true);
+    expect(identity.textContent).toBe('Pushes as: mikeparcewski (the deliver identity setting)');
+    expect(identity.querySelector('code')?.textContent).toBe('mikeparcewski');
+  });
+
+  it.each([
+    ["Push identity: none configured — pushes as whatever login gh holds (set the deliver identity in system settings, or this repository's push identity, to pin it). It refuses if gh's login and git's credential for the remote disagree.",
+      "Push identity: none configured — pushes as whatever login gh holds (set the deliver identity in system settings, or this repository's push identity, to pin it)."],
+    ['', null],
+  ])('studio#1086: an identity crew does not pin is its own sentence, and no sentence is no row (%#)', async (identity, shown) => {
+    vi.spyOn(client.api, 'getRunDiff').mockResolvedValue({ diff: '', truncated: false });
+    const gate = plainGate({ gateKind: 'deliver' });
+    useGateStore.setState({ gates: { [RUN]: gate } });
+    const units = [makeUnit({
+      ord: gate.ord, phase_ref: 'deliver', structured_description: true,
+      instructions: `Pushes the run branch wicked/r1 to origin (github.com/acme/shop) and opens a pull request there. ${identity}`.trim(),
+    })];
+    render(<ProposalCard view={makeView({ id: RUN, status: 'awaiting_human' }, units)} chain={EMPTY_CHAIN} />);
+    await screen.findByTestId('session-proposal-deliver-detail');
+    const row = screen.queryByTestId('session-proposal-deliver-identity');
+    if (shown === null) { expect(row).toBeNull(); return; }
+    expect(row?.textContent).toBe(shown);
+    expect(row?.querySelector('code')).toBeNull();
+  });
+
   it("a run change re-fetches the diff and shows run B's stat, not run A's", async () => {
     const RUN_A = 'r-deliver-a';
     const RUN_B = 'r-deliver-b';

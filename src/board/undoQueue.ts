@@ -621,5 +621,20 @@ export function describeDecision(
   return { verb: 'reject', preview: decisionPreview('reject', count, note) };
 }
 
+const PAST: Record<string, string> = { approve: 'Approved', reject: 'Rejected', 'request-changes': 'Requested changes on', 'edit-plan': 'Added', stop: 'Stopped' };
+
+/** studio#1088: a rule-hold answer says what was sent. */
+export function decisionSent(decision: GateDecision, label: string): string {
+  if (decision.action === 'skip_rules') {
+    const count = (decision.skipRules ?? []).length;
+    return `Skipped ${count} rule${count === 1 ? '' : 's'} on ${label} with your reason; the rule check runs again.`;
+  }
+  if (decision.action === 'retry_rules') {
+    return `Asked for the rule check again on ${label}; the step does not run again.`;
+  }
+  const { verb } = describeDecision(decision);
+  return `${PAST[verb] ?? 'Answered'} ${label}.`;
+}
+
 /** The page-close contract, in the inline block's own words. */
 export const CLOSE_NOTE = 'Close this tab before then and nothing is sent: the gate stays open.';

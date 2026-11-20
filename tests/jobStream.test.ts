@@ -210,6 +210,39 @@ describe('jobView', () => {
 });
 
 describe('the fold budget', () => {
+  const retrying = () => makeView({ id: 'run-1', status: 'executing', unit_ix: 6 }, [
+    ...['plan', 'design', 'build', 'test', 'docs', 'fix'].map((phase_ref, ord) => makeUnit({ ord, phase_ref, status: 'done' })),
+    makeUnit({ ord: 6, phase_ref: 'review', status: 'rejected' }),
+    makeUnit({ ord: 7, phase_ref: 'security', status: 'pending' }),
+    makeUnit({ ord: 8, phase_ref: 'verify', status: 'pending' }),
+    makeUnit({ ord: 9, phase_ref: 'deliver', status: 'pending' }),
+  ]);
+
+  it('studio#1088: an executing rejected cursor with no gate is current, not a failed or last step', () => {
+    const p = progressOf(retrying(), unitStepName, null);
+    expect(foldLine(p)).toBe('6 of 10 done · last: Fix');
+    expect(p.failed).toBe(0);
+    expect(p.last).toBe('Fix');
+    expect(p.current).toMatchObject({ ord: 6, label: 'Review', state: 'now' });
+    expect(p.next?.ord).toBe(7);
+    expect(p.more).toBe(2);
+  });
+
+  it('studio#1088: a failed run still counts its rejected step as failed', () => {
+    const view = retrying();
+    view.session.status = 'failed' as never;
+    const p = progressOf(view, unitStepName, null);
+    expect(foldLine(p)).toBe('6 of 10 done · 1 failed · last: Review');
+    expect(p.current).toBeNull();
+  });
+
+  it('studio#1088: an open gate still counts the rejected cursor as failed', () => {
+    const p = progressOf(retrying(), unitStepName, 6);
+    expect(foldLine(p)).toBe('6 of 10 done · 1 failed · last: Review');
+    expect(p.failed).toBe(1);
+    expect(p.current).toMatchObject({ ord: 6, state: 'waiting' });
+  });
+
   it('counts from recorded outcomes, never from position', () => {
     const view = makeView({ id: 'run-1', status: 'executing', unit_ix: 3 }, [
       makeUnit({ ord: 0, status: 'done', phase_ref: 'plan' }),
