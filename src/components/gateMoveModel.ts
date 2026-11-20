@@ -668,6 +668,17 @@ export function diffstatOf(diff: string): string | null {
 /** The head of an approved intent amendment's segment (wicked-core `INTENT_AMENDMENT_PREFIX`). */
 const INTENT_AMENDMENT_HEAD = 'APPROVED INTENT AMENDMENT';
 
+/** studio#1086: the target and push identity read the same card. */
+function deliverCardText(units: readonly WorkUnit[], ord: number | null | undefined): string | undefined {
+  if (typeof ord !== 'number') return undefined;
+  const unit = units.find((u) => u.ord === ord);
+  // core#686: a unit planned with its fields carries the card as `instructions` — read there, never
+  // split out of the description (an intent quoting ` ||| ` or the amendment sentence mis-parsed).
+  return unit?.structured_description === true
+    ? (unit.instructions?.trim() || undefined)
+    : legacyDeliverCard(unit?.description ?? '');
+}
+
 /**
  * What THIS deliver push will actually do, as the workflow's own gate card says it (N3, ship
  * re-proof) — the first part of the deliver unit's instructions, up to the push-identity sentence:
@@ -679,17 +690,22 @@ const INTENT_AMENDMENT_HEAD = 'APPROVED INTENT AMENDMENT';
  * be opened" (behind "show the full prompt" and a raw ` ||| `) and "…opens a pull request".
  */
 export function deliverTargetOf(units: readonly WorkUnit[], ord: number | null | undefined): string | null {
-  if (typeof ord !== 'number') return null;
-  const unit = units.find((u) => u.ord === ord);
-  // core#686: a unit planned with its fields carries the card as `instructions` — read there, never
-  // split out of the description (an intent quoting ` ||| ` or the amendment sentence mis-parsed).
-  const card = unit?.structured_description === true
-    ? (unit.instructions?.trim() || undefined)
-    : legacyDeliverCard(unit?.description ?? '');
+  const card = deliverCardText(units, ord);
   if (card === undefined) return null;
   const identity = card.indexOf(' Push identity:');
   const target = (identity === -1 ? card : card.slice(0, identity)).trim();
   return target === '' ? null : target;
+}
+
+/** studio#1086: crew's push identity sentence; only its two pinned forms name the login and where it is set. */
+export function deliverIdentityOf(units: readonly WorkUnit[], ord: number | null | undefined): { login: string | null; source: string | null; text: string } | null {
+  const card = deliverCardText(units, ord);
+  if (card === undefined) return null;
+  const start = card.indexOf(' Push identity:');
+  if (start === -1) return null;
+  const text = card.slice(start + 1).split(/ git pushes with| It refuses if/, 1)[0]!.trim();
+  const pinned = /^Push identity: (\S+) \(([^)]*)\)(?:, pinned by GH_TOKEN)? — /.exec(text);
+  return { login: pinned === null ? null : pinned[1]!, source: pinned === null ? null : pinned[2]!, text };
 }
 
 /**
