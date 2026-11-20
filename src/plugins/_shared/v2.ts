@@ -14,7 +14,7 @@
  * A plugin never names a host decision: it only answers what the host asks and acts through its granted requests.
  */
 
-import { isForwardable } from '../../editors/keys.js';
+import { isForwardable, isOneGrapheme } from '../../editors/keys.js';
 
 export const PROTOCOL = 'wicked.editor';
 export const ENVELOPE = 1;
@@ -63,6 +63,12 @@ export function announceReady(editor: string, surfaces: unknown): void {
   parent.postMessage({ p: PROTOCOL, v: ENVELOPE, type: 'plugin.ready', payload: readyPayload(editor, version, surfaces) }, '*');
 }
 
+/** The frame's controls in tab order (what the browser's own Tab walks), for the edges where Tab leaves the frame. */
+function tabRing(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>('button, a[href], input, select, textarea, summary, [tabindex]'))
+    .filter((c) => c.tabIndex >= 0 && !c.matches(':disabled') && c.closest('[hidden]') === null);
+}
+
 /** Options controls keep their native keys; host chords and Tab at either boundary leave the frame. */
 export function forwardOptionsKey(e: KeyboardEvent, root: HTMLElement, send: (key: string) => void): boolean {
   const mod = e.metaKey || e.ctrlKey;
@@ -73,8 +79,7 @@ export function forwardOptionsKey(e: KeyboardEvent, root: HTMLElement, send: (ke
   // down (agy h4b-r1). Option+letter stays the platform's character.
   else if (e.altKey && !mod && /^Key[A-Z]$/.test(e.code) && isForwardable(`Alt+${e.code.slice(3)}`)) key = `Alt+${e.code.slice(3)}`;
   else if (e.key === 'Tab') {
-    const controls = Array.from(root.querySelectorAll<HTMLElement>('button, input, select, textarea, [tabindex]'))
-      .filter((c) => c.tabIndex >= 0 && !c.matches(':disabled') && c.closest('[hidden]') === null);
+    const controls = tabRing(root);
     const at = controls.indexOf(e.target as HTMLElement);
     if (e.shiftKey ? at <= 0 : at === -1 || at === controls.length - 1) key = e.shiftKey ? 'Shift+Tab' : 'Tab';
   }
@@ -82,6 +87,24 @@ export function forwardOptionsKey(e: KeyboardEvent, root: HTMLElement, send: (ke
   e.preventDefault();
   e.stopPropagation();
   send(key);
+  return true;
+}
+
+/** Frame content hands typing to the composer; controls keep their native typing and activation keys. */
+export function forwardFrameKey(e: KeyboardEvent, root: HTMLElement, send: (type: 'ui.key' | 'ui.typed', payload: { key: string } | { grapheme: string }) => void): boolean {
+  if (e.defaultPrevented) return false;
+  const target = e.target as Element | null;
+  // Tab leaves only from a real control at an edge of the tab order; from anywhere else it is the browser's own.
+  if (e.key === 'Tab' && !(target instanceof HTMLElement && tabRing(root).includes(target))) return false;
+  if (forwardOptionsKey(e, root, key => send('ui.key', { key }))) return true;
+  if (e.metaKey || e.ctrlKey || e.altKey || !isOneGrapheme(e.key)) return false;
+  const editable = target?.closest('[contenteditable]');
+  if (target?.closest('input,textarea,select') || (editable && editable.getAttribute('contenteditable') !== 'false')) return false;
+  // Space activates whatever has the focus (a button, a summary, a link, a focusable component cell).
+  if (e.key === ' ' && target?.closest('button,summary,a[href],[role="button"],[tabindex]:not([tabindex="-1"])')) return false;
+  e.preventDefault();
+  e.stopPropagation();
+  send('ui.typed', { grapheme: e.key });
   return true;
 }
 

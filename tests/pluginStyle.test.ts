@@ -4,11 +4,12 @@ import { copyTokens, FONTS, mountStyle, THEMES, type ThemeTokens } from '../src/
 let root: HTMLDivElement;
 let tokens: ThemeTokens | null;
 const key = vi.fn<(key: string) => void>();
+const typed = vi.fn<(grapheme: string) => void>();
 const apply = vi.fn(async (next: ThemeTokens): Promise<{ ok: true } | { ok: false; reason: string }> => { tokens = next; return { ok: true }; });
 beforeEach(() => {
   root = document.createElement('div'); document.body.replaceChildren(root);
-  tokens = copyTokens(THEMES[0]!); apply.mockClear(); key.mockClear();
-  mountStyle(root, { tokens: () => tokens, apply, key });
+  tokens = copyTokens(THEMES[0]!); apply.mockClear(); key.mockClear(); typed.mockClear();
+  mountStyle(root, { tokens: () => tokens, apply, key, typed });
 });
 const change = (node: HTMLInputElement | HTMLSelectElement, value: string): void => { node.value = value; node.dispatchEvent(new Event('change', { bubbles: true })); };
 const field = (label: string): HTMLInputElement => root.querySelector(`input[aria-label="${label}"]`)!;
@@ -31,9 +32,14 @@ describe('shared artifact Style panel', () => {
       expect(key.mock.calls.length).toBe(before); expect(alt.defaultPrevented).toBe(false);
       for (const native of ['a', 'ArrowDown', 'Enter', ' ']) {
         const before = key.mock.calls.length;
+        const typedBefore = typed.mock.calls.length;
         const e = new KeyboardEvent('keydown', { key: native, bubbles: true, cancelable: true });
         control.dispatchEvent(e);
-        expect(e.defaultPrevented).toBe(false); expect(key).toHaveBeenCalledTimes(before);
+        // A button keeps Space/Enter activation; its printable letters go to the composer.
+        const toComposer = control instanceof HTMLButtonElement && native === 'a';
+        expect(e.defaultPrevented).toBe(toComposer); expect(key).toHaveBeenCalledTimes(before);
+        expect(typed).toHaveBeenCalledTimes(typedBefore + Number(toComposer));
+        if (toComposer) expect(typed).toHaveBeenLastCalledWith('a');
       }
     }
   });

@@ -10,6 +10,8 @@ import type { AnchorRef } from '../../editors/protocol.js';
 import { readThemeTokens } from '../../editors/theme.js';
 import { useRoute } from '../../hooks/useRoute.js';
 import { InsightsDecide } from './InsightsDecide.js';
+import { forwardedKey } from '../editorHost/composerBridge.js';
+import { focusBeside } from '../../editors/focus.js';
 
 /** Crew's insights read narrowed to ONE review run's own review (G2): what that run found, and nothing else. */
 export function insightsOfRun(r: InsightsResponse, runId: string): InsightsResponse {
@@ -130,8 +132,9 @@ function RunInsightsOf({ runId, runStatus, size }: { runId: string; runStatus: s
         ui: {
           chips: () => undefined,
           draft: () => undefined,
-          typed: () => undefined,
-          key: () => undefined,
+          // No composer on this page: the first typed letter leaves the frame (the rest is the page's, never three drops).
+          typed: () => { focusBeside(frameBox.current?.querySelector('iframe') ?? null, false); },
+          key: (k) => forwardedKey(k, frameBox.current?.querySelector('iframe') ?? null),
           morph: () => undefined,
           status: () => undefined,
           notes: () => undefined,

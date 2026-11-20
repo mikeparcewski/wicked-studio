@@ -20,6 +20,8 @@ import { useTurnRulesHold } from '../../editors/apps/turnHold.js';
 import { addAboutChip, chipsOf, removeAboutChip, useComposerChips } from '../../store/composerChips.js';
 import { recordingPort } from '../../editors/apps/previewSnapshots.js';
 import { ShowOnReport } from '../apps/ShowOnReport.js';
+import { forwardedKey } from './composerBridge.js';
+import { focusBeside } from '../../editors/focus.js';
 
 /**
  * THE APP HOST (DES-APPS-001 §6.1, §7.1, §7.3; slice K4): one app in the `wicked-apps` runtime's sandboxed frame, and
@@ -325,7 +327,10 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
             // collapsed (opening it would move the canvas under the pointer, and could close Edit): its Properties
             // icon shows the selection (xreview r4).
             if (c.some((x) => x.anchor.kind === 'element')) setPanelTab('properties');
-          }, draft: () => {}, typed: () => {}, key: () => {}, morph: () => {},
+          }, draft: () => {},
+            // No composer here: the first typed letter leaves the frame (so the rest is the page's, never three drops), and the chords reach the page.
+            typed: () => { focusBeside(frameBox.current?.querySelector('iframe') ?? null, false); },
+            key: (k) => forwardedKey(k, frameBox.current?.querySelector('iframe') ?? null), morph: () => {},
           status: (line) => setStatus(line), notes: () => {}, thread: () => {},
           writeFailed: (m) => setStatus(m),
           fullscreen: async () => false,
