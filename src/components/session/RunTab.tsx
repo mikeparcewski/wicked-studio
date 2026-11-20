@@ -8,9 +8,9 @@ import { workflowLabel } from '../../board/workflowNames.js';
 import { chatStatusWord } from '../../board/statusWords.js';
 import { seatLabel } from '../../board/seatNames.js';
 import { ORPHANED_LINE, orphanedOf } from '../../board/sessionModel.js';
-import { finishedDeliveryArm } from '../../board/proposalCard.js';
+import { finishedDeliveryArm, proposalKindOf } from '../../board/proposalCard.js';
 import { useRoster } from '../../hooks/useRoster.js';
-import { builderResponder, isCommandPath, isHelperSeat, isReviewUnit } from '../../board/responder.js';
+import { isCommandPath, isHelperSeat, isReviewUnit } from '../../board/responder.js';
 import { executingOrd } from '../../api/run-state.js';
 import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
@@ -214,7 +214,6 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   // sections below keep everything else.
   const total = chain.steps.length;
   const stepAt = current !== undefined ? chain.steps.indexOf(current) + 1 : doneSteps;
-  const builder = builderResponder(view, gate?.ord ?? null, roster);
   // (crew#1042) A held run has no helper "building" or "reviewing": nothing is working on it.
   const runningOrd = held ? null : executingOrd(view.session, view.units);
   const helpers = clis.filter(isHelperSeat).map((cli) => {
@@ -222,14 +221,15 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
     const name = seat === undefined ? cli : seatLabel(seat);
     const running = runningOrd !== null && view.units.some((u) => u.ord === runningOrd && u.assigned_cli === cli);
     const reviews = view.units.some((unit) => unit.assigned_cli === cli && isReviewUnit(unit));
-    return `${name} ${running ? (reviews ? 'reviewing' : 'building') : builder?.cli === cli ? 'built it' : reviews ? 'reviews' : 'builds'}`;
+    const making = view.units.filter((unit) => unit.assigned_cli === cli && (unit.role === 'creator' || (unit.role == null && !isReviewUnit(unit))));
+    return `${name} ${running ? (reviews ? 'reviewing' : 'building') : making.length > 0 ? (making.every((unit) => unit.status === 'done') ? 'built it' : 'builds') : reviews ? 'reviews' : 'builds'}`;
   });
   const changesWord = deliverySummary(view) ?? (delivered ? 'Nothing pushed' : 'Nothing delivered yet');
   const glance = (
     <div data-testid="run-tab-glance" data-undo-host="run-tab" className="wk-run-glance">
       <div className="wk-run-glance-item">
         <span className="wk-run-glance-label">Progress</span>
-        <span data-testid="run-tab-glance-progress" className="wk-run-glance-value">{total === 0 ? 'No steps yet' : `Step ${Math.max(1, stepAt)} of ${total}${current !== undefined ? ` · ${current.label}` : ''}`}</span>
+        <span data-testid="run-tab-glance-progress" className="wk-run-glance-value">{proposalKindOf(id, gate, view.units) === 'plan' ? 'Waiting for your plan approval' : total === 0 ? 'No steps yet' : `Step ${Math.max(1, stepAt)} of ${total}${current !== undefined ? ` · ${current.label}` : ''}`}</span>
         {total > 0 && <span aria-hidden className="wk-run-glance-bar" data-tone={session.status === 'awaiting_human' && !isAskTurnRun(session) ? 'waiting' : nothingToStop(view) ? 'done' : 'run'}><span style={{ width: `${Math.round((doneSteps / total) * 100)}%` }} /></span>}
       </div>
       <div className="wk-run-glance-item">

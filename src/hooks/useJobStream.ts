@@ -6,7 +6,7 @@ import { useCapabilities } from '../store/capabilities.js';
 import { create } from 'zustand';
 import type { SessionView } from '../api/types.js';
 import { enrichPlan, jobView, replanningOnRecord, type JobLineage, type JobRunInputs, type JobView } from '../board/jobStream.js';
-import { planStepLabel, unitStepName } from '../board/chainModel.js';
+import { distinctLabels, planStepLabel, unitStepName } from '../board/chainModel.js';
 import { useUndoQueue } from '../board/undoQueue.js';
 import { useElicitationStore } from '../store/elicitations.js';
 import { useGateStore } from '../store/gates.js';
@@ -131,8 +131,11 @@ export function useJobView(lineage: JobLineage, runs: readonly SessionView[], no
   const inputs = useMemo<JobRunInputs>(() => {
     const pv = plan.view;
     // The plan this gate holds: only a read made for the gate open now may be approved (`fresh`).
+    // (studio#1090) The rows are named by the chain's own rule, repeated words included ("Plan", "Plan" -> "Design",
+    // "Architecture"); the steps keep their own ids.
+    const named = pv === null ? [] : distinctLabels(pv.planSteps.map((s) => ({ id: s.id ?? s.catalog ?? '', label: planStepLabel(s.id, s.catalog) })));
     const planIn = pv !== null && (gate === undefined || gate.ord === pv.ord)
-      ? { ord: pv.ord, planRev: pv.planRev, ...enrichPlan(pv.planSteps.map((s) => ({ id: s.id, catalog: s.catalog, label: planStepLabel(s.id, s.catalog) })), fold?.rows ?? [], pv.planRev, pv.floorAdded), fresh: plan.fresh }
+      ? { ord: pv.ord, planRev: pv.planRev, ...enrichPlan(pv.planSteps.map((s, i) => ({ id: s.id, catalog: s.catalog, label: named[i]!.label })), fold?.rows ?? [], pv.planRev, pv.floorAdded), fresh: plan.fresh }
       : null;
     // A send-back stands until a newer revision of the plan is held (or the run moves past its plan): this tab's own, or
     // one crew's record shows (answered in another tab).

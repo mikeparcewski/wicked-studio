@@ -243,6 +243,25 @@ describe('wicked’s passage (the held plan)', () => {
     expect(posts).toEqual([{ path: `/runs/${RUN}/gate`, body: { approve: true, planRev: 2, ord: 1 } }]);
   });
 
+  it('floor-added design and architecture use distinct chain labels in rows and the version change', async () => {
+    const ids = ['scope', 'triage', 'reproduce', 'design', 'architecture', 'fix', 'review', 'security_review', 'verify', 'deliver'];
+    const floors = ['design', 'architecture', 'security_review'];
+    const steps = ids.map((id) => ({ id, catalog: id, ...(floors.includes(id) ? { added_by: 'floor' } : {}) }));
+    team = { teamed: true, units: [], planRev: 2, rows: [
+      { event_id: 1, event_type: 'wicked.team.plan.proposed', payload: { steps: steps.filter((s) => !floors.includes(s.id)) } },
+      { event_id: 2, event_type: 'wicked.team.plan.proposed', payload: { steps } },
+      { event_id: 3, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g2', ord: 1, plan_rev: 2 } },
+    ] };
+    page([run()]);
+    await waitFor(() => expect(screen.getAllByTestId('job-passage-plan-step')).toHaveLength(ids.length));
+    const rows = screen.getAllByTestId('job-passage-plan-step');
+    const labels = rows.map((r) => r.querySelector('b')!.textContent);
+    expect(labels).toEqual(['Scope', 'Triage', 'Reproduce', 'Design', 'Architecture', 'Fix', 'Review', 'Security check', 'Check', 'Deliver']);
+    expect(new Set(labels).size).toBe(labels.length);
+    for (const index of [3, 4, 7]) expect(rows[index]).toHaveTextContent('added for this risk');
+    expect(screen.getByTestId('job-passage-plan-changed').textContent).toBe('Plan v2: added Design, Architecture, Security check.');
+  });
+
   it('Undo in the receipt sends nothing and reopens the plan', async () => {
     page([run()]);
     await waitFor(() => expect(reply('approve').disabled).toBe(false));

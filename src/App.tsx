@@ -429,6 +429,7 @@ export function App(): React.ReactElement {
   // while minimized, so the conversation keeps running behind the tray.
   const chatMode = useChatWindow((s) => s.mode);
   const askOpen = chatMode !== 'closed';
+  const askBubble = phone && panel !== 'session' && chatMode !== 'minimized';
 
   // The Desk composer's send (skin `desk`, S4): the message rides to the Ask dock, which sends it
   // as the operator's own question. `askKey` remounts the dock for each handoff; the text is spent
@@ -884,7 +885,7 @@ export function App(): React.ReactElement {
 
       {/* studio#722: the gate notice is a strip IN the main column's flow, above the page — it pushes
           the page down instead of covering its composer, cards or thread. */}
-      <div id="main" tabIndex={-1} className="flex flex-1 flex-col overflow-hidden min-w-0" style={{ outline: 'none' }}>
+      <div id="main" data-ask-bubble={askBubble ? 'true' : undefined} tabIndex={-1} className="flex flex-1 flex-col overflow-hidden min-w-0" style={{ outline: 'none' }}>
         {/* DES-CHAT-ARTIFACTS-001 §9 (A7, mockup e): a theme previewed on this tab — Apply, Back to mine, Saved · Undo —
             a strip in the main column's flow, so it never covers a composer, a card or a page's controls. */}
         <ThemePreviewBar />
@@ -915,7 +916,7 @@ export function App(): React.ReactElement {
         bottomOffsetPx={panel === 'session' ? DESK_COMPOSER_PX : 0}
         // Chat is in the rail on every page; the bubble is the phone's way in (the rail is a drawer
         // there), and stands down on a session, whose composer holds this corner.
-        bubble={phone && panel !== 'session' && chatMode !== 'minimized'}
+        bubble={askBubble}
       />
       <ChatWindow phone={phone} railPx={railWidthPx(railIcons, phone)} onEnd={endSystemChat}>
         {askOpen && (

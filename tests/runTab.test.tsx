@@ -64,6 +64,44 @@ function phases(status: SessionView['session']['status'] = 'executing'): Session
 }
 
 describe('RunTab', () => {
+  function bugPlan(fixDone = false, plan = true): SessionView {
+    const view = makeView({ status: 'awaiting_human', unit_ix: 0 }, [
+      makeUnit({ ord: 2, phase_ref: 'fix', role: 'creator', assigned_cli: 'claude', status: fixDone ? 'done' : 'pending' }),
+      makeUnit({ ord: 0, phase_ref: 'triage', role: 'neutral', assigned_cli: 'codex' }),
+      makeUnit({ ord: 1, phase_ref: 'reproduce', role: 'neutral', assigned_cli: 'codex' }),
+      makeUnit({ ord: 3, phase_ref: 'verify', role: 'evaluator', assigned_cli: 'codex' }),
+    ]);
+    setCachedRoster([
+      { key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true },
+      { key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true },
+    ]);
+    const id = view.session.id;
+    useGateStore.setState({ gates: { [id]: { runId: id, ord: 0, prompt: plan ? 'Approve plan rev 1' : 'Check this step', gateKind: plan ? 'plan_approval' : 'unit_review', lifecycle: 'open', receivedAt: 1 } } });
+    return view;
+  }
+
+  it('a plan gate names pending creators as builds and neutral/checking seats as reviews', async () => {
+    await tab([bugPlan()]);
+    expect(screen.getByTestId('run-tab-glance-helpers').textContent).toBe('Claude Code builds · Codex reviews');
+    expect(screen.getByTestId('run-tab-glance-helpers')).not.toHaveTextContent('built it');
+  });
+
+  it('a seat built it only when all its making units are done', async () => {
+    await tab([bugPlan(true)]);
+    expect(screen.getByTestId('run-tab-glance-helpers').textContent).toBe('Claude Code built it · Codex reviews');
+  });
+
+  it('plan approval progress waits for approval before counting steps', async () => {
+    await tab([bugPlan()]);
+    expect(screen.getByTestId('run-tab-glance-progress').textContent).toBe('Waiting for your plan approval');
+    expect(screen.getByTestId('run-tab-glance-progress')).not.toHaveTextContent(/Step \d+ of/);
+  });
+
+  it('a non-plan gate keeps step progress', async () => {
+    await tab([bugPlan(false, false)]);
+    expect(screen.getByTestId('run-tab-glance-progress')).toHaveTextContent(/Step 1 of 4/);
+  });
+
   it('shows the empty session without a picker', async () => {
     await tab([]);
     expect(screen.getByTestId('run-tab-empty')).toHaveTextContent('No run in this session yet.');
