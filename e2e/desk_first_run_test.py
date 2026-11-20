@@ -124,7 +124,7 @@ with sync_playwright() as pw:
         page.get_by_test_id("first-run").wait_for(timeout=30000)
         page.get_by_test_id("first-run-ask-repos").wait_for(timeout=30000)
         known = {k: page.get_by_test_id(f"known-{k}").inner_text() for k in ("repos", "git", "agents", "languages")}
-        check(f"1-known-{w}", "Sam Rivera" in known["git"] and "nearby" in known["repos"] and "TypeScript" in known["languages"] and "agent" in known["agents"], known=known)
+        check(f"1-known-{w}", "Sam Rivera" in known["git"] and "nearby" in known["repos"] and "TypeScript" in known["languages"] and "helper" in known["agents"], known=known)
         rows = page.get_by_test_id("first-run-row").evaluate_all("els => els.map((e) => e.dataset.k)")
         check(f"1b-setup-rows-{w}", rows == ["repos", "agents", "style", "rules", "persona", "brand"], rows=rows)
         if w < 800:
