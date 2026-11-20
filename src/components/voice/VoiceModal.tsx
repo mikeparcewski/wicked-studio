@@ -49,7 +49,7 @@ export function VoiceModal(): React.ReactElement {
         <VoiceSetup />
         <AskCard ask={ENTRY_ASK} onAnswer={(a) => answerEntry(a.option === 'yes')} testIds={{ root: 'voice-entry-ask' }} />
         <TypeInstead label="Or type it" testId="voice-modal-type" />
-        <p className="wk-voice-tip">Say “yes”, “no”, or ask about voice mode. Esc closes.</p>
+        <p className="wk-voice-tip" data-testid="voice-tip">{listening ? 'Say “yes”, “no”, or ask about voice mode. Esc closes.' : 'Tap Yes or No, or type. Esc closes.'}</p>
       </div>
     </div>
   );
