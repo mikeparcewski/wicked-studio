@@ -49,8 +49,10 @@ describe('voice full screen layout with the setup banner', () => {
     expect(scrollCss).toMatch(/flex:\s*1 1 auto/);
     expect(scrollCss).toMatch(/min-height:\s*0/);
     expect(scrollCss).toMatch(/overflow-y:\s*auto/);
-    // The padding lives on the frame: padding on the scroller is where a scrolled-off line shows as a sliver.
-    expect(scrollCss).not.toMatch(/padding/);
-    expect(css).not.toMatch(/position:\s*(absolute|sticky)[^}]*wk-voice-setup/);
+    // The card padding lives on the frame: only a 4px focus gutter (offset by a -4px margin) stays on the scroller.
+    expect(scrollCss).toMatch(/padding:\s*4px/);
+    expect(scrollCss).toMatch(/margin:\s*-4px/);
+    // Nothing overlays the transcript: no rule for the banner or the frame positions them out of flow.
+    for (const m of css.matchAll(/([^{}]*wk-voice-(?:setup|trans-frame)[^{}]*)\{([^}]*)\}/g)) expect(m[2]).not.toMatch(/position:\s*(absolute|fixed|sticky)/);
   });
 });
