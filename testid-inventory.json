@@ -18568,6 +18568,48 @@
       ]
     },
     {
+      "testId": "run-pr-checks-failing",
+      "files": [
+        "src/components/RunRedeliver.tsx"
+      ]
+    },
+    {
+      "testId": "run-pr-checks-revise",
+      "files": [
+        "src/components/RunRedeliver.tsx"
+      ]
+    },
+    {
+      "testId": "run-pr-conflict",
+      "files": [
+        "src/components/RunRedeliver.tsx"
+      ]
+    },
+    {
+      "testId": "run-pr-moved",
+      "files": [
+        "src/components/RunRedeliver.tsx"
+      ]
+    },
+    {
+      "testId": "run-pr-no-delivered-head",
+      "files": [
+        "src/components/RunRedeliver.tsx"
+      ]
+    },
+    {
+      "testId": "run-pr-status",
+      "files": [
+        "src/components/RunRedeliver.tsx"
+      ]
+    },
+    {
+      "testId": "run-pr-unread",
+      "files": [
+        "src/components/RunRedeliver.tsx"
+      ]
+    },
+    {
       "testId": "run-provenance",
       "files": [
         "src/components/WhatWhere.tsx"
@@ -18577,6 +18619,48 @@
       "testId": "run-raw-back",
       "files": [
         "src/components/RunRawView.tsx"
+      ]
+    },
+    {
+      "testId": "run-redeliver-button",
+      "files": [
+        "src/components/RunRedeliver.tsx"
+      ]
+    },
+    {
+      "testId": "run-redeliver-conflict-file",
+      "files": [
+        "src/components/RunRedeliver.tsx"
+      ]
+    },
+    {
+      "testId": "run-redeliver-conflicts",
+      "files": [
+        "src/components/RunRedeliver.tsx"
+      ]
+    },
+    {
+      "testId": "run-redeliver-error",
+      "files": [
+        "src/components/RunRedeliver.tsx"
+      ]
+    },
+    {
+      "testId": "run-redeliver-failing",
+      "files": [
+        "src/components/RunRedeliver.tsx"
+      ]
+    },
+    {
+      "testId": "run-redeliver-result",
+      "files": [
+        "src/components/RunRedeliver.tsx"
+      ]
+    },
+    {
+      "testId": "run-redeliver-revise",
+      "files": [
+        "src/components/RunRedeliver.tsx"
       ]
     },
     {
