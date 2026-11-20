@@ -49,7 +49,7 @@ import { engineNamesFloorOverride, FLOOR_OVERRIDE_ACTION, FLOOR_OVERRIDE_CONSEQU
 import { offersSkipQeHere, skipQeAtDelivery, SKIP_QE_ACTION, SKIP_QE_GATE_TITLE, SKIP_QE_KEY, SKIP_QE_LABEL } from './qeSkip.js';
 import { FACE_MAX, failingOnFace, failingSplit, standingFloor, type FailingOnFace, type FailingSplit } from './failingChecks.js';
 import { deliverLift } from '../components/deliverLiftModel.js';
-import { choiceTokens, contractChoices, type GateAction, type NotePolicy, noteAsk } from './gateContract.js';
+import { choiceTokens, contractChoices, type GateAction, type NotePolicy } from './gateContract.js';
 
 /**
  * SESSION GATE ROW MODEL (S15e): pure classification and choice set for the session thread's
@@ -505,7 +505,7 @@ function withListed(model: GateRowModel, actions: readonly GateAction[], roster:
   const keep = (c: GateRowChoice): boolean => listed.has(choiceTokens([c])[0]!);
   const listedNote = (c: GateRowChoice): GateRowChoice => {
     const a = actions.find((a) => a.action === choiceTokens([c])[0]);
-    return a !== undefined && !noteAsk(a.note).box ? { ...c, note: a.note } : c;
+    return a !== undefined ? { ...c, note: a.note } : c;
   };
   const choices = model.choices.filter(keep).map(listedNote);
   const overflow = model.overflow.filter(keep).map(listedNote);
@@ -522,6 +522,17 @@ function withListed(model: GateRowModel, actions: readonly GateAction[], roster:
   const inline = ordered.slice(0, 4);
   const at = rec === undefined ? -1 : inline.findIndex((c) => c.key === rec.key);
   return { ...model, choices: inline, overflow: ordered.slice(4), recommended: at >= 0 ? at : null };
+}
+
+/**
+ * (studio#1177) The run's events could not be read but the gate lists its answers: the row is the list alone. Nothing is
+ * read from the missing log (no verdict, no consent plan, no recommendation, no default), so nothing claims evidence.
+ */
+export function listedOnlyChoices(gate: OpenGate, actions: readonly GateAction[], roster: readonly RosterSeat[] | null): GateRowModel {
+  return withContract({
+    reason: 'unknown', question: gate.prompt, choices: [], overflow: [], noteDefault: '', recommended: null,
+    detailItems: [shownPrompt(gate.prompt)], consequence: null, source: null, failing: [], reviewedOrd: null,
+  }, actions, roster);
 }
 
 /** Rows whose answers are the payload's own (a consent plan's choices, free text): drawn by their renderer, as before. */

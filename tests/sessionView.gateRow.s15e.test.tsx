@@ -675,8 +675,6 @@ describe('studio#1177: listed notes and missing evidence', () => {
       { action: 'reject', intent: 'cancel', note: 'none' },
     ] });
     render(<GateRow view={view()} gate={gate} />);
-    // Even while loading, the checked answer list is enough to draw controls.
-    expect(screen.getAllByTestId('session-gate-choice')).toHaveLength(3);
     await screen.findByTestId('session-gate-events-error');
     expect(screen.getAllByTestId('session-gate-choice')).toHaveLength(3);
     fireEvent.click(screen.getByTestId('session-gate-events-retry'));

@@ -5,7 +5,7 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 
 import type { RosterSeat, SessionView as RunView } from '../../api/types.js';
 import { QeRefusalWarning } from '../QeRefusalWarning.js';
 import { GATE_HASH, IDLE_GATE_ACTION, commitGateDecision, commitGateReassign, gateKeyOf, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
-import { FLOOR_FIX_LABEL, namedSendBackNote, SEND_BACK_NAMED_LABEL, sessionGateChoices, soonestBack, type DeadSeat, type GateRowChoice, type GateRowModel } from '../../board/gateRowModel.js';
+import { FLOOR_FIX_LABEL, listedOnlyChoices, namedSendBackNote, SEND_BACK_NAMED_LABEL, sessionGateChoices, soonestBack, type DeadSeat, type GateRowChoice, type GateRowModel } from '../../board/gateRowModel.js';
 import { AskCard, AskRecord, type AskReason } from '../ask/AskCard.js';
 import { askFromGate, gateOption } from '../../board/askModel.js';
 import type { AskOption } from '../../api/ask.js';
@@ -141,6 +141,13 @@ export function steerReachesBuilder(units: readonly WorkUnit[], ord: number | un
 const NO_UNITS: readonly never[] = [];
 const NO_EVENTS: readonly never[] = [];
 
+/** The choice the reply box under the dock answers through: Send back, else the retry / steer note, else a free-text
+ *  Send — only one that takes words (studio#1177: never an answer the engine takes without them). */
+export function replyChoiceOf(all: readonly GateRowChoice[]): GateRowChoice | null {
+  const takes = (key: string): GateRowChoice | undefined => all.find((c) => c.key === key && c.decision !== null && noteAsk(c.note).box);
+  return takes('send-back') ?? takes('steer') ?? takes('free-text-send') ?? null;
+}
+
 function ChatGateRow({ chatId, gate }: { chatId: string; gate: OpenGate | undefined }): React.ReactElement | null {
   const model = useMemo<GateRowModel | null>(() => {
     if (gate === undefined) return null;
@@ -182,10 +189,12 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   const signedIn = (roster ?? []).filter((r) => r.signed_in !== false).map((r) => r.key).join(',');
   const actions = useGateActions(runId, gate, signedIn);
   const model = useMemo<GateRowModel | null>(() => {
-    if (gate === undefined || (events === null && actions === undefined)) return null;
-    const evidence = events ?? [];
+    if (gate === undefined) return null;
+    // studio#1177: a failed events read keeps the engine's listed answers (and nothing read from the missing log);
+    // without a list the row fails closed below. While the read is on its way, nothing is drawn yet.
+    if (events === null) return eventsFetchFailed && actions !== undefined ? listedOnlyChoices(gate, actions, roster) : null;
     const read = gate.skipQe === undefined && liveSkipQe !== null ? { ...gate, skipQe: liveSkipQe } : gate;
-    const result = sessionGateChoices({ runId, gate: gateWithLogChoices(read, evidence), units: view.units, events: evidence, pool, roster, benched, rerun: rerunOffer, fullVerdict, rejudge, ...(actions !== undefined ? { actions } : {}) });
+    const result = sessionGateChoices({ runId, gate: gateWithLogChoices(read, events), units: view.units, events, pool, roster, benched, rerun: rerunOffer, fullVerdict, rejudge, ...(actions !== undefined ? { actions } : {}) });
     if (result === null) return null;
     const toBuilder = steerReachesBuilder(view.units, gate.ord);
     // Label each arm by its effect: the denied-step approve re-runs the step; a steer on a review gate
@@ -196,9 +205,8 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
       : choice.key === 'steer' && choice.label === 'Approve and steer' && !toBuilder
         ? { ...choice, label: 'Approve with a note for the next step', title: 'Approve, and your note goes to the next step — not to the builder. To have the builder change something, Send back.' }
         : choice;
-    // With the events unread, nothing is preselected: a recommendation is read from the evidence that is missing.
-    return { ...result, choices: result.choices.map(effectLabel), overflow: result.overflow.map(effectLabel), ...(events === null ? { recommended: null } : {}) };
-  }, [runId, gate, liveSkipQe, view.units, events, pool, roster, benched, rerunOffer, fullVerdict, rejudge, actions]);
+    return { ...result, choices: result.choices.map(effectLabel), overflow: result.overflow.map(effectLabel) };
+  }, [runId, gate, liveSkipQe, view.units, events, eventsFetchFailed, pool, roster, benched, rerunOffer, fullVerdict, rejudge, actions]);
   // S16a-1b: the creator seat's record on Approve and the standing-order offer (review gates).
   const seat = useSeatTrust(view, gate, {
     isPlanGate: false, isDeliverGate: gate?.gateKind === 'deliver',
@@ -704,9 +712,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   const [moreOpen, setMoreOpen] = useState(false);
   // (operator 2026-10-27) The reply box under the dock answers through this gate's note choice: Send back, else the
   // retry / steer note (never the floor override, whose rationale is asked for on its own).
-  const replyChoice = model === null ? null : [...model.choices, ...model.overflow].find((c) => c.key === 'send-back' && c.decision !== null)
-    ?? [...model.choices, ...model.overflow].find((c) => c.key === 'steer' && c.decision !== null)
-    ?? [...model.choices, ...model.overflow].find((c) => c.key === 'free-text-send' && c.decision !== null) ?? null;
+  const replyChoice = model === null ? null : replyChoiceOf([...model.choices, ...model.overflow]);
   const replySend = useRef<((text: string) => void) | null>(null);
   // artifact-runs-fix (rig run 2e6059da): a card that asks for its own words ("Retry this step with a note") opened
   // its box while the reply box below still said "Replies to this decision (Send back)" and sent a Send back. While

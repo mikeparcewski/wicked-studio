@@ -399,7 +399,9 @@ describe('GateRow submits, for each action it draws, the decision the gate lists
       for (const ch of [...m.choices, ...m.overflow].filter((x) => x.reassignCli !== undefined)) {
         const reassign = vi.spyOn(client.api, 'reassignRun').mockResolvedValue({ status: 'ok' } as never);
         await submitted(c, ch.key);
-        expect(reassign, `${name}: ${ch.key}`).toHaveBeenCalledWith(RUN, ch.reassignCli);
+        // studio#1177: the listed note policy decides whether the typed words ride the move.
+        expect(reassign, `${name}: ${ch.key}`).toHaveBeenCalledTimes(1);
+        expect(reassign.mock.calls[0], `${name}: ${ch.key}`).toEqual([RUN, ch.reassignCli, ch.note === 'none' ? undefined : 'because the evidence says so']);
         reassign.mockRestore();
       }
     });
