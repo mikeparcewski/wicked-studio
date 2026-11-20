@@ -7,7 +7,7 @@
  * data arrives through the granted port as content with no ids or paths (ED-3); every string is set as text.
  */
 
-import { announceReady, helloOf, V2Port, PROTOCOL, ENVELOPE, type Envelope } from '../_shared/v2.js';
+import { announceReady, forwardFrameKey, helloOf, V2Port, PROTOCOL, ENVELOPE, type Envelope } from '../_shared/v2.js';
 import surfaces from './surfaces.json';
 import type { InsightsView, InsightsViewReview } from '../../editors/insightsAdapter.js';
 import { TREND_CAPTIONS } from '../../editors/insightsWords.js';
@@ -75,11 +75,12 @@ export function trendSvg(points: InsightsView['trends'][number]['points'], unit:
 }
 
 export function start(): void {
-  const main = h('main', { 'data-testid': 'insights-plugin' });
+  const main = h('main', { 'data-testid': 'insights-plugin', tabindex: '-1' });
   document.body.prepend(main);
   let port: MessagePort | null = null;
   let v2: V2Port | null = null;
   let protocol = 1;
+  let lastHeight = 0;
   let grants: string[] = [];
   let view: InsightsView | null = null;
   let version = 0;
@@ -89,6 +90,7 @@ export function start(): void {
   let disposed = false;
   const pending = new Map<string, { resolve: (r: Reply) => void; timer: ReturnType<typeof setTimeout> }>();
   const send = (type: string, payload: unknown): void => port?.postMessage({ p: PROTOCOL, v: ENVELOPE, type, payload });
+  main.onkeydown = e => { forwardFrameKey(e, main, send); };
   const req = (type: string, payload: unknown): Promise<Reply> => new Promise((resolve) => {
     if (port === null || disposed) { resolve({ ok: false, error: { code: 'unavailable', message: 'No host here.' } }); return; }
     const id = `wi-${++seq}`;
@@ -176,6 +178,14 @@ export function start(): void {
   }
 
   function draw(): void {
+    drawContent();
+    if (protocol === 2 && v2 !== null) {
+      const px = Math.round(main.getBoundingClientRect().height);
+      if (px > 0 && px !== lastHeight) { lastHeight = px; v2.height(px); }
+    }
+  }
+
+  function drawContent(): void {
     main.replaceChildren();
     if (view === null) { main.append(h('p', { class: 'muted' }, 'Reading the reviews…')); return; }
     if (view.reviews.length === 0) {
