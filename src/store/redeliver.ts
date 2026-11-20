@@ -15,12 +15,13 @@ type RedeliverState =
 
 interface RunRedelivery {
   pr?: PrState;
-  redeliver?: RedeliverState;
+  redeliver?: RedeliverState | undefined;
 }
 
 interface RedeliverStore {
   byRun: Record<string, RunRedelivery>;
-  load: (runId: string) => void;
+  /** `fresh`: the read must start after now (after a redelivery answer), so an in-flight read does not stand in for it. */
+  load: (runId: string, fresh?: boolean) => void;
   redeliver: (runId: string) => void;
 }
 
@@ -28,7 +29,15 @@ function stringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
 
+/** The distinct non-empty names crew sent (a repeated path would repeat a line and a React key). */
+const names = (value: string[]) => [...new Set(value.filter((v) => v !== ''))];
+
+/** A refusal stops describing the PR once a newer read says it is no longer an open, conflicting PR at that head. */
+const actionable = (pr: RunPullRequest) => pr.state === 'OPEN' && pr.mergeable === 'CONFLICTING' && !pr.headMoved;
+
 const readsInFlight = new Set<string>();
+/** A fresh read asked for while one was in flight (the post-redelivery re-read) runs once that one settles. */
+const readsQueued = new Set<string>();
 
 /** crew#1493: every word comes from RunPullRequest / RedeliverRunResult or the refusal body.
  * "Nothing was pushed" is only for conflicts / failingChecks bodies: crew throws them before push. */
@@ -38,19 +47,24 @@ export const useRedeliverStore = create<RedeliverStore>((set, get) => {
   };
   return {
     byRun: {},
-    load: (runId) => {
-      if (readsInFlight.has(runId)) return;
+    load: (runId, fresh = false) => {
+      if (readsInFlight.has(runId)) { if (fresh) readsQueued.add(runId); return; }
       readsInFlight.add(runId);
+      const settle = () => {
+        readsInFlight.delete(runId);
+        if (readsQueued.delete(runId)) get().load(runId);
+      };
       api.runPullRequest(runId).then(
         (pr) => {
-          readsInFlight.delete(runId);
-          update(runId, { pr: { phase: 'loaded', pr } });
+          const stale = get().byRun[runId]?.redeliver?.phase === 'refused' && !actionable(pr);
+          update(runId, { pr: { phase: 'loaded', pr }, ...(stale ? { redeliver: undefined } : {}) });
+          settle();
         },
         (err: unknown) => {
-          readsInFlight.delete(runId);
           update(runId, {
             pr: isRouteAbsent(err) ? { phase: 'absent' } : { phase: 'error', error: err instanceof Error ? err.message : String(err) },
           });
+          settle();
         },
       );
     },
@@ -63,7 +77,7 @@ export const useRedeliverStore = create<RedeliverStore>((set, get) => {
       api.redeliverRun(runId).then(
         (result) => {
           update(runId, { redeliver: { phase: 'done', result } });
-          get().load(runId);
+          get().load(runId, true);
         },
         (err: unknown) => {
           const body = err instanceof ApiError && typeof err.body === 'object' && err.body !== null
@@ -72,10 +86,13 @@ export const useRedeliverStore = create<RedeliverStore>((set, get) => {
             redeliver: {
               phase: 'refused', error: err instanceof Error ? err.message : String(err),
               ...(base !== undefined ? { base } : {}),
-              ...(stringArray(body.conflicts) ? { conflicts: body.conflicts } : {}),
-              ...(stringArray(body.failingChecks) ? { failingChecks: body.failingChecks } : {}),
+              ...(stringArray(body.conflicts) && names(body.conflicts).length > 0 ? { conflicts: names(body.conflicts) } : {}),
+              // An empty list is still crew's "checks failed" refusal (a floor that refused names no check).
+              ...(stringArray(body.failingChecks) ? { failingChecks: names(body.failingChecks) } : {}),
             },
           });
+          // The refusal may be about a PR that changed (moved, closed): show what GitHub says now.
+          get().load(runId, true);
         },
       );
     },

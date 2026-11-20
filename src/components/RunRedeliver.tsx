@@ -18,19 +18,22 @@ export function PrRedeliver({ runId, onRevise }: Props): React.ReactElement | nu
 
   const read = entry?.pr;
   const delivery = entry?.redeliver;
-  if (read?.phase === 'absent' && delivery === undefined) return null;
+  // Nothing until crew answered (no empty gap under the link), and nothing on a crew without the route.
+  if ((read === undefined || read.phase === 'absent') && delivery === undefined) return null;
   const pr = read?.phase === 'loaded' ? read.pr : undefined;
   const result = delivery?.phase === 'done' ? delivery.result : undefined;
   const refusal = delivery?.phase === 'refused' ? delivery : undefined;
   const conflicts = refusal?.conflicts;
   const failingChecks = refusal?.failingChecks;
-  const reviseChecks = (names: string[]) => onRevise?.(`fix the failing checks: ${names.join(', ')}`);
+  const reviseChecks = (names: string[]) => onRevise?.(names.length > 0 ? `fix the failing checks: ${names.join(', ')}` : 'fix the repo checks that failed on the rebased tree');
+  // Right after a re-delivery the shown PR can still be the pre-push read: no second POST off that snapshot.
+  const staleAfterPush = result !== undefined && pr !== undefined && pr.headSha === result.oldHead;
 
   return (
     <div className="flex flex-col gap-1.5">
       {read?.phase === 'error' && (
         <div data-testid="run-pr-unread" style={{ color: 'var(--ink-muted)' }}>
-          <p>Crew can't show this PR's GitHub state.</p>
+          <p>Crew can't show this PR's state.</p>
           <TechDetails text={read.error} />
         </div>
       )}
@@ -44,7 +47,7 @@ export function PrRedeliver({ runId, onRevise }: Props): React.ReactElement | nu
                 <p data-testid="run-pr-no-delivered-head" style={{ color: 'var(--status-warn)' }}>Crew has no recorded delivered head for this PR, so it cannot re-deliver it.</p>
               ) : pr.headMoved ? (
                 <p data-testid="run-pr-moved" style={{ color: 'var(--status-warn)' }}>The PR branch moved since crew delivered it (now {pr.headSha.slice(0, 7)}, delivered {pr.deliveredHead.slice(0, 7)}); crew will not re-deliver over it.</p>
-              ) : (
+              ) : staleAfterPush ? null : (
                 <div>
                   <button
                     type="button"
@@ -95,7 +98,7 @@ export function PrRedeliver({ runId, onRevise }: Props): React.ReactElement | nu
           </>
         ) : failingChecks !== undefined ? (
           <>
-            <p data-testid="run-redeliver-failing" style={{ color: 'var(--status-fail)' }}>Repo checks failed on the rebased tree: {failingChecks.join(', ')}. Nothing was pushed.</p>
+            <p data-testid="run-redeliver-failing" style={{ color: 'var(--status-fail)' }}>Repo checks failed on the rebased tree{failingChecks.length > 0 ? `: ${failingChecks.join(', ')}` : ''}. Nothing was pushed.</p>
             {onRevise !== undefined && (
               <button type="button" data-testid="run-redeliver-revise" className={buttonClass} style={buttonStyle} onClick={() => reviseChecks(failingChecks)}>
                 Revise this PR to resolve it

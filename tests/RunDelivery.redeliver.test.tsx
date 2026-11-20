@@ -82,6 +82,8 @@ describe('RunDelivery rebase and re-deliver', () => {
     expect(result).toHaveTextContent('Re-delivered: 1234567 → abcdef0. Repo checks on the new tree: PASS (3 checks: lint, types, unit). Changelog conflicts resolved: CHANGELOG.md.');
     await waitFor(() => expect(client.api.runPullRequest).toHaveBeenCalledTimes(2));
     expect(screen.getByTestId('run-pr-status')).toHaveTextContent('mergeable CONFLICTING');
+    // The shown PR is still the pre-push read: no second POST can start off it.
+    expect(screen.queryByTestId('run-redeliver-button')).toBeNull();
     await act(async () => { refresh({ ...PR, mergeable: 'MERGEABLE', headSha: NEW, deliveredHead: NEW }); });
     expect(screen.getByTestId('run-pr-status')).toHaveTextContent('mergeable MERGEABLE');
   });
@@ -105,7 +107,7 @@ describe('RunDelivery rebase and re-deliver', () => {
     let refresh!: (pr: RunPullRequest) => void;
     vi.mocked(client.api.runPullRequest).mockReturnValueOnce(new Promise((resolve) => { refresh = resolve; }));
     render(<RunDelivery view={view} navigate={navigate} />);
-    expect(client.api.runPullRequest).toHaveBeenCalledTimes(2);
+    expect(client.api.runPullRequest).toHaveBeenCalledTimes(3);
     expect(screen.getByTestId('run-pr-status')).toHaveTextContent('mergeable CONFLICTING');
     expect(screen.getByTestId('run-redeliver-conflicts')).toHaveTextContent('conflict with release outside the changelog. Nothing was pushed.');
     expect(screen.getAllByTestId('run-redeliver-conflict-file').map((li) => li.textContent)).toEqual(['src/one.ts', 'src/two.ts']);
@@ -133,7 +135,7 @@ describe('RunDelivery rebase and re-deliver', () => {
     expect(await screen.findByTestId('run-redeliver-failing')).toHaveTextContent('Repo checks failed on the rebased tree: lint. Nothing was pushed.');
     await user.click(screen.getByTestId('run-redeliver-revise'));
     const prefill = takeRetryPrefill();
-    expect(prefill?.problem).toContain('lint');
+    expect(prefill?.problem).toBe('Revise PR #42 (wicked/run): Add the delivery action — fix the failing checks: lint');
     expect(prefill?.revisesPr?.number).toBe(PR.number);
   });
 
@@ -224,11 +226,12 @@ describe('RunDelivery rebase and re-deliver', () => {
 
   it.each(['not found', 'Not Found'])('R7 renders nothing for route-absent 404 (%s)', async (wire) => {
     vi.mocked(client.api.runPullRequest).mockRejectedValue(new ApiError(404, wire));
-    const card = render(<RunDelivery view={deliveredView()} />);
-    const before = card.container.textContent;
+    render(<RunDelivery view={deliveredView()} navigate={vi.fn()} />);
+    // No wrapper at all, before or after crew answers: the link is followed by the generic Revise button.
+    expect(screen.getByTestId('run-delivery-link').nextElementSibling).toBe(screen.getByTestId('run-revise-pr'));
     await act(async () => {});
     expect(client.api.runPullRequest).toHaveBeenCalledExactlyOnceWith(runId);
-    expect(card.container.textContent).toBe(before);
+    expect(screen.getByTestId('run-delivery-link').nextElementSibling).toBe(screen.getByTestId('run-revise-pr'));
     expect(screen.queryByTestId('run-pr-status')).toBeNull();
     expect(screen.queryByTestId('run-pr-unread')).toBeNull();
   });
@@ -238,7 +241,7 @@ describe('RunDelivery rebase and re-deliver', () => {
     vi.mocked(client.api.runPullRequest).mockRejectedValue(error);
     render(<RunDelivery view={deliveredView()} />);
     const unread = await screen.findByTestId('run-pr-unread');
-    expect(unread).toHaveTextContent("Crew can't show this PR's GitHub state.");
+    expect(unread).toHaveTextContent("Crew can't show this PR's state.");
     expect(unread.querySelector('details')).not.toHaveAttribute('open');
     expect(unread.querySelector('pre')?.textContent).toBe(error.message);
     expect(screen.queryByTestId('run-redeliver-button')).toBeNull();
@@ -250,7 +253,7 @@ describe('RunDelivery rebase and re-deliver', () => {
     expect(await screen.findByTestId('run-pr-checks-failing')).toHaveTextContent('Failing checks on GitHub: lint, types');
     await userEvent.setup().click(screen.getByTestId('run-pr-checks-revise'));
     const prefill = takeRetryPrefill();
-    expect(prefill?.problem).toContain('lint, types');
+    expect(prefill?.problem).toBe('Revise PR #42 (wicked/run): Add the delivery action — fix the failing checks: lint, types');
     expect(prefill?.revisesPr?.number).toBe(PR.number);
   });
 
@@ -340,6 +343,62 @@ describe('RunDelivery rebase and re-deliver', () => {
     render(<RunDelivery view={deliveredView()} />);
     await userEvent.setup().click(await screen.findByTestId('run-redeliver-button'));
     expect(await screen.findByTestId('run-redeliver-result')).toHaveTextContent(/^Re-delivered: 1234567 → abcdef0\. Repo checks on the new tree: PASS \(0 checks\)\.$/);
+  });
+
+  it('runs the post-redelivery re-read after a read that was already in flight (never dropped)', async () => {
+    let finish!: (result: RedeliverRunResult) => void;
+    vi.mocked(client.api.redeliverRun).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const view = deliveredView();
+    const card = render(<RunDelivery view={view} />);
+    await userEvent.setup().click(await screen.findByTestId('run-redeliver-button'));
+    // A remount during the long POST starts a read that sees the pre-push PR.
+    card.unmount();
+    let prePush!: (pr: RunPullRequest) => void;
+    vi.mocked(client.api.runPullRequest).mockReturnValueOnce(new Promise((resolve) => { prePush = resolve; }));
+    render(<RunDelivery view={view} />);
+    expect(client.api.runPullRequest).toHaveBeenCalledTimes(2);
+    vi.mocked(client.api.runPullRequest).mockResolvedValue({ ...PR, mergeable: 'MERGEABLE', headSha: NEW, deliveredHead: NEW });
+    await act(async () => { finish(RESULT); });
+    expect(client.api.runPullRequest).toHaveBeenCalledTimes(2);
+    await act(async () => { prePush(PR); });
+    await waitFor(() => expect(client.api.runPullRequest).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(screen.getByTestId('run-pr-status')).toHaveTextContent('mergeable MERGEABLE'));
+  });
+
+  it('re-reads the PR after a refusal and drops the refusal once GitHub says the branch moved', async () => {
+    vi.mocked(client.api.redeliverRun).mockRejectedValue(new ApiError(409, 'PR branch moved since delivery', { error: 'PR branch moved since delivery' }));
+    vi.mocked(client.api.runPullRequest).mockResolvedValueOnce(PR).mockResolvedValue({ ...PR, headMoved: true, headSha: NEW });
+    render(<RunDelivery view={deliveredView()} />);
+    await userEvent.setup().click(await screen.findByTestId('run-redeliver-button'));
+    expect(await screen.findByTestId('run-pr-moved')).toHaveTextContent('now abcdef0, delivered 1234567');
+    expect(client.api.runPullRequest).toHaveBeenCalledTimes(2);
+    expect(screen.queryByTestId('run-redeliver-error')).toBeNull();
+    expect(screen.queryByTestId('run-redeliver-button')).toBeNull();
+  });
+
+  it('keeps a conflicts refusal when the re-read still shows the same conflicting PR', async () => {
+    vi.mocked(client.api.redeliverRun).mockRejectedValue(new ApiError(409, 'rebase conflicts', { conflicts: ['a.ts', 'a.ts', 'b.ts'] }));
+    render(<RunDelivery view={deliveredView()} />);
+    await userEvent.setup().click(await screen.findByTestId('run-redeliver-button'));
+    await waitFor(() => expect(client.api.runPullRequest).toHaveBeenCalledTimes(2));
+    // Repeated paths are listed once.
+    await waitFor(() => expect(screen.getAllByTestId('run-redeliver-conflict-file').map((li) => li.textContent)).toEqual(['a.ts', 'b.ts']));
+  });
+
+  it('says checks failed with no names when crew names none, and an empty conflict list is not a conflicts card', async () => {
+    vi.mocked(client.api.redeliverRun)
+      .mockRejectedValueOnce(new ApiError(409, 'repo checks failed on the rebased tree', { failingChecks: [], report: { checks: [] } }))
+      .mockRejectedValueOnce(new ApiError(409, 'rebase conflicts', { conflicts: [] }));
+    const navigate = vi.fn();
+    const user = userEvent.setup();
+    render(<RunDelivery view={deliveredView()} navigate={navigate} />);
+    await user.click(await screen.findByTestId('run-redeliver-button'));
+    expect(await screen.findByTestId('run-redeliver-failing')).toHaveTextContent(/^Repo checks failed on the rebased tree\. Nothing was pushed\.$/);
+    await user.click(screen.getByTestId('run-redeliver-revise'));
+    expect(takeRetryPrefill()?.problem).toBe('Revise PR #42 (wicked/run): Add the delivery action — fix the repo checks that failed on the rebased tree');
+    await user.click(screen.getByTestId('run-redeliver-button'));
+    expect(await screen.findByTestId('run-redeliver-error')).toHaveTextContent('rebase conflicts');
+    expect(screen.queryByTestId('run-redeliver-conflicts')).toBeNull();
   });
 });
 
