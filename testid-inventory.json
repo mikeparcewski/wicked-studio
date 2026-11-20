@@ -18187,6 +18187,12 @@
       ]
     },
     {
+      "testId": "run-base-unfetched",
+      "files": [
+        "src/components/session/RunRecord.tsx"
+      ]
+    },
+    {
       "testId": "run-chat-drawer",
       "files": [
         "src/components/session/SessionView.tsx"

@@ -6,7 +6,7 @@ import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as client from '../src/api/client.js';
 import type { CoreEvent, SessionView } from '../src/api/types.js';
-import { RunRecordLines, RunStory } from '../src/components/session/RunRecord.js';
+import { RunBaseNote, RunRecordLines, RunStory } from '../src/components/session/RunRecord.js';
 import { ObjectSheet } from '../src/components/sheets/ObjectSheet.js';
 import { useProvenanceStore } from '../src/store/provenance.js';
 import { useRunEventStore } from '../src/store/events.js';
@@ -170,5 +170,25 @@ describe('S16a-1c — the deciding verdict in the sheet’s Steps tab', () => {
     act(() => openSheet({ kind: 'session', sessionId: 'run:r-live2' }, 'steps'));
     expect(screen.queryByTestId('sheet-verdict')).toBeNull();
     expect(screen.getByTestId('sheet-steps')).toBeInTheDocument();
+  });
+});
+
+describe('wicked-crew#1566 — a run that may have started behind the remote says so', () => {
+  const MSG = 'This run started from origin/main at 1234567, and the daemon could not fetch origin (network down), so it may be behind the remote.';
+  it('shows the audit sentence from the one audit fetch (running run)', async () => {
+    useProvenanceStore.setState({ byRun: {}, baseNotices: {} } as never);
+    vi.spyOn(client.api, 'getAudit').mockResolvedValue({ entries: [
+      { action: 'run.base_unfetched', runId: RUN, detail: { message: MSG } },
+    ] } as never);
+    render(<RunBaseNote runId={RUN} />);
+    expect(await screen.findByTestId('run-base-unfetched')).toHaveTextContent(MSG);
+    expect(client.api.getAudit).toHaveBeenCalledTimes(1);
+  });
+  it('says nothing when the audit has no such entry', async () => {
+    useProvenanceStore.setState({ byRun: {}, baseNotices: {} } as never);
+    render(<RunBaseNote runId={RUN} />);
+    await act(async () => { await Promise.resolve(); });
+    expect(client.api.getAudit).toHaveBeenCalled();
+    expect(screen.queryByTestId('run-base-unfetched')).toBeNull();
   });
 });
