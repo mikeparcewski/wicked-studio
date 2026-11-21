@@ -277,8 +277,17 @@ const qeEvents = (): CoreEvent[] => [
 
 interface EscCase { kind: string; gate: OpenGate; units: WorkUnit[]; events: CoreEvent[]; rejudge?: unknown; engine: string[] }
 const ESC: EscCase[] = [
-  { kind: 'floor failure, override offered', gate: gateOf({ gateKind: 'escalation', prompt: FLOOR_PROMPT }), units: UNITS, events: floorEvents(), engine: ['approve', 'request_changes', 'operator_judgment', 'reject'] },
-  { kind: 'floor failure, no override in its list', gate: gateOf({ gateKind: 'escalation', prompt: FLOOR_PROMPT.replace(JUDGMENT.trim() + ' ', '') }), units: UNITS, events: floorEvents(), engine: ['approve', 'request_changes', 'reject'] },
+  { kind: 'listed escalation with reassign', gate: gateOf({ gateKind: 'escalation', prompt: 'The gate.', actionsRead: true, actions: [
+    { action: 'approve', intent: 'retry', note: 'optional' },
+    { action: 'retry_qe', intent: 'retry_qe', note: 'none' },
+    { action: 'request_changes', intent: 'send_back', note: 'optional' },
+    { action: 'reassign', intent: 'reseat_and_retry', note: 'optional', seats: ['codex'] },
+    { action: 'reject', intent: 'stop', note: 'none' },
+  ] }), units: UNITS, events: [], engine: ['approve', 'retry_qe', 'request_changes', 'reassign', 'reject'] },
+  // `reassign` is crew's `POST /runs/:id/reassign` at an escalation gate (it approves the gate and re-seats the step): crew
+  // takes it wherever another seat of the run's pool can run the step, here `claude` for the failed `codex` floor step.
+  { kind: 'floor failure, override offered', gate: gateOf({ gateKind: 'escalation', prompt: FLOOR_PROMPT }), units: UNITS, events: floorEvents(), engine: ['approve', 'request_changes', 'operator_judgment', 'reassign', 'reject'] },
+  { kind: 'floor failure, no override in its list', gate: gateOf({ gateKind: 'escalation', prompt: FLOOR_PROMPT.replace(JUDGMENT.trim() + ' ', '') }), units: UNITS, events: floorEvents(), engine: ['approve', 'request_changes', 'reassign', 'reject'] },
   { kind: 'denied unit', gate: gateOf({ gateKind: 'escalation', prompt: DENIED_PROMPT }), units: UNITS, events: [{ type: 'gateEvaluated', session: RUN, ord: 2, denial: { source: 'input_governance', reason: 'x', claimId: null, ruleIds: [], deniedTool: null, phase: null }, combined: false, evaluatorPolicies: [] } as unknown as CoreEvent], engine: ['approve', 'reject'] },
   // studio#761 (ruled): nothing was judged, so Send back is withheld even though the prompt names it.
   { kind: 'QE escalation, no verdict', gate: gateOf({ ord: 6, gateKind: 'escalation', prompt: QE_PROMPT }), units: QE_UNITS, events: qeEvents(), engine: ['approve', 'reject'] },
@@ -287,13 +296,13 @@ const ESC: EscCase[] = [
   { kind: 'plain workflow gate (def)', gate: gateOf({ gateKind: 'def', prompt: 'Approve the design before unit 2 runs.' }), units: UNITS, events: [], engine: ['approve', 'request_changes', 'reject'] },
 ];
 
-const rowModelOf = (c: EscCase) => sessionGateChoices({ runId: RUN, gate: c.gate, units: c.units, events: c.events, pool: ['claude', 'codex', 'pi'], roster: null, rerun: null, fullVerdict: null, rejudge: (c.rejudge ?? null) as never })!;
+const rowModelOf = (c: EscCase) => sessionGateChoices({ runId: RUN, gate: c.gate, units: c.units, events: c.events, pool: ['claude'], roster: null, rerun: null, fullVerdict: null, rejudge: (c.rejudge ?? null) as never, ...(c.gate.actions !== undefined ? { actions: c.gate.actions } : {}) })!;
 
 describe('GateRow, escalation kinds: the row\'s actions equal the gate\'s list', () => {
   for (const c of ESC) {
     it(c.kind, () => {
       const m = rowModelOf(c);
-      expect(sorted([...m.choices, ...m.overflow].filter((x) => x.decision !== null).map((x) => tokenOf(x.decision)))).toEqual(sorted(c.engine));
+      expect(sorted(choiceTokens([...m.choices, ...m.overflow]))).toEqual(sorted(c.engine));
     });
   }
 });
@@ -364,6 +373,8 @@ describe('GateRow submits, for each action it draws, the decision the gate lists
 
   const submitted = async (c: EscCase, key: string): Promise<{ action?: string; approve?: boolean } | null> => {
     vi.mocked(client.api.confirmGate).mockClear();
+    const reassign = vi.spyOn(client.api, 'reassignRun').mockResolvedValue({ status: 'ok' } as never);
+    reassign.mockClear();
     vi.spyOn(client.api, 'getGate').mockResolvedValue({ runId: RUN, ord: c.gate.ord, prompt: c.gate.prompt, lifecycle: 'open', receivedAt: '', ...(c.rejudge !== undefined ? { rejudge: c.rejudge } : {}) } as never);
     useGateStore.setState({ gates: { [RUN]: c.gate } });
     useRunEventStore.setState({ byRun: { [RUN]: c.events } });
@@ -378,7 +389,8 @@ describe('GateRow submits, for each action it draws, the decision the gate lists
     await act(async () => { await flushDecisionsForTest(); });
     const call = vi.mocked(client.api.confirmGate).mock.calls[0];
     cleanup();
-    return call === undefined ? null : (call[1] as { action?: string; approve?: boolean });
+    return reassign.mock.calls.length > 0 ? { action: 'reassign' }
+      : call === undefined ? null : (call[1] as { action?: string; approve?: boolean });
   };
 
   // studio#1170 review r1: with the engine's list, every control the row draws SUBMITS a listed token (the wire body,
@@ -453,14 +465,20 @@ describe('GateRow submits, for each action it draws, the decision the gate lists
     it(c.kind, async () => {
       const m = rowModelOf(c);
       const sent: string[] = [];
-      for (const ch of m.choices.filter((x) => x.decision !== null)) {
-        const body = await submitted(c, ch.key);
-        expect(body, `${c.kind}: ${ch.key} sent nothing`).not.toBeNull();
-        expect(tokenOf(body), `${c.kind}: ${ch.key}`).toBe(tokenOf(ch.decision));
-        sent.push(tokenOf(body));
+      // studio#1114: inline AND overflow, each clicked on the card (ui-v2 draws every choice on the face, nothing to open).
+      for (const choices of [m.choices, m.overflow]) {
+        for (const ch of choices) {
+          const body = await submitted(c, ch.key);
+          if (ch.decision === null && ch.reassignCli === undefined) {
+            expect(body, `${c.kind}: ${ch.key} is a client move`).toBeNull();
+            continue;
+          }
+          expect(body, `${c.kind}: ${ch.key} sent nothing`).not.toBeNull();
+          expect(tokenOf(body), `${c.kind}: ${ch.key}`).toBe(choiceTokens([ch])[0]);
+          sent.push(tokenOf(body));
+        }
       }
-      // Every action the gate lists that the row draws inline is submitted as itself; none is outside the list.
-      for (const t of sent) expect(c.engine).toContain(t);
+      expect(sorted(sent)).toEqual(sorted(c.engine));
     });
   }
 });
@@ -490,7 +508,9 @@ describe('ProposalCard submits, for each answer it draws, the decision the gate 
     Object.assign(view.session as object, { assurance: { mode: 'full', required: ['qe_acceptance'], qe: { status: 'required', basis: 'diff', score: 100, threshold: 20, reason: 'required', reasons: [], ord: 2, tree: 'abc' } } });
     const acceptance = refused ? { required: true, satisfied: false, walkthrough: null, line: 'QE acceptance did not pass' } : { required: false, satisfied: true, walkthrough: null, line: '' };
     render(<ProposalCard view={view} chain={CHAIN} acceptance={acceptance as never} />);
-    fireEvent.click(document.querySelector<HTMLElement>(`[data-option="${way}"]`)!);
+    const option = document.querySelector<HTMLElement>(`[data-option="${way}"]`);
+    expect(option, `${way} is drawn`).not.toBeNull();
+    fireEvent.click(option!);
     const reason = screen.queryByTestId('session-proposal-skip-qe-reason') ?? screen.queryByTestId('session-proposal-reason-text');
     if (reason !== null) fireEvent.change(reason, { target: { value: 'because the evidence says so' } });
     fireEvent.click((screen.queryByTestId('session-proposal-skip-qe-send') ?? screen.queryByTestId('session-proposal-primary') ?? screen.getByTestId('session-proposal-go')) as HTMLElement);
@@ -500,6 +520,24 @@ describe('ProposalCard submits, for each answer it draws, the decision the gate 
     cleanup();
     return call === undefined ? null : (call[1] as { action?: string; approve?: boolean });
   };
+
+  it.each(['choices', 'actions'] as const)('explicit %s list: all three card answers submit exactly the declared set', async (source) => {
+    const engine = ['approve', 'request_changes', 'reject'];
+    const gate = gateOf({ ord: 1, gateKind: 'plan_approval', prompt: 'Approve plan rev 1: build, review.', actionsRead: true,
+      ...(source === 'choices' ? { choices: ['approve', 'request_changes', 'reject'] } : { actions: [
+        { action: 'approve', intent: 'continue', note: 'optional' },
+        { action: 'request_changes', intent: 'send_back', note: 'optional' },
+        { action: 'reject', intent: 'stop', note: 'none' },
+      ] }),
+    });
+    const sent: string[] = [];
+    for (const way of ['go', 'send-back', 'end']) {
+      const body = await sendWay(gate, false, way);
+      expect(body, `${source}: ${way} sent nothing`).not.toBeNull();
+      sent.push(tokenOf(body));
+    }
+    expect(sorted(sent)).toEqual(sorted(engine));
+  });
 
   it('plan_approval: approve and reject', async () => {
     const gate = gateOf({ ord: 1, gateKind: 'plan_approval', prompt: 'Approve plan rev 1: build, review.' });
@@ -621,3 +659,4 @@ describe('the resolver keeps every action the gate lists', () => {
     expect(result.current).toBeNull();
   });
 });
+

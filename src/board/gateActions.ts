@@ -9,7 +9,7 @@ import { jobTitle, plainGateQuestion } from './deskWords.js';
 import type { LaunchPlan } from '../api/teamPlan.js';
 import { sessionPath } from './sessionModel.js';
 import { PLAN_UNSEEN_TEXT, seenPlanRev } from './planRevBinding.js';
-import { beginGateRead, gateFromInfo, gateGen, useGateStore, type GateReadTicket } from '../store/gates.js';
+import { beginGateRead, doneRecheck, gateFromInfo, gateGen, hasNoGate, useGateStore, type GateReadTicket } from '../store/gates.js';
 import { recordShown } from '../store/gateDiffSeen.js';
 import { useMembershipStore } from '../store/membership.js';
 import {
@@ -110,15 +110,29 @@ function patch(runId: string, part: Partial<GateActionState>): void {
   }));
 }
 
+export interface GateInstance { ord: number; receivedAt?: number }
+
+const sameInstance = (a: GateInstance, b: GateInstance): boolean =>
+  a.ord === b.ord && (a.receivedAt === undefined || b.receivedAt === undefined || a.receivedAt === b.receivedAt);
+
+function differentOpenGate(runId: string, instance: GateInstance | undefined): boolean {
+  const open = useGateStore.getState().gates[runId];
+  return open !== undefined && instance !== undefined && !sameInstance(open, instance);
+}
+
+function refuseMovedGate(runId: string, instance: GateInstance | undefined): boolean {
+  if (instance === undefined) return false;
+  if (useGateStore.getState().gates[runId] !== undefined && !differentOpenGate(runId, instance)) return false;
+  reportDecision('not-sent', `Not sent: the gate on ${gateLabel(runId)} has moved on since you answered it.`, { keys: [gateKeyOf(runId)] });
+  return true;
+}
+
 // A gate ARRIVING for a run (first sight, a new ord, or the same ord asked again — a new gate
 // INSTANCE, studio#439) is a fresh question — drop any stale decision state so the fresh gate is
 // answerable. The answered state an OPEN decision leaves behind survives its own `clearGate` prune
 // (removal is not arrival), which is what keeps "approved · advancing…" on the chip until the
 // daemon's frame moves the run. Re-reading the SAME instance (same ord and receivedAt) is not an
 // arrival.
-const sameInstance = (a: { ord: number; receivedAt: number }, b: { ord: number; receivedAt: number }): boolean =>
-  a.ord === b.ord && a.receivedAt === b.receivedAt;
-
 useGateStore.subscribe((state, prev) => {
   if (state.gates === prev.gates) return;
   // Wave 2a round 3: a QUEUED decision is about one gate. If that gate leaves (answered elsewhere,
@@ -280,13 +294,11 @@ export function commitGateDecision(
     reportDecision('not-sent', dropNotice(runId, cur), { keys: [gateKeyOf(runId)] });
     return Promise.resolve('dropped');
   }
-  if (opts.expect !== undefined) {
-    const open = useGateStore.getState().gates[runId];
-    if (open === undefined || !sameInstance(open, opts.expect)) {
-      reportDecision('not-sent', `Not sent: the gate on ${gateLabel(runId)} has moved on since you answered it.`, { keys: [gateKeyOf(runId)] });
-      return Promise.resolve('cancelled');
-    }
-  }
+  const gateNow = useGateStore.getState().gates[runId];
+  const ord = opts.expect?.ord ?? decision.ord ?? gateNow?.ord;
+  const at = opts.expect?.receivedAt ?? (gateNow?.ord === ord ? gateNow?.receivedAt : undefined);
+  const instance = ord === undefined ? undefined : { ord, ...(at !== undefined ? { receivedAt: at } : {}) };
+  if ((opts.expect !== undefined || decision.ord !== undefined) && refuseMovedGate(runId, instance)) return Promise.resolve('cancelled');
   // DES-CATALOG-002: a run launched from a chat proposal takes a plan answer only with the revision the person was
   // shown, bound here at the moment they decided (never the newest one at send time).
   const rev = seenPlanRev(runId, decision);
@@ -318,11 +330,6 @@ export function commitGateDecision(
   // `skipRules` and never `amend`.
   const skips = (decision as { skipRules?: Array<{ reason?: unknown }> }).skipRules;
   const words = amend ?? (typeof skips?.[0]?.reason === 'string' ? skips[0].reason : null);
-  // The gate this decision was made on — watched while queued, and sent so the daemon can refuse
-  // a decision that outlived its gate (409 gate_changed).
-  const gateNow = useGateStore.getState().gates[runId];
-  const ord = opts.expect?.ord ?? gateNow?.ord;
-  const at = opts.expect?.receivedAt ?? gateNow?.receivedAt;
   return new Promise<DecisionOutcome>((resolve, reject) => {
     const id = queueDecision({
       verb,
@@ -335,11 +342,11 @@ export function commitGateDecision(
         watched.delete(runId);
         patch(runId, { queued: false });
         const decidedAt = Date.now();
-        const error = await sendGateDecision(runId, ord === undefined ? decision : { ...decision, ord });
+        const error = await sendGateDecision(runId, ord === undefined ? decision : { ...decision, ord }, instance);
         if (error === null) {
           // studio#244: the diff this gate showed is now the operator's last review of the run.
           recordShown(runId, ord, at, decidedAt);
-          if (opts.receipt !== undefined) {
+          if (opts.receipt !== undefined && !differentOpenGate(runId, instance)) {
             patch(runId, { receipt: { ...opts.receipt, sentAt: Date.now() } });
           }
           reportDecision('sent', opts.notice?.sent ?? decisionSent(decision, label), { keys: [gateKeyOf(runId)] });
@@ -373,12 +380,13 @@ export function commitGateDecision(
  * leaves the gate open and the card that asked it on screen. Same undo window, same per-gate state
  * (no double submit with another approve path), and a refusal is also said as a notice.
  */
-export function commitGateReassign(runId: string, cli: string, seatLabel: string, note?: string): Promise<DecisionOutcome> {
+export function commitGateReassign(runId: string, cli: string, seatLabel: string, note?: string, expect?: GateInstance): Promise<DecisionOutcome> {
   const cur = useGateActionStore.getState().byGate[runId] ?? IDLE_GATE_ACTION;
   if (cur.queued || cur.busy || cur.answered !== null) {
     reportDecision('not-sent', dropNotice(runId, cur), { keys: [gateKeyOf(runId)] });
     return Promise.resolve('dropped');
   }
+  if (refuseMovedGate(runId, expect)) return Promise.resolve('cancelled');
   patch(runId, { queued: true, ...NO_ERROR });
   const label = gateLabel(runId);
   const gateNow = useGateStore.getState().gates[runId];
@@ -394,8 +402,12 @@ export function commitGateReassign(runId: string, cli: string, seatLabel: string
         patch(runId, { queued: false, busy: true });
         try {
           await api.reassignRun(runId, cli, note);
-          patch(runId, { busy: false, answered: 'approved', receipt: { kind: 'row', chosenLabel: seatLabel, sentAt: Date.now() } });
-          useGateStore.getState().clearGate(runId);
+          patch(runId, { busy: false });
+          // studio#1121: a newer gate that opened while the move was on its way is not the one it answered.
+          if (!differentOpenGate(runId, gateNow)) {
+            patch(runId, { answered: 'approved', receipt: { kind: 'row', chosenLabel: seatLabel, sentAt: Date.now() } });
+            useGateStore.getState().clearGate(runId);
+          }
           reportDecision('sent', `Moved ${label} to ${seatLabel}; the retry runs there.`, { keys: [gateKeyOf(runId)] });
           resolve('sent');
         } catch (e) {
@@ -419,7 +431,7 @@ export function commitGateReassign(runId: string, cli: string, seatLabel: string
  * fan-out). Same double-submit guard: a call while a POST is open, or after it
  * landed, is dropped.
  */
-export async function sendGateDecision(runId: string, decision: GateDecisionWire): Promise<string | null> {
+export async function sendGateDecision(runId: string, decision: GateDecisionWire, instance?: GateInstance): Promise<string | null> {
   const cur = useGateActionStore.getState().byGate[runId] ?? IDLE_GATE_ACTION;
   if (cur.busy || cur.answered !== null) return 'not sent — already answered or still in flight';
   patch(runId, { busy: true, ...NO_ERROR });
@@ -427,6 +439,8 @@ export async function sendGateDecision(runId: string, decision: GateDecisionWire
     // The ONLY `confirmGate` call in studio (tests/gateWireSingleCaller.test.ts pins it). A refusal
     // (400, 409 gate_changed / gate_unknown) is never retried: the caller reports it as "Not sent".
     await api.confirmGate(runId, decision as GateDecision);
+    // studio#1121: the answer landed, but a newer gate opened before its response: that gate stays, unanswered.
+    if (differentOpenGate(runId, instance)) return null;
     patch(runId, { answered: decision.approve ? 'approved' : 'rejected' });
     // Prune the local gate immediately; the run's own status follows from the
     // daemon's frame, which is what actually moves the card (§1.4 live).
@@ -601,7 +615,8 @@ function startGateRead(runId: string): GateRead {
     const failures = useGateReadStore.getState().failed[runId] ?? 0;
     const epoch = epochOf(runId);
     try {
-      store.applyGateRead(ticket, gateFromInfo(await getGateBounded(runId, failures)));
+      // studio#1023: a reconnect's recheck is done once a read lands (an obsolete read leaves it for the next pass).
+      if (store.applyGateRead(ticket, gateFromInfo(await getGateBounded(runId, failures)))) doneRecheck(runId);
       // An answer ends the retrying only when it is the newest read's, for a run still waiting: an obsolete read's
       // answer (after a reconnect) applies by its ticket as before but must not cancel a newer read's retry.
       if (gateReads.get(runId) === read && epochOf(runId) === epoch) { clearRetry(runId); setFailed(runId, 0); }
@@ -609,7 +624,7 @@ function startGateRead(runId: string): GateRead {
       // crew's 404: no open gate, an answer. Any other failure (network, the deadline) leaves the store as it was and
       // is tried again, later and for longer (studio#1197), until a read lands or the run stops waiting.
       if (e instanceof ApiError && e.status === 404) {
-        store.applyGateRead(ticket, null);
+        if (store.applyGateRead(ticket, null)) doneRecheck(runId);
         if (gateReads.get(runId) === read && epochOf(runId) === epoch) { clearRetry(runId); setFailed(runId, 0); }
       } else if (gateReads.get(runId) === read && epochOf(runId) === epoch && useGateStore.getState().gates[runId] === undefined) {
         // Only the newest read counts, for a run still waiting that holds no gate: a read that was replaced, one begun
@@ -636,6 +651,7 @@ export function ensureGate(runId: string): Promise<void> {
     setFailed(runId, 0);
     return Promise.resolve();
   }
+  if (hasNoGate(runId)) return Promise.resolve();
   const on = gateReads.get(runId);
   if (on !== undefined && on.ticket.gen === gateGen(runId)) return on.promise;
   return startGateRead(runId).promise;

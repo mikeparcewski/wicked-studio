@@ -32,7 +32,9 @@ const RUN = 'r-s15e';
 const NOW = 1_700_000_000_000;
 
 function plainGate(over: Partial<OpenGate> = {}): OpenGate {
-  return { runId: RUN, ord: 1, prompt: 'Approve the plan?', lifecycle: 'open', receivedAt: NOW, ...over };
+  const gate = { runId: RUN, ord: 1, prompt: 'Approve the plan?', lifecycle: 'open', receivedAt: NOW, ...over };
+  useGateStore.getState().setGate(gate);
+  return gate;
 }
 
 function view(over: Partial<SessionView['session']> = {}): SessionView {
@@ -680,7 +682,7 @@ describe('studio#1177: listed notes and missing evidence', () => {
     expect(screen.getByTestId('session-gate-send')).toBeEnabled();
     expect(screen.getByLabelText(/optional/)).toBe(screen.getByTestId('session-gate-note'));
     fireEvent.click(screen.getByTestId('session-gate-send'));
-    await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, { approve: false, action: 'request_changes' }));
+    await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, { approve: false, action: 'request_changes', ord: 1 }));
   });
 
   it('a listed reject has no reason box and queues from the primary', async () => {
@@ -688,7 +690,7 @@ describe('studio#1177: listed notes and missing evidence', () => {
     fireEvent.click(screen.getByTestId('session-gate-choice'));
     expect(screen.queryByTestId('session-gate-note')).toBeNull();
     fireEvent.click(screen.getByTestId('session-gate-confirm'));
-    await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, { approve: false }));
+    await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, { approve: false, ord: 1 }));
   });
 
   it.each(['  try the focused check  ', '   '])('a listed optional reassign carries only nonblank words: %j', async (words) => {
@@ -717,7 +719,7 @@ describe('studio#1177: listed notes and missing evidence', () => {
     fireEvent.click(screen.getByTestId('session-gate-events-retry'));
     await waitFor(() => expect(screen.queryByTestId('session-gate-events-error')).toBeNull());
     chooseGate('approve');
-    await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, { approve: true }));
+    await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, { approve: true, ord: 1 }));
   });
 
   it('missing evidence preselects nothing: the listed answers are drawn, none recommended', async () => {
@@ -741,7 +743,7 @@ describe('studio#1177: listed notes and missing evidence', () => {
     render(<GateRow view={view()} gate={plainGate({ actions: [{ action: 'approve', intent: 'continue', note: 'none' }] })} />);
     await screen.findByTestId('session-gate-events-error');
     chooseGate('approve');
-    await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, { approve: true }));
+    await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, { approve: true, ord: 1 }));
   });
 
   it('ProposalCard sends an optional send-back without words', async () => {

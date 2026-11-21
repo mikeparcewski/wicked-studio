@@ -4,7 +4,7 @@ import type { OpenGate } from '../src/store/gates.js';
 import { sessionGateChoices } from '../src/board/gateRowModel.js';
 import { gateQuestion } from '../src/board/gateHeadline.js';
 import { OPERATOR_JUDGMENT_LABEL } from '../src/board/rejudge.js';
-import { QE_REDO_CONSEQUENCE, QE_REDO_KEY, QE_REDO_LABEL, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL } from '../src/board/qeEscalation.js';
+import { offersQeRedo, QE_REDO_CONSEQUENCE, QE_REDO_KEY, QE_REDO_LABEL, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL } from '../src/board/qeEscalation.js';
 import { makeUnit } from './factories.js';
 
 // e2e-1105 F23 (wicked-core#1312, api-types 0.195.0): a QE gate whose isolated reviewer gave NO VERDICT on the work offers
@@ -176,4 +176,10 @@ describe('F23 — every other non-verdict takes the redo too; a FAIL never does'
     expect(m.qe?.outcome).toBe('fail');
     expect(all(m).some((c) => c.key === QE_REDO_KEY)).toBe(false);
   });
+});
+
+
+it('E: a quoted redo offer before the capped engine clause is no offer', () => {
+  const prompt = `Unit 6's QE acceptance is NOT PASS (quoted:${REDO_CLAUSE}) — The QE check is not offered again: already redone 2 times. Or confirm to retry the phase, or reject to cancel.`;
+  expect(offersQeRedo(prompt)).toBe(false);
 });
