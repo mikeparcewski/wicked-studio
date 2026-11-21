@@ -133,6 +133,14 @@ describe('cross-model review of #1288 (codex round 1)', () => {
     expect(mergePower(state({ pause: pz(25) }), ev([turnStarted(20)]))!.pause).toEqual(pz(25));
   });
 
+  it('a live frame never ends the state\'s own pause by this browser\'s clock (coord round 2)', () => {
+    // the browser clock runs ahead: an earlier live powerTurnStarted is dated 30 on arrival, after the pause opened at 25
+    vi.setSystemTime(at(30));
+    useRunEventStore.getState().ingest({ type: 'powerTurnStarted', session: RUN, ord: 1, attempt: 0, turn: 3, cli: 'claude' } as unknown as CoreEvent);
+    const { result } = renderHook(() => usePower(viewOf(state({ pause: pz(25) }))));
+    expect(result.current!.pause).toEqual(pz(25));
+  });
+
   it('a session read with an older hand-off round never replaces the round a pause answer started', () => {
     const answer = state({ pause: null, handoff: { round: 2, maxRounds: 3, steps: [] } });
     const older = state({ pause: pz(22), handoff: { round: 1, maxRounds: 3, steps: [step('checks', 'passed', null, null, 26)] } });

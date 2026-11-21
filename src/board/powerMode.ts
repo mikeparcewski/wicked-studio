@@ -615,8 +615,9 @@ export function mergePower(p: PowerState | null, events: readonly CoreEvent[] | 
     const when = tsOf(e) ?? arrivedAt(e) ?? (typeof e.at === 'number' ? e.at : 0);
     // Anything that moves the run on after a pause ends it (seen on the rig: an answered pause, then the escalation,
     // then hand-off — no new turn ever started): after a frame's pause, any such frame; after the state's own pause,
-    // one dated after it opened. Checked on its own: the frame is still folded below.
-    if (pause !== null && PAUSE_ENDS.has(e.type) && (pauseFromFrame || when > pause.at)) { pause = null; pauseFromFrame = false; }
+    // only a RECORDED frame dated after it opened (its ts is the daemon's clock, as the pause's time is; a live frame's
+    // time is this browser's, which may run ahead). Checked on its own: the frame is still folded below.
+    if (pause !== null && PAUSE_ENDS.has(e.type) && (pauseFromFrame || (tsOf(e) ?? -Infinity) > pause.at)) { pause = null; pauseFromFrame = false; }
     if (e.type === 'rigorRescored' && e.change !== null && typeof e.change === 'object') {
       const c = e.change as RigorChange;
       if (typeof c.seq === 'number' && !history.has(c.seq)) history.set(c.seq, c);
