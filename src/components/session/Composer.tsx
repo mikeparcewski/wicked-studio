@@ -14,6 +14,7 @@ import { commandsOn, LOOKS_DEBOUNCE_MS, looksLike, useCatalogV2 } from '../../st
 import { entryOffered, entryWords, jobCatalogView, startsInline, type CatalogEntry } from '../../board/workflowCatalog.js';
 import { jobChipFor, postJob, setStartNote, useStartNotes, workflowChipFor } from '../../store/inlineStart.js';
 import { InlineStart, type InlineStartHandle } from './InlineStart.js';
+import { ChatHelpers } from './ChatHelpers.js';
 import { catalogProjectOf, useWorkflowCatalog } from '../../store/workflowCatalog.js';
 import { startCatalogEntry } from '../../store/startCatalogEntry.js';
 import { goToPath } from '../QeRefusalWarning.js';
@@ -175,11 +176,13 @@ const SEAT_REFUSAL = /no seat in the roster|every seat is signed out|signed out 
 
 export function Composer({
   composerKey, text, setText, onSend, runs = [], started = false, placeholder, ariaLabel, variant, className = '',
-  inputRef, hint = false, footer = null, suggestions = [], navigate, contextProjectId = null, answerOnly = false, answerOptional = false, jobChatId = null,
+  inputRef, hint = false, footer = null, suggestions = [], navigate, contextProjectId = null, answerOnly = false, answerOptional = false, jobChatId = null, chatHasPersonMessage,
 }: {
   /** DES-CATALOG-002 §4.6 (Lane E2): the chat this composer stands in, live on the daemon. A job picked here is posted
    *  into it (`POST /chats/:id/proposals`); with none (the Desk, a fresh chat's page) it seeds a new chat. */
   jobChatId?: string | null;
+  /** A proposal can start the thread before the first person message fixes the chat's seats. */
+  chatHasPersonMessage?: boolean;
   /** The box answers one thing (a job's bound reply, DES-CATALOG-002 §2.4): Send hands over the typed words alone —
    *  no workflow chip, `/` command or about-chip context starts or decorates anything. */
   answerOnly?: boolean;
@@ -423,7 +426,7 @@ export function Composer({
   // fold (the desk_home fit), and the row is there whenever there is something to send.
   // A send opens a chat before the first send, and after it whenever an `@project` chip starts a
   // fresh session there (`fresh: started` below) — both take the row's seats (codex r2 on #631).
-  const opensChat = !started || project !== null;
+  const opensChat = (!started && jobChatId === null) || project !== null;
   // While the `@` menu is open it already lists these helpers: the row steps aside, so one list shows
   // and the menu sits on the box (S3 UX gate, codex r2).
   const atMenuOpen = menuOpen && token?.trigger === '@';
@@ -434,7 +437,8 @@ export function Composer({
   const commandLine = v2Line && v2View !== null && parseCommandLine(v2View, line) !== null;
   const seatsApply = !answerOnly && jobChip === null && !commandLine && eligibleSeats.length > 0 && ((wfChip !== null && chipEntry?.launchKind !== 'app') || (wfChip === null && opensChat && text.trim() !== ''));
   // The command list stands in the same place: while it is open over a `/` line the row steps aside (one list shows).
-  const showSeats = seatsApply && !atMenuOpen && !v2Line;
+  const chatHelpers = !answerOnly && jobChatId !== null && chatHasPersonMessage === false && project === null;
+  const showSeats = seatsApply && !chatHelpers && !atMenuOpen && !v2Line;
   // A job's helpers (New job's J4 rule, codex r1 on #982): one that cannot take work now (signed out, benched) is off
   // unless turned on by hand, and the row shows exactly what the launch sends.
   const unusable = useMemo(() => new Set(wfChip === null ? [] : (roster ?? []).flatMap((s) => {
@@ -661,6 +665,7 @@ export function Composer({
     setNote(null);
     setStartNote(composerKey, null);
     const sentWords = text;
+    const helper = chips.find((c) => c.kind === 'about' && c.key.startsWith('h:'));
     try {
       const out = await postJob({
         card: j.card, option: j.option, depth: j.depth, words: j.words, source: j.source,
@@ -669,6 +674,7 @@ export function Composer({
         projectId: project?.projectId ?? contextProjectId, repoRef: project !== null ? null : sessionRepo, pickKey: j.pickKey,
         // F41: a new chat's job that takes a repository opens on the one its words name.
         repoFromWords: takesRepo(v2View, j.card, j.option),
+        ...(helper !== undefined ? { lead: helper.key.slice(2) } : {}),
       });
       // Not posted (the person went elsewhere first): the draft, its chip and its request stay for a retry (codex r7).
       if (out === null) return;
@@ -776,6 +782,9 @@ export function Composer({
             )
             : <span data-testid="composer-start-note" role="alert" className="wk-composer-note wk-composer-note--bad">{startNote}</span>)}
         </div>
+      )}
+      {chatHelpers && !atMenuOpen && !v2Line && jobChatId !== null && (
+        <ChatHelpers key={jobChatId} chatId={jobChatId} roster={roster} />
       )}
       {showSeats && (
         <div data-testid="composer-seats" role="group" aria-label="Helpers this send uses" className="wk-composer-chips">

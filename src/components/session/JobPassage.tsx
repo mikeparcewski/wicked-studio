@@ -371,12 +371,32 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
     }
     setError(null);
     setHandOff(true);
-    api.proposeInChat(chatId, body).then((res) => {
+    api.proposeInChat(chatId, body).then(async (res) => {
       handOffBodies.current.delete(key);
       // The person asked for the next job: ITS passage (the proposal crew answered with) takes the focus and says so.
       const made = (res as { view?: { proposal?: { pid?: unknown; lineage?: unknown } } } | undefined)?.view?.proposal;
       const madeLineage = typeof made?.lineage === 'string' ? made.lineage : typeof made?.pid === 'string' ? made.pid : null;
       if (madeLineage !== null) useHandOff.setState({ intent: { chatId, lineage: madeLineage } });
+      const next = res.view?.proposal?.seats;
+      if (what === 'again' && p.seats !== undefined && next !== undefined) {
+        const oldKeys = new Set([...p.seats.keys, ...(p.seats.lead !== null ? [p.seats.lead] : [])]);
+        const newKeys = new Set([...next.keys, ...(next.lead !== null ? [next.lead] : [])]);
+        const addSeats = [...oldKeys].filter((seat) => !newKeys.has(seat));
+        const removeSeats = [...newKeys].filter((seat) => !oldKeys.has(seat));
+        if ((p.seats.lead !== null && p.seats.lead !== next.lead) || addSeats.length > 0 || removeSeats.length > 0) {
+          await api.reviseChatProposal(chatId, {
+            revises: res.view.proposal.pid,
+            edits: {
+              ...(p.seats.lead !== null && p.seats.lead !== next.lead ? { lead: p.seats.lead } : {}),
+              ...(addSeats.length > 0 ? { addSeats } : {}),
+              ...(removeSeats.length > 0 ? { removeSeats } : {}),
+            },
+            source: 'question',
+            // Per proposal made: a second Try again of the same run revises its own proposal, never reuses this id.
+            requestId: `${key}:${res.view.proposal.pid}:seats`,
+          }).catch((e: unknown) => setError(`Your helper choice was not kept (${proposalRefusal(e).words}): change it in the job.`));
+        }
+      }
       onChanged();
     }).catch((e: unknown) => setError(proposalRefusal(e).words))
       .finally(() => setHandOff(false));
