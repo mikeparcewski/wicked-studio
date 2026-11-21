@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { ChatOpenBody, ChatProposalView } from 'wicked-crew-api-types';
 import { api } from '../api/client.js';
+import { ApiError } from '../api/errors.js';
 import { UNFILED_MOUNT } from '../api/interactive.js';
 import type { AboutChip } from '../board/aboutChips.js';
 import { cardForWorkflow, refusalOf } from '../board/slashCatalog.js';
@@ -110,6 +111,15 @@ function requestFor(pickKey: string, body: string): SentJob {
   return mine;
 }
 
+/** What the person reads when the chat an earlier try opened was deleted (crew's 410 `chat_gone`). */
+export const CHAT_GONE = 'the chat an earlier try opened has been deleted; the next try opens a new chat';
+
+function isChatGone(e: unknown): boolean {
+  if (!(e instanceof ApiError) || e.status !== 410) return false;
+  const body = e.body;
+  return typeof body === 'object' && body !== null && (body as { code?: unknown }).code === 'chat_gone';
+}
+
 /** A named opener's own envelope, kept with its job chip until the job is posted: where it opens (the project, the
  *  repository) and the requirements the person chose (codex r1: a retry after a failed seed keeps all of it). */
 interface Envelope {
@@ -192,8 +202,20 @@ export async function postJob(p: JobPost): Promise<{ chatId: string; proposal: C
     const clis = p.lead !== undefined && chosen.includes(p.lead) ? [p.lead, ...chosen.filter((k) => k !== p.lead)] : chosen;
     seedClis = clis;
     const body = JSON.stringify(['seed', fields, scope, clis]);
-    mine = requestFor(p.pickKey, body);
-    const res = await api.openChat({ seed: fields, clis, requestId: mine.requestId, ...scope });
+    const seedReq = requestFor(p.pickKey, body);
+    mine = seedReq;
+    const res = await api.openChat({ seed: fields, clis, requestId: seedReq.requestId, ...scope }).catch((e: unknown) => {
+      // studio#1282: crew answers 410 `chat_gone` when the chat this request opened was deleted since. That request id
+      // is spent (every retry would get 410 again): it is dropped, so the next try is a new request and a new chat.
+      if (isChatGone(e)) {
+        if (sent.get(p.pickKey) === seedReq) {
+          sent.delete(p.pickKey);
+          prepicked.delete(p.pickKey);
+        }
+        throw new Error(CHAT_GONE);
+      }
+      throw e;
+    });
     // A refused seed opened its chat but made no proposal: say why where the person is. A retry of the same body is the
     // same request, so crew answers that chat and completes its proposal (§4.6).
     if (res.proposal === undefined && res.seedRefused !== undefined) throw new Error(res.seedRefused.error);

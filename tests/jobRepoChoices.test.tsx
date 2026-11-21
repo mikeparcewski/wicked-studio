@@ -93,7 +93,7 @@ beforeEach(() => {
       if (path === `/chats/${CHAT}/close` && closeFails) return Promise.resolve(ok({ error: 'the daemon said no' }, 500));
       if (path === '/chats') {
         const st = seedStatuses.shift() ?? 201;
-        return seedGate.then(() => (st >= 400 ? ok({ error: 'the daemon said no' }, st) : ok({ chatId: 'seeded-1', seats: [], scope: null, refused: [], proposal: { state: 'open', proposal: { pid: 'seeded-1:person:1', kind: 'job' } } }, 201)));
+        return seedGate.then(() => (st === 410 ? ok({ code: 'chat_gone', error: 'the chat this request opened was deleted' }, 410) : st >= 400 ? ok({ error: 'the daemon said no' }, st) : ok({ chatId: 'seeded-1', seats: [], scope: null, refused: [], proposal: { state: 'open', proposal: { pid: 'seeded-1:person:1', kind: 'job' } } }, 201)));
       }
       return Promise.resolve(ok({ view: {} }));
     }
@@ -299,6 +299,17 @@ describe('F41: a job seeded from a new chat opens on the repository its words na
     expect(seeds()).toHaveLength(2);
     expect(seeds()[1]!.body['repoRefs']).toEqual(['rg1']);
     expect(seeds()[1]!.body['requestId']).toBe(seeds()[0]!.body['requestId']);
+  });
+  it('studio#1282: a seed whose chat was deleted (410 chat_gone) says so, and the next try is a new request', async () => {
+    // The first answer is lost (503): the retry is the same request, and crew answers that its chat was deleted.
+    seedStatuses = [503, 410];
+    const post = () => postJob({ card: 'analyze-codebase', option: 'domain', depth: null, words: 'Map the domain', source: 'command', chatId: null, projectId: null, repoRef: null, pickKey: 'k:gone' });
+    await expect(post()).rejects.toThrow();
+    await expect(post()).rejects.toThrow('the chat an earlier try opened has been deleted; the next try opens a new chat');
+    await post();
+    expect(seeds()).toHaveLength(3);
+    expect(seeds()[1]!.body['requestId']).toBe(seeds()[0]!.body['requestId']);
+    expect(seeds()[2]!.body['requestId']).not.toBe(seeds()[1]!.body['requestId']);
   });
   it('a retry with edited words reads its own repository (the first read is kept only for the same words)', async () => {
     seedStatuses = [503];
