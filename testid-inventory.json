@@ -8492,6 +8492,24 @@
       ]
     },
     {
+      "testId": "job-passage-gate-reading",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-gate-retry",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-gate-unread",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
       "testId": "job-passage-held",
       "files": [
         "src/components/session/JobPassage.tsx"

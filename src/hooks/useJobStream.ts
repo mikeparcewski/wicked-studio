@@ -13,6 +13,7 @@ import { useGateStore } from '../store/gates.js';
 import { loadPlanGate, usePlanGate } from '../store/planGates.js';
 import { useTeamFold } from './useTeamFold.js';
 import { useGateActions } from './useGateActions.js';
+import { useOwnGateRead } from './useOwnGateRead.js';
 
 /**
  * The job stream's one hook (DES-CATALOG-002 rev 7 §2.8.3): a lineage plus its run's state from studio's existing
@@ -76,6 +77,9 @@ export function useJobView(lineage: JobLineage, runs: readonly SessionView[], no
   planRetry: (() => void) | null;
   /** The run's own read by id failed (it is not in the runs index): reads it again. */
   runRetry: (() => void) | null;
+  /** A waiting question has no gate yet: distinguish a pending read from a failed one. */
+  gateRead: 'reading' | 'failed' | null;
+  gateRetry: () => void;
 } {
   const runId = jobRunId(lineage, runs);
   const listed = runId === null ? null : runs.find((r) => r.session.id === runId) ?? null;
@@ -91,6 +95,7 @@ export function useJobView(lineage: JobLineage, runs: readonly SessionView[], no
   }, [runId, listed, readTry]);
   const runReadFailed = listed === null && read !== null && read.id === runId && read.failed;
   const run = listed ?? (read !== null && read.id === runId ? read.run : null);
+  useOwnGateRead(runId, run?.session.status);
   const gate = useGateStore((s) => (runId === null ? undefined : s.gates[runId]));
   const waiting = run?.session.status === 'awaiting_human';
   const plan = usePlanGate(runId, waiting);
@@ -164,5 +169,8 @@ export function useJobView(lineage: JobLineage, runs: readonly SessionView[], no
   const gateReadFailed = useGateReadStore((s) => (runId === null ? 0 : s.failed[runId] ?? 0)) > 0;
   const planUnread = waiting && ((gate === undefined && gateReadFailed) || teamError !== null || (plan.view === null && !plan.pending && !plan.reading && (gate?.gateKind === 'plan_approval' || !classified)));
   const planRetry = planUnread && runId !== null ? () => { teamRetry(); void loadPlanGate(runId); void ensureGate(runId); } : null;
-  return { view, run, inputs, planRetry, runRetry: runReadFailed ? () => setReadTry((n) => n + 1) : null };
+  // Keep the answer's Undo / receipt mounted while the run status catches up with its cleared gate.
+  const gateRead = view.phase === 'gate' && gate === undefined && inputs.pending === null && !answering ? (gateReadFailed ? 'failed' : 'reading') : null;
+  const gateRetry = (): void => { if (runId !== null) void ensureGate(runId); };
+  return { view, run, inputs, planRetry, gateRead, gateRetry, runRetry: runReadFailed ? () => setReadTry((n) => n + 1) : null };
 }
