@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CoreEvent } from '../src/api/types.js';
 import { plainGateQuestion } from '../src/board/deskWords.js';
+import type { GateAction } from '../src/board/gateContract.js';
 import { sessionGateChoices } from '../src/board/gateRowModel.js';
 import { headlineProgress, pagesDoneOf, repeatChoicesOf, repeatLineOf, repeatQuestion } from '../src/board/repeatProgress.js';
 import type { OpenGate } from '../src/store/gates.js';
@@ -78,6 +79,45 @@ describe('the budget ask', () => {
     expect(m.choices.map((c) => [c.label, c.decision, c.isDefault === true])).toEqual([
       ['Run it again', { approve: true }, false],
       ['Stop here', { approve: false }, false],
+    ]);
+  });
+
+  // studio#1279: the gate read lists the engine's answers (wicked-core `repeat_actions`: a plain approve that takes the
+  // recommended choice, one answer per choice, reject). The row keeps the step's labels and its recommendation.
+  const listed = (...tokens: string[]): GateAction[] => tokens.map((action) => ({
+    action, intent: action === 'approve' ? 'continue' : action === 'reject' ? 'stop' : 'consent_choice', note: 'none',
+  }));
+
+  it('with the gate\'s listed answers, keeps the step\'s labels and its recommendation; no bare ids, no extra Approve (studio#1279)', () => {
+    const j6 = ev({
+      type: 'awaitingHuman', ord: 6, gateKind: 'repeat', prompt: 'Mapping … budget reached',
+      choices: ['consent:continue', 'consent:lower', 'reject'], recommended: 0,
+      choiceLabels: { 'consent:continue': 'Map up to 20 more pages', 'consent:lower': 'Lower the minimum to 2% for carddemo-t11 and build the graph', reject: 'Stop here' },
+      repeatLine: 'Mapping carddemo-t11 · 0% → 2% · target 80% · page 2 · budget reached',
+    });
+    const g: OpenGate = { ...gate(), ord: 6, choices: ['consent:continue', 'consent:lower', 'reject'] };
+    const m = sessionGateChoices({ runId: RUN, gate: g, units: UNITS, events: [PAGE1, j6], pool: [], roster: null,
+      actions: listed('approve', 'consent:continue', 'consent:lower', 'reject') })!;
+    expect([...m.choices, ...m.overflow].map((c) => [c.label, c.decision, c.isDefault === true])).toEqual([
+      ['Map up to 20 more pages', { approve: true, action: 'consent:continue' }, true],
+      ['Lower the minimum to 2% for carddemo-t11 and build the graph', { approve: true, action: 'consent:lower' }, false],
+      ['Stop here', { approve: false }, false],
+    ]);
+    expect(m.choices.map((c) => c.title).join(' ')).not.toMatch(/Answer with/);
+    // Only what the engine lists: a choice it no longer takes is not drawn.
+    const fewer = sessionGateChoices({ runId: RUN, gate: g, units: UNITS, events: [PAGE1, j6], pool: [], roster: null,
+      actions: listed('approve', 'consent:continue', 'reject') })!;
+    expect(fewer.choices.map((c) => c.label)).toEqual(['Map up to 20 more pages', 'Stop here']);
+  });
+
+  it('with the gate\'s listed answers, an ask with no choice of its own keeps "Run it again" (studio#1279)', () => {
+    const plain = ev({ type: 'awaitingHuman', ord: 11, gateKind: 'repeat', prompt: 'Paused · Approve: the step runs again.',
+      choices: ['approve', 'reject'], choiceLabels: { approve: 'Run it again', reject: 'Stop here' }, repeatLine: 'Paused' });
+    const m = sessionGateChoices({ runId: RUN, gate: { ...gate(), choices: ['approve', 'reject'] }, units: UNITS, events: [plain], pool: [], roster: null,
+      actions: listed('approve', 'reject') })!;
+    expect(m.choices.map((c) => [c.label, c.decision])).toEqual([
+      ['Run it again', { approve: true }],
+      ['Stop here', { approve: false }],
     ]);
   });
 

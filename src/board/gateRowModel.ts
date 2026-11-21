@@ -523,7 +523,21 @@ export function sessionGateChoices(input: SessionGateInput): GateRowModel | null
   const model = withDepth(base, input);
   if (input.actions === undefined) return model;
   const ctx = gateContextOf(input.gate, input.events);
+  if (isStepChoices(model, ctx)) return withListed(model, stepChoiceActions(model, input.actions), input.roster ?? null, ctx);
   return CONTRACT_EXEMPT.has(model.reason) ? withListed(model, input.actions, input.roster ?? null, ctx) : withContract(model, input.actions, input.roster ?? null, ctx);
+}
+
+/** studio#1279: a loop's ask drawn from its step's own choices ({@link repeatChoicesOf}): their labels and the step's
+ *  recommendation mark are the row's, so it keeps them, limited to the listed answers ({@link withListed}). */
+function isStepChoices(model: GateRowModel, ctx: GateContext): boolean {
+  return ctx.gateKind === 'repeat' && model.reason === 'choices';
+}
+
+/** At a loop's ask the engine's plain approve takes the step's recommended choice (wicked-core `repeat_actions`), so
+ *  where the step offers choices of its own it is that choice again, not a separate answer: it is not drawn. */
+function stepChoiceActions(model: GateRowModel, actions: readonly GateAction[]): readonly GateAction[] {
+  const own = [...model.choices, ...model.overflow].some((c) => c.key.startsWith('consent:'));
+  return own ? actions.filter((a) => a.action !== 'approve') : actions;
 }
 
 /** The gate's kind for its listed answers' words: the read's own, else its pause frame's. */
