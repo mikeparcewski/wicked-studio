@@ -118,12 +118,15 @@ export const sourcesApi = {
    * Register exactly the preview `previewHash` named (and write its secret to the keychain). `allowOrigin`
    * is the origin a REST preview's calls go to, sent only when the person confirmed it (G2).
    */
-  save: (previewHash: string, allowOrigin?: string, enabledWrites?: readonly string[]) =>
+  save: (previewHash: string, allowOrigin?: string, enabledWrites?: readonly string[], acceptedReads?: readonly string[]) =>
     apiFetch<McpServer>('/mcp/servers', post({
       previewHash,
       ...(allowOrigin !== undefined ? { allowOrigin } : {}),
       // (G1) The person's write grant: the preview's write tools to register enabled (a PM sheet's ticked "Asks you" rows).
       ...(enabledWrites !== undefined && enabledWrites.length > 0 ? { enabledWrites: [...enabledWrites] } : {}),
+      // (crew#1295) The person's read acceptance: the preview's read tools they accepted as Apps reads. crew records
+      // an acceptance only from this list, so a REST or MCP save without it backs no Apps query.
+      ...(acceptedReads !== undefined && acceptedReads.length > 0 ? { acceptedReads: [...acceptedReads] } : {}),
     })),
   /**
    * RE-KEY a saved source (crew#719: crew writes it only for a server that already references its own keychain entry):

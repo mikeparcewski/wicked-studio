@@ -252,7 +252,19 @@ describe('review r1 folds: consent is for what the person saw', () => {
     fireEvent.click(screen.getByTestId('source-egress-tick'));
     fireEvent.click(screen.getByTestId('source-save'));
     await waitFor(() => expect(calls.some((c) => c.path === '/mcp/servers' && c.method === 'POST')).toBe(true));
-    expect(calls.find((c) => c.path === '/mcp/servers' && c.method === 'POST')!.body).toEqual({ previewHash: 'rest-egress', allowOrigin: 'https://api.support.test' });
+    expect(calls.find((c) => c.path === '/mcp/servers' && c.method === 'POST')!.body).toEqual({ previewHash: 'rest-egress', allowOrigin: 'https://api.support.test', acceptedReads: ['list_tickets'] });
+  });
+
+  it("the reads tick rides the save as acceptedReads: exactly that preview's reads, never its writes (crew#1295)", async () => {
+    previewImpl = () => Promise.resolve(restPreview('rest-accept'));
+    sheet();
+    fillRest();
+    fireEvent.click(screen.getByTestId('source-test-run'));
+    await screen.findByTestId('source-operations');
+    fireEvent.click(screen.getByTestId('source-accept-reads-tick'));
+    fireEvent.click(screen.getByTestId('source-save'));
+    await waitFor(() => expect(calls.some((c) => c.path === '/mcp/servers' && c.method === 'POST')).toBe(true));
+    expect(calls.find((c) => c.path === '/mcp/servers' && c.method === 'POST')!.body).toEqual({ previewHash: 'rest-accept', acceptedReads: ['list_tickets'] });
   });
 
   it('a private http: API endpoint can be given "without TLS" consent (codex K17)', async () => {
