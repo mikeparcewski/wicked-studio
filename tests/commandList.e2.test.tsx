@@ -20,7 +20,7 @@ import { readCatalogV2, resetCatalogV2, resetLooksLike } from '../src/store/cata
 import { resetChatFlow, useChatFlow } from '../src/store/chatFlow.js';
 import { chipsOf, useComposerChips } from '../src/store/composerChips.js';
 import { resetComposerSeats } from '../src/store/composerSeats.js';
-import { useStartNotes } from '../src/store/inlineStart.js';
+import { postJob, useStartNotes } from '../src/store/inlineStart.js';
 import { DEMO_VIDEO_ID, DRAFT_EPICS_ID, openLaunchWizard, resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
 import { resetPlanCatalog } from '../src/store/planCatalog.js';
 import { clearRepoCache } from '../src/store/repoCache.js';
@@ -800,6 +800,49 @@ describe('review folds (r2)', () => {
     const st = commandList(sub, '/propose');
     expect(st.open && st.rows.map((r) => r.command)).toEqual(['/propose rules', '/propose memories']);
   });
+  it('an old post keeps the edited draft after the composer remounts', async () => {
+    let release!: () => void;
+    proposalGate = new Promise((r) => { release = r; });
+    function SavedDraft(): React.ReactElement {
+      const text = useSessionDrafts((s) => s.drafts['remount'] ?? '');
+      return <Composer composerKey="remount" jobChatId="c1" text={text}
+        setText={(t) => useSessionDrafts.getState().setDraft('remount', t)} onSend={() => {}}
+        placeholder="p" ariaLabel="a" variant="session" />;
+    }
+    const first = render(<SavedDraft />);
+    await ready();
+    type('/bug login crashes');
+    enter();
+    await waitFor(() => expect(proposals()).toHaveLength(1));
+    first.unmount();
+    render(<SavedDraft />);
+    type('my edited draft');
+    await act(async () => { release(); await proposalGate; });
+    await waitFor(() => expect(useSessionDrafts.getState().drafts['remount']).toBe('my edited draft'));
+    expect(screen.getByTestId('session-composer-input')).toHaveValue('my edited draft');
+  });
+
+  it('overlapping identical posts keep their request id after the first succeeds and the second fails', async () => {
+    let releaseFirst!: () => void;
+    proposalGate = new Promise((r) => { releaseFirst = r; });
+    const post = () => postJob({ card: 'bug', option: null, depth: null, words: 'login crashes', source: 'command',
+      chatId: 'c1', projectId: null, pickKey: 'overlap-same-body' });
+    const first = post();
+    let releaseSecond!: () => void;
+    proposalGate = new Promise((r) => { releaseSecond = r; });
+    proposalStatuses = [500];
+    const second = post().catch((e: unknown) => e);
+    expect(proposals()).toHaveLength(2);
+    expect(proposals()[1]!.requestId).toBe(proposals()[0]!.requestId);
+    releaseFirst();
+    await first;
+    releaseSecond();
+    expect(await second).toBeInstanceOf(Error);
+    proposalGate = Promise.resolve();
+    await post();
+    expect(proposals()[2]!.requestId).toBe(proposals()[0]!.requestId);
+  });
+
   it('a typed command retried after a remount is the same request', async () => {
     proposalStatuses = [500];
     const v = render(<Harness />);

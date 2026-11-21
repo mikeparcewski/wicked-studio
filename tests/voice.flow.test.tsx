@@ -19,9 +19,10 @@ import { ApiError } from '../src/api/errors.js';
 class FakeMic implements MicSource {
   onFrame: ((f: MicFrame) => void) | null = null;
   recording = false;
+  starts = 0;
   stops = 0;
   live = false;
-  async start(cb: (f: MicFrame) => void): Promise<void> { this.onFrame = cb; this.live = true; }
+  async start(cb: (f: MicFrame) => void): Promise<void> { this.starts += 1; this.onFrame = cb; this.live = true; }
   record(): void { this.recording = true; }
   peek(): Blob | null { return this.recording ? new Blob(['partial'], { type: 'audio/wav' }) : null; }
   take(): Blob | null { const r = this.recording; this.recording = false; return r ? new Blob(['turn'], { type: 'audio/wav' }) : null; }
@@ -111,27 +112,61 @@ afterEach(() => {
 async function enterFull(): Promise<void> {
   render(<VoiceRoot />);
   await act(async () => { await openVoice(); });
-  await speak('yes');
+  await act(async () => { await hear('yes', 'typed'); });
   await waitFor(() => expect(screen.getByTestId('voice-full')).toBeTruthy());
 }
 
 describe('voice mode', () => {
-  it('the modal asks, answers a question about voice and asks again; the mic is on only while it is open', async () => {
+  it.each(['resolve', 'reject'] as const)('stops a mic whose start finishes after voice closes (%s)', async (result) => {
+    let release!: () => void;
+    const starting = new Promise<void>((resolve, reject) => {
+      release = () => result === 'resolve' ? resolve() : reject(new Error('late failure'));
+    });
+    mic.start = async () => { mic.starts += 1; await starting; mic.live = true; };
+    await enterFull();
+    act(() => closeVoice());
+    const stops = mic.stops;
+    await act(async () => { release(); });
+    expect(mic.stops).toBe(stops + 1);
+    expect(mic.live).toBe(false);
+    expect(useVoiceStore.getState()).toMatchObject({ phase: 'off', micOn: false, micError: null });
+  });
+
+  it('starts the mic only after Yes, never after No', async () => {
+    render(<VoiceRoot />);
+    await act(async () => { await openVoice(); });
+    fireEvent.click(within(screen.getByTestId('voice-entry-ask')).getByText('No'));
+    expect(mic.starts).toBe(0);
+    await act(async () => { await openVoice(); });
+    await act(async () => { fireEvent.click(within(screen.getByTestId('voice-entry-ask')).getByText('Yes, go to voice')); });
+    expect(mic.starts).toBe(1);
+  });
+
+  it('says voice is not listening yet and shows an idle wave before consent', async () => {
+    render(<VoiceRoot />);
+    await act(async () => { await openVoice(); });
+    expect(screen.getByTestId('voice-mic-state').textContent).toBe('Voice · not listening yet');
+    expect(screen.getByTestId('voice-wave').getAttribute('data-who')).toBe('idle');
+    expect(screen.getByTestId('voice-tip').textContent).toBe('Tap Yes or No, or type. Esc closes.');
+    expect(screen.getByTestId('voice-modal').querySelector('.wk-voice-micdot')?.getAttribute('data-on')).toBe('false');
+  });
+
+  it('the modal answers typed questions about voice without starting the mic', async () => {
     render(<VoiceRoot />);
     await act(async () => { await openVoice(); });
     expect(screen.getByRole('dialog', { name: 'Voice mode' })).toBeTruthy();
-    expect(screen.getByTestId('voice-mic-state').textContent).toMatch(/listening only while this is open/);
+    expect(screen.getByTestId('voice-mic-state').textContent).toBe('Voice · not listening yet');
     expect(screen.getByText('Do you want to enter voice mode?')).toBeTruthy();
     expect(said).toContain('Do you want to enter voice mode?');
-    await speak('What happens to my voice? Is it recorded?');
+    await act(async () => { await hear('What happens to my voice? Is it recorded?', 'typed'); });
     expect(screen.getByTestId('voice-heard').textContent).toMatch(/what happens to my voice/i);
     expect(within(screen.getByTestId('voice-modal-thread')).getByText(/Nothing is recorded or sent anywhere/)).toBeTruthy();
     expect(said.at(-1)).toBe('Do you want to enter voice mode?');
-    // No (said) closes it and releases the mic.
-    await speak('no');
+    // No closes it without starting the mic.
+    await act(async () => { await hear('no', 'typed'); });
     expect(useVoiceStore.getState().phase).toBe('off');
     expect(screen.queryByTestId('voice-modal')).toBeNull();
-    expect(mic.stops).toBe(1);
+    expect(mic.starts).toBe(0);
   });
 
   it('Esc closes the modal; tapping Yes opens full screen with the listening question', async () => {
@@ -291,7 +326,7 @@ describe('voice mode', () => {
     await act(async () => { closeVoice(); });
     setVoiceDeps({ stt: { transcribe: async () => heard.shift() ?? '' } });
     await act(async () => { await openVoice(); });
-    await speak('yes');
+    await act(async () => { await hear('yes', 'typed'); });
     await waitFor(() => expect(useVoiceStore.getState().phase).toBe('full'));
     await act(async () => { releaseOld('leave voice'); await new Promise((r) => setTimeout(r, 0)); });
     expect(useVoiceStore.getState().phase).toBe('full');
@@ -313,7 +348,7 @@ describe('voice mode', () => {
     await act(async () => { closeVoice(); });
     await act(async () => { await openVoice(); });
     // the new session's own "yes" is recorded while the old transcription is still out
-    await speak('yes');
+    await act(async () => { await hear('yes', 'typed'); });
     await act(async () => { release('What is running right now?'); await new Promise((r) => setTimeout(r, 0)); });
     await waitFor(() => expect(useVoiceStore.getState().phase).toBe('full'));
     expect(asked).toEqual([]);
@@ -449,7 +484,7 @@ describe('voice setup: what it needs before it can hear', () => {
     it('the modal offers tapping or typing while it cannot hear', async () => {
       render(<VoiceRoot />);
       await act(async () => { await openVoice(); });
-      expect(screen.getByTestId('voice-mic-state').textContent).toMatch(/not hearing yet/);
+      expect(screen.getByTestId('voice-mic-state').textContent).toBe('Voice · not listening yet');
       expect(screen.getByTestId('voice-modal').querySelector('.wk-voice-tip')?.textContent).not.toMatch(/\bsay\b/i);
       expect(screen.getByTestId('voice-modal').querySelector('.wk-voice-tip')?.textContent).toMatch(/tap.*type/i);
     });
@@ -473,7 +508,7 @@ describe('voice setup: what it needs before it can hear', () => {
   it('keeps the spoken prompts and listening indicators when ready', async () => {
     render(<VoiceRoot />);
     await act(async () => { await openVoice(); });
-    expect(screen.getByTestId('voice-modal').querySelector('.wk-voice-tip')?.textContent).toBe('Say “yes”, “no”, or ask about voice mode. Esc closes.');
+    expect(screen.getByTestId('voice-modal').querySelector('.wk-voice-tip')?.textContent).toBe('Tap Yes or No, or type. Esc closes.');
     await act(async () => { await hear('yes', 'typed'); });
     expect(screen.getByTestId('voice-foot').textContent).toMatch(/Say or tap how I should listen/);
     expect(screen.getByTestId('voice-mic-state').textContent).toBe('Microphone on');
@@ -505,7 +540,7 @@ describe('voice setup: what it needs before it can hear', () => {
     render(<VoiceRoot />);
     await act(async () => { await openVoice(); });
     expect(screen.getByTestId('voice-model-consent').textContent).toMatch(/base\.en, about 142 MB, from huggingface\.co\/ggerganov\/whisper\.cpp.*never recorded or sent anywhere/);
-    expect(screen.getByTestId('voice-mic-state').textContent).toMatch(/not hearing yet/);
+    expect(screen.getByTestId('voice-mic-state').textContent).toBe('Voice · not listening yet');
     expect(modelPosts).toEqual([]);
     heard.push('yes');
     await act(async () => { for (let t = 0; t < 20; t++) { clock += 100; mic.onFrame?.({ level: t < 5 ? 0.3 : 0.001, bars: [0] }); } });

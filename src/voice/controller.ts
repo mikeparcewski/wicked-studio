@@ -1,9 +1,9 @@
 /**
  * VOICE MODE, PHASE 1 (program DES-VOICE §2a; mockup learn-and-panels state g; operator-approved 2026-10-31).
  *
- *  1. The modal: the mic in a composer (or ⌥V) opens a centred modal with a live waveform that asks, aloud and on
- *     screen, "Do you want to enter voice mode?". A question about voice is answered, then asked again. No (said,
- *     tapped or Esc) closes it; Yes opens full screen.
+ *  1. The modal: the mic in a composer (or ⌥V) opens a centred modal that asks, aloud and on
+ *     screen, "Do you want to enter voice mode?". A question about voice is answered, then asked again. No (typed,
+ *     tapped or Esc) closes it; Yes starts the mic and opens full screen.
  *  2. Full screen: the transcript in the middle, the live system dashboard around it, and the second question:
  *     streaming, or space bar (push-to-talk).
  *  3. Speech to text on this machine (crew's whisper.cpp), read-aloud by the browser's speechSynthesis; captions
@@ -11,7 +11,7 @@
  *  4. Questions go to the system chat. A steer is proposed with Send / Not that. A gate answer by voice ALWAYS stops
  *     at an on-screen Confirm, then the usual 10 s undo, and carries `input: "voice"`.
  *
- * Privacy: the mic is on only while voice mode is open (the header and the browser both say so); samples live in
+ * Privacy: the mic starts on Yes and is on only while voice mode is open (the header and the browser both say so); samples live in
  * page memory, go to crew once and are dropped; nothing is written to disk.
  *
  * This module is the behaviour; `store/voice.ts` is the state; components render it. Every edge (mic, speech to
@@ -932,7 +932,6 @@ export async function openVoice(opts: { focus?: string | null } = {}): Promise<v
   // The dashboard's first read starts now, so full screen opens on the live system (and says what it sees).
   void loadDashboard().then(() => readDashboardData());
   await refreshStatus();
-  await startMic();
   if (S.getState().phase === 'ask') await say('Do you want to enter voice mode?');
 }
 
@@ -969,8 +968,10 @@ async function startMic(): Promise<void> {
   mic = m;
   try {
     await m.start((f) => onFrame(f.level, f.bars));
+    if (mic !== m) { m.stop(); return; }
     set({ micOn: true, micError: null });
   } catch (e) {
+    if (mic !== m) { m.stop(); return; }
     mic = null;
     const name = (e as { name?: string } | null)?.name;
     set({ micOn: false, micError: name === 'NotAllowedError' ? 'The browser was not allowed to use the microphone. You can still tap and type.' : name === 'NotFoundError' ? 'No microphone was found. You can still tap and type.' : `The microphone could not start: ${e instanceof Error ? e.message : String(e)}` });
@@ -1007,6 +1008,7 @@ function enterFull(): void {
     else savePin(null);
   }
   pushLine({ who: 'it', text: describeNow() });
+  void startMic();
   openAsk(MODE_ASK, { kind: 'mode' });
   void say(`${describeNow()} How should I listen? Streaming, or space bar?`);
 }

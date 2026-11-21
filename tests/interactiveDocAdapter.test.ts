@@ -32,6 +32,7 @@ vi.mock('../src/api/interactive.js', () => {
   };
 });
 
+import { artifactContext, placementEntry, registerInView, resetInView } from '../src/store/artifactInView.js';
 import { InteractiveDocAdapter } from '../src/editors/interactiveDocAdapter.js';
 
 const entry = (version: number, parent: number | null, deterministic = false) => ({ version, parent, feedback_file: deterministic ? `f${version}.json` : null, html_file: `v${version}.html`, created_at: '2026-10-03T00:00:00Z' });
@@ -40,6 +41,21 @@ beforeEach(() => { api.manifests = []; api.events = []; api.forks = []; api.fork
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('InteractiveDocAdapter', () => {
+  it.each(['refresh', 'versions'] as const)('version zero is context only after the first manifest %s', async (read) => {
+    resetInView();
+    const adapter = new InteractiveDocAdapter('notes', 'plan', 'The plan');
+    const remove = registerInView(placementEntry({
+      key: 'zero', ref: 'notes/plan', title: 'The plan', composerKey: 'c',
+      surface: () => 'inline', lens: () => null, groupShown: () => null, adapter, host: () => null,
+    }));
+    try {
+      expect(await artifactContext('notes/plan')).toBeNull();
+      api.manifests = [{ head: 0, versions: [entry(0, null)] }];
+      await adapter[read]();
+      expect(await artifactContext('notes/plan')).toEqual({ ref: 'notes/plan', version: 0 });
+    } finally { remove(); }
+  });
+
   it('DES-CHAT-ARTIFACTS-001 §5.1: flush() waits for a write in flight and answers the version it made', async () => {
     const a = new InteractiveDocAdapter('notes', 'plan', 'The plan', 'page');
     api.manifests = [{ head: 1, versions: [entry(1, null)] }, { head: 1, versions: [entry(1, null)] }, { head: 1, versions: [entry(1, null)] }, { head: 2, versions: [entry(1, null), entry(2, 1, true)] }];
@@ -60,7 +76,7 @@ describe('InteractiveDocAdapter', () => {
     expect(api.events).toEqual([{ event_type: 'wicked.interactive.feedback.submitted', payload: { document_id: 'plan', version: 1, author: 'studio', items: [{ selector: 'headline', type: 'content-edit', value: 'New', before: 'Old' }] } }]);
     expect(a.head).toBe(2);
     expect(heads).toEqual([1, 2]);
-    expect(a.artifact()).toEqual({ kind: 'page', title: 'The plan', version: 2, head: 2, readonly: false, lockedParts: [] });
+    expect(a.artifact()).toEqual({ kind: 'page', title: 'The plan', version: 2, head: 2, read: true, readonly: false, lockedParts: [] });
   });
   it('the head moving by another hand (no deterministic child of the base) is `stale`, and the head follows', async () => {
     // The landing window is the adapter's (20 s); here it is short, so the test waits it out.

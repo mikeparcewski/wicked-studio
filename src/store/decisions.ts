@@ -33,7 +33,7 @@ interface DecisionsStore {
   /** The ledger's CURRENT views for a chat (`GET /decisions?chat=`), read once per chat and again
    *  on demand: a transcript's `decisions` records carry the state at recording time, so a reload
    *  must not restore a chip for a decision remembered or undone since. */
-  syncChat: (chatId: string) => Promise<void>;
+  syncChat: (chatId: string, opts?: { force: boolean }) => Promise<void>;
   /** The `/ws` frames; anything else is ignored. */
   ingest: (frame: { type: string } & Record<string, unknown>) => void;
   /** Re-read one decision after a change (ids only came over the wire). */
@@ -119,13 +119,16 @@ export const useDecisionsStore = create<DecisionsStore>((set, get) => {
       });
     },
 
-    syncChat: async (chatId) => {
-      if (synced.has(chatId)) return;
+    syncChat: async (chatId, opts) => {
+      if (synced.has(chatId) && opts?.force !== true) return;
       synced.add(chatId);
       const startedAt = tick();
       try {
         const r = await decisionsApi.list({ chat: chatId });
         set((s) => ({ mode: r.mode, loaded: true, byId: { ...s.byId, ...freshOf(r.decisions, startedAt) } }));
+        for (const d of r.decisions) {
+          if (d.origin.chat_id === chatId && typeof d.origin.turn_id === 'string') get().ingestTurn(chatId, d.origin.turn_id, [d]);
+        }
       } catch (e) {
         synced.delete(chatId);
         if (isDecisionsUnsupported(e)) set({ loaded: true, mode: 'off' });

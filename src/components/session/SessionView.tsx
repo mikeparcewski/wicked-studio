@@ -412,7 +412,11 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const wasConnected = useRef(wsStatus === 'connected');
   useEffect(() => {
     const now = wsStatus === 'connected';
-    if (now && !wasConnected.current && proposalsOn && ref.kind === 'chat') setChatTry((n) => n + 1);
+    if (now && !wasConnected.current && ref.kind === 'chat') {
+      if (proposalsOn) setChatTry((n) => n + 1);
+      const decisions = useDecisionsStore.getState();
+      if (decisions.mode === 'on') void decisions.syncChat(ref.chatId, { force: true });
+    }
     wasConnected.current = now;
   }, [wsStatus, proposalsOn, ref]);
   // studio#606 (4): on a live chat's own session the text replies into that chat; anywhere else a
@@ -782,6 +786,48 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     // undone, dismissed since) — one read per chat.
     if (any) void useDecisionsStore.getState().syncChat(ref.chatId);
   }, [ref, messages]);
+
+  const decisionsMode = useDecisionsStore((s) => s.mode);
+  const decisionsByTurn = useDecisionsStore((s) => s.byTurn);
+  const decisionChecks = useRef(new Map<string, { at: number | null; reads: number }>());
+  useEffect(() => { decisionChecks.current.clear(); }, [chatId]);
+  useEffect(() => {
+    if (chatId === null || decisionsMode !== 'on') return;
+    const operators = new Set<string>();
+    const pending = new Set<string>();
+    for (const e of entries) {
+      if (e.kind !== 'turn' || e.turnId === null) continue;
+      if (e.who === 'you') operators.add(e.turnId);
+      else if (e.pending === true) pending.add(e.turnId);
+    }
+    const settled = new Set<string>();
+    for (const e of entries) {
+      if (e.kind !== 'turn' || e.who === 'you' || e.pending === true || e.turnId === null || !operators.has(e.turnId) || pending.has(e.turnId)) continue;
+      const key = turnKey(chatId, e.turnId);
+      settled.add(key);
+    }
+    for (const [key, check] of decisionChecks.current) {
+      if (!settled.has(key)) check.at = null;
+    }
+    // The recorder runs after the replies. Keep both deadlines through transcript re-reads.
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    for (const key of settled) {
+      if ((decisionsByTurn[key]?.length ?? 0) > 0) continue;
+      const check = decisionChecks.current.get(key) ?? { at: null, reads: 0 };
+      const at = check.at ?? Date.now();
+      check.at = at;
+      decisionChecks.current.set(key, check);
+      for (const [i, delay] of [2000, 8000].entries()) {
+        if (i < check.reads) continue;
+        timers.push(setTimeout(() => {
+          check.reads = i + 1;
+          const store = useDecisionsStore.getState();
+          if (store.mode === 'on' && (store.byTurn[key]?.length ?? 0) === 0) void store.syncChat(chatId, { force: true });
+        }, Math.max(0, at + delay - Date.now())));
+      }
+    }
+    return () => { for (const timer of timers) clearTimeout(timer); };
+  }, [chatId, entries, decisionsMode, decisionsByTurn]);
 
   // R4: scroll and draft per session.
   const scroller = useRef<HTMLDivElement | null>(null);

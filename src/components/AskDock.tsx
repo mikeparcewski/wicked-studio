@@ -133,7 +133,7 @@ function headOf(ref: string): number | null {
   const p = parseArtifactRef(ref);
   if (p === null) return null;
   const head = (useDocsCache.getState().byProject[p.projectId] ?? []).find((d) => d.name === p.docId)?.head;
-  return typeof head === 'number' && head >= 1 ? head : null;
+  return typeof head === 'number' && Number.isInteger(head) && head >= 0 ? head : null;
 }
 
 /** The doc chip "Ask about this" adds for a document (one spelling, so a resumed chat can be given it too). */
@@ -762,11 +762,12 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             const ids = await upload(id, files);
             const context = await contextFor(out.page, picked);
             if (ended()) throw new Error('This chat was closed; nothing was sent.');
-            deposit(id, text, await postMessage(id, out.message, ids, context).catch(plainSendRefusal(id)));
+            const sent = await postMessage(id, out.message, ids, context).catch(plainSendRefusal(id));
+            deposit(id, text, sent);
             packLanded(id, out);
             pageRef.current?.onSent(text, id);
             stepAside(id);
-            return { chatId: id };
+            return { chatId: id, ...(sent.turnId !== undefined ? { turnId: sent.turnId } : {}) };
           } catch (sendErr) {
             // A failed send is NOT proof the session is gone — a 5xx or a network blip
             // against a still-warm chat must not orphan it. Ask the daemon, as the retired chat page's
@@ -895,11 +896,12 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
         const ids = await upload(id, files);
         const context = await contextFor(out.page, picked);
         if (ended()) throw new Error('This chat was closed; nothing was sent.');
-        deposit(id, text, await postMessage(id, out.message, ids, context).catch(plainSendRefusal(id)));
+        const sent = await postMessage(id, out.message, ids, context).catch(plainSendRefusal(id));
+        deposit(id, text, sent);
         packLanded(id, out);
         pageRef.current?.onSent(text, id);
         stepAside(id);
-        return { chatId: id };
+        return { chatId: id, ...(sent.turnId !== undefined ? { turnId: sent.turnId } : {}) };
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `ended` reads the module epoch

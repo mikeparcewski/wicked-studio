@@ -1,5 +1,8 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { DecisionView } from '../src/api/decisions.js';
+import { resetDecisionsStoreForTest, useDecisionsStore } from '../src/store/decisions.js';
+import { useConnectionStore } from '../src/store/connection.js';
 import type { TeamRow } from '../src/api/teamPlan.js';
 
 /**
@@ -51,9 +54,16 @@ const TRANSCRIPT = [
 let chatBody: Record<string, unknown> = {};
 let teamBody: Record<string, unknown> | null = null;
 let chatReads = 0;
+let decisionViews: DecisionView[] = [];
+let decisionReads = 0;
 
 beforeEach(() => {
   chatReads = 0;
+  decisionReads = 0;
+  decisionViews = [];
+  resetDecisionsStoreForTest();
+  useDecisionsStore.setState({ loaded: true, mode: 'on' });
+  useConnectionStore.setState({ status: 'connected' });
   chatBody = { chatId: 'chat-ask', seats: ['claude', 'codex'], scope: { kind: 'none' }, messages: TRANSCRIPT, path: { runId: RUN, pa: 'claude', selection: 'random', reviewer: 'codex', helpers: [], stepId: 'answer-1' } };
   teamBody = { runId: RUN, teamed: true, transport: 'bus', reason: null, planRev: 1, ended: false, units: [], rows: [ROWS.started, ROWS.scored, ROWS.accepted, ROWS.claimed, ROWS.reviewing, ROWS.completed, ROWS.finding] };
   useCapabilities.setState({ loaded: true, runChatId: true, walkthroughRoots: false, askPath: true });
@@ -71,11 +81,12 @@ beforeEach(() => {
     if (path.startsWith('/chats/')) { chatReads += 1; return ok(chatBody); }
     if (path.endsWith('/team')) return teamBody === null ? new Response('{}', { status: 404 }) : ok(teamBody);
     if (path.endsWith('/events')) return ok({ events: [] });
+    if (path === '/decisions') { decisionReads += 1; return ok({ decisions: decisionViews, mode: 'on' }); }
     if (path === '/catalog') return ok({ entries: [] });
     return ok({});
   }));
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 function ok(body: unknown): Promise<Response> {
   return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }));
@@ -86,6 +97,138 @@ function page(runs = [ASK_RUN]) {
 }
 
 const texts = (testid: string): string[] => screen.queryAllByTestId(testid).map((e) => e.textContent?.replace(/\s+/g, ' ').trim() ?? '');
+
+function lateDecision(): DecisionView {
+  return {
+    id: 'late-decision', at: T0 + 2000, project_id: null, host: 'studio-chat',
+    origin: { actor: { id: 'op', kind: 'human', trust: 'operator' }, auth_mode: 'required',
+      chat_id: 'chat-ask', turn_id: 't1', words: 'always check the provider', words_source: 'typed', redacted: false },
+    derived: { statement: 'Always check the provider', polarity: 'do', key: 'provider', scope: 'everywhere',
+      steering_type: 'development', template: 'T1-always', exclusions: [] },
+    route: 'offer', state: 'offered',
+  };
+}
+
+describe('late decision capture', () => {
+  it('re-reads at 2 and 8 seconds after settling when the decision misses the first read', async () => {
+    chatBody = { ...chatBody, messages: [TRANSCRIPT[0]] };
+    page();
+    await screen.findByText('why no trim?');
+    await useDecisionsStore.getState().syncChat('chat-ask');
+    vi.useFakeTimers();
+    await act(async () => useAskThreadStore.getState().ingest({ type: 'chatReply', chat: 'chat-ask', cliKey: 'claude',
+      turn_id: 't1', text: 'The answer arrived.', ok: true } as never));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1999); });
+    expect(decisionReads).toBe(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(decisionReads).toBe(2);
+    expect(screen.queryByTestId('decision-line')).toBeNull();
+    decisionViews = [lateDecision()];
+    await act(async () => { await vi.advanceTimersByTimeAsync(5999); });
+    expect(decisionReads).toBe(2);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(decisionReads).toBe(3);
+    expect(screen.getByTestId('decision-line')).toHaveAttribute('data-decision-id', 'late-decision');
+    expect(screen.getByTestId('decision-line').closest('[data-testid="session-turn"]')).toHaveAttribute('data-who', 'you');
+    await act(async () => { await vi.advanceTimersByTimeAsync(16000); });
+    expect(decisionReads).toBe(3);
+  });
+
+  it('skips both settled reads when the decision frame arrives before 2 seconds', async () => {
+    chatBody = { ...chatBody, messages: [TRANSCRIPT[0]] };
+    page();
+    await screen.findByText('why no trim?');
+    await useDecisionsStore.getState().syncChat('chat-ask');
+    vi.useFakeTimers();
+    await act(async () => useAskThreadStore.getState().ingest({ type: 'chatReply', chat: 'chat-ask', cliKey: 'claude',
+      turn_id: 't1', text: 'The answer arrived.', ok: true } as never));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    act(() => useDecisionsStore.getState().ingest({ type: 'chatDecisions', chat: 'chat-ask', turn_id: 't1', items: [lateDecision()] } as never));
+    await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
+    expect(screen.getByTestId('decision-line')).toHaveAttribute('data-decision-id', 'late-decision');
+    expect(decisionReads).toBe(1);
+  });
+
+  it('stops after two settled reads even when no decision arrives', async () => {
+    chatBody = { ...chatBody, messages: [TRANSCRIPT[0]] };
+    page();
+    await screen.findByText('why no trim?');
+    await useDecisionsStore.getState().syncChat('chat-ask');
+    vi.useFakeTimers();
+    await act(async () => useAskThreadStore.getState().ingest({ type: 'chatReply', chat: 'chat-ask', cliKey: 'claude',
+      turn_id: 't1', text: 'The answer arrived.', ok: true } as never));
+    await act(async () => { await vi.advanceTimersByTimeAsync(16000); });
+    expect(decisionReads).toBe(3);
+    await act(async () => {
+      useAskThreadStore.getState().ingest({ type: 'chatDelta', chat: 'chat-ask', cliKey: 'codex', turn_id: 't1', text: 'Another seat.' } as never);
+    });
+    await act(async () => useAskThreadStore.getState().ingest({ type: 'chatReply', chat: 'chat-ask', cliKey: 'codex',
+      turn_id: 't1', text: 'Another answer.', ok: true } as never));
+    await act(async () => { await vi.advanceTimersByTimeAsync(16000); });
+    expect(decisionReads).toBe(3);
+  });
+
+  it.each(['unmount', 'chat change'] as const)('clears the remaining settled read on %s', async (leave) => {
+    chatBody = { ...chatBody, messages: [TRANSCRIPT[0]] };
+    const view = page();
+    await screen.findByText('why no trim?');
+    await useDecisionsStore.getState().syncChat('chat-ask');
+    vi.useFakeTimers();
+    await act(async () => useAskThreadStore.getState().ingest({ type: 'chatReply', chat: 'chat-ask', cliKey: 'claude',
+      turn_id: 't1', text: 'The answer arrived.', ok: true } as never));
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect(decisionReads).toBe(2);
+    chatBody = { chatId: 'chat-next', seats: [], scope: { kind: 'none' }, messages: [] };
+    if (leave === 'unmount') view.unmount();
+    else await act(async () => view.rerender(<SessionPage sessionId="chat-next" runs={[]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />));
+    await act(async () => { await vi.advanceTimersByTimeAsync(16000); });
+    expect(decisionReads).toBe(2);
+  });
+
+  it('shows a decision under the operator turn after a settled reply when its frame never arrives', async () => {
+    chatBody = { ...chatBody, messages: [TRANSCRIPT[0]] };
+    page();
+    await screen.findByText('why no trim?');
+    await useDecisionsStore.getState().syncChat('chat-ask');
+    expect(screen.queryByTestId('decision-line')).toBeNull();
+    act(() => useAskThreadStore.getState().ingest({ type: 'chatReply', chat: 'chat-ask', cliKey: 'claude',
+      turn_id: 't1', text: 'The answer arrived.', ok: true } as never));
+    await waitFor(() => expect(chatReads).toBeGreaterThanOrEqual(2));
+    // The transcript read beat the recorder; no chatDecisions frame will arrive.
+    decisionViews = [lateDecision()];
+    await waitFor(() => expect(screen.getByTestId('decision-line')).toHaveAttribute('data-decision-id', 'late-decision'), { timeout: 3000 });
+    expect(screen.getByTestId('decision-line').closest('[data-testid="session-turn"]')).toHaveAttribute('data-who', 'you');
+    expect(decisionReads).toBe(2);
+  });
+
+  it('waits for the turn to settle while another seat is still replying', async () => {
+    chatBody = { ...chatBody, messages: [TRANSCRIPT[0]] };
+    page();
+    await screen.findByText('why no trim?');
+    await useDecisionsStore.getState().syncChat('chat-ask');
+    act(() => {
+      useAskThreadStore.getState().ingest({ type: 'chatDelta', chat: 'chat-ask', cliKey: 'codex', turn_id: 't1', text: 'Still thinking.' } as never);
+      useAskThreadStore.getState().ingest({ type: 'chatReply', chat: 'chat-ask', cliKey: 'claude', turn_id: 't1', text: 'First answer.', ok: true } as never);
+    });
+    await act(async () => { await new Promise((r) => setTimeout(r, 650)); });
+    expect(decisionReads).toBe(1);
+    decisionViews = [lateDecision()];
+    act(() => useAskThreadStore.getState().ingest({ type: 'chatReply', chat: 'chat-ask', cliKey: 'codex', turn_id: 't1', text: 'Final answer.', ok: true } as never));
+    await waitFor(() => expect(screen.getByTestId('decision-line')).toHaveAttribute('data-decision-id', 'late-decision'), { timeout: 3000 });
+    expect(decisionReads).toBe(2);
+  });
+
+  it('re-reads decisions on reconnect for the chat on screen without a transcript decision record', async () => {
+    page();
+    await screen.findByText(/greet\(\) does not trim its input/);
+    await useDecisionsStore.getState().syncChat('chat-ask');
+    act(() => useConnectionStore.setState({ status: 'disconnected' }));
+    decisionViews = [lateDecision()];
+    act(() => useConnectionStore.setState({ status: 'connected' }));
+    await waitFor(() => expect(screen.getByTestId('decision-line')).toHaveAttribute('data-decision-id', 'late-decision'));
+    expect(screen.getByTestId('decision-line').closest('[data-testid="session-turn"]')).toHaveAttribute('data-who', 'you');
+  });
+});
 
 describe('one thread, one voice', () => {
   it('folds the turns and the quiet lines in time order; the reply is the only agent bubble; the ask run has no block', async () => {

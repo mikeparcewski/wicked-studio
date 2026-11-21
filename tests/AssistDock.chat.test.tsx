@@ -150,6 +150,87 @@ describe('AssistDock — the chat block', () => {
     expect(order).toEqual(['Q:how many open tickets per region?', 'A:first answer', 'Q:and with query on?', 'A:second answer']);
   });
 
+  it('a late first-turn reply stays above a follow-up already sent', async () => {
+    const user = userEvent.setup();
+    dock({ send: vi.fn().mockResolvedValueOnce({ chatId: 'chat-1', turnId: 't1' })
+      .mockResolvedValueOnce({ chatId: 'chat-1', turnId: 't2' }) });
+    await user.type(screen.getByTestId('assist-input'), 'q1');
+    await user.click(screen.getByTestId('assist-send'));
+    await screen.findByTestId('assist-chat');
+    await user.type(screen.getByTestId('assist-input'), 'q2');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(screen.getByTestId('assist-input')).toHaveValue(''));
+    act(() => emit?.(frame({ type: 'chatReply', chat: 'chat-1', cliKey: 'claude', turn_id: 't1', text: 'late first answer', ok: true })));
+    expect(screen.getAllByTestId('assist-chat-msg').map((m) => (m.textContent ?? '').replace(/^(you|claude)/u, '')))
+      .toEqual(['late first answer', 'q2']);
+  });
+
+  it('keeps an unacknowledged tagged follow-up reply after earlier follow-ups, then under its question', async () => {
+    const user = userEvent.setup();
+    let ack!: (v: { chatId: string; turnId: string }) => void;
+    dock({ send: vi.fn().mockResolvedValueOnce({ chatId: 'chat-1', turnId: 't1' })
+      .mockResolvedValueOnce({ chatId: 'chat-1', turnId: 't2' })
+      .mockImplementationOnce(() => new Promise((resolve) => { ack = resolve; })) });
+    for (const q of ['q1', 'q2']) {
+      await user.type(screen.getByTestId('assist-input'), q);
+      await user.click(screen.getByTestId('assist-send'));
+      await waitFor(() => expect(screen.getByTestId('assist-input')).toHaveValue(''));
+    }
+    await user.type(screen.getByTestId('assist-input'), 'q3');
+    await user.click(screen.getByTestId('assist-send'));
+    act(() => emit?.(frame({ type: 'chatDelta', chat: 'chat-1', cliKey: 'claude', turn_id: 't3', text: 'third answer' })));
+    const words = () => screen.getAllByTestId('assist-chat-msg').map((m) => (m.textContent ?? '').replace(/^(you|claude)/u, '').replace(/ …$/u, ''));
+    expect(words()).toEqual(['q2', 'third answer']);
+    await act(async () => { ack({ chatId: 'chat-1', turnId: 't3' }); });
+    expect(words()).toEqual(['q2', 'q3', 'third answer']);
+  });
+
+  it('a late previous-turn reply stays under its question after the next send began', async () => {
+    const user = userEvent.setup();
+    const send = vi.fn().mockResolvedValueOnce({ chatId: 'chat-1', turnId: 't1' })
+      .mockResolvedValueOnce({ chatId: 'chat-1', turnId: 't2' })
+      .mockResolvedValueOnce({ chatId: 'chat-1', turnId: 't3' });
+    dock({ send });
+    await user.type(screen.getByTestId('assist-input'), 'q1');
+    await user.click(screen.getByTestId('assist-send'));
+    await screen.findByTestId('assist-chat');
+    act(() => emit?.(frame({ type: 'chatReply', chat: 'chat-1', cliKey: 'claude', turn_id: 't1', text: 'a1', ok: true })));
+    await user.type(screen.getByTestId('assist-input'), 'q2');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(screen.getByTestId('assist-input')).toHaveValue(''));
+    await user.type(screen.getByTestId('assist-input'), 'q3');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(screen.getByTestId('assist-input')).toHaveValue(''));
+    act(() => {
+      emit?.(frame({ type: 'chatDelta', chat: 'chat-1', cliKey: 'claude', turn_id: 't3', text: 'third ' }));
+      emit?.(frame({ type: 'chatDelta', chat: 'chat-1', cliKey: 'claude', turn_id: 't2', text: 'second ' }));
+      emit?.(frame({ type: 'chatReply', chat: 'chat-1', cliKey: 'claude', turn_id: 't2', text: 'second answer', ok: true }));
+      emit?.(frame({ type: 'chatReply', chat: 'chat-1', cliKey: 'claude', turn_id: 't3', text: 'third answer', ok: true }));
+    });
+    expect(screen.getAllByTestId('assist-chat-msg').map((m) => (m.textContent ?? '').replace(/^(you|claude)/u, '')))
+      .toEqual(['a1', 'q2', 'second answer', 'q3', 'third answer']);
+  });
+
+  it('a resumed history read after the POST shows the follow-up once by turn id', async () => {
+    const user = userEvent.setup();
+    let release!: (v: { records: readonly unknown[]; closed: boolean }) => void;
+    render(<AssistDock context={{ surface: 'ask', title: 'Chat', contextLabel: 'Rig', placeholder: 'Ask…' }}
+      verbs={{ send: vi.fn().mockResolvedValue({ chatId: 'chat-1', turnId: 't2' }) }}
+      open onOpenChange={() => undefined} variant="window" resumeChatId="chat-1"
+      loadHistory={() => new Promise((r) => { release = r; })} />);
+    await screen.findByTestId('assist-chat');
+    await user.type(screen.getByTestId('assist-input'), 'follow-up');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(screen.getAllByTestId('assist-chat-msg')).toHaveLength(1));
+    await act(async () => { release({ records: [
+      { kind: 'user', turnId: 't1', text: 'first question' },
+      { kind: 'seat', turnId: 't1', cliKey: 'claude', text: 'first answer', ok: true },
+      { kind: 'user', turnId: 't2', text: 'follow-up' },
+    ], closed: false }); });
+    expect(screen.getAllByTestId('assist-chat-msg').map((m) => (m.textContent ?? '').replace(/^(you|claude)/u, '')))
+      .toEqual(['first question', 'first answer', 'follow-up']);
+  });
+
   // Review r1 (codex): a reply's frames can arrive before its send is acknowledged; the question still sits above it.
   it('a reply that streams in before its send is acknowledged still sits under its question', async () => {
     const user = userEvent.setup();

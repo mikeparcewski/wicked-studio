@@ -195,6 +195,14 @@ describe('a daemon with chatArtifacts.context', () => {
     expect(sendChatMessage.mock.calls[1]![4]).toMatchObject({ artifact: { ref: 'mikes/deck', version: 5 } });
   });
 
+  it('an Ask sends version zero from the docs list', async () => {
+    useDocsCache.setState({ byProject: { mikes: [{ name: 'deck', head: 0 } as never] } } as never);
+    setAskAboutSeed({ ref: 'mikes/deck', label: 'Deck', projectId: 'mikes', docId: 'deck', version: null, seed: false });
+    render(<AskDock runs={[]} pathname="/p/mikes" onClose={() => undefined} startProjectId="mikes" startFresh />);
+    await ask('what is this?');
+    expect(sendChatMessage.mock.calls[0]![4]).toMatchObject({ artifact: { ref: 'mikes/deck', version: 0 } });
+  });
+
   it('an Ask whose press saw no version falls back to the version the docs list holds', async () => {
     useDocsCache.setState({ byProject: { mikes: [{ name: 'deck', head: 8 } as never] } } as never);
     setAskAboutSeed({ ref: 'mikes/deck', label: 'Deck', projectId: 'mikes', docId: 'deck', version: null, seed: false });

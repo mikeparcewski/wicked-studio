@@ -86,7 +86,7 @@ export interface AssistNote {
 
 /** What a send launched: a governed RUN (narrated by the run block) or a governed CHAT
  *  session (streamed by the chat block — the retired chat page's seat machinery's wire, §11-adjacent). */
-export type AssistLaunch = { runId: string } | { chatId: string };
+export type AssistLaunch = { runId: string } | { chatId: string; turnId?: string };
 
 export interface AssistVerbs {
   /** A typed message: launch a governed run OR chat session, return its id —
@@ -102,7 +102,7 @@ type ThreadItem =
   | { kind: 'user'; text: string; files: string[]; chip?: string }
   | { kind: 'note'; tone: NarrationTone; text: string }
   | { kind: 'run'; runId: string }
-  | { kind: 'chat'; chatId: string; resumed?: boolean };
+  | { kind: 'chat'; chatId: string; firstTurnId?: string; resumed?: boolean };
 
 interface PendingAttachment {
   name: string;
@@ -253,6 +253,7 @@ function DockRun({ runId }: { runId: string }): React.ReactElement {
 type DockSeatState = 'ready' | 'failed';
 
 interface DockChatMsg {
+  turnId?: string;
   cliKey: string;
   text: string;
   pending: boolean;
@@ -272,7 +273,7 @@ interface DockChatMsg {
 
 /** A follow-up turn, drawn inside its chat block so it sits above its own answer. `at`: when its send began. `failed`:
  *  the send failed with this message (the turn and its error stay where they were asked, before any retry). */
-export interface InlineTurn { id: number; text: string; files: string[]; chip?: string; at: number; failed?: string }
+export interface InlineTurn { turnId?: string; id: number; text: string; files: string[]; chip?: string; at: number; failed?: string }
 
 /** Whether a block holds only the operator's own follow-ups so far (no seat has said anything yet). */
 const onlyOwnTurns = (msgs: readonly DockChatMsg[]): boolean => msgs.every((m) => m.cliKey === 'you' || m.note === true);
@@ -280,9 +281,8 @@ const onlyOwnTurns = (msgs: readonly DockChatMsg[]): boolean => msgs.every((m) =
 /**
  * One launched CHAT session (the retired chat page's seat machinery's wire — `POST /chats` +
  * `POST /chats/:id/messages`, replies streaming back as `chatDelta`/`chatReply` frames).
- * The block folds ONLY frames whose `chat` matches, per-seat FIFO (the retired chat page's §7.9-3
- * correlation: a seat's frames belong to its oldest unfinished turn; the terminal
- * `chatReply` text is authoritative and replaces the accumulated deltas). Seats come from
+ * The block folds only frames whose `chat` matches, by turn id (per-seat FIFO on older daemons).
+ * The terminal `chatReply` text replaces the accumulated deltas. Seats come from
  * the one `GET /chats/:id` snapshot — frames that streamed before this block mounted are
  * healed by the authoritative reply, never re-invented.
  */
@@ -291,15 +291,36 @@ const onlyOwnTurns = (msgs: readonly DockChatMsg[]): boolean => msgs.every((m) =
 function replayDockTranscript(records: readonly unknown[]): DockChatMsg[] {
   const out: DockChatMsg[] = [];
   for (const r of records) {
-    const rec = r as { kind?: string; cliKey?: string; text?: string; ok?: boolean };
+    const rec = r as { kind?: string; cliKey?: string; text?: string; ok?: boolean; turnId?: string };
     if (typeof rec.text !== 'string') continue;
     if (rec.kind === 'user') {
       const files = (r as { attachments?: Array<{ name?: unknown }> }).attachments;
       const names = Array.isArray(files) ? files.map((f) => (typeof f?.name === 'string' ? f.name : '')).filter((n) => n !== '') : [];
-      out.push({ cliKey: 'you', text: splitAskContext(rec.text).typed, pending: false, ok: true, ...(names.length > 0 ? { files: names } : {}) });
+      out.push({ ...(rec.turnId !== undefined ? { turnId: rec.turnId } : {}), cliKey: 'you', text: splitAskContext(rec.text).typed, pending: false, ok: true, ...(names.length > 0 ? { files: names } : {}) });
     } else if (typeof rec.cliKey === 'string') {
-      out.push({ cliKey: rec.cliKey, text: rec.text, pending: false, ok: rec.ok ?? true });
+      out.push({ ...(rec.turnId !== undefined ? { turnId: rec.turnId } : {}), cliKey: rec.cliKey, text: rec.text, pending: false, ok: rec.ok ?? true });
     }
+  }
+  return out;
+}
+
+/** Replay and an acknowledged local turn may describe the same question. */
+function mergeDockHistory(history: DockChatMsg[], local: DockChatMsg[]): DockChatMsg[] {
+  const turns = new Set(history.filter((m) => m.cliKey === 'you' && m.turnId !== undefined).map((m) => m.turnId));
+  return [...history, ...local.filter((m) => m.cliKey !== 'you' || m.turnId === undefined || !turns.has(m.turnId))];
+}
+
+/** Tagged replies stay with their question even when another send began before they arrived. */
+function repliesByTurn(msgs: DockChatMsg[], firstTurnId?: string): DockChatMsg[] {
+  const known = new Set(msgs.filter((m) => m.cliKey === 'you').map((m) => m.turnId));
+  if (firstTurnId !== undefined) known.add(firstTurnId);
+  const moves = (m: DockChatMsg): boolean => m.cliKey !== 'you' && m.turnId !== undefined && known.has(m.turnId);
+  const tagged = msgs.filter(moves);
+  const out = msgs.filter((m) => !moves(m));
+  for (const reply of tagged) {
+    const own = out.findIndex((m) => m.cliKey === 'you' && m.turnId === reply.turnId);
+    const next = out.findIndex((m, i) => i > own && m.cliKey === 'you');
+    out.splice(next < 0 ? out.length : next, 0, reply);
   }
   return out;
 }
@@ -311,10 +332,12 @@ type ResumeProbe = { kind: 'gone' } | { kind: 'ended' } | { kind: 'error'; messa
 /** A chat's kept history (the system chat's past chats): its records, and whether it has ended. */
 export type ChatHistoryLoader = (chatId: string) => Promise<{ records: readonly unknown[]; closed: boolean }>;
 
-function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFooter, loadHistory, turns, flow = false, userText, onOpenFull }: {
+function DockChat({ chatId, firstTurnId, resumed = false, onResumeProbe, onStatus, answerFooter, loadHistory, turns, flow = false, userText, onOpenFull }: {
   /** crew-0183: how the person's own words are shown (a page strips what it appended for the seat). */
   userText?: ((text: string) => string) | undefined;
   chatId: string;
+  /** The first question is drawn outside the block. */
+  firstTurnId?: string | undefined;
   onOpenFull?: (() => void) | undefined;
   /** A chat window or page chat (journey 2026-11-04): the block is the conversation itself, not a box in a dock. No
    *  seat-chip header and no inner scroller: the thread around it is the one scroller, so no line of an answer ever
@@ -392,7 +415,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
         if (cancelled || h === null) return 'live' as const;
         replayedFromHistory = true;
         // A follow-up sent while the history loaded comes after it; a seat's frames that streamed in meanwhile win.
-        setMsgs((prev) => (onlyOwnTurns(prev) ? [...footed(h.records), ...prev] : prev));
+        setMsgs((prev) => (onlyOwnTurns(prev) ? mergeDockHistory(footed(h.records), prev) : prev));
         if (h.closed) {
           onResumeProbeRef.current?.({ kind: 'ended' });
           return 'ended' as const;
@@ -421,7 +444,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
         const messages = (detail as { messages?: unknown }).messages;
         if (resumed && !replayedFromHistory && Array.isArray(messages)) {
           const replayed = footed(messages);
-          setMsgs((prev) => (onlyOwnTurns(prev) ? [...replayed, ...prev] : prev));
+          setMsgs((prev) => (onlyOwnTurns(prev) ? mergeDockHistory(replayed, prev) : prev));
         }
       })
       .catch((e: unknown) => {
@@ -436,34 +459,33 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
     };
   }, [chatId, resumed]);
 
-  /** A seat's streaming chunk belongs to its OLDEST pending bubble (FIFO — the wire
-   *  carries no turn field); a chunk with no pending bubble opens its own. */
-  const append = (cliKey: string, text: string): void => {
+  /** Match the turn when present; older daemons' untagged chunks use FIFO. */
+  const append = (cliKey: string, text: string, turnId?: string): void => {
     setMsgs((prev) => {
       const next = [...prev];
       for (let i = 0; i < next.length; i += 1) {
         const m = next[i];
-        if (m !== undefined && m.cliKey === cliKey && m.pending) {
+        if (m !== undefined && m.cliKey === cliKey && m.pending && (turnId === undefined || m.turnId === turnId)) {
           next[i] = { ...m, text: m.text + text };
           return next;
         }
       }
-      next.push({ cliKey, text, pending: true, ok: false, at: Date.now() });
+      next.push({ ...(turnId !== undefined ? { turnId } : {}), cliKey, text, pending: true, ok: false, at: Date.now() });
       return next;
     });
   };
 
-  /** The terminal reply finalizes the oldest pending bubble — through
+  /** The terminal reply finalizes its turn's pending bubble — through
    *  {@link retainOnFinalize}: the wire keeps no history, so a terminal text
    *  SHORTER than the accumulated deltas never clobbers what streamed (E4);
    *  the longer text stands, ties to the terminal reply (the healing path for
    *  a block that mounted mid-stream, intact). */
-  const finalize = (cliKey: string, text: string, ok: boolean): void => {
+  const finalize = (cliKey: string, text: string, ok: boolean, turnId?: string): void => {
     setMsgs((prev) => {
       const next = [...prev];
       for (let i = 0; i < next.length; i += 1) {
         const m = next[i];
-        if (m !== undefined && m.cliKey === cliKey && m.pending) {
+        if (m !== undefined && m.cliKey === cliKey && m.pending && (turnId === undefined || m.turnId === turnId)) {
           // ASK-S1 (codex #9): on a path the relay's `chatReply` IS the canonical answer — the stored
           // output with the control lines stripped, so SHORTER than the deltas by design; it replaces
           // them. The retain rule stays for the pool-era fan-out (no capability).
@@ -471,7 +493,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
           return next;
         }
       }
-      next.push({ cliKey, text, pending: false, ok, foot: ok ? footRef.current?.(cliKey) ?? null : null, at: Date.now() });
+      next.push({ ...(turnId !== undefined ? { turnId } : {}), cliKey, text, pending: false, ok, foot: ok ? footRef.current?.(cliKey) ?? null : null, at: Date.now() });
       return next;
     });
   };
@@ -487,7 +509,8 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
     setMsgs((prev) => {
       const next = [...prev];
       for (const t of fresh) {
-        const own: DockChatMsg[] = [{ cliKey: 'you', text: t.text, pending: false, ok: true, at: t.at, ...(t.files.length > 0 ? { files: t.files } : {}), ...(t.chip !== undefined ? { chip: t.chip } : {}) }];
+        if (t.turnId !== undefined && next.some((m) => m.cliKey === 'you' && m.turnId === t.turnId)) continue;
+        const own: DockChatMsg[] = [{ ...(t.turnId !== undefined ? { turnId: t.turnId } : {}), cliKey: 'you', text: t.text, pending: false, ok: true, at: t.at, ...(t.files.length > 0 ? { files: t.files } : {}), ...(t.chip !== undefined ? { chip: t.chip } : {}) }];
         if (t.failed !== undefined) own.push({ cliKey: 'you', text: t.failed, pending: false, ok: false, note: true, at: t.at });
         let at = next.length;
         while (at > 0) {
@@ -502,7 +525,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
   }, [turns]);
 
   useEventStream((ev: CoreEvent) => {
-    const frame = ev as { type: string; chat?: string; cliKey?: string; text?: string; ok?: boolean; reason?: string };
+    const frame = ev as { type: string; chat?: string; cliKey?: string; text?: string; ok?: boolean; reason?: string; turn_id?: string };
     if (frame.chat !== chatId) return;
     switch (frame.type) {
       case 'chatSessionReady':
@@ -514,13 +537,13 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
         break;
       case 'chatDelta':
         if (frame.cliKey !== undefined && frame.text !== undefined && frame.text !== '') {
-          append(frame.cliKey, frame.text);
+          append(frame.cliKey, frame.text, frame.turn_id);
           onStatusRef.current?.('thinking');
         }
         break;
       case 'chatReply':
         if (frame.cliKey !== undefined) {
-          finalize(frame.cliKey, frame.text ?? '', frame.ok ?? false);
+          finalize(frame.cliKey, frame.text ?? '', frame.ok ?? false, frame.turn_id);
           // A failed turn is not an answer: the tray goes back to "ready", never "answer ready".
           onStatusRef.current?.(frame.ok === true ? 'answered' : 'ready');
         }
@@ -578,7 +601,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe, onStatus, answerFoot
             Sent — the helpers answer here as their replies stream in.
           </p>
         ) : (
-          msgs.map((m, i) => m.note === true ? (
+          repliesByTurn(msgs, firstTurnId).map((m, i) => m.note === true ? (
             // The dock's own line, the way the thread says it (a send that failed stays under its question).
             <p key={i} data-testid="assist-note" data-tone="fail" className="font-mono text-xs leading-relaxed" style={{ color: TONE_COLOR.fail }}>
               · {m.text}
@@ -873,7 +896,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       // A follow-up into a chat already on screen joins that chat's block, above its answer: its reply streams into
       // that block, so a question drawn after the block would sit below its own answer (journey 2026-11-04).
       if (into !== null && itemsRef.current.some((it) => it.kind === 'chat' && it.chatId === into)) {
-        setInlineTurns((cur) => ({ ...cur, [into]: [...(cur[into] ?? []), { id: (turnSeq.current += 1), text: body, files: fileNames, at: sentAt, ...(chip !== undefined ? { chip } : {}) }] }));
+        setInlineTurns((cur) => ({ ...cur, [into]: [...(cur[into] ?? []), { id: (turnSeq.current += 1), text: body, files: fileNames, at: sentAt, ...('turnId' in launched ? { turnId: launched.turnId } : {}), ...(chip !== undefined ? { chip } : {}) }] }));
       } else {
         push({ kind: 'user', text: body, files: fileNames, ...(chip !== undefined ? { chip } : {}) });
       }
@@ -883,7 +906,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
         setItems((cur) =>
           cur.some((it) => it.kind === 'chat' && it.chatId === launched.chatId)
             ? cur
-            : [...cur, { kind: 'chat', chatId: launched.chatId }],
+            : [...cur, { kind: 'chat', chatId: launched.chatId, ...('turnId' in launched ? { firstTurnId: launched.turnId } : {}) }],
         );
       } else {
         push({ kind: 'run', runId: launched.runId });
@@ -1173,6 +1196,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
               <DockChat
                 key={item.chatId}
                 chatId={item.chatId}
+                firstTurnId={item.firstTurnId}
                 onOpenFull={onExpandChat !== undefined ? () => onExpandChat(item.chatId) : undefined}
                 resumed={item.resumed === true}
                 onResumeProbe={item.resumed === true ? (outcome) => onResumeProbe(item.chatId, outcome) : undefined}
