@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { create } from 'zustand';
 import { powerOf, type PowerState } from '../api/power.js';
 import type { SessionView } from '../api/types.js';
-import { mergePower, type AnsweredPause } from '../board/powerMode.js';
+import { laterAnswered, mergePower, type AnsweredPause } from '../board/powerMode.js';
 import { useCapabilities } from '../store/capabilities.js';
 import { useRunEventStore } from '../store/events.js';
 
@@ -16,8 +16,9 @@ export const usePowerLocal = create<{ byRun: Record<string, PowerState>; answere
 export function rememberPower(runId: string, p: PowerState, answered: AnsweredPause | null = null): void {
   usePowerLocal.setState((s) => ({
     byRun: { ...s.byRun, [runId]: p },
-    // A later flip or raise keeps the record of the pause answered before it; a newer pause answer replaces it.
-    answeredByRun: answered === null ? s.answeredByRun : { ...s.answeredByRun, [runId]: { at: answered.at, checkpoint: answered.checkpoint } },
+    // A later flip or raise keeps the record of the pause answered before it; a pause answer keeps the later of the two
+    // (answers can come back out of order).
+    answeredByRun: answered === null ? s.answeredByRun : { ...s.answeredByRun, [runId]: laterAnswered(s.answeredByRun[runId], { at: answered.at, checkpoint: answered.checkpoint }) },
   }));
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(POWER_CHANGED));
 }

@@ -6,7 +6,7 @@
 import { renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CoreEvent } from '../src/api/types.js';
-import { mergePower } from '../src/board/powerMode.js';
+import { isAnswered, mergePower } from '../src/board/powerMode.js';
 import { rememberPower, usePower, usePowerLocal } from '../src/hooks/usePower.js';
 import { useCapabilities } from '../src/store/capabilities.js';
 import { useRunEventStore } from '../src/store/events.js';
@@ -121,5 +121,54 @@ describe('studio#947: a session read further along than this page\'s answer brin
     const merged = mergePower(bad, [], answer)!;
     expect(merged.pause).toEqual(pz(15));
     expect(merged.orchestrator.turns).toBe(2);
+  });
+});
+
+describe('cross-model review of #1288 (codex round 1)', () => {
+  const raised = [...state().history, change(4, 22, 'operator', 'high', 'highest', 34, 34, null)];
+
+  it('a pause the state holds ends on a later frame that moves the run on; an older frame leaves it', () => {
+    const turnStarted = (min: number) => ({ type: 'powerTurnStarted', session: RUN, ord: 1, attempt: 0, turn: 4, cli: 'claude', ts: at(min) });
+    expect(mergePower(state({ pause: pz(25) }), ev([cpFrame(25), turnStarted(30)]))!.pause).toBeNull();
+    expect(mergePower(state({ pause: pz(25) }), ev([turnStarted(20)]))!.pause).toEqual(pz(25));
+  });
+
+  it('a session read with an older hand-off round never replaces the round a pause answer started', () => {
+    const answer = state({ pause: null, handoff: { round: 2, maxRounds: 3, steps: [] } });
+    const older = state({ pause: pz(22), handoff: { round: 1, maxRounds: 3, steps: [step('checks', 'passed', null, null, 26)] } });
+    expect(mergePower(older, [], answer, { at: at(22), checkpoint: 3 })!.handoff).toEqual(answer.handoff);
+  });
+
+  it('a later checkpoint is a new pause whatever its clock says', () => {
+    expect(isAnswered({ at: at(20), checkpoint: 4 }, { at: at(22), checkpoint: 3 })).toBe(false);
+    expect(isAnswered({ at: at(22), checkpoint: 3 }, { at: at(22), checkpoint: 3 })).toBe(true);
+    expect(isAnswered({ at: at(10), checkpoint: 2 }, { at: at(22), checkpoint: 3 })).toBe(true);
+    const next = { ...pz(21), checkpoint: 4 };
+    const session = state({ pause: next, orchestrator: turnsOf(3) });
+    expect(mergePower(session, [], state({ pause: null }), { at: at(22), checkpoint: 3 })!.pause).toEqual(next);
+  });
+
+  it('a pause frame that opened before this page\'s raise was handled, delivered late, does not reopen it', () => {
+    // the pause opened at 20 and was answered elsewhere; the raise was handled at 22 (no pause); the old frame came at 25
+    vi.setSystemTime(at(25));
+    useRunEventStore.getState().ingest(cpFrame(20, false) as unknown as CoreEvent);
+    vi.setSystemTime(at(30));
+    rememberPower(RUN, state({ history: raised, rigor: 'highest', pause: null }));
+    const { result } = renderHook(() => usePower(viewOf(state())));
+    expect(result.current!.pause).toBeNull();
+  });
+
+  it('answers that come back out of order keep the later answered pause', () => {
+    rememberPower(RUN, state({ pause: null }), { ...pz(30), checkpoint: 4 });
+    rememberPower(RUN, state({ pause: null }), pz(22));
+    expect(usePowerLocal.getState().answeredByRun[RUN]).toEqual({ at: at(30), checkpoint: 4 });
+  });
+
+  it('a session pause the pause card cannot say is never adopted', () => {
+    const answer = state({ history: raised, pause: pz(15) });
+    for (const bad of [{ ...pz(30), reasons: undefined }, { ...pz(30), reasons: [3] }, { ...pz(30), recommended: 'later' }]) {
+      const merged = mergePower(state({ history: raised, pause: bad as never, orchestrator: turnsOf(3) }), [], answer)!;
+      expect(merged.pause).toEqual(pz(15));
+    }
   });
 });
