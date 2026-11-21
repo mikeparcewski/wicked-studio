@@ -165,6 +165,27 @@ describe('2 + 3 on the rendered row', () => {
   });
   afterEach(() => cleanup());
 
+  it('studio#930: More about this lists flaky tests apart from the change-only face', async () => {
+    const flaky = 'tests/retry.py::test_passed_on_retry';
+    const fresh = 'tests/new.py::test_regression';
+    const events = GATE_EVENTS.map((e) => e.type === 'repoChecksEvaluated'
+      ? floorEvent(2, 3, testCheck({ failureIds: [fresh, flaky], regressions: [fresh, flaky], preExisting: [], flakyIds: [flaky] })) as unknown as CoreEvent
+      : e);
+    useRunEventStore.setState({ byRun: { [RUN]: events } });
+    render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human', clis: ['codex', 'claude'] } as never, UNITS)} gate={gate()} navigate={vi.fn()} />);
+    const face = await screen.findByTestId('session-gate-failing-split');
+    expect(face.textContent).not.toContain(flaky);
+    expect(face.textContent).not.toContain('Passed on retry');
+    expect(face.textContent).toContain('Regression');
+    const more = screen.getByTestId('session-gate-more-about');
+    expect(more).not.toHaveAttribute('open');
+    fireEvent.click(screen.getByText('More about this'));
+    const block = await screen.findByTestId('session-gate-flaky');
+    expect(more).toContainElement(block);
+    expect(block).toHaveTextContent('Flaky (passed on retry)');
+    expect([...block.querySelectorAll('code')].map((el) => el.textContent)).toEqual([flaky]);
+  });
+
   it('the face names the failing tests and marks the override suggested', async () => {
     render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human', clis: ['codex', 'claude'] } as never, UNITS)} gate={gate()} navigate={vi.fn()} />);
     const failing = await screen.findByTestId('session-gate-failing');

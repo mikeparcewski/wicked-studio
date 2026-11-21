@@ -71,6 +71,7 @@ describe('studio#403 — reading the refused hand-over', () => {
     const m = sessionGateChoices({ runId: RUN, gate: g, units: UNITS, events: [], pool: [], roster: null })!;
     expect(m).not.toBeNull();
     expect(m.choices.map((c) => [c.label, c.decision])).toEqual([['Deliver again', { approve: true }], ['Stop', { approve: false }]]);
+    expect(m.choices[0]!.title).toBe('Re-run the deliver phase on the same tree: its checks run again on that tree, then it pushes if they pass.');
     expect(m.recommended).toBeNull();
     expect(m.refusal?.branch).toBe(BRANCH);
     // A fresh deliver gate is still the hand-over card.

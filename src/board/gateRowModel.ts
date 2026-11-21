@@ -39,7 +39,7 @@ import {
 } from '../components/gateVerdictModel.js';
 import type { ReassignCandidate, RunBench } from '../components/gateVerdictModel.js';
 import type { GateAnswer } from './gateActions.js';
-import { repeatChoicesOf, repeatLineOf, REPEAT_QUESTION } from './repeatProgress.js';
+import { repeatChoicesOf, repeatLineOf, repeatQuestion } from './repeatProgress.js';
 import type { RerunOffer } from '../components/rerunModel.js';
 import { isInconclusiveQePrompt, offersQeRedo, qeGateOf, qeRecordedOutcome, QE_REDO_ACTION, QE_REDO_CONSEQUENCE, QE_REDO_KEY, QE_REDO_LABEL, QE_REDO_TITLE, QE_RETRY_LABEL, QE_RETRY_NOTE_LABEL, QE_RETRY_NOTE_TITLE, QE_RETRY_TITLE, type QeGate } from './qeEscalation.js';
 import { ruleSkippable, rulesHoldAt, waitsForJudge, type RuleRow } from './assuranceModel.js';
@@ -659,7 +659,7 @@ export const REFUSAL_JUDGMENT_TITLE = `${FLOOR_OVERRIDE_CONSEQUENCE} Approving r
 function refusalChoice(offer: GateOffer): GateRowChoice {
   switch (offer.action) {
     case OFFER_APPROVE:
-      return { key: 'retry', label: 'Deliver again', decision: { approve: true }, note: 'none', title: 'Re-run the deliver phase: it re-checks the work and pushes again.' };
+      return { key: 'retry', label: 'Deliver again', decision: { approve: true }, note: 'none', title: 'Re-run the deliver phase on the same tree: its checks run again on that tree, then it pushes if they pass.' };
     case FLOOR_OVERRIDE_ACTION:
       // wicked-core: the deliver phase's own re-verify failed (a lift moved the tree onto a red base);
       // the operator's judgment over exactly that result, then the deliver phase re-runs on it.
@@ -721,7 +721,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     const choices = repeatChoicesOf(gate, events);
     if (choices !== null) {
       const line = repeatLineOf(events);
-      return { reason: 'choices', question: REPEAT_QUESTION, choices: choices.slice(0, 4), overflow: choices.slice(4), noteDefault: '', recommended: null, detailItems: [line ?? shownPrompt(gate.prompt)] };
+      return { reason: 'choices', question: repeatQuestion(line ?? gate.prompt), choices: choices.slice(0, 4), overflow: choices.slice(4), noteDefault: '', recommended: null, detailItems: [line ?? shownPrompt(gate.prompt)] };
     }
   }
   if (kind === 'consent') {

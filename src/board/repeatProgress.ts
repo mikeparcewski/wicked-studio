@@ -77,8 +77,18 @@ function frameOf(gate: OpenGate, events: readonly CoreEvent[] | null): Record<st
   return null;
 }
 
-/** The ask's headline: the step's own line says where it got to; the question is whether to go on. */
-export const REPEAT_QUESTION = 'The budget for this job is spent — keep going?';
+export const BUDGET_QUESTION = 'The budget for this job is spent — keep going?';
+
+/** studio#1082: the first matching stop reason names the repeat ask. */
+export function repeatQuestion(line: string | null | undefined): string {
+  const text = line ?? '';
+  if (/nothing (?:is )?left to map/i.test(text)) return 'Nothing is left to map and the minimum isn’t met — finish with what was found, or stop?';
+  if (/(?:resolved|answered) under 1 in \d+ of its units/i.test(text)) return 'The last page resolved almost none of its units — read its review before you choose';
+  if (/out of reach/i.test(text)) return 'The minimum is out of reach in this run — keep going anyway?';
+  if (/added no real requirement/i.test(text)) return 'The last two pages added no real requirement — keep going?';
+  if (/budget reached/i.test(text)) return BUDGET_QUESTION;
+  return 'The job stopped to ask how to go on';
+}
 
 const STOP_TITLE = 'End the job here. The real requirements found so far are kept, and a later run continues from them.';
 

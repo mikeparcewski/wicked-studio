@@ -1035,6 +1035,13 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
               <ul>{model.refusal.changed.map((f) => <li key={f}><code className="wk-gate2-new-id">{showPath(f)}</code></li>)}</ul>
             </div>
           )}
+          {/* studio#930: passed-on-retry tests stay apart from the failing list. */}
+          {(model.failingTests?.flaky?.length ?? 0) > 0 && (
+            <div data-testid="session-gate-flaky" className="wk-gate2-base">
+              <p className="wk-gate2-label">Flaky (passed on retry)</p>
+              <ul>{model.failingTests!.flaky!.map((f) => <li key={f}><code className="wk-gate2-new-id">{f}</code></li>)}</ul>
+            </div>
+          )}
           {drift !== null && <DriftLine drift={drift} />}
           {/* studio#639: no install plan ran, so no file list — the engine's own reason, where the lists would be. */}
           {model.consentMissing !== undefined && (
