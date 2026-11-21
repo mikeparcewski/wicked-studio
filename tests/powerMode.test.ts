@@ -210,17 +210,17 @@ describe('the state as it stands now', () => {
     const local = state({ on: false, toggles: flip, orchestrator: { cli: 'claude', ord: 1, turns: 2, inTurn: true, sessionRestarts: 0 }, checkpoints: 2 });
     // the session read after the flip: the same flip, and the run has moved on since
     const session = state({ on: false, toggles: flip, orchestrator: { cli: 'claude', ord: 1, turns: 6, inTurn: false, sessionRestarts: 0 }, checkpoints: 4 });
-    const merged = mergePower(session, [], local, at(25))!;
+    const merged = mergePower(session, [], local)!;
     expect(merged.orchestrator.turns).toBe(6);
     expect(merged.checkpoints).toBe(4);
     expect(merged.on).toBe(false);
     // an older session read (taken before this page's answer, at the same tip) never takes the progress back
     const older = state({ on: false, toggles: flip, orchestrator: { cli: 'claude', ord: 1, turns: 1, inTurn: true, sessionRestarts: 0 }, checkpoints: 1 });
-    const kept = mergePower(older, [], local, at(25))!;
+    const kept = mergePower(older, [], local)!;
     expect(kept.orchestrator.turns).toBe(2);
     expect(kept.checkpoints).toBe(2);
     // before the session caught up (a read without the flip), this page's answer leads
-    expect(mergePower(state(), [], local, at(25))!.on).toBe(false);
+    expect(mergePower(state(), [], local)!.on).toBe(false);
   });
   it('on a caught-up tie the session\'s progress replaces the answer\'s whole only when strictly further along (codex r4-r7 on 9d)', () => {
     const flip = [{ at: at(25), on: false, by: 'you', reason: null, stayPhased: [] }];
@@ -231,7 +231,7 @@ describe('the state as it stands now', () => {
       state({ on: false, toggles: flip, handoff: { round: 1, maxRounds: 3, steps: [step('checks', 'running', 26)] } }),
       state({ on: false, toggles: flip, handoff: { round: 1 } as never, turnLog: [null] as never }),
     ]) {
-      const kept = mergePower(session, [], local, at(25))!;
+      const kept = mergePower(session, [], local)!;
       expect(kept.handoff).toEqual(local.handoff);
       expect(kept.orchestrator).toEqual(local.orchestrator);
     }
@@ -244,14 +244,14 @@ describe('the state as it stands now', () => {
       state({ on: false, toggles: flip, orchestrator: { cli: 'claude', ord: 1, turns: 9, inTurn: false, sessionRestarts: 0 }, turnLog: [{ turn: 9, attempt: 0, startedAt: 1, endedAt: null, outcome: null, summary: 'x' }] as never }),
       state({ on: false, toggles: flip, handoff: { round: 2, maxRounds: 3, steps: [{ step: 'review', status: 'running', at: at(30), summary: null }] } as never }),
     ]) {
-      const kept = mergePower(bad, [], local, at(25))!;
+      const kept = mergePower(bad, [], local)!;
       expect(kept.handoff).toEqual(local.handoff);
       expect(kept.orchestrator.turns).toBe(local.orchestrator.turns);
     }
     // a later state: the session's hand-off replaces the answer's whole, as a leading session snapshot does
     const later = state({ on: false, toggles: flip, handoff: { round: 2, maxRounds: 3, steps: [step('review', 'running', 30)] } });
-    expect(mergePower(later, [], local, at(25))!.handoff).toEqual(later.handoff);
-    expect(mergePower(later, [], local, at(25))!.on).toBe(false);
+    expect(mergePower(later, [], local)!.handoff).toEqual(later.handoff);
+    expect(mergePower(later, [], local)!.on).toBe(false);
   });
   it('a checkpoint frame that opened a pause pauses the run until the next turn starts; this page\'s answer clears it', () => {
     const pz = { at: at(29), checkpoint: 3, reasons: ['grew'], recommended: 'split' as const };

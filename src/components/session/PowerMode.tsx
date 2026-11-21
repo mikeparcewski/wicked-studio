@@ -412,7 +412,8 @@ export function PowerPauseCard({ view, power }: { view: SessionView; power: Powe
         commit: async () => {
           try {
             const v = await powerApi.pause(id, decision, note);
-            rememberPower(id, v);
+            // The pause this answer closed: a frame or an older session read never opens it again (studio#945).
+            rememberPower(id, v, pause);
             reportDecision('sent', `${PAUSE_CHOICES[c].label}: sent.`, { keys: [`power:${id}`] });
           } catch (e) {
             setError(errorWords(e));

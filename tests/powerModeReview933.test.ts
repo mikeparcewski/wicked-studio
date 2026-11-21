@@ -23,8 +23,11 @@ describe('mergePower and the pause', () => {
   });
   it('this page\'s earlier answer never hides a later pause (codex P2, agy P1.4)', () => {
     const local = state({ on: true, toggles: [{ at: at(20), on: true, by: 'you', reason: null, stayPhased: [] }] });
-    expect(mergePower(state(), ev([cpFrame(29)]), local, at(20))!.pause).toEqual(pz(29));
-    expect(mergePower(state(), ev([cpFrame(29)]), local, at(30))!.pause).toBeNull();
+    expect(mergePower(state(), ev([cpFrame(29)]), local)!.pause).toEqual(pz(29));
+    // studio#945: when the answer ARRIVED says nothing about the pause; the flip was handled at 20, the pause opened at
+    // 29, so it shows even when the answer reached the page at 30 (this line expected it hidden before #945).
+    // The pause this page answered is the one that stays closed.
+    expect(mergePower(state(), ev([cpFrame(29)]), local, { at: at(29), checkpoint: 3 })!.pause).toBeNull();
   });
   it('the hand-off step that ends a pause is still folded (agy P1.1)', () => {
     const merged = mergePower(state(), ev([cpFrame(29), { type: 'powerHandoffStepped', session: 'r', round: 1, step: step('checks', 'passed', null, null, 33), ts: at(33) }]))!;
