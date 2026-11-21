@@ -342,6 +342,32 @@ export function schemePrefix(raw: string): string {
   return /[=:]$/.test(scheme) ? scheme : `${scheme} `;
 }
 
+const ENV_HUMAN_ONLY_MESSAGE = 'Only a person signed in as the operator can approve settings for a server.';
+
+function parseServerSettings(raw: string): { env?: Record<string, string>; error?: string } {
+  const entries: Array<[string, string]> = [];
+  const names = new Set<string>();
+  for (const [index, rawLine] of raw.split('\n').entries()) {
+    const line = rawLine.replace(/\r$/, '');
+    if (line.trim() === '') continue;
+    const at = line.indexOf('=');
+    const where = `Line ${index + 1}`;
+    if (at === -1) return { error: `${where}: use NAME=value.` };
+    const name = line.slice(0, at).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(name)) {
+      return { error: `${where}: use a name of at most 64 letters, digits or underscores, starting with a letter or underscore.` };
+    }
+    const key = name.toUpperCase();
+    if (names.has(key)) return { error: `${where}: duplicate setting ${name} (names are compared without case).` };
+    if (entries.length === 16) return { error: `${where}: at most 16 settings are allowed.` };
+    const value = line.slice(at + 1);
+    if (value.length > 1024) return { error: `${where}: the value for ${name} must be at most 1024 characters.` };
+    names.add(key);
+    entries.push([name, value]);
+  }
+  return entries.length === 0 ? {} : { env: Object.fromEntries(entries) };
+}
+
 function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
   onSaved: (name: string) => void;
   onClose: () => void;
@@ -355,6 +381,8 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
   /** The kinds this form writes; `web` is written by its install route only (the contract's `McpServerConfigBody.kind`). */
   const [kind, setKind] = useState<Exclude<McpUpstreamKind, 'web'>>('mcp-stdio');
   const [target, setTarget] = useState('');
+  const [settingsText, setSettingsText] = useState('');
+  const settings = parseServerSettings(kind === 'mcp-stdio' ? settingsText : '');
   /** `rest` only: where crew fetches the API's OpenAPI document. */
   const [openapiUrl, setOpenapiUrl] = useState('');
   const [asks, setAsks] = useState<Array<UnconfirmedAddress & { forTarget: string }>>([]);
@@ -389,6 +417,7 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
   /** A pasted secret for a name already registered overwrites THAT server's live credential. */
   const replacesLiveSecret = authValue !== '' && saved.includes(name);
   const ready = nameOk && target.trim() !== '' && (kind !== 'rest' || openapiUrl.trim() !== '')
+    && settings.error === undefined
     // A pasted value decides the reference (crew answers it), so a half-typed reference must not
     // block the secret that replaces it (codex review round 6 on #387).
     && (authValue !== '' || authRef.trim() === '' || /^(env|keychain):/.test(authRef.trim()))
@@ -405,7 +434,8 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
     // A prefix belongs to a HEADER injection only; an env-injected secret is the value itself.
     const scheme = kind !== 'mcp-stdio' && authPrefix.trim() !== '' ? { prefix: schemePrefix(authPrefix) } : {};
     const auth = ref === '' ? null : { ref, ...into, ...scheme };
-    if (kind === 'mcp-stdio') return { name, kind, command: parts[0] ?? '', args: parts.slice(1), auth };
+    if (kind === 'mcp-stdio') return { name, kind, command: parts[0] ?? '', args: parts.slice(1), auth,
+      ...(settings.env !== undefined ? { env: settings.env } : {}) };
     const address = confirmation !== null && confirmation.forTarget === forTarget && confirmation.ranges.length > 0
       ? { address: { allow: [...confirmation.ranges] } } : {};
     if (kind === 'rest') return { name, kind, url: target.trim(), openapiUrl: openapiUrl.trim(), auth, ...address };
@@ -414,7 +444,8 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
   const body = (confirmation = confirmed) => bodyWith(impliedRef(), confirmation);
 
   const previewSeq = useRef(0);
-  const formKey = JSON.stringify(body());
+  // Invalid edits must also invalidate an in-flight preview, even when no env can be built.
+  const formKey = JSON.stringify(settings.error === undefined ? body() : { invalidSettings: settingsText });
   /** The LIVE form key, readable after an await (the closure's copy is the one it started with). */
   const formKeyRef = useRef(formKey);
   formKeyRef.current = formKey;
@@ -427,6 +458,7 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
   const setPreview = (p: null): void => { setHeld(p); setError(null); };
 
   const doPreview = async (confirmation = confirmed): Promise<void> => {
+    if (!ready) return;
     setBusy(true);
     setError(null);
     setHeld(null);
@@ -467,7 +499,9 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
           ? list : [...list, { ...u, forTarget }]);
         return;
       }
-      setError(msg(e));
+      setError(e instanceof ApiError && e.status === 403
+        && typeof e.body === 'object' && e.body !== null && 'code' in e.body && e.body.code === 'env_human_only'
+        ? ENV_HUMAN_ONLY_MESSAGE : msg(e));
     } finally {
       if (seq === previewSeq.current) setBusy(false);
     }
@@ -530,6 +564,24 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
           </label>
         )}
       </div>
+      {kind === 'mcp-stdio' && (
+        <div className="flex flex-col gap-1">
+          <label className="flex flex-col gap-1" style={{ color: 'var(--ink-muted)' }}>
+            Settings for the server (not secrets)
+            <textarea data-testid="mcp-add-env" value={settingsText}
+              onChange={(e) => { setSettingsText(e.target.value); setPreview(null); }}
+              rows={3} spellCheck={false} className={input}
+              aria-invalid={settings.error !== undefined}
+              aria-describedby={settings.error === undefined ? 'mcp-add-env-hint' : 'mcp-add-env-hint mcp-add-env-error'} />
+          </label>
+          <p id="mcp-add-env-hint" className="wk-field-note">One NAME=value per line. Secrets go in the secret field.</p>
+          {settings.error !== undefined && (
+            <p id="mcp-add-env-error" data-testid="mcp-add-env-error" role="alert" className="wk-field-note" style={{ color: 'var(--status-fail)' }}>
+              {settings.error}
+            </p>
+          )}
+        </div>
+      )}
       {kind === 'rest' && (
         <p data-testid="mcp-add-rest-note" className="" style={{ color: 'var(--ink-dim)' }}>
           Each operation becomes a tool: GET reads, POST writes, PUT, PATCH and DELETE are destructive. A call sends only the arguments its operation declares, and only to the base URL; a request or redirect that would leave it is refused and recorded.
@@ -600,7 +652,8 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
         </label>
       ))}
       {error !== null && (
-        <StateBanner data-testid="mcp-add-error" kind={readErrorKind(error)} what="the server preview" error={error} onRetry={() => void doPreview()} />
+        <StateBanner data-testid="mcp-add-error" kind={readErrorKind(error)} what="the server preview" error={error}
+          said={error === ENV_HUMAN_ONLY_MESSAGE ? error : null} onRetry={() => void doPreview()} />
       )}
       {preview !== null && (
         <div data-testid="mcp-add-preview-result" data-preview-hash={preview.previewHash} className="flex flex-col gap-2">
@@ -609,6 +662,24 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
             {preview.tools.length} tool{preview.tools.length === 1 ? '' : 's'}
             {preview.diff !== null && ` · replaces the saved ${name}: ${preview.diff.added.length} added, ${preview.diff.changed.length} changed, ${preview.diff.removed.length} removed`}
           </p>
+          {preview.envNames !== undefined && preview.envNames.length > 0 && (
+            <>
+              <p style={{ color: 'var(--ink-muted)' }}>It starts with these settings, which you approve by saving:</p>
+              <ul data-testid="mcp-add-env-names" className="flex flex-col gap-1">
+                {preview.envNames.map((setting) => (
+                  <li key={setting.name} data-testid="mcp-add-env-name" data-class={setting.class} className="flex items-center gap-2">
+                    <code className="wk-src-mono">{setting.name}</code>
+                    <span style={{ color: setting.class === 'runtime_control' ? 'var(--status-warn)' : 'var(--ink-dim)' }}>
+                      {setting.class === 'runtime_control' ? 'Runtime control' : 'App setting'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {preview.envNames.some((setting) => setting.class === 'runtime_control') && (
+                <p className="wk-field-note">A runtime control can change how the server starts, loads code, finds packages or trusts the network. Approve it only if you expect it.</p>
+              )}
+            </>
+          )}
           {preview.skipped !== undefined && preview.skipped.length > 0 && (
             <div data-testid="mcp-add-skipped">
               <p className="wk-field-note">{preview.skipped.length === 1 ? 'One tool' : `${preview.skipped.length} tools`} can’t be managed here and will be left out.</p>

@@ -10551,6 +10551,30 @@
       ]
     },
     {
+      "testId": "mcp-add-env",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-env-error",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-env-name",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-env-names",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
       "testId": "mcp-add-error",
       "files": [
         "src/components/McpToolsPage.tsx"
