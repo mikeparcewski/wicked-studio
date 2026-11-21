@@ -36,7 +36,7 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import DECISIONS, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4356"))
 W, H = 1440, 700
@@ -173,9 +173,11 @@ with sync_playwright() as p:
           and len(posts("widen")) == 1, text=widen_text, after=everywhere)
 
     # ── 9. LIVE: a chatDecisions frame lands under the turn that had no record ──────────
+    # Crew writes the ledger row as it sends the frame: until then the list does not have it.
     with urllib.request.urlopen(f"{origin}/api/v1/decisions?chat=chat-pay", timeout=10) as r:
-        live_item = [d for d in json.loads(r.read())["decisions"] if d["id"] == "dec-live"]
-    check("live-frame-precondition", page.locator(LINE.format("dec-live")).count() == 0 and len(live_item) == 1)
+        listed = [d for d in json.loads(r.read())["decisions"] if d["id"] == "dec-live"]
+    live_item = [DECISIONS["dec-live"]]
+    check("live-frame-precondition", page.locator(LINE.format("dec-live")).count() == 0 and listed == [])
     set_fixture(origin, extra_frames=[{"type": "chatDecisions", "chat": "chat-pay", "turn_id": "d7", "items": live_item, "project_id": "upload-endpoint"}])
     try:
         page.locator(LINE.format("dec-live")).wait_for(state="visible", timeout=15000)
