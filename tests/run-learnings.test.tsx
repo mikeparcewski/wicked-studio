@@ -76,6 +76,49 @@ describe('the end card line', () => {
       vi.useRealTimers();
     }
   });
+
+  it('a failed read while distilling is tried again, longer each time, until the answer says done (studio#943)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      apiFetch
+        .mockResolvedValueOnce(learnings({ proposed: 0, pending: 0, approved: 0, distilling: true }))
+        .mockRejectedValueOnce(new ApiError(502, 'bad gateway'))
+        .mockRejectedValueOnce(new ApiError(502, 'bad gateway'))
+        .mockResolvedValue(learnings({ proposed: 2, pending: 2, approved: 0 }));
+      render(<RunLearningsLine runId="run-1" />);
+      expect(await screen.findByTestId('run-learnings-line')).toHaveAttribute('data-distilling', 'true');
+      await vi.advanceTimersByTimeAsync(15_000);
+      await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2));
+      // the first retry waits the poll interval again, the next one twice that
+      await vi.advanceTimersByTimeAsync(15_000);
+      await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(3));
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(apiFetch).toHaveBeenCalledTimes(3);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await waitFor(() => expect(screen.getByTestId('run-learnings-line')).toHaveTextContent('2 learnings proposed · 2 waiting for you'));
+      expect(screen.getByTestId('run-learnings-line')).toHaveAttribute('data-distilling', 'false');
+      expect(apiFetch).toHaveBeenCalledTimes(4);
+      // a terminal answer ends the reads
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(apiFetch).toHaveBeenCalledTimes(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a failed first read is not retried: nothing said it was distilling (studio#943)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      apiFetch.mockRejectedValue(new ApiError(502, 'bad gateway'));
+      render(<RunLearningsLine runId="run-1" />);
+      await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(1));
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(apiFetch).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId('run-learnings-line')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('the Memory queue, from a run', () => {
