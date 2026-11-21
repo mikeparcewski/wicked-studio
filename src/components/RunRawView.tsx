@@ -36,7 +36,7 @@ export function RunRawView({ target, runId, run, navigate }: {
         >
           ←
         </button>
-        <p className="flex-1 truncate" style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--ink-high)' }} title={title}>
+        <p className="flex-1 min-w-0 line-clamp-2" style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--ink-high)' }} title={title}>
           {target === 'events' ? 'Raw events' : 'Files'} · {title}
           <Tech data-testid="tech-run-raw" parts={[runShortId(runId), run !== null ? `#${run.session.attempt + 1}` : null]} />
         </p>

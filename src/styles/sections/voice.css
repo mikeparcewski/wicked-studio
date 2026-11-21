@@ -92,7 +92,7 @@
    the remaining height and holds the card look and its padding; the scroller inside it is the only thing that scrolls, so a
    scrolled-off line is clipped at the padded edge, not shown as a sliver in the card's top padding. Nothing overlays it. */
 .wk-voice-center > .wk-voice-setup { flex: 0 0 auto; max-height: 40vh; overflow-y: auto; }
-.wk-voice-trans-frame { flex: 1 1 auto; min-height: 0; max-height: 62vh; display: flex; flex-direction: column; padding: 16px 18px; border-radius: 20px; background: color-mix(in oklab, var(--surface-card) 92%, transparent); box-shadow: inset 0 0 0 1px var(--border); }
+.wk-voice-trans-frame { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 16px 18px; border-radius: 20px; background: color-mix(in oklab, var(--surface-card) 92%, transparent); box-shadow: inset 0 0 0 1px var(--border); }
 .wk-voice-trans { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 4px; margin: -4px; display: flex; flex-direction: column; gap: 12px; scroll-behavior: smooth; }
 .wk-voice-trans:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .wk-voice-line { font-size: var(--text-md); line-height: 1.55; color: var(--ink-body); }
@@ -175,7 +175,6 @@
   .wk-voice-side .wk-voice-list, .wk-voice-side .wk-voice-spark, .wk-voice-side .wk-voice-tile p { display: none; }
   .wk-voice-add { flex: 0 0 auto; }
   .wk-voice-big { font-size: var(--text-lg); }
-  .wk-voice-trans-frame { max-height: none; }
   .wk-voice-top { flex-wrap: wrap; }
   .wk-voice-top .wk-voice-wave { flex: 1 1 100%; order: 2; justify-content: center; }
   .wk-voice-hide-sm { display: none; }

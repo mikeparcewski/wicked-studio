@@ -8,18 +8,19 @@
  *    the old gate back; of two reads the later one wins, whichever lands first;
  *  - one read per run and generation while it is on its way.
  */
-import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { useCapabilities } from '../src/store/capabilities.js';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import * as client from '../src/api/client.js';
 import { ApiError } from '../src/api/errors.js';
 import type { CoreEvent, GateInfo, SessionView } from '../src/api/types.js';
 import { teamPlanApi } from '../src/api/teamPlan.js';
-import { GATE_READ_DEADLINE_MS, IDLE_GATE_ACTION, ensureGate, reconcileGateRetries, refreshGate, resetGateSlotsForTest, useGateActionStore } from '../src/board/gateActions.js';
+import { GATE_READ_DEADLINE_MS, IDLE_GATE_ACTION, ensureGate, reconcileGateRetries, refreshGate, resetGateSlotsForTest, useGateActionStore, useGateReadStore } from '../src/board/gateActions.js';
 import { RunBlock } from '../src/components/session/RunConversation.js';
 import { GATE_READS_IN_FLIGHT, inGateSlot, useRuns } from '../src/hooks/useRuns.js';
 import { useConnectionStore } from '../src/store/connection.js';
 import { useRunEventStore } from '../src/store/events.js';
+import { useElicitationStore } from '../src/store/elicitations.js';
 import { invalidateGateReads, useGateStore, type OpenGate } from '../src/store/gates.js';
 import { makeView } from './factories.js';
 
@@ -57,6 +58,8 @@ const fresh = (tag: string): string => `r-f31-${tag}-${++n}`;
 beforeEach(() => {
   useGateStore.setState({ gates: {}, approaching: {} });
   useGateActionStore.setState({ byGate: {} });
+  useGateReadStore.setState({ failed: {} });
+  useElicitationStore.setState({ elicitations: {} });
 });
 afterEach(() => { cleanup(); reconcileGateRetries([]); resetGateSlotsForTest(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
@@ -74,6 +77,55 @@ describe('a waiting run’s thread reads its own gate', () => {
     vi.spyOn(client.api, 'getRoster').mockResolvedValue({ roster: [] } as never);
     vi.spyOn(client.api, 'listWorkflows').mockResolvedValue({ workflows: [] } as never);
     vi.spyOn(client.api, 'listRepos').mockResolvedValue({ repos: [] } as never);
+  });
+
+  it('shows Reading the question while an awaiting run has no gate yet', () => {
+    const runId = fresh('question-reading');
+    heldGetGate();
+    render(<RunBlock view={makeView({ id: runId, status: 'awaiting_human', problem: 'fix the sum bug' })} badge={1} sessionId={`run:${runId}`} />);
+    expect(screen.getByText('Reading the question…')).toBeTruthy();
+  });
+
+  it('keeps an answered run’s receipt without a reading line while its status catches up', () => {
+    const runId = fresh('receipt');
+    heldGetGate();
+    useGateActionStore.setState({ byGate: { [runId]: {
+      ...IDLE_GATE_ACTION, answered: 'approved',
+      receipt: { kind: 'row', chosenLabel: 'Continue', sentAt: Date.now() },
+    } } });
+    render(<RunBlock view={makeView({ id: runId, status: 'awaiting_human' })} badge={1} sessionId={`run:${runId}`} />);
+    expect(screen.queryByText('Reading the question…')).toBeNull();
+    expect(screen.getByText(/You chose: Continue/)).toBeTruthy();
+  });
+
+  it('shows a failed gate read as an alert and Retry reads the gate again', async () => {
+    const runId = fresh('failed');
+    const getGate = vi.spyOn(client.api, 'getGate').mockRejectedValueOnce(new TypeError('fetch failed')).mockResolvedValue(planInfo(runId));
+    render(<RunBlock view={makeView({ id: runId, status: 'awaiting_human' })} badge={1} sessionId={`run:${runId}`} />);
+    await waitFor(() => expect(useGateReadStore.getState().failed[runId]).toBeGreaterThan(0));
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toContain('The question hasn’t loaded yet (the daemon is slow); it is trying again.');
+    expect(screen.queryByText('Reading the question…')).toBeNull();
+    fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(getGate).toHaveBeenCalledTimes(2));
+    expect(getGate).toHaveBeenLastCalledWith(runId, expect.any(AbortSignal));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
+  it('shows no reading line for a parked ask_turn run', () => {
+    const runId = fresh('ask-turn');
+    heldGetGate();
+    render(<RunBlock view={makeView({ id: runId, status: 'awaiting_human', ask_turn: true })} badge={1} sessionId={`run:${runId}`} />);
+    expect(screen.queryByText('Reading the question…')).toBeNull();
+  });
+
+  it('leaves a run question to RunQuestions without a gate reading line', () => {
+    const runId = fresh('elicitation');
+    heldGetGate();
+    useElicitationStore.getState().setElicitation({ runId, elicitationId: 'q1', message: 'Which branch?', options: ['main', 'release'], receivedAt: new Date().toISOString() });
+    render(<RunBlock view={makeView({ id: runId, status: 'awaiting_human' })} badge={1} sessionId={`run:${runId}`} />);
+    expect(screen.queryByText('Reading the question…')).toBeNull();
+    expect(screen.getByText('Which branch?')).toBeTruthy();
   });
 
   it('with no gate cached (a reload), the plan card shows after the thread mounts, from one GET /runs/:id/gate', async () => {

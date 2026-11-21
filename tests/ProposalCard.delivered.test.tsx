@@ -45,7 +45,7 @@ describe('studio#575: the Done receipt says where the work went', () => {
     useRunEventStore.setState({ byRun: { [RUN]: [] } });
     render(<ProposalCard view={delivered(RUN, { delivery: 'delivered', deliverUrl: PR })} chain={CHAIN} />);
     expect(screen.getByTestId('session-proposal').dataset['state']).toBe('done');
-    expect(screen.getByTestId('session-proposal-outcome').textContent).toBe('Finished · delivered');
+    expect(screen.queryByTestId('session-proposal-outcome')).toBeNull();
     const a = screen.getByTestId('session-proposal-pr') as HTMLAnchorElement;
     expect(a.getAttribute('href')).toBe(PR);
     expect(a.getAttribute('target')).toBe('_blank');
@@ -57,7 +57,7 @@ describe('studio#575: the Done receipt says where the work went', () => {
     const RUN = 'r-done-branch';
     useRunEventStore.setState({ byRun: { [RUN]: [] } });
     render(<ProposalCard view={delivered(RUN, { delivery: 'pushed', deliverBranch: 'wicked/r-done-branch', deliverRemote: 'origin' })} chain={CHAIN} />);
-    expect(screen.getByTestId('session-proposal-outcome').textContent).toBe('Finished · branch pushed');
+    expect(screen.queryByTestId('session-proposal-outcome')).toBeNull();
     expect(screen.getByTestId('session-proposal-branch').textContent).toContain('wicked/r-done-branch');
     expect(screen.queryByTestId('session-proposal-pr')).toBeNull();
   });

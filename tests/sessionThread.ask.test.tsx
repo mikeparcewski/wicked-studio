@@ -377,7 +377,7 @@ describe('rule 3 — the thread is the chain until a creator step is accepted', 
     expect(useAskThreadStore.getState().turnGates[RUN]).toBeUndefined();
     const block = await screen.findByTestId('session-run');
     expect(block.getAttribute('data-run-id')).toBe(RUN);
-    await waitFor(() => expect(screen.getByTestId('session-status-sentence').textContent).toBe('Waiting on you at Research · 1 of 1 done'));
+    await waitFor(() => expect(screen.getByTestId('session-status-sentence').textContent).toBe('Waiting on you at Research'));
     await screen.findByTestId('session-gate-row');
   });
 

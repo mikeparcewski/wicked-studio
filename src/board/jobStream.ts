@@ -285,6 +285,17 @@ export function foldJobLineages(records: readonly unknown[]): JobLineage[] {
   return [...lineages.values()];
 }
 
+/** A transcript containing only this job's proposal lineage can end after the job moves. */
+export function chatHoldsOnlyJob(records: readonly unknown[], lineage: JobLineage): boolean {
+  const pids = new Set(lineage.versions.map((v) => v.pid));
+  return records.length > 0 && records.every((r) => {
+    if (!isObj(r)) return false;
+    if (r['kind'] === 'proposal') return isObj(r['proposal']) && pids.has(String(r['proposal']['pid']));
+    return (r['kind'] === 'proposal_revising' || r['kind'] === 'proposal_released' || r['kind'] === 'proposal_accepting' || r['kind'] === 'proposal_decided')
+      && str(r['pid']) && pids.has(r['pid']);
+  });
+}
+
 // ── The state the passage draws ───────────────────────────────────────────────────────────────────────────────────
 
 export type JobPhase =

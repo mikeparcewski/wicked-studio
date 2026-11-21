@@ -137,12 +137,17 @@ function CappedCard(props: PluginCardProps & { editor: EditorView }): React.Reac
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by the artifact's identity; the binding is read through its ref
     [adapterProp, b.artifactKey, b.source, b.projectId, b.docId, b.kind],
   );
+  const [, bumpTitle] = useState(0);
+  useEffect(() => {
+    if (!live && !full) return adapter?.subscribe?.(() => bumpTitle((n) => n + 1));
+    return undefined;
+  }, [adapter, live, full]);
   if (live || full) return <LiveCard {...props} {...(adapter !== null ? { adapter } : {})} />;
   return (
     <section data-testid="plugin-card" data-state="still" data-editor={props.editor.id} className="wk-pcard">
       <header className="wk-pcard-head">
         <span className="wk-card-tag" data-testid="plugin-card-tag">{props.editor.title}</span>
-        <span className="wk-pcard-title">{props.binding.title}</span>
+        <span className="wk-pcard-title">{adapter?.docTitle?.() ?? props.binding.title}</span>
       </header>
       <div className="wk-pcard-frame wk-pcard-still" data-testid="plugin-card-thumb">
         <button type="button" className="wk-host-btn" onClick={() => touchLive(key)}>Show it live</button>
@@ -152,7 +157,7 @@ function CappedCard(props: PluginCardProps & { editor: EditorView }): React.Reac
   );
 }
 
-function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants: grantsProp, declared }: PluginCardProps & { editor: EditorView }): React.ReactElement {
+function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants: grantsProp, regrant: regrantProp, declared }: PluginCardProps & { editor: EditorView }): React.ReactElement {
   const run = useRunHost();
   const frameBox = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<EditorHost | null>(null);
@@ -176,7 +181,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   /** An Ask pressed in full screen, run once the screen it needs (the drawer, or the card) has rendered (G24). */
   const [pendingAsk, setPendingAsk] = useState<ArtifactBinding | null>(null);
   const [, bump] = useState(0);
-  const loaded = useRef<{ src: string; grants: readonly PermissionId[] } | null>(null);
+  const loaded = useRef<{ src: string; grants: readonly PermissionId[]; regrant?: () => Promise<readonly PermissionId[]> } | null>(null);
   const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
 
@@ -189,6 +194,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by the artifact's identity; the binding is read through its ref
     [adapterProp, binding.artifactKey, binding.source, binding.projectId, binding.docId, binding.kind],
   );
+  const title = adapter?.docTitle?.() ?? binding.title;
   const group = groupKey(editor.id, binding.artifactKey);
   const full = useHostChrome((s) => s.full === binding.artifactKey);
   const advisory = useAdvisoryNotes((s) => s.byGroup[group]);
@@ -247,7 +253,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       if (panel.tab.owner === 'run') panel.setTab(firstTabOf(panel.group));
       return;
     }
-    openGroup({ key: group, binding, editor, surfaces: decl, protocol, src: loaded.current.src, grants: loaded.current.grants, adapter });
+    openGroup({ key: group, binding, editor, surfaces: decl, protocol, ...loaded.current, adapter });
   }, [adapter, decl, group, binding, editor, protocol, openGroup]);
   const openOptionsRef = useRef(openOptions);
   /** Every host-approved Options opener (button, the plugin's accepted offer, the options-only catch) goes through the
@@ -277,7 +283,10 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       if (cancelled || frameBox.current === null) return;
       setNote(grantNote(decided));
       const src = srcProp ?? bundleUrl(apiBase(), editor.id, editor.version, editor.sha256);
-      loaded.current = { src, grants: decided.grants };
+      const regrant = grantsProp === undefined
+        ? async () => (await fetchGrants(editor.id, editor.version, editor.sha256, binding.projectId === '' ? null : binding.projectId)).grants
+        : regrantProp;
+      loaded.current = { src, grants: decided.grants, ...(regrant === undefined ? {} : { regrant }) };
       const bridge = adapter.mcpBridge?.();
       const startedFull = fullRef.current;
       const host = new EditorHost({
@@ -290,6 +299,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
         size: startedFull ? 'full' : 'inline',
         surface: startedFull ? 'full' : 'card',
         grants: decided.grants,
+        ...(regrant === undefined ? {} : { regrant }),
         theme: readThemeTokens(),
         prefs: { reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false, techDetails: false, locale: navigator.language },
         firstParty: editor.first_party,
@@ -662,7 +672,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       data-protocol={protocol}
       data-surface={full ? 'full' : 'card'}
       data-artifact={binding.artifactKey}
-      aria-label={`${editor.title}: ${binding.title}`}
+      aria-label={`${editor.title}: ${title}`}
       className={`wk-pcard${full ? ' wk-pcard--full' : ''}${optionsOpen ? ' wk-pcard--options' : ''}`}
     >
       {!full && binding.producedBy != null && binding.producedBy !== '' && (
@@ -671,14 +681,14 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       {!full && (
         <header className="wk-pcard-head">
           <span className="wk-card-tag" data-testid="plugin-card-tag">{editor.title}</span>
-          <span className="wk-pcard-title">{binding.title}</span>
+          <span className="wk-pcard-title">{title}</span>
           {pills.map((p) => <span key={p.id} data-testid="plugin-card-pill" data-tone={p.tone} className={`wk-pill wk-pill--${p.tone}`}>{p.text}</span>)}
         </header>
       )}
       <FullShell
         open={full}
         tag={editor.title}
-        title={binding.title}
+        title={title}
         phase={run?.phase ?? null}
         modes={decl?.full?.modes ?? null}
         mode={mode}
@@ -703,7 +713,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           )}
           {!interactive && !full && torn === null && (
             // The v1 hit layer (and `interactive:false`): a click is the host's — it opens, never reaches the frame.
-            <button type="button" data-testid="plugin-card-catch" aria-label={`Open ${binding.title}`} className="wk-artifact-catch"
+            <button type="button" data-testid="plugin-card-catch" aria-label={`Open ${title}`} className="wk-artifact-catch"
               onClick={() => { if (hasFull) enterFull(binding.artifactKey); else if (hasOptions) pressOptionsRef.current(); }} />
           )}
           {torn !== null && (

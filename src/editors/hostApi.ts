@@ -61,6 +61,8 @@ export interface ArtifactPart { id: string; label: string; state: 'pending' | 'a
 /** The protocol-1 {@link HostAdapter} plus what the host chrome reads. */
 export interface SurfaceAdapter extends HostAdapter {
   readonly source: AdapterSource;
+  /** The document’s own title, once its head content has been read. */
+  docTitle?(): string | undefined;
   capabilities(): readonly AdapterCapability[];
   /** Formats offered by Export (replaces ArtifactMorph's per-kind EXPORTS table). Needs `export`. */
   exports?(): readonly ExportOption[];
@@ -195,6 +197,7 @@ export interface OptionsGroup {
   /** Bundle URL and grants the card instance used: the options instance is the same pinned bundle. */
   src: string;
   grants: readonly PermissionId[];
+  regrant?: () => Promise<readonly PermissionId[]>;
   adapter: SurfaceAdapter;
 }
 
@@ -336,6 +339,8 @@ export interface PluginCardProps {
   src?: string;
   /** Test page / conformance: the grant set (otherwise crew's decided set). */
   grants?: readonly PermissionId[];
+  /** (crew#1423) With `grants`: how the host re-reads that set after an editor grant change (absent = fixed). */
+  regrant?: () => Promise<readonly PermissionId[]>;
   /** The registry's copy of the surfaces, when crew lists it (§5.1). Defaults to `editor.surfaces` if present. */
   declared?: unknown;
 }

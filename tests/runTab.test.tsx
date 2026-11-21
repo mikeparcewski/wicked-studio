@@ -412,3 +412,10 @@ it('(s4-ui-fix r3) a completed run says its rules once, on the delivery receipt'
   expect(screen.queryByTestId('run-tab-rules')).toBeNull();
   expect(screen.getAllByTestId('assurance-rules-line')).toHaveLength(1);
 });
+
+it('studio#932: the Now pill says how long a running step has been silent', async () => {
+  const v = phases();
+  useRunEventStore.setState({ byRun: { [v.session.id]: [{ type: 'unitDispatched', session: v.session.id, ord: 1, ts: Date.now() - 19 * 60_000 } as never] } });
+  await tab([v]);
+  expect(screen.getByTestId('run-tab-pill')).toHaveTextContent('No output for 19 min');
+});

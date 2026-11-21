@@ -1,3 +1,4 @@
+import { useSeatImageRebuild } from '../../store/seatImageRebuild.js';
 import { useState } from 'react';
 import { api } from '../../api/client.js';
 import type { SystemAttention, SystemSnapshot, SystemUnresolved } from '../../api/system.js';
@@ -40,6 +41,8 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
   navigate: Navigate;
   now: number;
 }): React.ReactElement {
+  const starting = useSeatImageRebuild((s) => s.phase === 'starting');
+  const rebuilding = snapshot.infra.find((r) => r.key === 'seat_images')?.rebuild?.running === true;
   const items = snapshot.attention;
   const { several, single } = rankedSections(items);
   const byId = new Map(runs.map((v) => [v.session.id, v]));
@@ -52,6 +55,7 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
   // Sign in opens that helper's own sign-in here (operator 2026-10-27: never a settings page).
   const signIn = useSignInHere();
   const act = (a: SystemAttention): void => {
+    if (a.action?.kind === 'rebuild-seat-images') { void useSeatImageRebuild.getState().start(); return; }
     const path = actionPath(a.action);
     if (path !== null) { navigate(path); return; }
     if (a.action?.kind === 'sign-in') { signIn.open(a.action.target); return; }
@@ -81,7 +85,7 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
                   {rowLead(a, causes.get(a.id) ?? null) !== null && <span className="wk-needs-card-line">{rowLead(a, causes.get(a.id) ?? null)}</span>}
                   {a.remedy !== null && a.remedy !== 'Re-check.' && <span className="wk-needs-card-remedy">{a.remedy}</span>}
                 </span>
-                {a.action !== null && <button type="button" className="wk-home-btn wk-home-btn--primary" data-testid="needs-item-act" onClick={() => act(a)}>{a.action.label ?? rowVerb(a, null)}</button>}
+                {a.action !== null && <button type="button" className="wk-home-btn wk-home-btn--primary" data-testid="needs-item-act" disabled={a.action?.kind === 'rebuild-seat-images' && (starting || rebuilding)} onClick={() => act(a)}>{a.action.label ?? rowVerb(a, null)}</button>}
               </article>
             ))}
           </section>
@@ -112,7 +116,7 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
                     </span>
                     {path !== null
                       ? <a href={path} onClick={go(path)} className="wk-home-link wk-needs-row-act" data-testid="needs-item-act">{rowVerb(a, gateKind)} <span aria-hidden>→</span></a>
-                      : a.action !== null && <button type="button" className="wk-home-btn wk-home-btn--secondary" data-testid="needs-item-act" onClick={() => act(a)}>{rowVerb(a, null)}</button>}
+                      : a.action !== null && <button type="button" className="wk-home-btn wk-home-btn--secondary" data-testid="needs-item-act" disabled={a.action?.kind === 'rebuild-seat-images' && (starting || rebuilding)} onClick={() => act(a)}>{rowVerb(a, null)}</button>}
                   </li>
                 );
               })}

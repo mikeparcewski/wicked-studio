@@ -35,6 +35,8 @@ import { plainGateQuestion } from '../board/deskWords.js';
 import { useAskThreadStore } from '../store/askThread.js';
 import { useGateStore, type OpenGate } from '../store/gates.js';
 import { getCachedRoster, setCachedRoster } from '../store/rosterCache.js';
+import { useNeedsCount } from '../store/needsCount.js';
+import { NEEDS_SETTLE_MS } from '../hooks/useNeedsRows.js';
 import { useSystemStore } from '../store/systemSnapshot.js';
 import type { SystemSnapshot } from '../api/system.js';
 import { loadDashboard, readDashboardData, useDashStore } from './dashboardStore.js';
@@ -42,7 +44,7 @@ import { INITIAL_VOICE, lineId, useVoiceStore, type ListenMode, type VoiceAskCon
 import { isLeave, parseConfirm, parseEntry, parseGateAnswer, parseMode } from './intent.js';
 import { BrowserMic, BrowserSpeaker, crewStt, type MicSource, type Speaker, type SttEngine } from './io.js';
 import { Vad } from './vad.js';
-import { isRunningJob } from './widgets.js';
+import { isRunningJob, loadWord } from './widgets.js';
 
 // ── The edges ─────────────────────────────────────────────────────────────────────────────────
 
@@ -219,6 +221,7 @@ const vad = new Vad();
 let partialTimer: ReturnType<typeof setInterval> | null = null;
 let partialBusy = false;
 let gateUnsub: (() => void) | null = null;
+let summaryUnsub: (() => void) | null = null;
 let generation = 0;
 
 const S = useVoiceStore;
@@ -983,16 +986,17 @@ export function answerEntry(yes: boolean): void {
   if (yes) enterFull(); else closeVoice();
 }
 
-function describeNow(): string {
+function describeNow(): string | null {
   const snap = snapshotNow();
-  const gates = Object.keys(useGateStore.getState().gates).length;
-  if (snap === null) return 'You’re in voice mode. Around us is the live system.';
+  const { phase, count } = useNeedsCount.getState();
+  if (snap === null || phase !== 'complete' || count === null) return null;
   const working = snap.runs.filter(isRunningJob).length;
   const load = snap.infra.find((i) => i.key === 'load');
-  const busy = load?.state === 'down' ? 'the machine very busy' : load?.state === 'degraded' ? 'the machine a bit busy' : 'the machine calm';
+  const loadDescription = loadWord(load);
+  const busy = loadDescription === 'not read' ? '' : `, the machine ${loadDescription}`;
   const jobs = working === 0 ? 'no jobs running' : working === 1 ? 'one job running' : `${working} jobs running`;
-  const wait = gates === 0 ? 'nothing waiting on you' : gates === 1 ? 'one decision waiting on you' : `${gates} decisions waiting on you`;
-  return `You’re in voice mode. Around us is what’s happening now: ${jobs}, ${wait}, ${busy}.`;
+  const wait = count === 0 ? 'nothing needs you' : count === 1 ? 'one thing needs you' : `${count} things need you`;
+  return `You’re in voice mode. Around us is what’s happening now: ${jobs}, ${wait}${busy}.`;
 }
 
 function enterFull(): void {
@@ -1007,10 +1011,30 @@ function enterFull(): void {
     if (snap === null || snap.runs.some((r) => r.runId === pinned)) set({ preview: { runId: pinned, pinned: true } });
     else savePin(null);
   }
-  pushLine({ who: 'it', text: describeNow() });
+  const summary = describeNow();
+  const id = pushLine({ who: 'it', text: summary ?? "Reading what's happening around us…" });
   void startMic();
-  openAsk(MODE_ASK, { kind: 'mode' });
-  void say(`${describeNow()} How should I listen? Streaming, or space bar?`);
+  const modeAskId = openAsk(MODE_ASK, { kind: 'mode' });
+  const ask = 'How should I listen? Streaming, or space bar?';
+  if (summary !== null) {
+    void say(`${summary} ${ask}`);
+    return;
+  }
+  // Replace this turn's first line once both shared reads are ready. Leaving voice cancels the wait.
+  const finish = (text: string): void => {
+    summaryUnsub?.();
+    summaryUnsub = null;
+    patchLine(id, { text });
+    const s = S.getState();
+    void say(s.openAsk === modeAskId && s.mode === null ? `${text} ${ask}` : text);
+  };
+  const ready = (): void => {
+    const text = describeNow();
+    if (text !== null) finish(text);
+  };
+  const unsubs = [useNeedsCount.subscribe(ready), useDashStore.subscribe(ready), useSystemStore.subscribe(ready)];
+  const deadline = setTimeout(() => finish("I couldn't read yet what's waiting on you; the Desk has it."), NEEDS_SETTLE_MS + 5000);
+  summaryUnsub = () => { unsubs.forEach((unsubscribe) => unsubscribe()); clearTimeout(deadline); };
 }
 
 export function chooseMode(mode: ListenMode): void {
@@ -1050,6 +1074,8 @@ export function closeVoice(): void {
   mic = null;
   gateUnsub?.();
   gateUnsub = null;
+  summaryUnsub?.();
+  summaryUnsub = null;
   deps.speaker.cancel();
   deps.endChat();
   set({ ...INITIAL_VOICE, readAloud: S.getState().readAloud });

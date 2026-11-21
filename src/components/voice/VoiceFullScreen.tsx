@@ -30,6 +30,7 @@ const typing = (t: EventTarget | null): boolean => {
 export function VoiceFullScreen(): React.ReactElement {
   const ref = useRef<HTMLDivElement>(null);
   const trans = useRef<HTMLDivElement>(null);
+  const previousLines = useRef(new Map<number, string>());
   // Everything but the waveform's bars and who is speaking (those move ~20 times a second; LiveWave reads them).
   const v = useVoiceStore(useShallow(withoutWave));
   const { layout, widgets, loaded } = useDashStore();
@@ -42,7 +43,24 @@ export function VoiceFullScreen(): React.ReactElement {
     return () => clearInterval(t);
   }, []);
 
-  useEffect(() => { const el = trans.current; if (el !== null) el.scrollTop = el.scrollHeight; }, [v.lines]);
+  useEffect(() => {
+    const el = trans.current;
+    // A new line, or the last line filled in place (a chat reply starts as "…" and its text lands on the same line;
+    // a streamed caption grows): both are placed by the same top-or-bottom rule. Older lines patched in place (an ask's
+    // record) never move the view.
+    const last = v.lines.length - 1;
+    const firstNew = v.lines.findIndex((line, i) => {
+      const was = previousLines.current.get(line.id);
+      return was === undefined || (i === last && was !== line.text);
+    });
+    previousLines.current = new Map(v.lines.map((line) => [line.id, line.text]));
+    if (el === null || firstNew < 0) return;
+    const line = el.children[firstNew] as HTMLElement | undefined;
+    if (line === undefined) return;
+    const bottom = Math.max(0, el.scrollHeight - el.clientHeight);
+    const top = line.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
+    el.scrollTop = Math.min(bottom, top);
+  }, [v.lines]);
 
   const all = loaded ? dashboardWidgets(layout, widgets) : [];
   const { left, right } = sides(all);

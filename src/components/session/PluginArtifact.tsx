@@ -108,6 +108,7 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
         title: `${editor.title}: ${title}`,
         size: sizeRef.current,
         grants: decided.grants,
+        regrant: async () => (await fetchGrants(editor.id, editor.version, editor.sha256, projectId)).grants,
         theme: readThemeTokens(),
         prefs: { reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false, techDetails: false, locale: navigator.language },
         firstParty: editor.first_party,

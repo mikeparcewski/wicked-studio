@@ -1,3 +1,6 @@
+import { useSystemPoll, useSystemStore } from '../../store/systemSnapshot.js';
+import type { SystemRun } from '../../api/system.js';
+import { snapshotSilence, silentWords } from '../../board/silentStep.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { Project } from '../../api/types.js';
@@ -65,6 +68,9 @@ export function EverythingPage({ runs, runsLoaded, runsError = null, onRetryRuns
   /** The current `location.search` — the tab, filter, scope and kind. */
   search: string;
 }): React.ReactElement {
+  useSystemPoll();
+  const liveRuns = useSystemStore((s) => s.snapshot?.runs);
+  const liveness = useMemo(() => new Map(liveRuns?.map((r) => [r.runId, r])), [liveRuns]);
   const q = readEverythingQuery(search);
   const project = q.project;
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
@@ -114,7 +120,7 @@ export function EverythingPage({ runs, runsLoaded, runsError = null, onRetryRuns
         </header>
         <section id="everything-panel" role="tabpanel" aria-labelledby={`everything-tab-${q.tab}`} data-testid="everything-panel" data-tab={q.tab} className="wk-everything-panel">
           {q.tab === 'sessions' && (
-            <SessionsTab runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={onRetryRuns} needRows={needRows} q={{ ...q, project }} navigate={navigate} go={go} />
+            <SessionsTab liveness={liveness} runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={onRetryRuns} needRows={needRows} q={{ ...q, project }} navigate={navigate} go={go} />
           )}
           {q.tab === 'made' && <MadeTab runs={runs} runsLoaded={runsLoaded} q={q} navigate={navigate} go={go} />}
           {q.tab === 'handed' && <HandedTab runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={onRetryRuns} go={go} />}
@@ -134,7 +140,8 @@ function useProjectName(): (id: string | null) => string {
 
 // ── Sessions ─────────────────────────────────────────────────────────────────────────────────
 
-function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, navigate, go }: {
+function SessionsTab({ liveness, runs, runsLoaded, runsError, onRetryRuns, needRows, q, navigate, go }: {
+  liveness: ReadonlyMap<string, SystemRun>;
   runs: SessionView[];
   runsLoaded: boolean;
   runsError: string | null;
@@ -250,7 +257,7 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
         </div>
       </div>}
       {q.view === 'runs' && (
-        <RunsTable
+        <RunsTable liveness={liveness}
           runs={runs} runChatId={runChatId} projects={projects} q={q}
           runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={onRetryRuns}
           navigate={navigate} go={go} archive={archive} viewOf={viewOf} showText={showText}
@@ -292,8 +299,9 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
             // the line a needs-you item's own words when the session has one.
             const views = s.runIds.map(viewOf).filter((v): v is SessionView => v !== undefined);
             // A live session (one run still working or waiting) says so, whatever its newest run did.
+            const silent = snapshotSilence(liveness.get(s.runIds[s.runIds.length - 1]!));
             const word = s.state === 'waiting' ? { word: 'Waiting on you', tone: 'gate' as const }
-              : s.state === 'working' ? { word: 'Working', tone: 'run' as const }
+              : s.state === 'working' ? silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : { word: 'Working', tone: 'run' as const }
               : views.length > 0 ? chatStatusWord(views) : null;
             const at = lastActivityMs(views);
             // A needs-you item's words, or a delivery line ("handed over just now"), are kept; the state's
@@ -406,7 +414,8 @@ const RUN_COLS: readonly { key: RunSortKey; label: string }[] = [
  * and renders the same table with an inline Unarchive. Sort, text filter and paging are the pure
  * folds in `board/runsTableModel.ts`; only the 100-row page slice is painted.
  */
-function RunsTable({ runs, runChatId, projects, q, runsLoaded, runsError, onRetryRuns, navigate, go, archive, viewOf, showText }: {
+function RunsTable({ liveness, runs, runChatId, projects, q, runsLoaded, runsError, onRetryRuns, navigate, go, archive, viewOf, showText }: {
+  liveness: ReadonlyMap<string, SystemRun>;
   runs: SessionView[];
   runChatId: boolean;
   projects: Project[];
@@ -515,7 +524,9 @@ function RunsTable({ runs, runChatId, projects, q, runsLoaded, runsError, onRetr
             // studio#675: an archived run opens at its run address (its chat's session reads the live index).
             const path = sessionPath(archivedMode ? `run:${r.runId}` : r.sessionId);
             const view = archivedMode ? archivedViewOf(r.runId) : viewOf(r.runId);
-            const word = view !== undefined ? statusWord(view) : { word: 'Unknown' as const, tone: 'quiet' as const };
+            const status = view !== undefined ? statusWord(view) : { word: 'Unknown' as const, tone: 'quiet' as const };
+            const silent = status.word === 'Working' ? snapshotSilence(liveness.get(r.runId)) : null;
+            const word = silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : status;
             const finished = !archivedMode && FINISHED.has(r.status) ? view : undefined;
             const title = showText(r.title);
             const lead = [

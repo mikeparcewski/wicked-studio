@@ -39,6 +39,7 @@ import { ruleCauses } from '../../board/ruleCauses.js';
 import { AssuranceReceipt, AssuranceReceiptTech, QeAcceptanceLabel, ReducedAssuranceLabel, RulesChecked } from './AssuranceReceipt.js';
 import { RunDataUse } from './RunDataUse.js';
 import { actionJobTitle, TrackerActions } from '../trackers/TrackerActions.js';
+import { PERMISSION_WORDS } from '../../editors/model.js';
 
 import { missingSeatsLine, OPERATOR_JUDGMENT_LABEL, rejudgeOfferOf, type RejudgeOffer } from '../../board/rejudge.js';
 import { baseCountOf, failureName, groupByFile, testPlace, testWords } from '../../board/failingChecks.js';
@@ -193,7 +194,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   const model = useMemo<GateRowModel | null>(() => {
     if (gate === undefined) return null;
     // studio#1177: a failed events read keeps the engine's listed answers (and nothing read from the missing log);
-    // without a list the row fails closed below. While the read is on its way, nothing is drawn yet.
+    // without a list the row fails closed below. While the read is on its way, only the question is drawn.
     if (events === null) return eventsFetchFailed && actions !== undefined ? listedOnlyChoices(gate, actions, roster) : null;
     const read = gate.skipQe === undefined && liveSkipQe !== null ? { ...gate, skipQe: liveSkipQe } : gate;
     const result = sessionGateChoices({ runId, gate: gateWithLogChoices(read, events), units: view.units, events, pool, roster, benched, rerun: rerunOffer, fullVerdict, rejudge, ...(actions !== undefined ? { actions } : {}) });
@@ -366,6 +367,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   return (
     <GateRowBody
       runId={runId} gate={gate} model={model} seat={seat} rerunOffer={rerunOffer}
+      eventsReading={gate !== undefined && events === null && !eventsFetchFailed}
       eventsUnavailable={gate !== undefined && events === null && eventsFetchFailed}
       retryEvents={retryEvents} depth={depth} refusalLines={refusalLines} drift={drift}
       assurance={assurance}
@@ -651,7 +653,7 @@ export function allOnBaseWords(n: number): string {
 
 type DerivedLead = { choice: GateRowChoice; act?: undefined; prefill?: string } | { act: { key: string; label: string; title: string; onClick: () => void }; choice?: undefined; prefill?: undefined };
 
-function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, retryEvents, depth, refusalLines = null, drift = null, assurance = null, assuranceTech = null, rulesLine = null, explain = null, unavailable = null, signInModal = null, headline = null, derived = null, extraItems = null, builders = [], builderName = (c) => c }: {
+function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsReading = false, eventsUnavailable, retryEvents, depth, refusalLines = null, drift = null, assurance = null, assuranceTech = null, rulesLine = null, explain = null, unavailable = null, signInModal = null, headline = null, derived = null, extraItems = null, builders = [], builderName = (c) => c }: {
   /** The cause, in plain words, when it reads better than the engine's question. */
   headline?: string | null;
   /** The seats that built the judged work: a choice that seats one as the judge is never the lead, and says so. */
@@ -673,6 +675,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   /** The creator seat's record and the standing-order offer; null on a chat's gate. */
   seat: SeatTrust | null;
   rerunOffer: RerunOffer | null;
+  /** The gate is known but its events read is still on its way. */
+  eventsReading?: boolean;
   /** The events read failed and nothing hydrated the log (fail closed). */
   eventsUnavailable: boolean;
   retryEvents: () => void;
@@ -811,6 +815,15 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     );
   }
 
+  if (eventsReading && model === null) {
+    return (
+      <div data-testid="session-gate-row" ref={rowRef} tabIndex={-1} className="wk-session-gate-row">
+        <p data-testid="session-gate-question" className="wk-session-gate-question">{question}</p>
+        <p data-testid="session-gate-reading" className="wk-session-grey">Reading the choices…</p>
+      </div>
+    );
+  }
+
   if (model === null) return null;
 
   const allChoices = [...model.choices, ...model.overflow];
@@ -897,6 +910,12 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   // One sentence under the headline: the failures in a line, a refused hand-over's reason, a QE review's why.
   const sentence = split !== undefined ? null : refusalLines?.lead ?? model.qe?.why ?? null;
   const [more, setMore] = [moreOpen, setMoreOpen];
+  const consentAsks = new Map<string, string[]>();
+  for (const { editor, permission } of model.consentAsks ?? []) {
+    const words = consentAsks.get(editor) ?? [];
+    words.push(Object.hasOwn(PERMISSION_WORDS, permission) ? PERMISSION_WORDS[permission as keyof typeof PERMISSION_WORDS] : permission);
+    consentAsks.set(editor, words);
+  }
 
   return (
     <div
@@ -1006,6 +1025,13 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
           commit(c, a.reason);
         }}
       />
+      {consentAsks.size > 0 && (
+        <div data-testid="gate-consent-asks" className="wk-gate2-base">
+          <p className="wk-gate2-label">It will ask to:</p>
+          <ul>{[...consentAsks].map(([editor, words]) => <li key={editor}>{editor}: {words.join(', ')}</li>)}</ul>
+          <p className="wk-ask-foot">You allow each one later in Plugins.</p>
+        </div>
+      )}
       </div>
       {(extraItems !== null || unavailable !== null) && (
         <div className="wk-gate-ask-more">

@@ -499,7 +499,7 @@ export interface HandoffRowWords {
   initial: string | null;
 }
 
-export function handoffRow(s: HandoffStep, rigor: Rigor | null, seatName: (cli: string) => string): HandoffRowWords {
+export function handoffRow(s: HandoffStep, rigor: Rigor | null, seatName: (cli: string) => string, overridden: boolean | 'carried' = false): HandoffRowWords {
   const seat = s.seat !== null && s.seat !== '' ? seatName(s.seat) : null;
   const role = s.step === 'checks' ? `${rigor === 'high' || rigor === 'highest' ? 'full suite' : 'targeted tests'}${rigor !== null ? `, rigor ${rigor}` : ''}`
     : s.step === 'review' ? 'reviewing on its own seat'
@@ -510,7 +510,8 @@ export function handoffRow(s: HandoffStep, rigor: Rigor | null, seatName: (cli: 
   const who = s.step === 'checks' ? 'Checks' : s.step === 'compliance' && seat === null ? 'Compliance' : s.step === 'rescore' ? 'Re-score' : seat ?? capital(s.step);
   const pass = s.step === 'review' || s.step === 'security' ? '✓ Approved' : '✓ Passed';
   const fail = s.step === 'review' || s.step === 'security' ? 'Changes asked' : '✗ Failed';
-  const [result, tone]: [string, HandoffRowWords['tone']] = s.status === 'passed' ? [pass, 'pass']
+  const [result, tone]: [string, HandoffRowWords['tone']] = s.step === 'checks' && s.status === 'failed' && overridden ? [overridden === 'carried' ? 'Override carried' : 'Overridden by you', 'skip']
+    : s.status === 'passed' ? [pass, 'pass']
     : s.status === 'failed' ? [fail, 'fail']
       : s.status === 'running' ? ['Running', 'run']
         : s.status === 'skipped' ? ['Skipped', 'skip']

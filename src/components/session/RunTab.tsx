@@ -3,7 +3,7 @@ import type { SessionView } from '../../api/types.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import type { ChainModel, ChainStep } from '../../board/chainModel.js';
 import { jobTitle } from '../../board/deskWords.js';
-import { moneyWords } from '../../board/deskPulse.js';
+import { deriveRunCost } from '../runIdentity.js';
 import { workflowLabel } from '../../board/workflowNames.js';
 import { chatStatusWord } from '../../board/statusWords.js';
 import { seatLabel } from '../../board/seatNames.js';
@@ -92,8 +92,8 @@ function agentsWord(n: number): string {
 }
 
 function spendWords(view: SessionView): string | null {
-  const cost = (view.session as unknown as Record<string, unknown>).cost_usd;
-  return typeof cost === 'number' && Number.isFinite(cost) ? moneyWords(cost) : null;
+  const cost = deriveRunCost(view.session);
+  return cost.text === 'cost not in run record' ? null : cost.text;
 }
 
 function startedMs(view: SessionView): number | null {
@@ -183,7 +183,16 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   const roster = useRoster();
   const stopping = useSheets((s) => s.stopping[id] !== undefined);
   const [confirmStop, setConfirmStop] = useState(false);
+  const [stopReason, setStopReason] = useState('');
   const [glanceStop, setGlanceStop] = useState(false);
+  const stop = (): void => {
+    if (stopping) return;
+    const reason = stopReason.trim();
+    if (reason !== '') stopRun([id], `“${title}”`, { reason });
+    else stopRun([id], `“${title}”`);
+    setGlanceStop(false);
+    setConfirmStop(false);
+  };
   const current = currentStep(view, chain);
   const clis = assignedClis(view);
   const session = view.session;
@@ -256,12 +265,13 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         <button type="button" data-testid="run-tab-glance-evidence" className="wk-run-glance-link" onClick={() => useRunPanel.getState().focusOn('checks', 'evidence')}>Evidence and record</button>
       </nav>
       {!nothingToStop(view) && !glanceStop && (
-        <button type="button" data-testid="run-tab-glance-stop" className="wk-run-tab-button wk-stop-btn wk-run-glance-stop" disabled={stopping} onClick={() => setGlanceStop(true)}>{stopping ? 'Stopping…' : 'Stop job'}</button>
+        <button type="button" data-testid="run-tab-glance-stop" className="wk-run-tab-button wk-stop-btn wk-run-glance-stop" disabled={stopping} onClick={() => { setStopReason(''); setGlanceStop(true); }}>{stopping ? 'Stopping…' : 'Stop job'}</button>
       )}
       {!nothingToStop(view) && glanceStop && (
         <div data-testid="run-tab-glance-stop-confirm-row" className="wk-run-tab-confirm">
           <span>Stop this job? What it did so far is kept.</span>
-          <button type="button" data-testid="run-tab-glance-stop-confirm" className="wk-run-tab-button wk-stop-btn wk-stop-btn--confirm" disabled={stopping} onClick={() => { stopRun([id], `“${title}”`); setGlanceStop(false); }}>Stop this job</button>
+          <label className="wk-stop-reason">Why? (optional, kept with the record)<input type="text" data-testid="run-tab-glance-stop-reason" value={stopReason} maxLength={2000} placeholder="One line is enough" onChange={(e) => setStopReason(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); stop(); } }} /></label>
+          <button type="button" data-testid="run-tab-glance-stop-confirm" className="wk-run-tab-button wk-stop-btn wk-stop-btn--confirm" disabled={stopping} onClick={stop}>Stop this job</button>
           <button type="button" className="wk-run-tab-button" onClick={() => setGlanceStop(false)}>Keep going</button>
         </div>
       )}
@@ -272,9 +282,10 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
 
   // The panel's rows: the core sections at their places (Now first), the run plugins' sections between them by their
   // manifest's `order`, a pinned plugin section at the top (DES-LEARN §1.2).
+  const nowWord = held ? chatStatusWord([shown]).word : silent !== null ? silentWords(silent) : floor !== null ? floorWords(floor) : chatStatusWord([view]).word;
   const core: Record<PanelSectionId, React.ReactElement> = {
     now: (
-      <Section id="now" {...fold} summary={/* (crew#1042) held: it waits on you, no "working for N min" or silence clock */ held ? chatStatusWord([shown]).word : silent !== null ? silentWords(silent) : floor !== null ? floorWords(floor) : chatStatusWord([view]).word}>
+      <Section id="now" {...fold} summary={nowWord}>
         <div data-testid="run-tab-now" className="wk-run-tab-block">
           <p data-testid="run-tab-status" role="status" className="wk-run-tab-line">{statusSentence(shown, chain, gate, action, silent?.minutes ?? null)}</p>
           {(started !== null || ended !== null) && (
@@ -288,7 +299,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         </div>
         <div data-testid="run-tab-workflow" className="wk-run-tab-block">
           <p className="wk-run-tab-line">{workflowLabel(session.workflow_id)}{' '}
-            <span className="wk-run-tab-pill">{chatStatusWord([shown]).word}</span>
+            <span className="wk-run-tab-pill" data-testid="run-tab-pill">{silent !== null && !held ? silentWords(silent) : chatStatusWord([shown]).word}</span>
           </p>
           {typeof session.repo_ref === 'string' && session.repo_ref.trim() !== '' && (
             <p data-testid="run-tab-repo" className="wk-run-tab-line"><code>{session.repo_ref}</code></p>
@@ -308,14 +319,15 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         <div data-undo-host="run-tab" className="wk-undo-scope">
         <div data-testid="run-tab-actions" className="wk-run-tab-actions">
           {!nothingToStop(view) && (
-            <button type="button" data-testid="run-tab-stop" className="wk-run-tab-button wk-stop-btn" disabled={stopping} onClick={() => setConfirmStop(true)}>{stopping ? 'Stopping…' : 'Stop'}</button>
+            <button type="button" data-testid="run-tab-stop" className="wk-run-tab-button wk-stop-btn" disabled={stopping} onClick={() => { setStopReason(''); setConfirmStop(true); }}>{stopping ? 'Stopping…' : 'Stop'}</button>
           )}
           {panelShown && <SheetRunActions view={view} />}
         </div>
         {!nothingToStop(view) && confirmStop && (
           <div data-testid="run-tab-stop-confirm-row" className="wk-run-tab-confirm">
             <span>Stop this run?</span>
-            <button type="button" data-testid="run-tab-stop-confirm" className="wk-run-tab-button wk-stop-btn wk-stop-btn--confirm" disabled={stopping} onClick={() => { stopRun([id], `“${title}”`); setConfirmStop(false); }}>Stop this run</button>
+            <label className="wk-stop-reason">Why? (optional, kept with the record)<input type="text" data-testid="run-tab-stop-reason" value={stopReason} maxLength={2000} placeholder="One line is enough" onChange={(e) => setStopReason(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); stop(); } }} /></label>
+            <button type="button" data-testid="run-tab-stop-confirm" className="wk-run-tab-button wk-stop-btn wk-stop-btn--confirm" disabled={stopping} onClick={stop}>Stop this run</button>
             <button type="button" data-testid="run-tab-stop-keep" className="wk-run-tab-button" onClick={() => setConfirmStop(false)}>Keep going</button>
           </div>
         )}

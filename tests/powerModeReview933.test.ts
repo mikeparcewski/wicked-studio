@@ -91,10 +91,10 @@ describe('rigor words', () => {
 });
 
 describe('the evaluator face (agy P2)', () => {
-  it('reads a sentence beside a machine line, keeps the period after a path, and leads with a FAIL verdict', () => {
-    expect(evaluatorFace('VERDICT: PASS\nAll 7 checks passed.', 'QE')!.sentence).toBe('All 7 checks passed.');
-    expect(evaluatorFace('Wrote /tmp/run/out.json. Two notes follow.\n\nVERDICT: PASS', 'QE')!.sentence).toBe('Wrote.');
+  it('reads no prose sentence and leads with a FAIL verdict', () => {
+    expect(evaluatorFace('VERDICT: PASS\nAll 7 checks passed.', 'QE')!.sentence).toBeNull();
+    expect(evaluatorFace('Wrote /tmp/run/out.json. Two notes follow.\n\nVERDICT: PASS', 'QE')!.sentence).toBeNull();
     expect(evaluatorFace('Looked.\nITEM 1: PASS\nITEM 2: PASS\nVERDICT: FAIL', 'Review')).toMatchObject({ verdictLine: 'Review did not pass (2 of 2 items passed)', tone: 'fail' });
-    expect(evaluatorFace('Summary line without a stop\nITEM 1: PASS\nVERDICT: PASS', 'QE')!.sentence).toBe('Summary line without a stop');
+    expect(evaluatorFace('Summary line without a stop\nITEM 1: PASS\nVERDICT: PASS', 'QE')!.sentence).toBeNull();
   });
 });

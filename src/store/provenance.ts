@@ -11,9 +11,8 @@ import type { ActorKind, AuditEntry } from '../api/types.js';
  * at launch time (crew routes.ts:570). This store holds one derived
  * {@link Provenance} per run id:
  *
- *  - ONE fetch per detail view, cached per run id (§3.3's declared exception
- *    to the zero-requests-on-mount budgets — named in its AC). A failed fetch
- *    caches the degraded answer too: revisits never re-fire.
+ *  - One live read per run id, plus one read after the run ends so the stop record is fresh.
+ *    Failed reads cache the degraded answer too: revisits never re-fire that read.
  *  - List rows (notifications) read ONLY this cache — no fan-out.
  *  - Absence degrades honestly: no matching audit entry (or an unreachable
  *    trail) is `{state:'unknown'}`, rendered as "launch not recorded" (wicked-crew#632:
@@ -136,16 +135,21 @@ export const ENGINE_TIMEOUT_AUDIT = 'run.turn.timedout';
  * record holds and puts no words in the operator's mouth:
  *  - `rejectNote`      — the operator REJECTED a gate with these words (the run was cancelled by that);
  *  - `sendBackNote`    — the operator's last send-back to the creator (acted on; not a rejection);
+ *  - `stop`            — the newest recorded stop, its reason and whether a person stopped it;
  *  - `engineTimedOut`  — the daemon recorded a worker turn hitting the engine's time ceiling.
  */
 export interface CancelStory {
   rejectNote: string | null;
   sendBackNote: string | null;
   engineTimedOut: boolean;
+  stop: { reason: string | null; byPerson: boolean } | null;
 }
 
 export function cancelStoryOf(entries: readonly AuditEntry[], runId: string): CancelStory {
+  const stopped = entries.find((e) => e.action === 'run.cancelled' && e.runId === runId);
+  const reason = stopped?.detail?.['reason'];
   return {
+    stop: stopped !== undefined ? { reason: typeof reason === 'string' && reason.trim() !== '' ? reason.trim() : null, byPerson: stopped.actor.kind === 'human' } : null,
     rejectNote: rejectNoteOf(entries, runId),
     sendBackNote: sendBackNoteOf(entries, runId),
     engineTimedOut: entries.some((e) => e.action === ENGINE_TIMEOUT_AUDIT && e.runId === runId),
@@ -195,12 +199,14 @@ interface ProvenanceStore {
   /** Run ids THIS studio session launched (the `studio` channel witness). */
   launchedHere: Record<string, true>;
   markLaunchedHere: (runId: string) => void;
-  /** The one sanctioned audit fetch per detail view; cached + in-flight-deduped. */
-  load: (runId: string) => void;
+  /** Runs whose one ended audit read has started (including failed reads). */
+  endedRead: Record<string, true>;
+  /** One live audit read, plus one ended read to pick up the stop record; both deduped. */
+  load: (runId: string, ended?: boolean) => void;
 }
 
 /** In-flight guard so a re-render during the fetch never doubles it. */
-const inflight = new Set<string>();
+const inflight = new Map<string, Promise<void>>();
 
 export const useProvenanceStore = create<ProvenanceStore>((set, get) => ({
   byRun: {},
@@ -208,16 +214,22 @@ export const useProvenanceStore = create<ProvenanceStore>((set, get) => ({
   cancelStories: {},
   baseNotices: {},
   launchedHere: {},
+  endedRead: {},
 
   markLaunchedHere: (runId) => {
     writeSessionLaunch(runId);
     set((s) => ({ launchedHere: { ...s.launchedHere, [runId]: true } }));
   },
 
-  load: (runId) => {
-    if (get().byRun[runId] !== undefined || inflight.has(runId)) return;
-    inflight.add(runId);
-    api
+  load: (runId, ended = false) => {
+    if (get().byRun[runId] !== undefined && (!ended || get().endedRead[runId])) return;
+    const pending = inflight.get(runId);
+    if (pending !== undefined) {
+      if (ended) void pending.then(() => get().load(runId, true));
+      return;
+    }
+    if (ended) set((s) => ({ endedRead: { ...s.endedRead, [runId]: true } }));
+    const read = api
       .getAudit(runId)
       .then(({ entries }) => {
         // Check both the in-memory Zustand witness AND the sessionStorage record so
@@ -244,5 +256,6 @@ export const useProvenanceStore = create<ProvenanceStore>((set, get) => ({
       .finally(() => {
         inflight.delete(runId);
       });
+    inflight.set(runId, read);
   },
 }));

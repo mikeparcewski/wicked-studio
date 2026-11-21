@@ -1,7 +1,7 @@
 import { useViewPrefsStore } from '../src/store/viewPrefs.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { RosterSeat } from '../src/api/types.js';
 import { useConnectionStore } from '../src/store/connection.js';
 
@@ -18,6 +18,8 @@ import { useConnectionStore } from '../src/store/connection.js';
 const NOW = Date.now();
 let caps: Record<string, unknown> = { system: true };
 let systemAnswer: () => Promise<unknown>;
+let diagnosticsExtra: Record<string, unknown> = {};
+const rebuildPost = vi.fn();
 let rosterAnswer: () => Promise<unknown> = () => Promise.resolve({ roster: SEATS });
 const getHealth = vi.fn(() => Promise.resolve({ status: 'ok', version: '0.16.0', ping: 'pong', capabilities: caps }));
 const SEATS: RosterSeat[] = [
@@ -32,9 +34,10 @@ const GOVERNANCE = {
 };
 const WEEK = { days: 7, since: NOW - 7 * 86_400_000, until: NOW, runsRead: 4, truncated: false, seats: [] };
 
-const apiFetch = vi.fn((path: string) => {
+const apiFetch = vi.fn((path: string, init?: RequestInit) => {
+  if (path === '/system/seat-images/rebuild') return rebuildPost(init);
   if (path === '/system') return systemAnswer();
-  if (path === '/diagnostics') return Promise.resolve({ governance: GOVERNANCE });
+  if (path === '/diagnostics') return Promise.resolve({ governance: GOVERNANCE, ...diagnosticsExtra });
   return Promise.resolve({});
 });
 
@@ -46,7 +49,7 @@ vi.mock('../src/api/client.js', () => ({
     upsertConformanceRule: () => Promise.resolve({}),
     listRepos: () => Promise.resolve({ repos: [] }),
   },
-  apiFetch: (path: string) => apiFetch(path),
+  apiFetch: (path: string, init?: RequestInit) => apiFetch(path, init),
 }));
 vi.mock('../src/components/agents/AgentModal.js', () => ({
   AgentModal: ({ agentKey }: { agentKey: string }) => <div data-testid="agent-modal" data-agent={agentKey} />,
@@ -55,6 +58,7 @@ vi.mock('../src/components/agents/AgentModal.js', () => ({
 const { NerveCenterPage } = await import('../src/components/nerve/NerveCenterPage.js');
 const { NerveCenterTile } = await import('../src/components/desk/NerveCenterTile.js');
 const { resetSystemStore } = await import('../src/store/systemSnapshot.js');
+const { useSeatImageRebuild } = await import('../src/store/seatImageRebuild.js');
 const { gateOpenPath } = await import('../src/board/gateActions.js');
 const { clearCachedRoster } = await import('../src/store/rosterCache.js');
 
@@ -112,12 +116,21 @@ const SNAPSHOT = {
 beforeEach(() => {
   useViewPrefsStore.setState({ prefs: { technical_details: false } });
   resetSystemStore();
+  useSeatImageRebuild.setState({ phase: 'idle', refusal: null });
   clearCachedRoster();
   caps = { system: true };
   systemAnswer = () => Promise.resolve(SNAPSHOT);
   rosterAnswer = () => Promise.resolve({ roster: SEATS });
   getHealth.mockClear();
   apiFetch.mockClear();
+  apiFetch.mockImplementation((path: string, init?: RequestInit) => {
+    if (path === '/system/seat-images/rebuild') return rebuildPost(init);
+    if (path === '/system') return systemAnswer();
+    if (path === '/diagnostics') return Promise.resolve({ governance: GOVERNANCE, ...diagnosticsExtra });
+    return Promise.resolve({});
+  });
+  diagnosticsExtra = {};
+  rebuildPost.mockReset().mockResolvedValue({ started: true, rebuild: null });
   useConnectionStore.setState({ status: 'connected' });
   window.history.replaceState(null, '', '/watch');
 });
@@ -656,7 +669,7 @@ describe('the tone rule: a CLI nobody set up never turns Nerve Center yellow', (
     } finally {
       apiFetch.mockImplementation((path: string) => {
         if (path === '/system') return systemAnswer();
-        if (path === '/diagnostics') return Promise.resolve({ governance: GOVERNANCE });
+        if (path === '/diagnostics') return Promise.resolve({ governance: GOVERNANCE, ...diagnosticsExtra });
         return Promise.resolve({});
       });
     }
@@ -703,4 +716,94 @@ it('slice C: no home paths or long IDs in the page, rail tile or their attribute
     assertSafe();
   }
   useViewPrefsStore.setState({ prefs: { technical_details: false } });
+});
+
+// studio#931 / #936 / #1096: the cause has its remedy and its one concrete move.
+it('the overview gateway card shows its remedy beside Re-check', async () => {
+  renderBoth();
+  const slow = (await screen.findAllByTestId('nc-slow'))[0]!;
+  expect(within(slow).getByTestId('nc-slow-remedy')).toHaveTextContent('Start the gateway: wicked-crew gateway start');
+});
+
+it("the overview says no remedy line for crew's bare 'Re-check.' (the button says it)", async () => {
+  systemAnswer = () => Promise.resolve({ ...SNAPSHOT, attention: [{ ...SNAPSHOT.attention[0], remedy: 'Re-check.' }] });
+  renderBoth();
+  const slow = (await screen.findAllByTestId('nc-slow'))[0]!;
+  expect(within(slow).queryByTestId('nc-slow-remedy')).toBeNull();
+});
+
+function imagesSnapshot(rebuild: unknown = null): unknown {
+  return { ...SNAPSHOT,
+    attention: [{ ...SNAPSHOT.attention[0], id: 'infra:seat_images', title: 'Seat images need rebuilding', reason: 'Images are missing', remedy: 'Rebuild the seat images.', target: { kind: 'infra', key: 'seat_images' }, action: { kind: 'rebuild_seat_images', label: 'Rebuild seat images' } }],
+    infra: [{ key: 'seat_images', label: 'Seat images', state: 'degraded', details: { rebuild } }],
+  };
+}
+
+it('the overview Rebuild seat images button POSTs once then re-checks', async () => {
+  systemAnswer = () => Promise.resolve(imagesSnapshot());
+  let finish!: (v: unknown) => void;
+  rebuildPost.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  const recheck = vi.fn();
+  window.addEventListener('wicked:health-rechecked', recheck);
+  try {
+    renderBoth();
+    fireEvent.click(await screen.findByRole('button', { name: 'Rebuild seat images' }));
+    await waitFor(() => expect(rebuildPost).toHaveBeenCalledTimes(1));
+    expect(rebuildPost).toHaveBeenCalledWith({ method: 'POST' });
+    const button = screen.getByRole('button', { name: 'Rebuild seat images' });
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(rebuildPost).toHaveBeenCalledTimes(1);
+    finish({ started: true, rebuild: null });
+    await waitFor(() => expect(recheck).toHaveBeenCalledTimes(1));
+  } finally { window.removeEventListener('wicked:health-rechecked', recheck); }
+});
+
+it('a refused rebuild shows the 503 reason', async () => {
+  const { ApiError } = await import('../src/api/errors.js');
+  rebuildPost.mockRejectedValue(new ApiError(503, 'unavailable', { reason: 'The engine cannot start.' }));
+  systemAnswer = () => Promise.resolve(imagesSnapshot());
+  renderBoth();
+  fireEvent.click(await screen.findByTestId('nc-slow-fix'));
+  expect(await screen.findByTestId('seat-image-rebuild')).toHaveTextContent('The engine cannot start.');
+});
+
+it('a refusal clears once crew answers a newer snapshot (the row speaks then)', async () => {
+  const { ApiError } = await import('../src/api/errors.js');
+  const { useSystemStore } = await import('../src/store/systemSnapshot.js');
+  rebuildPost.mockRejectedValue(new ApiError(503, 'unavailable', { reason: 'The engine cannot start.' }));
+  systemAnswer = () => Promise.resolve(imagesSnapshot());
+  renderBoth();
+  fireEvent.click(await screen.findByTestId('nc-slow-fix'));
+  expect(await screen.findByTestId('seat-image-rebuild')).toHaveTextContent('The engine cannot start.');
+  const at = useSeatImageRebuild.getState().refusal!.at;
+  act(() => { useSystemStore.setState({ snapshotAt: at + 1 }); });
+  expect(screen.queryByTestId('seat-image-rebuild')).toBeNull();
+});
+
+it('a running rebuild shows only its last three safe tail lines and disables its fixes', async () => {
+  systemAnswer = () => Promise.resolve(imagesSnapshot({ running: true, rc: null, error: null, tail: ['old output', 'Building /home/alice/repo', 'Holding codex', 'Building claude'] }));
+  renderBoth();
+  expect(await screen.findByTestId('nc-slow-fix')).toBeDisabled();
+  const note = screen.getByTestId('seat-image-rebuild');
+  expect(note).toHaveTextContent('Rebuilding seat images…');
+  expect(note).toHaveTextContent('Holding codex');
+  expect(note).not.toHaveTextContent('old output');
+  expect(note).not.toHaveTextContent('/home/alice');
+  openTab('attention');
+  expect(screen.getByTestId('nc-attention-action')).toBeDisabled();
+  openTab('infra');
+  expect(screen.getByTestId('seat-image-rebuild')).toHaveTextContent('Building claude');
+});
+
+it.each([true, false])('the disk row shows floor cache only when diagnostics reports it (%s)', async (present) => {
+  diagnosticsExtra = { stores: [], floorCache: present ? { path: '~/.cache/floors', bytes: 17.7e9, totalCapBytes: 20e9, logs: { bytes: 1e9 } } : null };
+  systemAnswer = () => Promise.resolve({ ...SNAPSHOT, attention: [{ ...SNAPSHOT.attention[0], id: 'infra:disk', target: { kind: 'infra', key: 'disk' } }], infra: [{ key: 'disk', label: 'Free disk', state: 'degraded', reason: 'Low free space', details: {} }] });
+  renderBoth();
+  await screen.findAllByTestId('nc-slow');
+  if (present) await screen.findByText('Repo-checks floor cache: 18 GB of its 20 GB cap (~/.cache/floors)');
+  openTab('infra');
+  await screen.findByTestId('nc-infra');
+  if (present) expect(await screen.findByTestId('nc-infra-floor-cache')).toHaveTextContent('Repo-checks floor cache: 18 GB of its 20 GB cap (~/.cache/floors)');
+  else expect(screen.queryByTestId('nc-infra-floor-cache')).toBeNull();
 });

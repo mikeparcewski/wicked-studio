@@ -11,7 +11,7 @@ import { FixedAppStore, tileHostPort, type AppTileData } from '../../editors/app
 import { tileKpis, type TileScheduler, type TileState } from '../../editors/apps/liveTiles.js';
 import { dropSnapshot, isRefusal, snapshotAt, snapshotPort } from '../../editors/apps/previewSnapshots.js';
 import { EditorHost } from '../../editors/host.js';
-import { bundleUrl } from '../../editors/model.js';
+import { bundleUrl, fetchGrants } from '../../editors/model.js';
 import { APPS_EDITOR, type PermissionId } from '../../editors/protocol.js';
 import { readThemeTokens } from '../../editors/theme.js';
 import { cellText } from '../../plugins/wicked-apps/runtime/format.js';
@@ -64,6 +64,7 @@ function TilePreview({ tile, detail, editor, live }: { tile: AppTileData; detail
       host = new EditorHost({
         container: box.current, src: bundleUrl(apiBase(), APPS_EDITOR, editor.entry.version, editor.entry.sha), editor: APPS_EDITOR, version: editor.entry.version,
         name: 'App', title: `Preview of ${tile.name}`, size: 'inline', surface: 'card', grants: editor.entry.grants, theme: readThemeTokens(),
+        regrant: async () => (await fetchGrants(APPS_EDITOR, editor.entry.version, editor.entry.sha, null)).grants,
         prefs: { reducedMotion: true, techDetails: false, locale: navigator.language }, firstParty: true,
         adapter: new AppAdapter(session, tile.name), app: port,
         ui: { chips: () => {}, draft: () => {}, typed: () => {}, key: () => {}, morph: () => {}, status: () => {}, notes: () => {}, thread: () => {}, fullscreen: async () => false, torn: () => setTorn(true), log: () => {} },
