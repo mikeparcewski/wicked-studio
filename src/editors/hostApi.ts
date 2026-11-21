@@ -61,6 +61,8 @@ export interface ArtifactPart { id: string; label: string; state: 'pending' | 'a
 /** The protocol-1 {@link HostAdapter} plus what the host chrome reads. */
 export interface SurfaceAdapter extends HostAdapter {
   readonly source: AdapterSource;
+  /** The document’s own title, once its head content has been read. */
+  docTitle?(): string | undefined;
   capabilities(): readonly AdapterCapability[];
   /** Formats offered by Export (replaces ArtifactMorph's per-kind EXPORTS table). Needs `export`. */
   exports?(): readonly ExportOption[];

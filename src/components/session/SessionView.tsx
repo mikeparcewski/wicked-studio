@@ -23,7 +23,7 @@ import { useRunChain } from './ChainLine.js';
 import { ProposalCard } from './ProposalCard.js';
 import { ArtifactProposalCard } from '../chat/ArtifactProposalCard.js';
 import { JobPassage } from './JobPassage.js';
-import { foldJobLineages, jobTicks, type JobLineage, type JobTick } from '../../board/jobStream.js';
+import { chatHoldsOnlyJob, foldJobLineages, jobTicks, type JobLineage, type JobTick } from '../../board/jobStream.js';
 import { useTeamPlanStore } from '../../store/teamPlan.js';
 import { jobRunId } from '../../hooks/useJobStream.js';
 import { useJobBinding } from '../../store/jobBinding.js';
@@ -355,14 +355,14 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // wicked's passage, one per lineage, folded from the same records. An older daemon has none: today's flow.
   const jobsOn = useCapabilities((s) => s.chatJobProposals);
   const lastJobs = useRef<{ chatId: string; lineages: JobLineage[] } | null>(null);
+  const jobRecords = keptChat !== null && kept?.id === keptChat ? kept.records : messages;
   const jobLineages = useMemo<JobLineage[]>(() => {
     if (!jobsOn || ref.kind !== 'chat') return [];
-    const source = keptChat !== null && kept?.id === keptChat ? kept.records : messages;
-    const folded = foldJobLineages(source as readonly unknown[]);
+    const folded = foldJobLineages(jobRecords);
     const unread = waitingForKept || keptError !== null || chatError !== null || mineChat === null;
     // While a read is pending or failed, this chat's passages stay as they were (never a blank flash).
     return unread && folded.length === 0 && lastJobs.current?.chatId === ref.chatId ? lastJobs.current.lineages : folded;
-  }, [jobsOn, ref, keptChat, kept, messages, waitingForKept, keptError, chatError, mineChat]);
+  }, [jobsOn, ref, jobRecords, waitingForKept, keptError, chatError, mineChat]);
   useEffect(() => { if (ref.kind === 'chat') lastJobs.current = { chatId: ref.chatId, lineages: jobLineages }; }, [ref, jobLineages]);
   // The runs the passages hold: their block, working line and dock item are the passage's (§2.8.1).
   const jobRunIds = useMemo(() => {
@@ -1401,7 +1401,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
               : e.kind === 'artifact'
                 ? null
               : e.kind === 'job' && ref.kind === 'chat'
-                ? <JobPassage key={e.key} chatId={ref.chatId} lineage={e.lineage} runs={mine} sessionId={sessionId} settled={e.settled}
+                ? <JobPassage key={e.key} chatId={ref.chatId} lineage={e.lineage} endSourceChat={!waitingForKept && keptError === null && chatError === null && mineChat !== null && chatHoldsOnlyJob(jobRecords, e.lineage)} runs={mine} sessionId={sessionId} settled={e.settled}
                     navigate={navigate} say={(t) => composerProps.onSend(t, {})} onChanged={() => setChatTry((n) => n + 1)} />
               : e.kind === 'job'
                 ? null

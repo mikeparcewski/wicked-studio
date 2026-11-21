@@ -267,6 +267,7 @@ export function Composer({
   const [cursorKey, setCursorKey] = useState<string | null>(null);
   const [closedAt, setClosedAt] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const heldEnter = useRef<string | null>(null);
 
   // Lane E2: on a daemon with the v2 catalog, a line that starts with `/` is the command list's (the whole line filters
   // it; a command typed whole and followed by words closes it, and Enter posts the job).
@@ -601,10 +602,10 @@ export function Composer({
       return;
     }
     // A `/` line before the daemon's capabilities are read is held: which list and which path is the daemon's to say.
-    if (!capsLoaded && line.startsWith('/')) { setNote(WORKFLOWS_LOADING_LINE); return; }
+    if (!capsLoaded && line.startsWith('/')) { heldEnter.current = text; setNote(WORKFLOWS_LOADING_LINE); return; }
     if (cmdsOn && line.startsWith('/')) {
       // A command line is held until the catalog can read it (codex r1): never sent as a chat message meanwhile.
-      if (v2View === null) { setNote(v2Load.state === 'error' ? WORKFLOWS_FAILED_LINE : WORKFLOWS_LOADING_LINE); return; }
+      if (v2View === null) { heldEnter.current = v2Load.state === 'loading' ? text : null; setNote(v2Load.state === 'error' ? WORKFLOWS_FAILED_LINE : WORKFLOWS_LOADING_LINE); return; }
       const hit = parseCommandLine(v2View, line);
       if (hit !== null) {
         if (hit.refused !== null) { setNote(hit.refused); return; }
@@ -693,6 +694,18 @@ export function Composer({
       setJobBusy(false);
     }
   };
+
+  const sendNow = useRef(send);
+  sendNow.current = send;
+  // Consume the held press before sending: a render caused by the send cannot repeat it.
+  useEffect(() => {
+    if (heldEnter.current === null) return;
+    if (heldEnter.current !== text) { heldEnter.current = null; return; }
+    if (!capsLoaded || (cmdsOn && v2Load.state === 'loading')) return;
+    heldEnter.current = null;
+    if (cmdsOn && v2Load.state === 'error') setNote(WORKFLOWS_FAILED_LINE);
+    else sendNow.current();
+  }, [text, capsLoaded, cmdsOn, v2Load.state]);
 
   return (
     <div className={`wk-composer ${className}`} data-testid="composer" data-composer={composerKey}>
@@ -832,6 +845,7 @@ export function Composer({
           rows={1}
           value={text}
           onChange={(e) => {
+            heldEnter.current = null;
             setText(e.target.value); syncCaret(e.target); setCursor(0); setCursorKey(null); if (note !== null && e.target.value !== '') setNote(null);
             // studio#623 (#620's launch-form rule): an Escape closes THIS token's menu; once that token
             // is gone (or the caret is in another one), a new `/` or `@` opens the menu again.

@@ -1,4 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+import { api } from '../../api/client.js';
+import { placeToken } from '../../store/inlineStart.js';
+import { fetchReposCached } from '../../store/repoCache.js';
+import { useProjectsStore } from '../../store/projects.js';
 import type { ArtifactProposal, Project } from '../../api/types.js';
 import { openChat } from '../../store/chatFlow.js';
 import { moveJob, moveOf, retireMoved, useJobMoves, type JobMove } from '../../store/jobMoves.js';
@@ -52,9 +56,10 @@ type Choices = { repo: string | null; list: Project[]; holding: boolean } | { re
  * proposal is then set aside (Not now). Once moved, the chips give way to the moved job, so a second press never makes
  * a second one. Reads are GETs; the only writes are the press's.
  */
-export function JobProjectChoices({ chatId, proposal, onError, repo: repoPicked, repoName }: {
+export function JobProjectChoices({ chatId, proposal, onError, repo: repoPicked, repoName, endSourceChat = false }: {
   chatId: string;
   proposal: ArtifactProposal;
+  endSourceChat?: boolean;
   onError: (words: string | null) => void;
   /** The repository the person just picked for this job (F41), when its chat had none: the move takes it along. */
   repo?: string;
@@ -66,6 +71,18 @@ export function JobProjectChoices({ chatId, proposal, onError, repo: repoPicked,
   const [all, setAll] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const busyRef = useRef(false);
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState('');
+  const needsAttach = useRef(new Set<string>());
+  useEffect(() => {
+    if (!creating || repoName !== undefined || repo === null) return;
+    let live = true;
+    void fetchReposCached().then((repos) => {
+      const repository = repos.find((r) => r.id === repo);
+      if (live && repository !== undefined) setName((current) => current === '' ? repository.name : current);
+    }, () => { if (live) onError('The repository name could not be read. Enter a project name.'); });
+    return () => { live = false; };
+  }, [creating, repo, repoName, onError]);
   /** The job, once moved: where it went, and whether this one was set aside (else a retry that never seeds again). */
   const moved = useJobMoves((s) => moveOf(s.moves, proposal.pid));
   /** A move of this job already out (from this control, or another one the person left): nothing more is pressable. */
@@ -87,16 +104,50 @@ export function JobProjectChoices({ chatId, proposal, onError, repo: repoPicked,
   if (shape === undefined) {
     return <p data-testid="job-passage-projects" data-state="failed" role="alert" className="wk-pass-sub">This job can’t be moved to a project from here. Start it again from the / list in a project’s chat.</p>;
   }
+  const moveTo = async (p: Project, here: string): Promise<void> => {
+    if (repo !== null && needsAttach.current.has(p.id)) {
+      try {
+        await api.attachProjectMember(p.id, { kind: 'crew.repo', ref: repo, attachedBy: 'studio' });
+        needsAttach.current.delete(p.id);
+      } catch (e: unknown) {
+        onError(`The repository was not attached to ${p.name}: ${e instanceof Error ? e.message : String(e)}. Pick the project to try again.`);
+        return;
+      }
+    }
+    try {
+      await moveJob({ fromChatId: chatId, endSourceChat, proposal, projectId: p.id, repoRef: repo, where: p.name, pickKey: `${proposal.pid}:project:${p.id}`, here });
+    } catch (e: unknown) {
+      onError(`The job was not moved to ${p.name}: ${e instanceof Error ? e.message : String(e)}. Pick a project again.`);
+    }
+  };
   const pick = (p: Project): void => {
     // A ref, not the render's state: two presses in one tick seed once (pi r4).
     if (busyRef.current || moved !== null || moving) return;
     busyRef.current = true;
     setBusy(p.id);
     onError(null);
-    void moveJob({ fromChatId: chatId, proposal, projectId: p.id, repoRef: repo, where: p.name, pickKey: `${proposal.pid}:project:${p.id}` }).then(
-      () => undefined,
-      (e: unknown) => onError(`The job was not moved to ${p.name}: ${e instanceof Error ? e.message : String(e)}. Pick a project again.`),
-    ).finally(() => { busyRef.current = false; setBusy(null); });
+    void moveTo(p, placeToken()).finally(() => { busyRef.current = false; setBusy(null); });
+  };
+  const create = (): void => {
+    if (busyRef.current || moved !== null || moving || name.trim() === '') return;
+    busyRef.current = true;
+    setBusy('new');
+    onError(null);
+    const here = placeToken();
+    void (async () => {
+      let project: Project;
+      try {
+        ({ project } = await api.createProject({ name: name.trim() }));
+      } catch (e: unknown) {
+        onError(`The project was not created: ${e instanceof Error ? e.message : String(e)}. Try another name.`);
+        return;
+      }
+      useProjectsStore.getState().addProject(project);
+      setChoices((current) => current !== null && !('failed' in current) ? { ...current, list: [project, ...current.list] } : current);
+      if (repo !== null) needsAttach.current.add(project.id);
+      setCreating(false);
+      await moveTo(project, here);
+    })().finally(() => { busyRef.current = false; setBusy(null); });
   };
 
   if (moved !== null) return <JobMovedLine chatId={chatId} pid={proposal.pid} moved={moved} />;
@@ -113,7 +164,7 @@ export function JobProjectChoices({ chatId, proposal, onError, repo: repoPicked,
   return (
     <div data-testid="job-passage-projects" role="group" aria-label="Which project?" className="wk-pass-sub wk-composer-start-need">
       <span className="wk-composer-note">
-        {choices.list.length === 0 ? 'Make a project first: this job belongs to a project.'
+        {choices.list.length === 0 ? 'This job belongs to a project. Make one here.'
           : choices.holding ? `Which project? ${repoName !== undefined ? `These hold ${repoName}.` : 'These hold its repository.'} The job opens in a new chat there.`
             : `Which project${repoName !== undefined ? ` for ${repoName}` : ''}? The job opens in a new chat there.`}
       </span>
@@ -123,6 +174,14 @@ export function JobProjectChoices({ chatId, proposal, onError, repo: repoPicked,
           {busy === p.id ? `${p.name}…` : p.name}
         </button>
       ))}
+      <button type="button" data-testid="job-passage-project-new" className="wk-composer-chip wk-composer-suggestion" disabled={busy !== null || moving}
+        aria-pressed={creating} onClick={() => { setName(repoName ?? ''); setCreating(true); }}>New project</button>
+      {creating && (
+        <form data-testid="job-passage-project-create" className="wk-composer-start-create" onSubmit={(e) => { e.preventDefault(); create(); }}>
+          <label className="wk-composer-note">Project name <input data-testid="job-passage-project-name" className="wk-composer-start-name" spellCheck={false} value={name} disabled={busy !== null || moving} onChange={(e) => setName(e.target.value)} autoFocus /></label>
+          <button type="submit" className="wk-composer-chip wk-composer-suggestion" disabled={busy !== null || moving || name.trim() === ''}>Create</button>
+        </form>
+      )}
       {!all && choices.list.length > CHOICES_MAX && (
         <button type="button" data-testid="job-passage-projects-more" className="wk-btn wk-btn--link wk-btn--sm" onClick={() => setAll(true)}>
           {choices.list.length - CHOICES_MAX} more
