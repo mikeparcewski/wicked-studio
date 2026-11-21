@@ -114,6 +114,14 @@ export function choicesForAction(a: GateAction, seatLabel: (cli: string) => stri
     }));
   }
   if (a.action === 'approve') {
+    if (a.noteIntent === 'skip_rules') {
+      const ids = a.rules ?? [];
+      return [{
+        key: 'steer', label: `Land, skipping ${ids.length === 1 ? ids[0] : `${ids.length} rules`}`, decision: decisionFor(a), note: 'required',
+        landSkipsRules: ids,
+        title: `Accept the work as it stands with the reviewer's open items carried; ${ids.join(', ')} are recorded as skipped by you, with your note as the reason. The review does not run again.`,
+      }];
+    }
     const [plain, noted, title] = APPROVE_WORDS[a.intent] ?? ['Approve', 'Approve with a note', 'Approve the gate.'];
     const out: GateRowChoice[] = [];
     const ask = noteAsk(a.note);

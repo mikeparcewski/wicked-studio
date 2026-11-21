@@ -82,6 +82,8 @@ export interface GateRowChoice {
   /** (DES-RULE-CHECK-001) The unchecked steering rules this choice skips: the note is each one's reason
    *  (`skipRules`), never an `amend`. */
   skipRuleIds?: string[];
+  /** A noted approve lands and records these rules as skipped; the wire stays approve + amend. */
+  landSkipsRules?: string[];
   /** (e2e-1105 CJ9) The note field's placeholder when this choice asks for a particular one. */
   notePlaceholder?: string;
   /** Hover text explaining the consequence of this choice. */
@@ -174,6 +176,8 @@ export function consentChoicesOf(gate: OpenGate, events: readonly CoreEvent[] | 
 
 export interface GateRowModel {
   reason: SessionGateReason;
+  /** Finding ids for the team dispute on this unit. */
+  disputeIds?: string[];
   question: string;
   /** First four inline choices. */
   choices: readonly GateRowChoice[];
@@ -863,6 +867,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     }
     return {
       reason, question, choices: all.slice(0, 4), overflow: all.slice(4),
+      ...(dispute ? { disputeIds: findingIds } : {}),
       noteDefault: dispute && raw.includes('request_changes') ? disputeNote(findingIds) : '',
       recommended: recommended !== null && recommended < all.length ? recommended : null,
       detailItems,

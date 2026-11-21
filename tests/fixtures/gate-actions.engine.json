@@ -44,6 +44,15 @@
   "adj-rules": {
     "actions": [
       {
+        "action": "approve",
+        "intent": "land_with_carried_items",
+        "note": "required",
+        "noteIntent": "skip_rules",
+        "rules": [
+          "R1"
+        ]
+      },
+      {
         "action": "retry_rules",
         "intent": "retry_rules",
         "note": "none"

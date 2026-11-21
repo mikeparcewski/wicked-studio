@@ -19550,6 +19550,30 @@
       ]
     },
     {
+      "testId": "session-gate-dispute-council",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-dispute-finding",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-dispute-findings",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-dispute-loading",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-error",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -19623,6 +19647,24 @@
     },
     {
       "testId": "session-gate-failing-words",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-finding",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-findings",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-findings-toggle",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
