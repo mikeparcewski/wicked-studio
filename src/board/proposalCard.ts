@@ -120,9 +120,9 @@ export function planSentence(steps: readonly string[]): string {
 
 /** The run's ONE status sentence: what is happening now, in words, with the step count. While an
  *  answer is queued (the 10 s undo window) or being sent, it says so — never that work started. */
-export function statusSentence(view: SessionView, chain: ChainModel, gate: OpenGate | undefined, action?: GateActionState, silentMinutes: number | null = null): string {
+export function statusSentence(view: SessionView, chain: ChainModel, gate: OpenGate | undefined, action?: GateActionState, silentMinutes: number | null = null, options: { count?: boolean } = {}): string {
   const s = view.session.status;
-  const count = chain.total > 0 && !chain.proposed ? ` · ${chain.done} of ${chain.total} done` : '';
+  const count = options.count !== false && chain.total > 0 && !chain.proposed ? ` · ${chain.done} of ${chain.total} done` : '';
   if (action !== undefined && (s === 'awaiting_human' || gate !== undefined)) {
     if (action.queued) return `Sending your answer in a moment — you can undo it on the decision card${count}`;
     if (action.busy) return `Sending your answer${count}`;
@@ -438,4 +438,11 @@ export function strandedCard(view: SessionView, press: StrandedPress): StrandedC
   if (press.phase === 'delivered') return { ...base, state: 'delivered', out: 'Finished · delivered', prUrl: press.prUrl };
   if (press.qe === true) return { ...base, state: 'error', error: { headline: 'Delivery failed — the run is still stranded.', detail: press.detail ?? press.error, qe: true } };
   return { ...base, state: 'error', error: { headline: 'Delivery failed — the run is still stranded.', detail: press.error } };
+}
+
+/** Checks the review deferred to the opened pull request, as the deliver prompt records them. */
+export function afterDeliveryChecks(prompt: string): string[] {
+  const at = prompt.indexOf('before you merge:');
+  if (at < 0) return [];
+  return [...prompt.slice(at + 'before you merge:'.length).matchAll(/ITEM\s+\d+\s*:\s*DEFERRED\s*[—–-]?\s*(.+?)\s*\(review unit \d+\)/g)].map((m) => m[1]!.trim());
 }

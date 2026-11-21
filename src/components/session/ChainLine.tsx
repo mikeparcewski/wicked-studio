@@ -1,3 +1,4 @@
+import { TechDetails } from '../ui/TechDetails.js';
 import { useEffect, useState } from 'react';
 import type { SessionView } from '../../api/types.js';
 import { isRouteUnsupported } from '../../api/errors.js';
@@ -194,12 +195,13 @@ export function ChainLine({ chain, runId, units = [], teamError = null, onRetry,
         <p data-testid="chain-sentence" className="wk-chain-sentence">{checkedSentence(chain) ?? chainSentence(chain, nothingChecked)}</p>
       )}
       {teamError !== null && (
-        <p data-testid="chain-team-error" className="wk-chain-transport">
-          Could not read the team plan ({teamError}); {chain.source === 'team' ? 'showing the plan as last read' : 'showing the run\u2019s own steps'}.{' '}
+        <div data-testid="chain-team-error" className="wk-chain-transport">
+          {chain.source === 'team' ? 'Couldn\u2019t read the team plan, so this is the plan as last read.' : 'Couldn\u2019t read the team plan, so these are the run\u2019s own steps.'}{' '}
           {onRetry !== undefined && (
             <button type="button" data-testid="chain-team-retry" onClick={onRetry} className="wk-since-toggle">Try again</button>
           )}
-        </p>
+          <TechDetails text={teamError} />
+        </div>
       )}
       {chain.transportLine !== null && (
         <p data-testid="chain-transport" className="wk-chain-transport">{chain.transportLine}</p>

@@ -106,6 +106,8 @@ export interface FloorOverrideView {
    *  `resultId` — `<run>:unit-<ord>:attempt-<n>:<layer>`); `null` when neither says. */
   ord: number | null;
   attempt: number | null;
+  carriedFrom: string | null;
+  carriedFromOrd: number | null;
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -125,6 +127,8 @@ export function floorOverrideOf(v: unknown): FloorOverrideView | null {
   if (!isRecord(v)) return null;
   const label = typeof v['label'] === 'string' && v['label'].trim() !== '' ? v['label'].trim() : 'floor overridden by operator';
   const resultId = typeof v['resultId'] === 'string' ? v['resultId'] : '';
+  const carriedFrom = typeof v['carriedFrom'] === 'string' && v['carriedFrom'] !== '' ? v['carriedFrom'] : null;
+  const carriedAt = carriedFrom !== null ? /:unit-(\d+):attempt-\d+:/.exec(carriedFrom) : null;
   const at = /:unit-(\d+):attempt-(\d+):/.exec(resultId);
   const int = (x: unknown, fallback: string | undefined): number | null =>
     typeof x === 'number' && Number.isInteger(x) ? x : fallback !== undefined ? Number(fallback) : null;
@@ -134,6 +138,8 @@ export function floorOverrideOf(v: unknown): FloorOverrideView | null {
     label,
     ord: int(v['ord'], at?.[1]),
     attempt: int(v['attempt'], at?.[2]),
+    carriedFrom,
+    carriedFromOrd: carriedAt !== null ? Number(carriedAt[1]) : null,
   };
 }
 

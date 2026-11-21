@@ -75,6 +75,8 @@ export function failingSplit(floor: GateFloorView | null | undefined, said?: str
   const onBase: string[] = [];
   let told = false;
   for (const c of failedChecks(floor)) {
+    // A base that passed only on retry cannot tell these failures apart from the change.
+    if (c.baseCleared === true) continue;
     const pre = names(c.preExisting);
     const reg = names(c.regressions);
     const ids = names(c.failureIds);

@@ -565,7 +565,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null, madeEl
             "Details" read as that marker's: it says whose record it opens. */}
         <summary className="wk-chat-details-summary">{powerBuild ? 'The job’s record: steps, checks and helpers' : 'Details'}</summary>
         <p data-testid="session-status-sentence" role="status" className="wk-session-status-sentence">
-          {statusSentence(shown, chain, gate, action)}
+          {statusSentence(shown, chain, gate, action, null, { count: false })}
           {view.session.archived_at != null && <span data-testid="session-run-archived" className="wk-session-grey"> · Archived</span>}
         </p>
         <p className="wk-session-run-labels"><RunAssuranceLabel view={view} /></p>

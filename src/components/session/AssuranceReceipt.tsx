@@ -35,10 +35,12 @@ export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-r
   const w = receiptWords(receipt, passed);
   const judged = (receipt.operatorJudges ?? []).filter((j) => j.floorOverride === undefined);
   const overrides = (receipt.operatorJudges ?? []).filter((j) => j.floorOverride !== undefined);
+  const given = overrides.filter((j) => j.floorOverride?.carriedFrom === null);
+  const carried = overrides.filter((j) => j.floorOverride?.carriedFrom !== null);
   // Never an actor id ("local (human)"): the local operator is "you" (operator 2026-10-29).
   const judgedBy = [...new Set(judged.map((j) => actorWords(j.by)))];
   const judgedGates = judged.length;
-  const overriddenBy = [...new Set(overrides.map((j) => actorWords(j.by)))];
+  const overriddenBy = [...new Set(given.map((j) => actorWords(j.by)))];
   const stepOf = (ord: number): string | null => {
     const u = (units ?? []).find((x) => x.ord === ord);
     if (u === undefined) return null;
@@ -55,19 +57,26 @@ export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-r
         <span className={`wk-assurance-kind wk-assurance-kind--${w.kind}`}>{lead}</span>
         {w.reduced && <ReducedAssuranceLabel />}
         {judgedBy.length > 0 && <OperatorJudgedLabel />}
-        {overriddenBy.length > 0 && <FloorOverriddenLabel />}
+        {overrides.length > 0 && <FloorOverriddenLabel />}
       </p>
       {overriddenBy.length > 0 && (
         <p data-testid="assurance-floor-overridden-line" className="wk-assurance-line">
-          {overrides.length === 1 ? 'At one gate' : `At ${overrides.length} gates`} the repository checks failed and {overriddenBy.join(', ')} overrode them
-          {overrides.length === 1 && overrides[0]!.note !== null ? <>: <q>{overrides[0]!.note}</q></> : null}. Every other check still applied, and QE acceptance is still required.
+          {given.length === 1 ? 'At one gate' : `At ${given.length} gates`} the repository checks failed and {overriddenBy.join(', ')} overrode them
+          {given.length === 1 && given[0]!.note !== null ? <>: <q>{given[0]!.note}</q></> : null}. Every other check still applied, and QE acceptance is still required.
         </p>
       )}
+      {carried.map((o, i) => {
+        const over = o.floorOverride!;
+        const from = over.carriedFromOrd !== null ? stepOf(over.carriedFromOrd) : null;
+        const actor = actorWords(o.by);
+        const owner = actor === 'you' ? 'your' : `${actor}’s`;
+        return <p key={`${over.resultId}-${i}`} className="wk-assurance-line">Carried to {overrideWhere({ ...over, attempt: null }, stepOf)} from {owner} override at {from !== null ? `the ${from} step` : 'an earlier step'} (same tree).</p>;
+      })}
       {overrides.length > 1 && (
         <ul data-testid="assurance-floor-overrides" className="wk-assurance-list">
           {overrides.map((o, i) => (
             <li key={`${o.floorOverride?.resultId ?? ''}-${i}`} data-testid="assurance-floor-override">
-              {capitalize(actorWords(o.by))}{o.floorOverride !== undefined ? `, at ${overrideWhere(o.floorOverride, stepOf)}` : ''}
+              {o.floorOverride?.carriedFrom !== null ? 'Override carried' : capitalize(actorWords(o.by))}{o.floorOverride !== undefined ? `, at ${overrideWhere(o.floorOverride, stepOf)}` : ''}
               {o.note !== null ? <>: <q>{o.note}</q></> : ' (no rationale recorded)'}
             </li>
           ))}

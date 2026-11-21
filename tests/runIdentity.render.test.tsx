@@ -27,13 +27,13 @@ describe('RunTimes DOM — identity-strip cost row (run-times)', () => {
     const strip = screen.getByTestId('run-times');
     expect(strip).toHaveTextContent('cost');
     expect(strip).toHaveTextContent('$1.81');
-    expect(strip).toHaveTextContent('claude');
-    expect(strip).toHaveTextContent('pi unmetered');
+    expect(strip).toHaveTextContent('partial');
+    expect(strip).toHaveTextContent('pi not metered');
   });
 
-  it('null cost_usd renders "unmetered" in the cost row', () => {
+  it('null cost_usd renders "not metered" in the cost row', () => {
     render(<RunTimes runId="r-cost-2" status="completed" session={{ cost_usd: null }} />);
-    expect(screen.getByTestId('run-times')).toHaveTextContent('unmetered');
+    expect(screen.getByTestId('run-times')).toHaveTextContent('not metered');
   });
 
   it('absent cost_usd renders "cost not in run record" in the cost row', () => {
