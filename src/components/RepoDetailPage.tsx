@@ -24,6 +24,7 @@ import { useMembershipStore } from '../store/membership.js';
 import { knowledgeOf, useRepoKnowledge, useRepoKnowledgeFor } from '../store/repoKnowledge.js';
 import { linksOf, useRepoLinks, useRepoLinksFor } from '../store/repoLinks.js';
 import { TrackerReadLine } from './trackers/TrackerReadLine.js';
+import { overlayLiveRuns } from '../board/liveRunOverlay.js';
 import { AddRepoToProject } from './AddRepoToProject.js';
 import { RepoWatchControls, RepoWatchLine } from './RepoWatchLine.js';
 import { useRepoWatch, watchDotTone, watchLine } from '../api/repoWatch.js';
@@ -125,12 +126,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
     // Only this repository's runs (the read's list may still be the previous repository's while a new one loads).
     const read = fetchedRuns.filter((v) => v.session.repo_ref === repoId);
     if (liveRuns === undefined) return read;
-    const live = liveRuns.filter((v) => v.session.repo_ref === repoId);
-    const liveIds = new Set(live.map((v) => v.session.id));
-    const seen = seenLiveRef.current;
-    for (const id of liveIds) seen.add(id);
-    return [...live, ...read.filter((v) => !liveIds.has(v.session.id) && !seen.has(v.session.id))]
-      .sort((a, b) => (b.session.created_at ?? 0) - (a.session.created_at ?? 0));
+    return overlayLiveRuns(read, liveRuns.filter((v) => v.session.repo_ref === repoId), seenLiveRef.current);
   }, [liveRuns, fetchedRuns, repoId]);
   // (crew#1042) The runs, marked from the shared held set (subscribed): a run a Needs-you row holds is not
   // "working now" (Overview, Jobs), and each row's word (statusWord) says it waits on you.
