@@ -550,34 +550,49 @@ export { isRigor };
 /** Frames that can only come after a pause was answered: the run moved on. */
 const PAUSE_ENDS: ReadonlySet<string> = new Set(['powerTurnStarted', 'powerHandoffStepped', 'powerToggled', 'unitDispatched', 'resumed', 'gateDecided', 'sessionCompleted', 'sessionFailed', 'runCancelled']);
 
+/** The pause this page answered (`POST /runs/:id/power/pause`), recorded with the answer: its own time and checkpoint. */
+export type AnsweredPause = Pick<NonNullable<PowerState['pause']>, 'at' | 'checkpoint'>;
+
+/** Is this the pause this page answered, or an older one (studio#945)? A pause answer adds no dated record, so the
+ *  state's own time cannot tell an answered pause from an open one. */
+function isAnswered(pause: PowerState['pause'], answered: AnsweredPause | null): boolean {
+  return pause !== null && answered !== null && pause.at <= answered.at;
+}
+
 /** When the state a merge starts from was last true: its newest dated record (a change, a flip, a hand-off step, the
- *  plan, the pause it holds). A frame newer than this is news; an older one is history the state already folded. */
-function stateAt(p: PowerState): number {
+ *  plan, the pause it holds, the pause this page answered). A frame newer than this is news; an older one is history
+ *  the state already folded. */
+function stateAt(p: PowerState, answered: AnsweredPause | null = null): number {
   let at = p.plan?.at ?? 0;
   for (const c of p.history) at = Math.max(at, c.at);
   for (const t of p.toggles) at = Math.max(at, t.at);
   for (const st of p.handoff?.steps ?? []) at = Math.max(at, st.at);
   if (p.pause !== null) at = Math.max(at, p.pause.at);
+  if (answered !== null) at = Math.max(at, answered.at);
   return at;
 }
 
 /**
  * The run's power state, brought up to date by the frames that arrived after the session was read (`rigorRescored`,
  * `powerToggled`, `powerHandoffStepped`, `powerCheckpointReached`) and by the answer to this page's own flip, raise or
- * pause answer (`local`, the route's PowerView, received at `localAt`), whichever is newest. Rigor only ever moves the
- * way the engine said it did.
+ * pause answer (`local`, the route's PowerView), whichever is newest. Rigor only ever moves the way the engine said it
+ * did.
  *
  * The pause (xreview on studio#933): a checkpoint frame's pause counts only when it is NEWER than the state it is
  * merged over (a frame that came live, or one dated after the state's newest record) — an answered pause in the
- * recorded trail never comes back on a reload — and any later frame that moves the run on ends it.
+ * recorded trail never comes back on a reload — and any later frame that moves the run on ends it. Newer is judged
+ * from the state's own time, not from when this page's answer arrived (studio#945: a pause that opened after the
+ * daemon handled a flip, but before its answer reached the page, was skipped). The pause this page answered
+ * (`answered`, recorded with the answer) never opens again, from a frame or from a session read that predates it.
  */
-export function mergePower(p: PowerState | null, events: readonly CoreEvent[] | null | undefined, local: PowerState | null = null, localAt: number | null = null): PowerState | null {
+export function mergePower(p: PowerState | null, events: readonly CoreEvent[] | null | undefined, local: PowerState | null = null, answered: AnsweredPause | null = null): PowerState | null {
   let base = p;
   // This page's own answer (a flip, a raise, a pause answered) is the newest word on what it changed.
   const usedLocal = local !== null && (base === null || historyTip(local) >= historyTip(base));
-  if (usedLocal) base = p !== null && historyTip(local!) === historyTip(p) ? withLiveProgress(local!, p) : { ...local! };
+  if (usedLocal) base = p !== null && historyTip(local!) === historyTip(p) ? withLiveProgress(local!, p, answered) : { ...local! };
   if (base === null) return null;
-  const since = Math.max(stateAt(base), usedLocal && localAt !== null ? localAt : 0);
+  if (isAnswered(base.pause, answered)) base = { ...base, pause: null };
+  const since = stateAt(base, answered);
   const history = new Map<number, RigorChange>(base.history.map((c) => [c.seq, c]));
   let toggles = base.toggles;
   let checkpoints = base.checkpoints;
@@ -599,7 +614,7 @@ export function mergePower(p: PowerState | null, events: readonly CoreEvent[] | 
       if (!toggles.some((x) => x.at === t.at && x.on === t.on)) toggles = [...toggles, t];
     } else if (e.type === 'powerCheckpointReached' && typeof e.checkpoint === 'number') {
       checkpoints = Math.max(checkpoints, e.checkpoint);
-      if (e.pause !== null && typeof e.pause === 'object' && when > since) framePause = e.pause as NonNullable<PowerState['pause']>;
+      if (e.pause !== null && typeof e.pause === 'object' && when > since && !isAnswered(e.pause as NonNullable<PowerState['pause']>, answered)) framePause = e.pause as NonNullable<PowerState['pause']>;
     } else if (e.type === 'powerIntakePlanned' && plan === null && e.plan !== null && typeof e.plan === 'object') {
       plan = e.plan as RigorPlan;
     } else if (e.type === 'powerHandoffStepped' && e.step !== null && typeof e.step === 'object') {
@@ -631,13 +646,16 @@ export function mergePower(p: PowerState | null, events: readonly CoreEvent[] | 
  * and outcome froze there (Copilot on #937: after a flip the power panel stopped updating). When the session is
  * STRICTLY further along (more turns started, or a later state), its progress replaces the answer's whole, exactly as a
  * session snapshot is used when it leads; otherwise the answer stands, as at ca561f8. What the answer changed (on,
- * rigor, history, toggles, pause) stays the answer's.
+ * rigor, history, toggles) stays the answer's. The pause is the session's when it is further along (studio#947: a new
+ * checkpoint pause, or a pause answered elsewhere, showed only after a reload), unless it is the pause this page
+ * answered; the pause this page answered never makes a session read count as further along (studio#945).
  */
-function withLiveProgress(local: PowerState, p: PowerState): PowerState {
+function withLiveProgress(local: PowerState, p: PowerState, answered: AnsweredPause | null): PowerState {
   // An unreadable session progress block is never inspected or adopted: this page's answer stands (codex r8 on 9d).
   if (!readableProgress(p)) return { ...local };
   const turns = (s: PowerState): number => (typeof s.orchestrator?.turns === 'number' && Number.isFinite(s.orchestrator.turns) ? s.orchestrator.turns : -1);
-  const ahead = turns(p) > turns(local) || stateAt(p) > stateAt(local);
+  const session = isAnswered(p.pause, answered) ? { ...p, pause: null } : p;
+  const ahead = turns(p) > turns(local) || stateAt(session) > stateAt(local, answered);
   if (!ahead) return { ...local };
   return {
     ...local,
@@ -645,6 +663,7 @@ function withLiveProgress(local: PowerState, p: PowerState): PowerState {
     ...(p.turnLog !== undefined ? { turnLog: p.turnLog } : {}),
     checkpoints: p.checkpoints,
     handoff: p.handoff,
+    pause: session.pause,
     outcome: p.outcome,
   };
 }
@@ -666,6 +685,9 @@ function readableProgress(p: PowerState): boolean {
     && finite(st['at']) && strOrNull(st['seat']) && strOrNull(st['summary']) && (st['round'] === undefined || finite(st['round']));
   const h = p.handoff as unknown;
   if (h !== null && (!obj(h) || !finite(h['round']) || !Array.isArray(h['steps']) || !(h['steps'] as unknown[]).every(stepOk))) return false;
+  // The pause is adopted too (studio#947): none, or one with its own time and checkpoint.
+  const pz = p.pause as unknown;
+  if (pz !== null && (!obj(pz) || !finite(pz['at']) || !finite(pz['checkpoint']))) return false;
   return true;
 }
 

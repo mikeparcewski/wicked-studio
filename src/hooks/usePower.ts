@@ -2,18 +2,23 @@ import { useMemo } from 'react';
 import { create } from 'zustand';
 import { powerOf, type PowerState } from '../api/power.js';
 import type { SessionView } from '../api/types.js';
-import { mergePower } from '../board/powerMode.js';
+import { mergePower, type AnsweredPause } from '../board/powerMode.js';
 import { useCapabilities } from '../store/capabilities.js';
 import { useRunEventStore } from '../store/events.js';
 
 /** The answers to this page's own flips and raises (`POST /runs/:id/power|rigor` return the run's PowerView), by run:
- *  the header shows them before the next session read lands. */
-export const usePowerLocal = create<{ byRun: Record<string, PowerState>; atByRun: Record<string, number> }>(() => ({ byRun: {}, atByRun: {} }));
+ *  the header shows them before the next session read lands. `answeredByRun`: the pause this page answered, so a
+ *  frame or an older session read never opens it again (studio#945). */
+export const usePowerLocal = create<{ byRun: Record<string, PowerState>; answeredByRun: Record<string, AnsweredPause> }>(() => ({ byRun: {}, answeredByRun: {} }));
 
-/** This page's answer to its own flip, raise or pause answer, and when it came: a frame after it is news again. The
- *  run list is re-read too, so every surface that says the run's state (the rail, the counts) catches up. */
-export function rememberPower(runId: string, p: PowerState): void {
-  usePowerLocal.setState((s) => ({ byRun: { ...s.byRun, [runId]: p }, atByRun: { ...s.atByRun, [runId]: Date.now() } }));
+/** This page's answer to its own flip, raise or pause answer (`answered`: the pause it answered). The run list is
+ *  re-read too, so every surface that says the run's state (the rail, the counts) catches up. */
+export function rememberPower(runId: string, p: PowerState, answered: AnsweredPause | null = null): void {
+  usePowerLocal.setState((s) => ({
+    byRun: { ...s.byRun, [runId]: p },
+    // A later flip or raise keeps the record of the pause answered before it; a newer pause answer replaces it.
+    answeredByRun: answered === null ? s.answeredByRun : { ...s.answeredByRun, [runId]: { at: answered.at, checkpoint: answered.checkpoint } },
+  }));
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(POWER_CHANGED));
 }
 
@@ -29,7 +34,7 @@ export function usePower(view: SessionView | null | undefined): PowerState | nul
   const id = view?.session.id ?? '';
   const events = useRunEventStore((s) => s.byRun[id]);
   const local = usePowerLocal((s) => s.byRun[id]) ?? null;
-  const localAt = usePowerLocal((s) => s.atByRun[id]) ?? null;
+  const answered = usePowerLocal((s) => s.answeredByRun[id]) ?? null;
   const session = view?.session;
-  return useMemo(() => (cap && session !== undefined ? mergePower(powerOf(session), events, local, localAt) : null), [cap, session, events, local, localAt]);
+  return useMemo(() => (cap && session !== undefined ? mergePower(powerOf(session), events, local, answered) : null), [cap, session, events, local, answered]);
 }

@@ -33,7 +33,7 @@ beforeEach(() => {
   resetStepOutputs();
   resetRunCoverage();
   resetLaunchWizard();
-  usePowerLocal.setState({ byRun: {}, atByRun: {} });
+  usePowerLocal.setState({ byRun: {}, answeredByRun: {} });
   useCapabilities.setState({ loaded: true, powerMode: true });
   useGateStore.setState({ gates: {}, approaching: {} });
   useRunEventStore.setState({ byRun: { [RUN]: buildEvents() as never } });
