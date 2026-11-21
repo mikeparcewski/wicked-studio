@@ -198,10 +198,10 @@ describe('rejectNoteOf', () => {
       ts: 4, action: ENGINE_TIMEOUT_AUDIT, actor: { id: 'crew.daemon', kind: 'system', trust: 'admin' }, runId: 'r-1', detail: { ord: 6 },
     };
     const entries = [timedOut, decided('r-1', { approve: false, action: 'request_changes', amend: 'Fix the reviewer\'s failing items' }, 3), launched('r-1')];
-    expect(cancelStoryOf(entries, 'r-1')).toEqual({ rejectNote: null, sendBackNote: 'Fix the reviewer\'s failing items', engineTimedOut: true });
+    expect(cancelStoryOf(entries, 'r-1')).toEqual({ rejectNote: null, sendBackNote: 'Fix the reviewer\'s failing items', engineTimedOut: true, stop: null });
     // Another run's timeout is not this run's; a plain rejection reads as one.
-    expect(cancelStoryOf([{ ...timedOut, runId: 'r-2' }], 'r-1')).toEqual({ rejectNote: null, sendBackNote: null, engineTimedOut: false });
-    expect(cancelStoryOf([decided('r-1', { approve: false, amend: 'not this week' })], 'r-1')).toEqual({ rejectNote: 'not this week', sendBackNote: null, engineTimedOut: false });
+    expect(cancelStoryOf([{ ...timedOut, runId: 'r-2' }], 'r-1')).toEqual({ rejectNote: null, sendBackNote: null, engineTimedOut: false, stop: null });
+    expect(cancelStoryOf([decided('r-1', { approve: false, amend: 'not this week' })], 'r-1')).toEqual({ rejectNote: 'not this week', sendBackNote: null, engineTimedOut: false, stop: null });
   });
 
   it('the store keeps the cancel story beside the reject note, from the same one fetch', async () => {
@@ -211,7 +211,7 @@ describe('rejectNoteOf', () => {
       launched('r-537'),
     ] });
     useProvenanceStore.getState().load('r-537');
-    await waitFor(() => expect(useProvenanceStore.getState().cancelStories['r-537']).toEqual({ rejectNote: null, sendBackNote: 'step 4 is the whole of e2e/', engineTimedOut: true }));
+    await waitFor(() => expect(useProvenanceStore.getState().cancelStories['r-537']).toEqual({ rejectNote: null, sendBackNote: 'step 4 is the whole of e2e/', engineTimedOut: true, stop: null }));
     expect(useProvenanceStore.getState().rejectNotes['r-537']).toBeNull();
     expect(spy).toHaveBeenCalledTimes(1);
     spy.mockRestore();

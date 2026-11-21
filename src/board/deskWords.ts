@@ -96,6 +96,9 @@ export function plainGateQuestion(prompt: string | undefined, gateKind: string |
 export function governanceDenialHeadline(prompt: string | undefined): string | null {
   if (prompt === undefined) return null;
   if (/^\s*Unit\s+\d+\s+was DENIED by input governance\b/i.test(prompt)) {
+    if (!/tool call was refused/i.test(prompt) && /its governance evidence failed/i.test(prompt)) {
+      return /left the tree unchanged|changed nothing/i.test(prompt) ? 'The rework changed nothing' : 'The step’s evidence did not hold';
+    }
     const tool = /tool call was refused\s*\(\s*`?([A-Za-z0-9_.:-]+)`?\s*\)/i.exec(prompt)?.[1];
     return `A ${tool !== undefined ? `${tool} ` : 'tool '}call was blocked by the job’s rules`;
   }

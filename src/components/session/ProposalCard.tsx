@@ -1,3 +1,4 @@
+import { Markdown } from '../Markdown.js';
 import { useGateActions } from '../../hooks/useGateActions.js';
 import { choicesForAction, listedGateAnswer } from '../../board/gateContract.js';
 import { noteOption } from '../../board/askModel.js';
@@ -12,7 +13,7 @@ import type { ChainModel } from '../../board/chainModel.js';
 import { api } from '../../api/client.js';
 import { commitGateDecision, GATE_HASH, IDLE_GATE_ACTION, gateKeyOf, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
 import { InlineUndo } from '../InlineUndo.js';
-import { deliverCardOf, deliverFailureOf, deliverLine, gateInstance, PLAN_STOP, proposalCard, proposalKindOf, type ProposalKind } from '../../board/proposalCard.js';
+import { afterDeliveryChecks, deliverCardOf, deliverFailureOf, deliverLine, gateInstance, PLAN_STOP, proposalCard, proposalKindOf, type ProposalKind } from '../../board/proposalCard.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
 import { repoNameOf } from '../../board/deskWords.js';
 import type { AskProposal } from '../../board/askThread.js';
@@ -212,6 +213,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     ? { label: PLAN_NOTE_REPLY, placeholder: PLAN_NOTE_PLACEHOLDER, raw: true, restoreKey: planNoteKey(runId, gateInstance(gate)), ...(gate !== undefined ? { instance: `${runId}:${gateInstance(gate)!}` } : {}), send: (t) => answerRef.current(t) }
     : null);
   if (card === null) return null;
+  const afterDelivery = afterDeliveryChecks(gate?.prompt ?? '');
   const chat = variant === 'chat';
   const instance = gateInstance(gate);
   // A refused approval that can be tried again keeps the plan's draft too (codex r2 #2: an Edit made after the
@@ -476,6 +478,13 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
               ? (rerun.offer !== null ? 'Run it again so QE checks it, or skip QE here with a reason.' : 'Skip QE here with a reason, or stop it.')
               : (rerun.offer !== null ? 'Run it again so QE checks it, or stop it.' : 'Start it again with QE skipped, or stop it.')}</p>
             : card.why !== null && card.state === 'ask' && <p data-testid="session-proposal-why" className="wk-prop-why wk-gate2-p">{card.why}</p>}
+          {/* studio#891 (wicked-core#1045): what the review deferred to the opened pull request, before the choices. */}
+          {card.kind === 'deliver' && card.state === 'ask' && afterDelivery.length > 0 && (
+            <div data-testid="session-proposal-after-delivery" className="wk-prop-why wk-gate2-p">
+              <p>After delivery, check these on the pull request before you merge:</p>
+              <ul className="list-disc pl-5">{afterDelivery.map((item, i) => <li key={i}><Markdown>{item}</Markdown></li>)}</ul>
+            </div>
+          )}
           {card.state === 'confirm' && card.confirm !== null ? (
             <div data-testid="session-proposal-confirm" role="alertdialog" aria-label={`Are you sure? ${card.confirm.q}`} className="wk-prop-confirm">
               <p className="wk-prop-why"><b>Are you sure? {card.confirm.q}</b> {card.confirm.w}</p>
@@ -614,7 +623,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
         <p className="wk-prop-status">
           <span aria-hidden className="wk-prop-tick">✓</span>
           <b>Done</b>
-          <span data-testid="session-proposal-outcome" className="wk-prop-live">{card.out}</span>
+          {(card.handed === null || (card.handed.href === null && card.handed.branch === null)) && <span data-testid="session-proposal-outcome" className="wk-prop-live">{card.out}</span>}
           {/* studio#575: where the work went, on the card the operator approved it from — the same
               `Pull request ↗` the Handed-over row carries; the branch when no PR was opened. */}
           {card.handed !== null && card.handed.href !== null && (
