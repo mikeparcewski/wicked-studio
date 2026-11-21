@@ -126,6 +126,7 @@ function RunInsightsOf({ runId, runStatus, size, composerKey }: { runId: string;
         size: sizeRef.current,
         surface: sizeRef.current === 'inline' ? 'card' : 'full',
         grants: decided.grants,
+        regrant: async () => (await fetchGrants(editor.id, editor.version, editor.sha256, null)).grants,
         theme: readThemeTokens(),
         prefs: { reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false, techDetails: false, locale: navigator.language },
         firstParty: editor.first_party,

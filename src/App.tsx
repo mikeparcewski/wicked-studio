@@ -74,6 +74,7 @@ import { useNeedsClock, useNeedsRows, useSettledNeeds } from './hooks/useNeedsRo
 import { ambientProjectId } from './hooks/ambientProject.js';
 import { useEventStream } from './hooks/useEventStream.js';
 import { publishCoreEvent } from './hooks/eventTap.js';
+import { ingestEditorGrantsChanged } from './store/runPlugins.js';
 import { useVisitClock } from './hooks/useVisitClock.js';
 import { useProjectVisits } from './hooks/useProjectVisits.js';
 import { usePeekJump } from './hooks/usePeekJump.js';
@@ -189,6 +190,7 @@ export function App(): React.ReactElement {
     (event: CoreEvent) => {
       // Run-thread plugins (program DES-PLUGIN-EVENTS spike 1) hear the same frames through the tap.
       publishCoreEvent(event);
+      ingestEditorGrantsChanged(event);
       ingestGate(event);
       // Slice BD: terminal frames retire a run's pre-gate annotation draft.
       ingestAnnotation(event);
