@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { sourcesPath } from '../../api/sources.js';
 import { agentAccessOf, type SourceAgentAccess } from '../../api/sourceAgents.js';
 import { usePmSources } from './TrackerParts.js';
@@ -64,7 +65,15 @@ function offWhy(tools: ReadonlyArray<{ why: OffWhy }>): string {
 /** The repository Overview's Trackers line: how many are linked, and whether jobs here can read them. */
 export function TrackerReadLine({ count, sources, navigate }: { count: number; sources: readonly string[]; navigate: (path: string) => void }): React.ReactElement {
   // Read again when the window comes back: the switches may have changed on Data sources in another tab.
-  const { sources: pm, error } = usePmSources(count > 0, { followFocus: true });
+  const on = count > 0;
+  const [round, setRound] = useState(0);
+  useEffect(() => {
+    if (!on) return undefined;
+    const again = (): void => setRound((n) => n + 1);
+    window.addEventListener('focus', again);
+    return () => window.removeEventListener('focus', again);
+  }, [on]);
+  const { sources: pm, error } = usePmSources(on, round);
   // A read that failed claims nothing (never "reading" for good).
   const tools = error !== null ? [] : pm === null ? null : pm.map((s) => ({ name: s.name, access: agentAccessOf(s.server as { agents?: unknown }), enabled: (s.server as { enabled?: unknown }).enabled !== false }));
   const read = count === 0 ? null : trackerReadOf(sources, tools);
