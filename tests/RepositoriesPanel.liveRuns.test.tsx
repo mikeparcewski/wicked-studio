@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { RepoEntry, SessionView } from '../src/api/types.js';
 import { makeView } from './factories.js';
 import { REPO_INTREE_NO_LIVE } from './fixtures/wave2.js';
@@ -116,6 +116,16 @@ describe('Repositories follows the live run list (studio#940)', () => {
     rerender(ui([fin]));
     await waitFor(() => expect(attrOf('wicked-studio', 'data-graph')).toBe('missing'));
     await waitFor(() => expect(kindsReadsOf('wicked-studio')).toBe(2));
+    expect(listRepos).toHaveBeenCalledTimes(2);
+  });
+
+  it('codex r2: a Retry after a failed first read reads the repositories once, whatever runs the retry finds', async () => {
+    listRepos.mockImplementationOnce(() => Promise.reject(new TypeError('Failed to fetch')));
+    listRuns.mockImplementationOnce(() => Promise.resolve({ runs: [] })).mockImplementationOnce(() => Promise.resolve({ runs: [done] }));
+    render(<RepositoriesPanel navigate={() => {}} liveRuns={undefined} />);
+    fireEvent.click(await screen.findByTestId('repos-error-retry'));
+    await screen.findAllByTestId('repo-card');
+    await new Promise((r) => setTimeout(r, 20));
     expect(listRepos).toHaveBeenCalledTimes(2);
   });
 
