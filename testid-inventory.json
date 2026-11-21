@@ -19825,6 +19825,12 @@
       ]
     },
     {
+      "testId": "session-gate-reading",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-reduced",
       "files": [
         "src/components/session/GateRow.tsx"

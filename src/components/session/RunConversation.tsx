@@ -2,7 +2,10 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client.js';
 import { RunPhaseRows, RunPluginJumpRows, WorkingDocSteerRows } from './RunThreadPlugin.js';
 import type { CoreEvent, SessionView as RunView } from '../../api/types.js';
-import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
+import { IDLE_GATE_ACTION, ensureGate, useGateActionStore, useGateReadStore } from '../../board/gateActions.js';
+import { gateReadState } from '../../board/gateReadState.js';
+import { isAskTurnRun } from '../../board/askTurn.js';
+import { useUndoQueue } from '../../board/undoQueue.js';
 import { finishedDeliveryArm, proposalKindOf, statusSentence } from '../../board/proposalCard.js';
 import type { Responder } from '../../board/responder.js';
 import { builderResponder, gateResponder, isReviewUnit, seatResponder } from '../../board/responder.js';
@@ -25,6 +28,8 @@ import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { useRunCoverage } from '../../hooks/useRunCoverage.js';
 import { useOwnGateRead } from '../../hooks/useOwnGateRead.js';
+import { useJobLocal } from '../../hooks/useJobStream.js';
+import { useElicitationStore } from '../../store/elicitations.js';
 import { useGateStore } from '../../store/gates.js';
 import { usePostHocDeliverStore } from '../../store/postHocDeliver.js';
 import { useRunEventStore } from '../../store/events.js';
@@ -273,6 +278,15 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null, madeEl
   const gate = useGateStore((s) => s.gates[id]);
   useOwnGateRead(id, status);
   const action = useGateActionStore((s) => s.byGate[id] ?? IDLE_GATE_ACTION);
+  const pending = useUndoQueue((s) => s.pending.some((p) => p.runIds.includes(id)));
+  const question = useElicitationStore((s) => s.elicitations[id] !== undefined);
+  const reshaping = useJobLocal((s) => s.reshaping[id] === true);
+  const gateReadFailed = useGateReadStore((s) => (s.failed[id] ?? 0) > 0);
+  const gateRead = gateReadState({
+    waiting: status === 'awaiting_human', hasGate: gate !== undefined, pending,
+    answering: action.busy || action.answered !== null || reshaping,
+    question, askTurn: isAskTurnRun(view.session), failed: gateReadFailed,
+  });
   const acceptance = useRunAcceptance(view, planChain, gate, true);
   const checks = acceptance?.walkthrough?.steps ?? null;
   const chain = useMemo(() => applyCheckState(planChain, checks), [planChain, checks]);
@@ -496,6 +510,13 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null, madeEl
           dock={<PowerPauseCard view={view} power={power} />}>
           <PowerPauseCard view={view} power={power} />
         </Docked>
+      )}
+      {gateRead === 'reading' && <p className="wk-chat-quiet" aria-busy="true">Reading the question…</p>}
+      {gateRead === 'failed' && (
+        <p role="alert" className="wk-chat-quiet">
+          The question hasn’t loaded yet (the daemon is slow); it is trying again.{' '}
+          <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" onClick={() => { void ensureGate(id); }}>Retry</button>
+        </p>
       )}
       {gate !== undefined && effectiveKind === null && finished === null && (
         <Docked dockKey={id} open marker={<DecisionMarker dockKey={id} who={builderResponder(view, gate.ord, roster)?.name ?? null} since={gate.receivedAt} />}

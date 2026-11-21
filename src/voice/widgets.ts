@@ -15,6 +15,7 @@
  * Pure: the manifests, the slot parser, the field-path reader and the layout moves.
  */
 
+import type { SystemInfra } from '../api/system.js';
 import type { VoicePanelDecl, VoiceWidgetManifest } from '../api/voice.js';
 import { parsePanels } from '../board/runPluginPanels.js';
 
@@ -216,4 +217,13 @@ export function isRunningJob(r: { liveness: string }): boolean {
 export function stepWords(phase: string | null): string | null {
   if (phase === null || phase === '' || /(^|:)unit-\d+(:a\d+)?$/.test(phase)) return null;
   return phase;
+}
+
+/** One load word for the dashboard and its spoken summary. */
+export function loadWord(row: Pick<SystemInfra, 'state' | 'load'> | undefined): string {
+  if (row?.state === 'down') return 'saturated';
+  if (row?.state === 'degraded') return 'busy';
+  if (row?.state !== 'ok') return 'not read';
+  const load = row.load;
+  return load !== null && load.cores !== null && load.cores > 0 && load.load1 / load.cores >= 0.75 ? 'nearly full' : 'calm';
 }

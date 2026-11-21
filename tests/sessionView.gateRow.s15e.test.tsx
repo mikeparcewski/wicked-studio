@@ -56,6 +56,19 @@ afterEach(() => {
   cleanup();
 });
 
+describe('gate reads in progress', () => {
+  it('shows the known question without buttons while its events read is pending', () => {
+    const runId = 'r-s15e-reading';
+    const gate = plainGate({ runId });
+    useRunEventStore.setState({ byRun: {} });
+    vi.spyOn(client.api, 'getRunEvents').mockReturnValue(new Promise(() => {}));
+    render(<GateRow view={view({ id: runId })} gate={gate} />);
+    expect(screen.getByTestId('session-gate-question').textContent).toBe('Approve the plan?');
+    expect(screen.getByTestId('session-gate-reading').textContent).toBe('Reading the choices…');
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+});
+
 describe('GateRow — def gate', () => {
   it('renders session-gate-row with 4 choices', () => {
     const gate = plainGate();

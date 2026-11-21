@@ -30,6 +30,7 @@ const typing = (t: EventTarget | null): boolean => {
 export function VoiceFullScreen(): React.ReactElement {
   const ref = useRef<HTMLDivElement>(null);
   const trans = useRef<HTMLDivElement>(null);
+  const previousLines = useRef(new Set<number>());
   // Everything but the waveform's bars and who is speaking (those move ~20 times a second; LiveWave reads them).
   const v = useVoiceStore(useShallow(withoutWave));
   const { layout, widgets, loaded } = useDashStore();
@@ -42,7 +43,17 @@ export function VoiceFullScreen(): React.ReactElement {
     return () => clearInterval(t);
   }, []);
 
-  useEffect(() => { const el = trans.current; if (el !== null) el.scrollTop = el.scrollHeight; }, [v.lines]);
+  useEffect(() => {
+    const el = trans.current;
+    const firstNew = v.lines.findIndex((line) => !previousLines.current.has(line.id));
+    previousLines.current = new Set(v.lines.map((line) => line.id));
+    if (el === null || firstNew < 0) return;
+    const line = el.children[firstNew] as HTMLElement | undefined;
+    if (line === undefined) return;
+    const bottom = Math.max(0, el.scrollHeight - el.clientHeight);
+    const top = line.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
+    el.scrollTop = Math.min(bottom, top);
+  }, [v.lines]);
 
   const all = loaded ? dashboardWidgets(layout, widgets) : [];
   const { left, right } = sides(all);
