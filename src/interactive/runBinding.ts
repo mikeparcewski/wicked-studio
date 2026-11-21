@@ -10,7 +10,7 @@
  * (`extraWriteRoots: [runDir]`, per-run isolation — crew#313/#314), and that directory is named
  * by the doc:
  *
- *   drafts   <state>/interactive-drafts/<docId>
+ *   drafts   <state>/interactive-drafts/<mount>__<docId>   (crew#1280; `<docId>` before it)
  *   asks     <state>/interactive-chats/<docId>-m-<sourceMessageId>  |  <docId>-e-<eventId>
  *   edits    <state>/interactive-edits/<docId>-v<version>
  *   demos    <state>/interactive-demos/<docId>[-…]
@@ -28,10 +28,15 @@ import { LIVE_RUN, threadKey, useDocThreadStore } from '../store/docThread.js';
 
 /** The seams' state-home directories — the parent a doc run's write root sits under. */
 const SEAM_DIR = /^interactive-(drafts|chats|edits|demos)$/;
+/** `<mount>__<docId>`: a mount (`_unfiled`, or a project id) then the doc. */
+const MOUNT_KEYED = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}__[a-z0-9][a-z0-9-]{0,63}$/;
 
 /** Is `base` (a write root's own name) the doc's, under the seams' key grammars? */
 function namesDoc(base: string, docId: string): boolean {
   if (base === docId) return true;
+  // A draft's folder is keyed by its mount too (`_unfiled` or the project id; crew#1280). The doc grammar has no `_`, so
+  // the `__` split is unambiguous; the project is narrowed by `inProject`.
+  if (MOUNT_KEYED.test(base) && base.endsWith(`__${docId}`)) return true;
   if (!base.startsWith(`${docId}-`)) return false;
   const tail = base.slice(docId.length + 1);
   // `-m-<msg>` / `-e-<n>` (asks), `-v<n>` (edits), or a demo handoff's `-v<n>`-style tail.
