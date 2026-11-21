@@ -195,13 +195,28 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
   // studio#940: a repository's run going from in flight to finished (seen in the live list) reads the repositories
   // again once (their findings and code-map state) and that repository's code-map size. The in-flight runs of the last
   // list seen are the memory, kept while the first read is still out; a finish seen then is read once it lands.
+  // (codex r2) A run that both started and finished between two lists (the live list was away meanwhile) is a finish
+  // too: a finished run the list it came from did not hold before. The first list from a source (App's live list, or
+  // this page's own read) only primes that memory, so opening the page, or App's list arriving, reads nothing more.
   const inFlightRef = useRef<{ runs: Map<string, string>; ended: Set<string> }>({ runs: new Map(), ended: new Set() });
+  const knownRef = useRef<{ from: 'live' | 'read'; ids: Set<string> } | null>(null);
   useEffect(() => {
     const inFlight = new Map<string, string>();
     for (const v of rawRuns) if (v.session.repo_ref != null && !TERMINAL_STATUSES.has(v.session.status)) inFlight.set(v.session.id, v.session.repo_ref);
     const prev = inFlightRef.current;
     const ended = new Set(prev.ended);
     for (const [id, repoId] of prev.runs) if (!inFlight.has(id)) ended.add(repoId);
+    const from = liveRuns !== undefined ? 'live' : loading ? null : 'read';
+    if (from !== null) {
+      const k = knownRef.current;
+      const before = k !== null && k.from === from ? k.ids : null;
+      const ids = new Set<string>();
+      for (const v of liveRuns ?? fetchedRuns) {
+        ids.add(v.session.id);
+        if (before !== null && !before.has(v.session.id) && v.session.repo_ref != null && TERMINAL_STATUSES.has(v.session.status)) ended.add(v.session.repo_ref);
+      }
+      knownRef.current = { from, ids };
+    }
     if (loading) { inFlightRef.current = { runs: inFlight, ended }; return; }
     inFlightRef.current = { runs: inFlight, ended: new Set() };
     if (ended.size === 0) return;
@@ -212,7 +227,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
       useNeedsSources.getState().depositRepos(rs);
       setRepos(rs);
     }).catch(() => { /* a failed re-read keeps the list shown; the next finish or a reload reads it again */ });
-  }, [rawRuns, loading]);
+  }, [rawRuns, loading, liveRuns, fetchedRuns]);
 
   // The apps' own repositories (crew's apps store: `AppSummary.repoId`), marked App on the list with no Index nag. One
   // read, beside the list's; a crew without the apps route (or a failed read) marks none.

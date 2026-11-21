@@ -104,6 +104,46 @@ describe('Repositories follows the live run list (studio#940)', () => {
     await waitFor(() => expect(kindsReadsOf('wicked-studio')).toBe(2));
   });
 
+  it('codex r2: a run that started and finished while the live list was away still reads the repositories again', async () => {
+    const fin = makeView({ id: 'o-s', repo_ref: 'wicked-studio', workflow_id: 'onboarding', status: 'completed', problem: 'Onboard wicked-studio' });
+    listRepos
+      .mockImplementationOnce(() => Promise.resolve({ repos: [{ ...REPO_INTREE_NO_LIVE, findings: [] }] }))
+      .mockImplementationOnce(() => Promise.resolve({ repos: [REPO_INTREE_NO_LIVE] }));
+    const { rerender } = render(ui([]));
+    await screen.findAllByTestId('repo-card');
+    await waitFor(() => expect(kindsReadsOf('wicked-studio')).toBe(1));
+    // The next list already holds the run, finished: it was never seen in flight.
+    rerender(ui([fin]));
+    await waitFor(() => expect(attrOf('wicked-studio', 'data-graph')).toBe('missing'));
+    await waitFor(() => expect(kindsReadsOf('wicked-studio')).toBe(2));
+    expect(listRepos).toHaveBeenCalledTimes(2);
+  });
+
+  it('codex r2: finished runs already on the first list, or on App’s list arriving after the page’s own, read nothing more', async () => {
+    listRuns.mockImplementationOnce(() => Promise.resolve({ runs: [] }));
+    const { rerender } = render(<RepositoriesPanel navigate={() => {}} liveRuns={undefined} />);
+    await screen.findAllByTestId('repo-card');
+    rerender(ui([done, makeView({ id: 'z', repo_ref: 'other', status: 'failed' })]));
+    await waitFor(() => expect(stateOf('billing')).toBe('ready'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(listRepos).toHaveBeenCalledTimes(1);
+  });
+
+  it('codex r2: a finish seen while the first read is still out is read once that read lands', async () => {
+    const first = deferred<{ repos: RepoEntry[] }>();
+    listRepos.mockImplementationOnce(() => first.promise);
+    const { rerender } = render(ui([running]));
+    await waitFor(() => expect(listRepos).toHaveBeenCalledTimes(1));
+    rerender(ui([done]));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(listRepos).toHaveBeenCalledTimes(1);
+    first.resolve({ repos: [repo('billing'), repo('other')] });
+    await screen.findAllByTestId('repo-card');
+    await waitFor(() => expect(listRepos).toHaveBeenCalledTimes(2));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(listRepos).toHaveBeenCalledTimes(2);
+  });
+
   it('codex r1: two refreshes answered out of order: the older answer changes neither the list nor the shared one', async () => {
     const other = makeView({ id: 'x-1', repo_ref: 'other', workflow_id: 'onboarding', status: 'executing', problem: 'Onboard other' });
     const otherDone = makeView({ id: 'x-1', repo_ref: 'other', workflow_id: 'onboarding', status: 'completed', problem: 'Onboard other' });
