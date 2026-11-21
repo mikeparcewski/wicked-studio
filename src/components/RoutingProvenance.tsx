@@ -1,3 +1,4 @@
+import { useDisplayText } from '../hooks/useHomePath.js';
 import type { RoutingInfo } from '../api/types.js';
 import { lostQuorum, quorumLabel } from './councilQuorum.js';
 
@@ -6,6 +7,7 @@ interface Props {
 }
 
 export function RoutingProvenance({ routing }: Props): React.ReactElement | null {
+  const showText = useDisplayText();
   if (!routing) return null;
 
   if (routing.method === 'council') {
@@ -32,7 +34,7 @@ export function RoutingProvenance({ routing }: Props): React.ReactElement | null
   if (routing.method === 'degraded') {
     return (
       <p className="text-xs font-mono" style={{ color: 'var(--status-gate)' }} data-testid="routing-provenance">
-        <span className="font-medium">Degraded:</span> {routing.reason}
+        <span className="font-medium">Degraded:</span> {showText(routing.reason)}
       </p>
     );
   }

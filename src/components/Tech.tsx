@@ -1,3 +1,4 @@
+import { displayText } from '../board/homePath.js';
 import type { AgentSession } from '../api/types.js';
 import { useTechDetails } from '../hooks/useTechDetails.js';
 
@@ -54,5 +55,5 @@ export function runTechParts(session: Pick<AgentSession, 'id'> & { clis?: readon
 export function seatPart(clis: readonly string[] | null | undefined): string | null {
   const names = (clis ?? []).filter((c) => typeof c === 'string' && c !== '');
   if (names.length === 0) return null;
-  return `${names.length === 1 ? 'seat' : 'seats'} ${names.join(', ')}`;
+  return `${names.length === 1 ? 'seat' : 'seats'} ${displayText(names.join(', '))}`;
 }

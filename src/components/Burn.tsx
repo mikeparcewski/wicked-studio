@@ -1,3 +1,4 @@
+import { useDisplayText } from '../hooks/useHomePath.js';
 import { burnSummary, type RunModel } from '../hooks/useRunModel.js';
 import type { SessionStatus } from '../api/types.js';
 
@@ -18,6 +19,7 @@ function cost(n: number | null): string {
 }
 
 export function Burn({ model }: Props): React.ReactElement {
+  const showText = useDisplayText();
   const b = burnSummary(model);
 
   const nonTerminal = !TERMINAL.has(model.session.status);
@@ -77,7 +79,7 @@ export function Burn({ model }: Props): React.ReactElement {
             <ul className="flex flex-col gap-0.5">
               {b.perCli.map((c) => (
                 <li key={c.cli} className="flex justify-between font-mono" style={{ color: 'var(--ink-muted)' }}>
-                  <span>{c.cli}</span>
+                  <span>{showText(c.cli)}</span>
                   <span>{tokens(c.input + c.output)} tok · {cost(c.cost)}</span>
                 </li>
               ))}
@@ -88,13 +90,13 @@ export function Burn({ model }: Props): React.ReactElement {
 
       {b.noAdapterClis.length > 0 && (
         <p style={{ color: 'var(--status-gate)' }} data-testid="burn-unavailable">
-          usage unavailable for {b.noAdapterClis.join(', ')} — no usage adapter
+          usage unavailable for {showText(b.noAdapterClis.join(', '))} — no usage adapter
         </p>
       )}
 
       {b.pendingUsageClis.length > 0 && (
         <p style={{ color: 'var(--ink-dim)' }} data-testid="burn-pending">
-          usage not yet reported for {b.pendingUsageClis.join(', ')}
+          usage not yet reported for {showText(b.pendingUsageClis.join(', '))}
         </p>
       )}
     </div>

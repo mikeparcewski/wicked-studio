@@ -1,3 +1,4 @@
+import { useDisplayText } from '../../hooks/useHomePath.js';
 import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { SessionView } from '../../api/types.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -116,6 +117,7 @@ export function RunTab({ runs, allRuns = runs, sessionId, title, navigate }: {
   title: string;
   navigate?: Navigate;
 }): React.ReactElement {
+  const showText = useDisplayText();
   const picked = useRunPanel((s) => (s.picked?.sessionId === sessionId ? s.picked.runId : null));
   const view = (picked !== null ? runs.find((run) => run.session.id === picked) : undefined) ?? primaryRun(runs);
   if (view === undefined) return <p data-testid="run-tab-empty" className="wk-run-tab-muted">No run in this session yet.</p>;
@@ -124,7 +126,7 @@ export function RunTab({ runs, allRuns = runs, sessionId, title, navigate }: {
       {runs.length > 1 && (
         <select data-testid="run-tab-run-pick" aria-label="Which run" className="wk-run-tab-pick" value={view.session.id}
           onChange={(e) => useRunPanel.getState().pick(sessionId, e.target.value)}>
-          {runs.map((run) => <option key={run.session.id} value={run.session.id}>{jobTitle(run.session)}</option>)}
+          {runs.map((run) => <option key={run.session.id} value={run.session.id}>{showText(jobTitle(run.session))}</option>)}
         </select>
       )}
       {/* A confirmation belongs to one run; changing the pick starts a fresh confirmation. */}
@@ -136,6 +138,7 @@ export function RunTab({ runs, allRuns = runs, sessionId, title, navigate }: {
 const NO_NAVIGATE: Navigate = () => {};
 
 function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: SessionView; allRuns: readonly SessionView[]; sessionId: string; title: string; navigate?: Navigate }): React.ReactElement {
+  const showText = useDisplayText();
   const id = view.session.id;
   const { chain } = useRunChain(view);
   const gate = useGateStore((s) => s.gates[id]);
@@ -365,7 +368,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
             <p data-testid="run-tab-delivery-outcome" className="wk-run-tab-line">{view.session.status === 'completed' ? outcomeLine(view) : 'Not delivered'}</p>
             {delivery.url !== null && <p className="wk-run-tab-line"><a data-testid="run-tab-pr" href={delivery.url} target="_blank" rel="noreferrer">Pull request{prNumber !== null ? ` #${prNumber}` : ''} ↗</a></p>}
             {delivery.pushed !== undefined && <p data-testid="run-tab-branch" className="wk-run-tab-line">Branch <code>{delivery.pushed.branch}</code></p>}
-            {delivery.reason !== null && delivery.state !== 'delivered' && <p data-testid="run-tab-delivery-reason" className="wk-run-tab-muted">{delivery.reason}</p>}
+            {delivery.reason !== null && delivery.state !== 'delivered' && <p data-testid="run-tab-delivery-reason" className="wk-run-tab-muted">{showText(delivery.reason)}</p>}
             {receipt !== null && <AssuranceReceipt receipt={receipt} passed={recorded !== null && !recorded.verified ? null : true} testId="run-tab-assurance" units={view.units} />}
             <DeliveryAssuranceLines recorded={recorded} testIdPrefix="run-tab" />
             {panelShown && <DeliverCredentialsNotice view={view} />}
@@ -384,7 +387,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
           {rulesRows.length > 0 && <RulesChecked rows={rulesRows} testId="run-tab-rules" soFar={!isTerminal(view)} />}
           {/* crew's acceptance line (WT-W3 `summary.line`; a bare string from an older read). An acceptance not passed leads;
               a passed one under an override is QE acceptance's word only, so it goes behind Technical details. */}
-          {acceptanceLine !== null && (overridden === null || acceptancePassed === false) && <p data-testid="run-tab-acceptance" className="wk-run-tab-line">{acceptanceLine}</p>}
+          {acceptanceLine !== null && (overridden === null || acceptancePassed === false) && <p data-testid="run-tab-acceptance" className="wk-run-tab-line">{showText(acceptanceLine)}</p>}
           {overridden !== null && overridden.floors !== 0 && <p data-testid="run-tab-overridden" className="wk-run-tab-line wk-prop-accept--overridden">{overriddenLine(overridden)}</p>}
           {toolOverrides.map((line, i) => <p key={i} data-testid="run-tab-tool-check-overridden" className="wk-run-tab-line wk-prop-accept--overridden">{line}</p>)}
           {acceptanceLine !== null && overridden !== null && acceptancePassed !== false && <TechDetails data-testid="run-tab-acceptance-detail" summary="What QE acceptance recorded" text={acceptanceLine} />}

@@ -7,7 +7,7 @@ import { DELIVER_HASH } from '../../board/needsYou.js';
 import { deliverUnit } from '../delivery.js';
 import { DeliverLift } from '../DeliverLift.js';
 import { deliverLift } from '../deliverLiftModel.js';
-import { useDisplayPath } from '../../hooks/useHomePath.js';
+import { useDisplayPath, useDisplayText } from '../../hooks/useHomePath.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { usePostHocDeliverStore } from '../../store/postHocDeliver.js';
 import { deliveryAssuranceOf } from '../../board/assuranceModel.js';
@@ -41,6 +41,7 @@ function writeLeft(runId: string, left: boolean): void {
  *  - Arriving with `#deliver` (the Desk's stranded row) focuses the primary button.
  */
 export function StrandedCard({ view }: { view: SessionView }): React.ReactElement {
+  const showText = useDisplayText();
   const runId = view.session.id;
   const press = usePostHocDeliverStore((s) => s.byRun[runId]);
   const card = strandedCard(view, press);
@@ -106,7 +107,7 @@ export function StrandedCard({ view }: { view: SessionView }): React.ReactElemen
       {card.error !== null && card.error.qe !== true && (
         <div data-testid="session-stranded-error" role="alert" className="wk-prop-why">
           <p className="wk-prop-bad">{card.error.headline}</p>
-          <p className="wk-prop-live" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{card.error.detail}</p>
+          <p className="wk-prop-live" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{showText(card.error.detail)}</p>
         </div>
       )}
       <div className="wk-prop-btns">

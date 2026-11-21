@@ -1,3 +1,4 @@
+import { useDisplayText } from '../../hooks/useHomePath.js';
 import { durableFloorOverrides } from '../../board/assuranceModel.js';
 import { useEffect, useId, useRef, useState } from 'react';
 import { CircleCheck, CircleX, FileText, Flag, GitCommitHorizontal, MessageCircle, Pencil, ShieldCheck, Terminal, TrendingDown, TrendingUp, Zap } from 'lucide-react';
@@ -53,6 +54,7 @@ function useDismiss(open: boolean, close: () => void, ref: React.RefObject<HTMLE
 
 /** The switch beside the run's name, then the rigor chip (the state badge sits between them in the header). */
 export function PowerSwitchButton({ view, power }: { view: SessionView; power: PowerState }): React.ReactElement {
+  const showText = useDisplayText();
   const id = view.session.id;
   const sw = powerSwitch(power, view.session.status);
   const [confirm, setConfirm] = useState(false);
@@ -89,7 +91,7 @@ export function PowerSwitchButton({ view, power }: { view: SessionView; power: P
             </button>
             <button type="button" data-testid="power-switch-keep" onClick={() => setConfirm(false)} className="wk-btn wk-btn--quiet wk-btn--sm">{next ? 'Keep it off' : 'Keep it on'}</button>
           </span>
-          {error !== null && <span role="alert" data-testid="power-switch-error" className="pm-rigor-note" style={{ display: 'block' }}>Not switched: {error}</span>}
+          {error !== null && <span role="alert" data-testid="power-switch-error" className="pm-rigor-note" style={{ display: 'block' }}>Not switched: {showText(error)}</span>}
         </span>
       )}
     </span>
@@ -113,6 +115,7 @@ export function rigorHistoryWords(c: RigorChange): string {
 
 /** The rigor history: the intake row, then every change that moved it. */
 export function RigorHistory({ power }: { power: PowerState }): React.ReactElement {
+  const showText = useDisplayText();
   const rows = power.history.filter((c) => c.to !== null && (c.direction !== 'same' || c.trigger === 'intake'));
   const intake = rows.some((c) => c.trigger === 'intake');
   return (
@@ -127,7 +130,7 @@ export function RigorHistory({ power }: { power: PowerState }): React.ReactEleme
         <div key={c.seq} className="pm-rigor" data-testid="rigor-history-row" data-trigger={c.trigger} data-direction={c.direction}>
           {c.trigger !== 'intake' && <span className="pm-rigor-arrow" aria-hidden>{c.direction === 'up' ? '↑' : c.direction === 'down' ? '↓' : '·'}</span>}
           <span className={`pm-chip pm-chip--${c.to}`}>{c.to}</span>
-          <span>{rigorHistoryWords(c)}</span>
+          <span>{showText(rigorHistoryWords(c))}</span>
         </div>
       ))}
     </div>
@@ -165,6 +168,7 @@ export function RigorChipButton({ view, power }: { view: SessionView; power: Pow
 
 /** "Raise rigor ▾": the rigors above the current one; a raise becomes a floor. Nothing here can lower it. */
 function RaiseRigor({ runId, rigor, inCard = false }: { runId: string; rigor: Rigor; inCard?: boolean }): React.ReactElement | null {
+  const showText = useDisplayText();
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<{ kind: 'idle' } | { kind: 'busy' } | { kind: 'done'; to: Rigor } | { kind: 'error'; why: string }>({ kind: 'idle' });
   const above = higherRigors(rigor);
@@ -194,7 +198,7 @@ function RaiseRigor({ runId, rigor, inCard = false }: { runId: string; rigor: Ri
         </div>
       )}
       {state.kind === 'done' && <p role="status" data-testid="rigor-raise-done" className="pm-intake-status">Raised to {state.to}. It holds from now on: rigor never goes below it.</p>}
-      {state.kind === 'error' && <p role="alert" data-testid="rigor-raise-error" className="pm-intake-status">Not raised: {state.why}</p>}
+      {state.kind === 'error' && <p role="alert" data-testid="rigor-raise-error" className="pm-intake-status">Not raised: {showText(state.why)}</p>}
     </>
   );
 }
@@ -203,6 +207,7 @@ function RaiseRigor({ runId, rigor, inCard = false }: { runId: string; rigor: Ri
 
 /** The intake QE plan, informational: it never waits on you. */
 export function IntakeCard({ runId, plan, rigor, at, live }: { runId: string; plan: RigorPlan; rigor: Rigor; at: number | null; live: boolean }): React.ReactElement {
+  const showText = useDisplayText();
   return (
     <div role="note" aria-label="QE plan" data-testid="power-intake" data-rigor={plan.rigor} className="pm-intake">
       <span className="pm-intake-icon" aria-hidden><ShieldCheck /></span>
@@ -212,12 +217,12 @@ export function IntakeCard({ runId, plan, rigor, at, live }: { runId: string; pl
         {live && <RaiseRigor runId={runId} rigor={rigor} inCard />}
         <details data-testid="power-intake-more">
           <summary>More about this</summary>
-          <p>Change score {plan.score} from the code graph (the {plan.band} band){plan.highRisk ? ', marked high risk' : ''}.{plan.reasons.length > 0 ? ` ${plan.reasons.join('; ')}.` : ''}</p>
+          <p>Change score {plan.score} from the code graph (the {plan.band} band){plan.highRisk ? ', marked high risk' : ''}.{plan.reasons.length > 0 ? ` ${showText(plan.reasons.join('; '))}.` : ''}</p>
           {plan.estimateMinutes !== null && <p>Estimate: about {plan.estimateMinutes} min of build.</p>}
-          {plan.mandatoryPhases.length > 0 && <p>Stays phased: {listWords(plan.mandatoryPhases.map((m) => `${m.phase} (${m.why})`))}.</p>}
-          {plan.risks.length > 0 && <><p>Risks:</p><ul>{plan.risks.map((r) => <li key={r}>{r}</li>)}</ul></>}
-          {plan.scenarios.length > 0 && <><p>Planned tests:</p><ul>{plan.scenarios.map((s) => <li key={s}>{s}</li>)}</ul></>}
-          {plan.floors.length > 0 && <p>Never below: {listWords(plan.floors.map((f) => `${f.rigor} (${f.why})`))}.</p>}
+          {plan.mandatoryPhases.length > 0 && <p>Stays phased: {showText(listWords(plan.mandatoryPhases.map((m) => `${m.phase} (${m.why})`)))}.</p>}
+          {plan.risks.length > 0 && <><p>Risks:</p><ul>{plan.risks.map((r) => <li key={r}>{showText(r)}</li>)}</ul></>}
+          {plan.scenarios.length > 0 && <><p>Planned tests:</p><ul>{plan.scenarios.map((s) => <li key={s}>{showText(s)}</li>)}</ul></>}
+          {plan.floors.length > 0 && <p>Never below: {showText(listWords(plan.floors.map((f) => `${f.rigor} (${f.why})`)))}.</p>}
           <p>Checkpoints re-score the diff as the work goes and can only raise rigor on their own. Nothing waits on this card.</p>
         </details>
       </div>
@@ -230,6 +235,7 @@ const ACT_ICON: Record<ActivityRow['kind'], typeof Pencil> = {
 };
 
 function ActivityRows({ rows }: { rows: readonly ActivityRow[] }): React.ReactElement {
+  const showText = useDisplayText();
   return (
     <div className="pm-acts" data-testid="power-acts" aria-label="What the orchestrator did">
       {rows.map((r, i) => {
@@ -240,10 +246,10 @@ function ActivityRows({ rows }: { rows: readonly ActivityRow[] }): React.ReactEl
             <span className="pm-act-words">
               {r.lead}
               {r.sha !== null && <> <span className="pm-sha">{r.sha}</span></>}
-              {r.code !== null && <> <code>{r.code}</code></>}
+              {r.code !== null && <> <code>{showText(r.code)}</code></>}
               {r.added !== null && <> <span className="pm-add">+{r.added}</span></>}
               {r.removed !== null && <> <span className="pm-del">−{r.removed}</span></>}
-              {r.tail !== null && <>{r.kind === 'read' ? ' ' : ' · '}{r.tail}</>}
+              {r.tail !== null && <>{r.kind === 'read' ? ' ' : ' · '}{showText(r.tail)}</>}
             </span>
             {r.at !== null && <span className="pm-act-meta">{clockTime(r.at)}</span>}
           </div>
@@ -256,10 +262,11 @@ function ActivityRows({ rows }: { rows: readonly ActivityRow[] }): React.ReactEl
 function Mark({ testId, tone, icon, head, tail, at, extra = {} }: {
   testId: string; tone: 'plain' | 'up' | 'down' | 'note' | 'paused'; icon: React.ReactNode; head: string; tail: string; at: number | null; extra?: Record<string, string>;
 }): React.ReactElement {
+  const showText = useDisplayText();
   return (
     <div role="note" data-testid={testId} {...extra} className={`wk-dmark pm-mark${tone !== 'plain' ? ` pm-mark--${tone}` : ''}`}>
       {icon}
-      <span className="wk-dmark-words"><b>{head}</b>{tail !== '' ? ` · ${tail}` : ''}</span>
+      <span className="wk-dmark-words"><b>{head}</b>{tail !== '' ? ` · ${showText(tail)}` : ''}</span>
       {at !== null && <span className="wk-dmark-go">{clockTime(at)}</span>}
     </div>
   );
@@ -267,6 +274,7 @@ function Mark({ testId, tone, icon, head, tail, at, extra = {} }: {
 
 /** The hand-off as it ran: one row per step (checks, the distinct reviewer, QE, compliance), each with its status. */
 export function HandoffCard({ round, steps, rigor, overrides = [] }: { round: number; steps: readonly HandoffStep[]; rigor: Rigor | null; overrides?: ReturnType<typeof durableFloorOverrides> }): React.ReactElement {
+  const showText = useDisplayText();
   const roster = useRoster();
   const name = (cli: string): string => seatResponder(cli, roster).name;
   return (
@@ -277,9 +285,9 @@ export function HandoffCard({ round, steps, rigor, overrides = [] }: { round: nu
         return (
           <div key={s.step} role="listitem" data-testid="power-handoff-row" data-step={s.step} data-status={s.status} className="pm-hrow">
             <span aria-hidden className={`pm-hrow-dot${w.initial === null ? ' pm-hrow-dot--icon' : ''}`}>{w.initial ?? (s.step === 'checks' ? <Terminal /> : <ShieldCheck />)}</span>
-            <p className="pm-hrow-who">{w.who} <span>· {w.role}</span></p>
+            <p className="pm-hrow-who">{showText(w.who)} <span>· {w.role}</span></p>
             <span data-testid="power-handoff-result" className={`pm-res pm-res--${w.tone}`}>{w.result}</span>
-            {w.what !== null && w.what !== '' && <p className="pm-hrow-what">{w.what}</p>}
+            {w.what !== null && w.what !== '' && <p className="pm-hrow-what">{showText(w.what)}</p>}
           </div>
         );
       })}
@@ -376,6 +384,7 @@ function unitForStep(view: SessionView, ord: number | null, kind: HandoffStep['s
  * high rigor, or stop, as a guided ask: four cards, the engine's recommendation marked and preselected, Stop asks why.
  */
 export function PowerPauseCard({ view, power }: { view: SessionView; power: PowerState }): React.ReactElement {
+  const showText = useDisplayText();
   const id = view.session.id;
   const pause = power.pause;
   const cause = pauseCause(power);
@@ -441,8 +450,8 @@ export function PowerPauseCard({ view, power }: { view: SessionView; power: Powe
       <p className="wk-dock-eyebrow pm-pause-eyebrow" data-testid="power-pause-eyebrow">{cause.eyebrow}{pause !== null ? ` · checkpoint ${pause.checkpoint}` : ''}</p>
       <h2 className="wk-prop-text wk-gate2-q" data-testid="power-pause-question">{cause.question}</h2>
       <p className="wk-prop-why wk-gate2-p">{who} paused at the end of its turn. Recommended: {PAUSE_CHOICES[recommended].label.toLowerCase()}.</p>
-      {reasons.length > 0 && <ul className="pm-pause-reasons" data-testid="power-pause-reasons">{reasons.map((r) => <li key={r}>{pauseReasonWords(r)}</li>)}</ul>}
-      {cause.raw !== null && <details className="pm-pause-more" data-testid="power-pause-more"><summary>More about this</summary>{cause.raw}</details>}
+      {reasons.length > 0 && <ul className="pm-pause-reasons" data-testid="power-pause-reasons">{reasons.map((r) => <li key={r}>{showText(pauseReasonWords(r))}</li>)}</ul>}
+      {cause.raw !== null && <details className="pm-pause-more" data-testid="power-pause-more"><summary>More about this</summary>{showText(cause.raw)}</details>}
       <div className="wk-gate2-decide">
       {busy !== null ? (
         // Answered: one plain line where the cards were, with the undo window's countdown (DES-GUIDED-CHAT §3).
@@ -464,7 +473,7 @@ export function PowerPauseCard({ view, power }: { view: SessionView; power: Powe
       </div>
       {/* studio 0.16.4: the answer's countdown, what happens, Undo and the result, on this card. */}
       <InlineUndo host="power-pause" keys={[`power:${id}`]} />
-      {error !== null && <p role="alert" data-testid="power-pause-error" className="pm-pause-note">Not sent: {error}</p>}
+      {error !== null && <p role="alert" data-testid="power-pause-error" className="pm-pause-note">Not sent: {showText(error)}</p>}
     </div>
   );
 }

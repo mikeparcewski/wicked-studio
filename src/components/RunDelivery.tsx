@@ -494,7 +494,7 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
                 className="font-mono break-words whitespace-pre-wrap"
                 style={{ color: 'var(--status-fail)' }}
               >
-                {postHoc.error}
+                {showText(postHoc.error)}
               </p>
             </div>
           )}

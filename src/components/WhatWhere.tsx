@@ -100,7 +100,7 @@ export function WhatWhere({ model, provenance, retriedAs, onSelectRun }: Props):
           {...(base.note !== null ? { title: showText(base.note) } : {})}
         />
       )}
-      <Row label="roster" value={session.clis.length > 0 ? session.clis.join(', ') : '—'} mono />
+      <Row label="roster" value={session.clis.length > 0 ? showText(session.clis.join(', ')) : '—'} mono />
       <Row label="entity" value={session.entity_mode} />
       {/* Brainstorm idea 13: the trust receipt — a low-risk preset run's route, trusted in one move. */}
       <TrustReceipt session={session} />

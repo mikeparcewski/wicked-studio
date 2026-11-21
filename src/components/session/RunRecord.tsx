@@ -64,13 +64,13 @@ export function RunStory({ view, navigate, events = EMPTY }: {
         {/* The status sentence already says "Cancelled"; the story says only WHY, when it is known. */}
         {engineStopped && <p className="wk-session-run-story-line">It was stopped automatically: a step ran past its time limit.</p>}
         {shownStop !== null && (
-          <p className="wk-session-run-story-note">{shownStop.byPerson ? 'You stopped it' : 'It was stopped'}{shownStop.reason !== null ? <>: “{shownStop.reason}”</> : '; no reason was given.'}</p>
+          <p className="wk-session-run-story-note">{shownStop.byPerson ? 'You stopped it' : 'It was stopped'}{shownStop.reason !== null ? <>: “{show(shownStop.reason)}”</> : '; no reason was given.'}</p>
         )}
         {shownStop === null && rejectNote !== null && (
-          <p data-testid="failure-reject-note" className="wk-session-run-story-note">You rejected it: “{rejectNote}”</p>
+          <p data-testid="failure-reject-note" className="wk-session-run-story-note">You rejected it: “{show(rejectNote)}”</p>
         )}
         {sendBack !== null && (
-          <p data-testid="failure-send-back-note" className="wk-session-run-story-note">Your last send-back to the creator (acted on — not a rejection): “{sendBack}”</p>
+          <p data-testid="failure-send-back-note" className="wk-session-run-story-note">Your last send-back to the creator (acted on — not a rejection): “{show(sendBack)}”</p>
         )}
         {/* The door to the other stopped runs rides with a story; alone it is a stray link. */}
         {navigate !== undefined && (shownStop !== null || engineStopped || rejectNote !== null || sendBack !== null) && <AllRunsLink navigate={navigate} filter="cancelled" />}
@@ -143,10 +143,11 @@ export function RunCheckersNote({ events }: { events: readonly CoreEvent[] }): R
 
 /** wicked-crew#1566: the run may have started behind the remote (the daemon could not fetch origin): one quiet warning line. */
 export function RunBaseNote({ runId }: { runId: string }): React.ReactElement | null {
+  const showText = useDisplayText();
   useEffect(() => { useProvenanceStore.getState().load(runId); }, [runId]);
   const note = useProvenanceStore((s) => s.baseNotices[runId] ?? null);
   if (note === null) return null;
-  return <p data-testid="run-base-unfetched" role="note" className="wk-session-base-note">{note}</p>;
+  return <p data-testid="run-base-unfetched" role="note" className="wk-session-base-note">{showText(note)}</p>;
 }
 
 /**

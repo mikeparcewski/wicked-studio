@@ -1,3 +1,4 @@
+import { useDisplayText } from '../../hooks/useHomePath.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { Ask, AskAnswer } from '../../api/ask.js';
@@ -48,6 +49,7 @@ export function InflightCheck({ runId, ord, attempt, kind, startedAt, now, seatN
   /** What Stop stops, in words ("this answer", "the job"). */
   label: string;
 }): React.ReactElement | null {
+  const showText = useDisplayText();
   const key = `${runId}:${ord}:${attempt}`;
   const threshold = checkAfterMs(kind);
   const minutes = Math.round(threshold / 60_000);
@@ -198,11 +200,11 @@ export function InflightCheck({ runId, ord, attempt, kind, startedAt, now, seatN
             {cost !== null ? ` · this check: ${cost}` : ''}
           </span>
         </p>
-        {record.doing !== null && <p data-testid="inflight-check-doing" className="wk-ask-q">{record.doing}</p>}
-        {record.progress !== null && <p data-testid="inflight-check-progress" className="wk-ask-sub">{record.progress}</p>}
+        {record.doing !== null && <p data-testid="inflight-check-doing" className="wk-ask-q">{showText(record.doing)}</p>}
+        {record.progress !== null && <p data-testid="inflight-check-progress" className="wk-ask-sub">{showText(record.progress)}</p>}
         {record.evidence.length > 0 && (
           <ul data-testid="inflight-check-evidence" className="wk-inflight-evidence">
-            {record.evidence.slice(0, 4).map((e, i) => <li key={i}>{e}</li>)}
+            {record.evidence.slice(0, 4).map((e, i) => <li key={i}>{showText(e)}</li>)}
           </ul>
         )}
         {record.why !== null && <p data-testid="inflight-check-why" className="wk-inflight-why">{record.why}</p>}

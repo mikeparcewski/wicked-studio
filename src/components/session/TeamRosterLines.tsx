@@ -1,3 +1,4 @@
+import { useDisplayText } from '../../hooks/useHomePath.js';
 import { useMemo } from 'react';
 import type { RosterSeat } from '../../api/types.js';
 import { seatLabel } from '../../board/seatNames.js';
@@ -28,6 +29,7 @@ export function watchLine(monitors: number, watched: number): string {
 }
 
 export function TeamRosterView({ team, roster }: { team: TeamRoster; roster: readonly RosterSeat[] | null | undefined }): React.ReactElement | null {
+  const showText = useDisplayText();
   const name = (key: string): string => {
     const seat = roster?.find((s) => s.key === key);
     return seat === undefined ? key : seatLabel(seat);
@@ -61,7 +63,7 @@ export function TeamRosterView({ team, roster }: { team: TeamRoster; roster: rea
               className={m.status === 'failed' ? 'wk-run-tab-member wk-run-tab-member--failed' : 'wk-run-tab-member'}>
               {m.seat === null ? 'No monitor' : name(m.seat)}{' '}
               <span className="wk-run-tab-muted">{m.status === 'watching' ? 'watching' : 'could not watch'}</span>
-              {m.error !== null && <span data-testid="run-tab-team-member-error" className="wk-run-tab-member-error">{m.error}</span>}
+              {m.error !== null && <span data-testid="run-tab-team-member-error" className="wk-run-tab-member-error">{showText(m.error)}</span>}
             </li>
           ))}
         </ul>
