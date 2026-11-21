@@ -199,14 +199,26 @@ def open_voice(page) -> None:
     page.locator('[data-testid="voice-modal"]').wait_for(timeout=10000)
 
 
+def type_in_modal(page, words: str) -> None:
+    """studio#1147: before Yes the mic is off, so the modal hears typed words only."""
+    page.locator('[data-testid="voice-modal-type-input"]').fill(words)
+    page.locator('[data-testid="voice-modal-type"] button[type="submit"]').click()
+
+
+def tap_yes(page) -> None:
+    page.locator('[data-testid="voice-entry-ask"] [data-ask-option="yes"]').click()
+    page.locator('[data-testid="voice-ask-mode"]').wait_for(timeout=15000)
+
+
 def stage(page, upto: str, w: int, theme: str) -> None:
     """Drive one page to a moment for its screenshot (the look pass)."""
     open_voice(page)
-    page.wait_for_function("() => document.querySelector('[data-testid=voice-mic-state]')?.textContent.includes('listening only')", timeout=10000)
+    page.wait_for_function("() => document.querySelector('[data-testid=voice-mic-state]')?.textContent.includes('not listening yet')", timeout=10000)
     shot(page, f"voice-modal-ask-{w}-{theme}.png")
-    say(page, "What happens to my voice? Is it recorded?", "() => !!document.querySelector('[data-testid=voice-modal-thread]')")
+    type_in_modal(page, "What happens to my voice? Is it recorded?")
+    page.locator('[data-testid="voice-modal-thread"]').wait_for(timeout=10000)
     shot(page, f"voice-modal-answer-{w}-{theme}.png")
-    say(page, "yes", "() => !!document.querySelector('[data-testid=voice-ask-mode]')")
+    tap_yes(page)
     page.locator('[data-testid="voice-widget-builtin.load"]').wait_for(timeout=10000)
     shot(page, f"voice-mode-{w}-{theme}.png")
     say(page, "streaming", "() => document.querySelector('[data-testid=voice-mode]')?.textContent === '● Streaming'")
@@ -235,18 +247,20 @@ with sync_playwright() as p:
           and page.locator('[data-testid="voice-wave"]').count() == 1, box=box)
     try:
         page.wait_for_function("() => window.__said.includes('Do you want to enter voice mode?')", timeout=10000)
-        page.wait_for_function("() => document.querySelector('[data-testid=voice-mic-state]')?.textContent.includes('listening only')", timeout=10000)
+        # studio#1147: asked aloud, and the mic is NOT on before the answer.
+        page.wait_for_function("() => document.querySelector('[data-testid=voice-mic-state]')?.textContent.includes('not listening yet')", timeout=10000)
     except Exception:  # noqa: BLE001
-        fail("1b-asks-aloud-mic-on", {"said": page.evaluate("() => window.__said"), "mic": page.locator('[data-testid="voice-mic-state"]').inner_text(),
+        fail("1b-asks-aloud-mic-off", {"said": page.evaluate("() => window.__said"), "mic": page.locator('[data-testid="voice-mic-state"]').inner_text(),
                                      "setup": page.locator('[data-testid="voice-setup"]').all_inner_texts(), "errors": errors[:3]})
 
-    say(page, "What happens to my voice? Is it recorded?", "() => !!document.querySelector('[data-testid=voice-modal-thread]')")
+    type_in_modal(page, "What happens to my voice? Is it recorded?")
+    page.locator('[data-testid="voice-modal-thread"]').wait_for(timeout=10000)
     thread = page.locator('[data-testid="voice-modal-thread"]').inner_text()
     page.wait_for_function("() => window.__said.filter((s) => s === 'Do you want to enter voice mode?').length >= 2", timeout=10000)
-    check("2-answers-then-asks", "Nothing is recorded or sent anywhere" in thread and len(wavs) >= 1 and all(w["ok"] for w in wavs),
-          thread=thread, wavs=wavs[-2:])
+    # Nothing was heard before Yes: no audio went to speech-to-text.
+    check("2-answers-then-asks", "Nothing is recorded or sent anywhere" in thread and len(wavs) == 0, thread=thread, wavs=wavs[-2:])
 
-    say(page, "yes", "() => !!document.querySelector('[data-testid=voice-ask-mode]')")
+    tap_yes(page)
     page.locator('[data-testid="voice-widget-builtin.load"]').wait_for(timeout=10000)
     tiles = page.locator('[data-testid^="voice-widget-builtin."]').evaluate_all("(els) => els.map((e) => e.dataset.widget)")
     trans = page.locator('[data-testid="voice-trans"]').bounding_box() or {"width": 0}

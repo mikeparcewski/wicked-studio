@@ -185,8 +185,10 @@ def enter(page) -> None:
     page.wait_for_timeout(1500)
     page.keyboard.press("Alt+KeyV")
     page.locator('[data-testid="voice-modal"]').wait_for(timeout=10000)
-    page.wait_for_function("() => document.querySelector('[data-testid=voice-mic-state]')?.textContent.includes('listening only')", timeout=10000)
-    say(page, "yes", "() => !!document.querySelector('[data-testid=voice-ask-mode]')")
+    # studio#1147: the mic starts only after Yes, so the modal is answered by a tap.
+    page.wait_for_function("() => document.querySelector('[data-testid=voice-mic-state]')?.textContent.includes('not listening yet')", timeout=10000)
+    page.locator('[data-testid="voice-entry-ask"] [data-ask-option="yes"]').click()
+    page.locator('[data-testid="voice-ask-mode"]').wait_for(timeout=15000)
     say(page, "streaming", "() => document.querySelector('[data-testid=voice-mode]')?.textContent === '● Streaming'")
 
 
