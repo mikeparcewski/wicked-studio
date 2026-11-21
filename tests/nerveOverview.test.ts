@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { checkedWords } from '../src/components/nerve/NerveOverview.js';
 import { diskReading, normalizeSnapshot, type SystemAttention } from '../src/api/system.js';
 import { notSetUp, notSetUpWords, systemSummary } from '../src/board/nerveCenter.js';
 import {
@@ -70,7 +71,7 @@ describe('the sections', () => {
     expect(claude).toMatchObject({ name: 'Claude Code', state: 'Ready', tone: 'ok', line: '71 steps · 79% pass', tab: 'clis' });
     expect(opencode).toMatchObject({ state: 'Not signed in', tone: 'quiet', signIn: 'opencode' });
     expect(copilot!.state).toMatch(/^Back at /);
-    expect(copilot).toMatchObject({ tone: 'warn', line: 'Out of quota' });
+    expect(copilot).toMatchObject({ tone: 'quiet', line: 'Out of quota' });
     expect(copilot!.signIn).toBeUndefined();
   });
 
@@ -121,7 +122,6 @@ describe('free disk, free now and available (operator 2026-10-29: Finder said 70
     expect(diskReading({ freeBytes: 6e9, totalBytes: 460e9 })!.availableBytes).toBeNull();
   });
   it('Check again stamps when crew was read: just now, then minutes', async () => {
-    const { checkedWords } = await import('../src/components/nerve/NerveOverview.js');
     expect(checkedWords(1_000_000, 1_000_000 + 20_000)).toBe('Checked just now');
     expect(checkedWords(1_000_000, 1_000_000 + 3 * 60_000)).toBe('Checked 3 min ago');
     expect(checkedWords(null, 1)).toBeNull();
@@ -166,4 +166,30 @@ describe('a CLI nobody set up (operator 2026-11-05)', () => {
     expect(notSetUpWords(LIVE.clis, [att('cli:one-reviewer', 'clis')])).toBeNull();
     expect(systemSummary(att('cli:one-reviewer', 'clis', 'yellow', { text: 'Sign in a second agent so a different one can review' }))).toBe('sign in a second helper');
   });
+});
+
+it('studio#1004: a benched helper is quiet and needs no look', () => {
+  const benched = cliTile(LIVE.clis[2]!);
+  expect(benched.tone).toBe('quiet');
+  expect(tilesNeedingALook([benched])).toBe(0);
+});
+
+it('studio#936: normalizes the rebuild action and seat image progress', () => {
+  const rebuild = { running: true, rc: null, tail: ['building codex'], error: null };
+  const s = normalizeSnapshot({ attention: [{ id: 'infra:seat_images', source: 'infra', action: { kind: 'rebuild_seat_images' } }], infra: [{ key: 'seat_images', details: { rebuild } }, { key: 'disk' }] });
+  expect(s.attention[0]?.action).toMatchObject({ kind: 'rebuild-seat-images', target: '' });
+  expect(s.infra[0]?.rebuild).toEqual(rebuild);
+  expect(s.infra[1]?.rebuild).toBeNull();
+});
+
+it('studio#1096: floor cache words name only the largest measured store', async () => {
+  const { floorCacheWords } = await import('../src/board/nerveOverview.js');
+  const cache = { path: '~/.cache/floors', bytes: 17.7e9, totalCapBytes: 20e9, repoCapBytes: 2e9, idleTtlSecs: 3600, repos: [], logs: { path: '~/logs', bytes: 1e9, capBytes: 2e9 } };
+  expect(floorCacheWords({ stores: [], floorCache: cache })).toBe('Repo-checks floor cache: 18 GB of its 20 GB cap (~/.cache/floors)');
+  expect(floorCacheWords({ stores: [{ name: 'db', path: '~/db', bytes: 18e9 }], floorCache: cache })).toBeNull();
+  expect(floorCacheWords({ stores: [], floorCache: { ...cache, logs: { ...cache.logs, bytes: 18e9 } } })).toBeNull();
+  expect(floorCacheWords({ stores: [], floorCache: { ...cache, bytes: 0 } })).toBeNull();
+  expect(floorCacheWords({ stores: [], floorCache: null })).toBeNull();
+  expect(floorCacheWords({ stores: [], floorCache: { error: 'unread' } })).toBeNull();
+  expect(floorCacheWords({ stores: [] })).toBeNull();
 });

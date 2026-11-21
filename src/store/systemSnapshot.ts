@@ -109,7 +109,7 @@ let queued: Promise<void> | null = null;
 /** Bumped by every Re-check: a read started under an older generation is superseded (not shown). */
 let generation = 0;
 
-export const useSystemStore = create<SystemStore>((set) => ({
+export const useSystemStore = create<SystemStore>((set, get) => ({
   mode: 'unknown',
   health: null,
   healthAt: null,
@@ -130,7 +130,11 @@ export const useSystemStore = create<SystemStore>((set) => ({
     const mine = generation;
     set({ reading: true });
     inflight = readTick()
-      .then((answer) => { if (mine === generation) set(answer); })
+      .then(async (answer) => {
+        // studio#931: a fresh daemon gets one more read before its first failure is shown.
+        if ((answer.healthError != null || answer.snapshotError != null) && get().healthAt === null && mine === generation) answer = await readTick();
+        if (mine === generation) set(answer);
+      })
       .finally(() => { inflight = null; set({ reading: queued !== null }); });
     return inflight;
   },
