@@ -178,9 +178,12 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     const seq = ++reposSeq.current;
     Promise.all([api.listRepos(), api.listRuns()])
       .then(([{ repos: rs }, { runs: rv }]) => {
-        // The needs-you queue's repo-graph input rides this read (a deposit, zero requests).
-        useNeedsSources.getState().depositRepos(rs);
-        if (seq === reposSeq.current) setRepos(rs);
+        // The needs-you queue's repo-graph input rides this read (a deposit, zero requests). A read superseded by a newer
+        // one deposits nothing either (codex r1 on #1284: an older list would overwrite the shared one).
+        if (seq === reposSeq.current) {
+          useNeedsSources.getState().depositRepos(rs);
+          setRepos(rs);
+        }
         setRuns(rv);
       })
       .catch((err: unknown) => setError(err))
@@ -205,8 +208,9 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     useRepoKnowledge.getState().ensure([...ended], true);
     const seq = ++reposSeq.current;
     void api.listRepos().then(({ repos: rs }) => {
+      if (seq !== reposSeq.current) return;
       useNeedsSources.getState().depositRepos(rs);
-      if (seq === reposSeq.current) setRepos(rs);
+      setRepos(rs);
     }).catch(() => { /* a failed re-read keeps the list shown; the next finish or a reload reads it again */ });
   }, [rawRuns, loading]);
 

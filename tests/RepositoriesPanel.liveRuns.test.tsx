@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import type { RepoEntry, SessionView } from '../src/api/types.js';
 import { makeView } from './factories.js';
+import { REPO_INTREE_NO_LIVE } from './fixtures/wave2.js';
 
 /**
  * studio#940 item 1: Repositories left open follows App's live run list, as a repository's page does (studio#1161).
@@ -17,6 +18,8 @@ const otherRunning = makeView({ id: 'x-1', repo_ref: 'other', workflow_id: 'onbo
 const listRepos = vi.fn(() => Promise.resolve({ repos: [repo('billing'), repo('other')] }));
 // The page's own read knows no run: everything on the rows comes from the live list.
 const listRuns = vi.fn((): Promise<{ runs: SessionView[] }> => Promise.resolve({ runs: [] }));
+/** A repository's code-map size read (the knowledge store's). */
+const getGraphKindsForRepo = vi.fn((id: string) => { void id; return Promise.resolve({ kinds: [] }); });
 
 vi.mock('../src/api/client.js', () => ({
   api: {
@@ -24,16 +27,27 @@ vi.mock('../src/api/client.js', () => ({
     listRuns: () => listRuns(),
     listProjects: () => Promise.resolve({ projects: [] }),
     listApps: () => Promise.resolve({ apps: [] }),
+    getGraphKindsForRepo: (id: string) => getGraphKindsForRepo(id),
+    listRequirements: () => Promise.reject(new Error('no requirements in this suite')),
   },
 }));
 
 const { RepositoriesPanel } = await import('../src/components/RepositoriesPanel.js');
+const { resetRepoKnowledge } = await import('../src/store/repoKnowledge.js');
+const { useNeedsSources } = await import('../src/store/needsSources.js');
 
 const ui = (liveRuns: readonly SessionView[]): React.ReactElement => <RepositoriesPanel navigate={() => {}} liveRuns={liveRuns} />;
-const stateOf = (id: string): string | null =>
-  screen.getAllByTestId('repo-card').find((c) => c.getAttribute('data-repo-id') === id)?.getAttribute('data-state') ?? null;
+const attrOf = (id: string, attr: string): string | null =>
+  screen.getAllByTestId('repo-card').find((c) => c.getAttribute('data-repo-id') === id)?.getAttribute(attr) ?? null;
+const stateOf = (id: string): string | null => attrOf(id, 'data-state');
+const kindsReadsOf = (id: string): number => getGraphKindsForRepo.mock.calls.filter((c) => c[0] === id).length;
+const deferred = <T,>(): { promise: Promise<T>; resolve: (v: T) => void } => {
+  let resolve!: (v: T) => void;
+  const promise = new Promise<T>((r) => { resolve = r; });
+  return { promise, resolve };
+};
 
-beforeEach(() => { listRepos.mockClear(); listRuns.mockClear(); });
+beforeEach(() => { listRepos.mockClear(); listRuns.mockClear(); getGraphKindsForRepo.mockClear(); resetRepoKnowledge(); });
 afterEach(cleanup);
 
 describe('Repositories follows the live run list (studio#940)', () => {
@@ -71,5 +85,43 @@ describe('Repositories follows the live run list (studio#940)', () => {
     expect(stateOf('billing')).toBe('onboarding');
     rerender(ui([]));
     await waitFor(() => expect(stateOf('billing')).toBe('never'));
+  });
+
+  it('codex r1: the refresh lands the repository’s new findings, and re-reads its code-map size at once', async () => {
+    const run = makeView({ id: 'o-s', repo_ref: 'wicked-studio', workflow_id: 'onboarding', status: 'executing', problem: 'Onboard wicked-studio' });
+    const fin = makeView({ id: 'o-s', repo_ref: 'wicked-studio', workflow_id: 'onboarding', status: 'completed', problem: 'Onboard wicked-studio' });
+    listRepos
+      .mockImplementationOnce(() => Promise.resolve({ repos: [{ ...REPO_INTREE_NO_LIVE, findings: [] }] }))
+      .mockImplementationOnce(() => Promise.resolve({ repos: [REPO_INTREE_NO_LIVE] }));
+    const { rerender } = render(ui([run]));
+    await screen.findAllByTestId('repo-card');
+    await waitFor(() => expect(kindsReadsOf('wicked-studio')).toBe(1));
+    expect(attrOf('wicked-studio', 'data-graph')).not.toBe('missing');
+    rerender(ui([fin]));
+    // The finished index's findings (no live graph) are shown, not the list read at mount.
+    await waitFor(() => expect(attrOf('wicked-studio', 'data-graph')).toBe('missing'));
+    // Its code-map size is read again now, not at the next minute's refresh.
+    await waitFor(() => expect(kindsReadsOf('wicked-studio')).toBe(2));
+  });
+
+  it('codex r1: two refreshes answered out of order: the older answer changes neither the list nor the shared one', async () => {
+    const other = makeView({ id: 'x-1', repo_ref: 'other', workflow_id: 'onboarding', status: 'executing', problem: 'Onboard other' });
+    const otherDone = makeView({ id: 'x-1', repo_ref: 'other', workflow_id: 'onboarding', status: 'completed', problem: 'Onboard other' });
+    const first = deferred<{ repos: RepoEntry[] }>();
+    const second = deferred<{ repos: RepoEntry[] }>();
+    const { rerender } = render(ui([running, other]));
+    await screen.findAllByTestId('repo-card');
+    listRepos.mockImplementationOnce(() => first.promise).mockImplementationOnce(() => second.promise);
+    rerender(ui([done, other]));
+    await waitFor(() => expect(listRepos).toHaveBeenCalledTimes(2));
+    rerender(ui([done, otherDone]));
+    await waitFor(() => expect(listRepos).toHaveBeenCalledTimes(3));
+    // The newer read (asked second) answers first, with a repository added since; the older one answers last.
+    second.resolve({ repos: [repo('billing'), repo('other'), repo('added')] });
+    await waitFor(() => expect(attrOf('added', 'data-state')).toBe('never'));
+    first.resolve({ repos: [repo('billing'), repo('other')] });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(attrOf('added', 'data-state')).toBe('never');
+    expect(useNeedsSources.getState().repos?.map((r) => r.id)).toEqual(['billing', 'other', 'added']);
   });
 });
