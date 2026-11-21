@@ -151,7 +151,7 @@ export function NewAppChat({
       {heading && (
         <div className="wk-newapp-head">
           <h2 className="wk-newapp-title">Make a new app</h2>
-          <span className="wk-newapp-sub">Say what it should show: your data sources{knows ? ', or what this project knows (its documents, memories, steering rules and data shapes)' : ''}. An agent builds it, another reviews it, and it opens here.</span>
+          <span className="wk-newapp-sub">Say what it should show: the data sources its project may use{knows ? ', or what this project knows (its documents, memories, steering rules and data shapes)' : ''}. A source in no project needs one first, on Data sources. A helper builds it, another reviews it, and it opens here.</span>
         </div>
       )}
       {before}

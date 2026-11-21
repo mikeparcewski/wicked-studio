@@ -25,8 +25,8 @@ export function linkedIssuesLine(preview: LinkedIssuesPreviewResponse): string |
 const NOT_READ: Record<string, string> = {
   not_linked: 'not in a tracker linked to this project or its repositories',
   ambiguous: 'two linked trackers have this key: pick one below',
-  hidden: 'the tool’s Agents switches keep this project out',
-  query_off: 'agents can’t read issues from that tool (its “read issues” switch is off)',
+  hidden: 'the tool’s Helpers switches keep this project out',
+  query_off: 'helpers can’t read issues from that tool (its “read issues” switch is off)',
   unavailable: 'the tool couldn’t be reached',
   not_found: 'the tracker has no such issue',
 };

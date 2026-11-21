@@ -82,14 +82,17 @@ export function AgentsOffWarning({ who, link, navigate }: { who: string; link: T
   return (
     <span data-testid="tracker-agents-off">
       <AlertTriangle size={13} aria-hidden />
-      <span>{who}’s agents can’t use {link.source} yet.{' '}
-        <a className="wk-link" href={href} onClick={(e) => { e.preventDefault(); navigate(href); }}>Open its Agents box</a></span>
+      <span>{who}’s helpers can’t use {link.source} yet.{' '}
+        <a className="wk-link" href={href} onClick={(e) => { e.preventDefault(); navigate(href); }}>Open its Helpers switches</a></span>
     </span>
   );
 }
 
-/** The registered PM sources (name and system), for the Link a tracker picker; `null` while reading. */
-export function usePmSources(enabled: boolean): { sources: Array<{ name: string; system: PmSystem; server: McpServer }> | null; error: string | null } {
+/**
+ * The registered PM sources (name and system), for the Link a tracker picker; `null` while reading. A new `round`
+ * reads them again (the last answer stays shown until the new one lands).
+ */
+export function usePmSources(enabled: boolean, round = 0): { sources: Array<{ name: string; system: PmSystem; server: McpServer }> | null; error: string | null } {
   const [state, setState] = useState<{ sources: Array<{ name: string; system: PmSystem; server: McpServer }> | null; error: string | null }>({ sources: null, error: null });
   useEffect(() => {
     if (!enabled) return undefined;
@@ -106,6 +109,6 @@ export function usePmSources(enabled: boolean): { sources: Array<{ name: string;
       (e: unknown) => { if (live) setState({ sources: [], error: e instanceof Error ? e.message : String(e) }); },
     );
     return () => { live = false; };
-  }, [enabled]);
+  }, [enabled, round]);
   return state;
 }

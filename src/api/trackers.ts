@@ -216,6 +216,16 @@ export const systemName = (s: PmSystem): string => SYSTEM_NAMES[s];
 export const systemShort = (s: PmSystem): string => SYSTEM_SHORT[s];
 export const systemBadge = (s: PmSystem): string => SYSTEM_BADGES[s];
 
+/**
+ * (studio#1012) A repository's own `owner/name` on GitHub, read from its git URL (https, ssh or scp form, userinfo
+ * ignored), or `null` for any other host or shape. The tracker picker offers it first on that repository.
+ */
+export function githubSlugOf(gitUrl: string | null | undefined): string | null {
+  if (typeof gitUrl !== 'string') return null;
+  const m = /^(?:(?:https?|ssh|git):\/\/(?:[^@/\s]+@)?|[^@/\s:]+@)github\.com(?::(?:22|443))?[:/]([A-Za-z0-9-]+)\/([A-Za-z0-9._-]+?)(?:\.git)?\/?$/i.exec(gitUrl.trim());
+  return m === null ? null : `${m[1]}/${m[2]}`;
+}
+
 /** "BILL · Billing" for a Jira project; a GitHub repo's `owner/repo` (its label when it says more); a GitLab or ADO project's name. */
 export function trackerTitle(t: { system: PmSystem; key: string; label: string }): string {
   const label = t.label.trim();

@@ -87,8 +87,8 @@ describe('the Agents box on a saved source', () => {
     expect(screen.getByTestId('source-agent-controls-query').getAttribute('aria-checked')).toBe('false');
     expect(screen.getByTestId('source-agent-controls-query-state').textContent).toBe('off');
     expect(screen.getByTestId('source-agent-controls-consequence').textContent).toBe(AGENT_QUERY_CONSEQUENCE);
-    expect(AGENT_QUERY_CONSEQUENCE).toContain("go to the agent's model provider");
-    expect(screen.getByTestId('source-agent-controls-projects-state').textContent).toMatch(/No project yet: no agent can use it/);
+    expect(AGENT_QUERY_CONSEQUENCE).toContain("go to the helper's model provider");
+    expect(screen.getByTestId('source-agent-controls-projects-state').textContent).toMatch(/No project yet: no helper can use it/);
     await waitFor(() => expect(screen.getByTestId('source-agent-controls-recent-none')).toBeTruthy());
     // "Unfiled" is not a project to tick: "Every project" covers jobs and chats in none.
     await waitFor(() => expect(screen.getByTestId('source-agent-controls-project-proj_support')).toBeTruthy());
@@ -169,7 +169,7 @@ describe('the Agents box on a saved source', () => {
     render(<Box />);
     fireEvent.click(screen.getByTestId('source-agent-controls-see'));
     const e403 = await screen.findByTestId('source-agent-controls-error');
-    expect(e403.textContent).toBe('Only a person signed in as an operator can change what agents may do with a source. Nothing changed.');
+    expect(e403.textContent).toBe('Only a person signed in as an operator can change what helpers may do with a source. Nothing changed.');
     expect(e403.textContent).not.toMatch(/agent\/operator|daemon refused/);
     expect(screen.getByTestId('source-agent-controls-see').getAttribute('aria-checked')).toBe('true');
     await waitFor(() => expect(heard.settled).toEqual(['support-pg']));
@@ -179,7 +179,7 @@ describe('the Agents box on a saved source', () => {
     fireEvent.click(screen.getByTestId('source-agent-controls-query'));
     fireEvent.click(screen.getByTestId('source-agent-controls-confirm-on'));
     await waitFor(() => expect(screen.getByTestId('source-agent-controls-error').textContent).toBe(
-      'Agents can query only a source whose structure they can see. Turn on “Agents can see this structure” first. Nothing changed.',
+      'Helpers can query only a source whose structure they can see. Turn on “Helpers can see this structure” first. Nothing changed.',
     ));
     // The shown "see on" was older than crew's: the page reads crew again.
     await waitFor(() => expect(heard.settled).toEqual(['support-pg', 'support-pg']));
@@ -219,7 +219,7 @@ describe('the Agents box on a saved source', () => {
     putImpl = () => Promise.reject(new ApiError(404, 'not found'));
     await waitFor(() => expect(screen.getByTestId('source-agent-controls-see')).not.toBeDisabled());
     fireEvent.click(screen.getByTestId('source-agent-controls-see'));
-    await waitFor(() => expect(screen.getByTestId('source-agent-controls-error').textContent).toBe('This crew can’t change agent switches yet: update crew. Nothing changed.'));
+    await waitFor(() => expect(screen.getByTestId('source-agent-controls-error').textContent).toBe('This crew can’t change helper switches yet: update crew. Nothing changed.'));
     heard.stop();
   });
 
@@ -313,7 +313,7 @@ describe('NEGATIVE CONTROL: no Agents box without crew\'s `agents` field', () =>
       await screen.findByTestId('source-agents-see');
       expect(screen.queryByTestId('source-agent-controls')).toBeNull();
       // Present but unreadable is not an older crew: "What agents see" claims nothing either way (codex r2 F1).
-      expect(screen.getByTestId('source-agents-see').textContent).toMatch(/Not known here: studio couldn’t read crew’s agent switches/);
+      expect(screen.getByTestId('source-agents-see').textContent).toMatch(/Not known here: studio couldn’t read crew’s helper switches/);
       expect(screen.getByTestId('source-agents-see').textContent).not.toMatch(/No values from rows/);
       cleanup();
     }
@@ -334,7 +334,7 @@ describe('NEGATIVE CONTROL: no Agents box without crew\'s `agents` field', () =>
   it('with the field: the box, and "What agents see" follows its switches', async () => {
     sheet(pgServer({ agents: DEFAULTS } as never));
     await screen.findByTestId('source-agent-controls');
-    expect(screen.getByTestId('source-agents-see').textContent).toMatch(/agents can’t query it unless you turn that on below/);
+    expect(screen.getByTestId('source-agents-see').textContent).toMatch(/helpers can’t query it unless you turn that on below/);
     cleanup();
     sheet(pgServer({ agents: { ...DEFAULTS, query: true } } as never));
     await screen.findByTestId('source-agent-controls');
@@ -342,7 +342,7 @@ describe('NEGATIVE CONTROL: no Agents box without crew\'s `agents` field', () =>
     cleanup();
     sheet(pgServer({ agents: { ...DEFAULTS, see: false } } as never));
     await screen.findByTestId('source-agent-controls');
-    expect(screen.getByTestId('source-agents-see').textContent).toMatch(/^What agents seeNothing while/);
+    expect(screen.getByTestId('source-agents-see').textContent).toMatch(/^What helpers seeNothing while/);
   });
 });
 

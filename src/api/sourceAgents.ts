@@ -139,12 +139,12 @@ export function refusalCode(e: unknown): string | null {
  */
 export function agentSwitchRefusal(e: unknown): string {
   // A crew that sends the switches but has no route to change them (B1 without B2): nothing ran.
-  if (isRouteAbsent(e)) return 'This crew can’t change agent switches yet: update crew. Nothing changed.';
+  if (isRouteAbsent(e)) return 'This crew can’t change helper switches yet: update crew. Nothing changed.';
   const code = refusalCode(e);
-  if (code === 'agents_switch_human_only') return 'Only a person signed in as an operator can change what agents may do with a source. Nothing changed.';
-  if (code === 'see_off') return 'Agents can query only a source whose structure they can see. Turn on “Agents can see this structure” first. Nothing changed.';
+  if (code === 'agents_switch_human_only') return 'Only a person signed in as an operator can change what helpers may do with a source. Nothing changed.';
+  if (code === 'see_off') return 'Helpers can query only a source whose structure they can see. Turn on “Helpers can see this structure” first. Nothing changed.';
   if (code === 'unknown_server') return 'This source is no longer registered with crew. Nothing changed.';
-  if (code === 'not_a_source') return 'crew doesn’t offer this source to agents, so it has no agent switches. Nothing changed.';
+  if (code === 'not_a_source') return 'crew doesn’t offer this source to helpers, so it has no helper switches. Nothing changed.';
   if (code === 'bad_request') return `crew didn’t take that change: a source names at most ${AGENT_PROJECTS_MAX} projects, by their ids. Nothing changed.`;
   if (code === 'registry_unavailable' || code === 'registry_corrupt') return 'crew couldn’t read its source registry just now, so nothing changed. Try again in a moment.';
   return 'crew’s answer didn’t say whether the change was made, so the switches below are read again from crew.';

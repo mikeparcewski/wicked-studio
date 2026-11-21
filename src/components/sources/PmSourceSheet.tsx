@@ -90,13 +90,13 @@ export function toolReview(tool: { name: string; class: string; binding?: unknow
     return { name: tool.name, kind: 'writes', verdict: 'asks', note: 'A write: it happens only through an action the deliver gate asks you about.', ...(saved && typeof enabled === 'boolean' ? { granted: enabled } : {}) };
   }
   const b = tool.binding;
-  if (b === null) return { name: tool.name, kind: 'reads', verdict: 'not_for_agents', note: noteFor(UNBOUND_NOTES, tool.name) ?? 'crew can’t limit it to the trackers you link, so no agent gets it.' };
+  if (b === null) return { name: tool.name, kind: 'reads', verdict: 'not_for_agents', note: noteFor(UNBOUND_NOTES, tool.name) ?? 'crew can’t limit it to the trackers you link, so no helper gets it.' };
   // A binding studio can't read whole, or none sent at all, claims nothing either way.
   const unknown: ToolReview = { name: tool.name, kind: 'reads', verdict: 'unknown', note: 'crew’s review of this tool could not be read, so studio claims nothing about it.' };
   if (typeof b !== 'object' || typeof (b as { policy?: unknown }).policy !== 'string') return unknown;
   const inForce = (b as { inForce?: unknown }).inForce;
   if (saved && inForce === false) {
-    return { name: tool.name, kind: 'issues', verdict: 'review_again', note: 'Its schema or crew’s binding changed since it was reviewed: agents can’t use it until you save this source again.' };
+    return { name: tool.name, kind: 'issues', verdict: 'review_again', note: 'Its schema or crew’s binding changed since it was reviewed: helpers can’t use it until you save this source again.' };
   }
   // A saved tool is reviewed only while its binding is in force.
   if (saved && inForce !== true) return unknown;
@@ -127,14 +127,14 @@ const GENERIC: ReadonlySet<string> = new Set(['discover', 'search', 'fetch', 'ex
 export function toolGroupsOf(system: 'jira' | 'github', reviews: readonly ToolReview[]): ToolGroup[] {
   const where = system === 'jira' ? 'Jira projects' : 'repositories';
   const groups: ToolGroup[] = [
-    { key: 'agents', title: 'Agents can use', reason: `Limited to the ${where} you link: crew names the ${system === 'jira' ? 'site and project' : 'repository'}, and drops anything else from an answer.`, rows: true, tools: [] },
-    { key: 'writes', title: 'Writes', reason: 'You confirm each one at delivery: an agent never sends one itself.', rows: true, tools: [] },
-    { key: 'again', title: 'Check again', reason: 'Its review changed since the save, or could not be read, so no agent gets it for now: save this source again.', rows: false, tools: [] },
-    { key: 'unscoped', title: 'Not for agents', reason: `Can’t be limited to your linked ${where}.`, rows: false, tools: [] },
-    { key: 'confluence', title: 'Not for agents', reason: 'Not part of trackers (Confluence).', rows: false, tools: [] },
-    { key: 'graph', title: 'Not for agents', reason: 'Not part of trackers (Teamwork Graph, people and Loom).', rows: false, tools: [] },
-    { key: 'product', title: 'Not for agents', reason: 'Not part of trackers (other Atlassian products).', rows: false, tools: [] },
-    { key: 'code', title: 'Not for agents', reason: 'Not part of trackers (code, pull requests and the rest of GitHub).', rows: false, tools: [] },
+    { key: 'agents', title: 'Helpers can use', reason: `Limited to the ${where} you link: crew names the ${system === 'jira' ? 'site and project' : 'repository'}, and drops anything else from an answer.`, rows: true, tools: [] },
+    { key: 'writes', title: 'Writes', reason: 'You confirm each one at delivery: a helper never sends one itself.', rows: true, tools: [] },
+    { key: 'again', title: 'Check again', reason: 'Its review changed since the save, or could not be read, so no helper gets it for now: save this source again.', rows: false, tools: [] },
+    { key: 'unscoped', title: 'Not for helpers', reason: `Can’t be limited to your linked ${where}.`, rows: false, tools: [] },
+    { key: 'confluence', title: 'Not for helpers', reason: 'Not part of trackers (Confluence).', rows: false, tools: [] },
+    { key: 'graph', title: 'Not for helpers', reason: 'Not part of trackers (Teamwork Graph, people and Loom).', rows: false, tools: [] },
+    { key: 'product', title: 'Not for helpers', reason: 'Not part of trackers (other Atlassian products).', rows: false, tools: [] },
+    { key: 'code', title: 'Not for helpers', reason: 'Not part of trackers (code, pull requests and the rest of GitHub).', rows: false, tools: [] },
   ];
   const put = (k: ToolGroup['key'], t: ToolReview): void => { groups.find((g) => g.key === k)!.tools.push(t); };
   // crew's review state first (bound, changed, unreadable); then a tool of another product or a generic one, whatever its
@@ -192,7 +192,7 @@ export function toolReviewsOf(tools: unknown, saved: boolean): ToolReview[] | nu
   return out;
 }
 
-const VERDICT_WORDS: Record<ToolReview['verdict'], string> = { reviewed: 'Reviewed', not_for_agents: 'Not for agents', asks: 'Asks you', review_again: 'Review again', unknown: 'Not known' };
+const VERDICT_WORDS: Record<ToolReview['verdict'], string> = { reviewed: 'Reviewed', not_for_agents: 'Not for helpers', asks: 'Asks you', review_again: 'Review again', unknown: 'Not known' };
 const VERDICT_TONE: Record<ToolReview['verdict'], string> = { reviewed: 'ok', not_for_agents: 'warn', asks: 'gate', review_again: 'warn', unknown: 'muted' };
 
 /** The Basic credential Atlassian's server takes for an API token: base64 of `email:token` (UTF-8). */
@@ -574,7 +574,7 @@ export function PmSourceSheet({ target, existing, servers, ghCli, agentsUnverifi
   const replaces = isNew && existing.includes(name.trim());
   const title = isNew ? `Add ${systemName(system)}` : shownServer?.name ?? systemName(system);
   const frozen = busy === 'save';
-  const tokenNote = tokenSent ? 'Sent once, with this test. Save keeps it in your keychain; type it again only to test again.' : 'Kept in your keychain. Never shown again, never in a file, a log or an agent’s context.';
+  const tokenNote = tokenSent ? 'Sent once, with this test. Save keeps it in your keychain; type it again only to test again.' : 'Kept in your keychain. Never shown again, never in a file, a log or a helper’s context.';
   const savedNote = !isNew && savedAuth !== 'none' && (refKind === 'env' || refKind === 'other') ? elsewhereWords(refKind, 'token') : tokenNote;
   /** Between the GitHub CLI login and a typed token: whatever was typed before is let go, so neither mode inherits the other's. */
   const switchAuth = (to: 'gh' | 'token'): void => {
@@ -595,8 +595,8 @@ export function PmSourceSheet({ target, existing, servers, ghCli, agentsUnverifi
         submit: () => void rekey(),
         focusOnOpen: system !== 'jira',
         note: system === 'jira'
-          ? 'Type the account email and a new API token. Only the token changes: the links, agent access and tools stay as they are.'
-          : 'Type a new token. Only the token changes: the links, agent access and tools stay as they are.',
+          ? 'Type the account email and a new API token. Only the token changes: the links, helper access and tools stay as they are.'
+          : 'Type a new token. Only the token changes: the links, helper access and tools stay as they are.',
       }}
       onEdit={(has) => { setHasSecret(has); setTokenSent(false); setSecretEdits((n) => n + 1); setError(null); }} />
   );
@@ -615,8 +615,8 @@ export function PmSourceSheet({ target, existing, servers, ghCli, agentsUnverifi
             <div className="wk-src-col" data-testid="pm-sheet-form">
               <p className="wk-pm-lede">
                 {system === 'jira'
-                  ? 'crew talks to Jira through Atlassian’s own MCP server. Agents read issues only from the Jira projects you link to a project or a repository.'
-                  : 'crew talks to GitHub through GitHub’s own MCP server. Agents read issues only from the repositories you link as trackers.'}
+                  ? 'crew talks to Jira through Atlassian’s own MCP server. Helpers read issues only from the Jira projects you link to a project or a repository.'
+                  : 'crew talks to GitHub through GitHub’s own MCP server. Helpers read issues only from the repositories you link as trackers.'}
               </p>
               <div className="wk-src-pair wk-pm-pair">
                 <label className="wk-src-field"><span className="wk-src-label">Name</span>
@@ -691,7 +691,7 @@ export function PmSourceSheet({ target, existing, servers, ghCli, agentsUnverifi
               {canRekey && <span role="status" className="wk-src-note wk-src-tone-ok" data-testid="pm-rekey-status">{rekeyStatus}</span>}
               {system === 'jira' ? (
                 <div className="wk-pm-guide" data-tone="warn" data-testid="pm-token-advice">
-                  <b>Jira API tokens can’t be limited to projects.</b> crew limits every call to the Jira projects you link: it sets the site, adds your linked projects to every search, and drops anything else from an answer before an agent sees it.
+                  <b>Jira API tokens can’t be limited to projects.</b> crew limits every call to the Jira projects you link: it sets the site, adds your linked projects to every search, and drops anything else from an answer before a helper sees it.
                 </div>
               ) : ghLogin !== null || (!isNew && refKind === 'gh') ? (
                 <div className="wk-pm-guide" data-tone="ok" data-testid="pm-token-advice">
@@ -699,7 +699,7 @@ export function PmSourceSheet({ target, existing, servers, ghCli, agentsUnverifi
                 </div>
               ) : (
                 <div className="wk-pm-guide" data-tone="ok" data-testid="pm-token-advice">
-                  <b>Use a fine-grained token</b> limited to the repositories you’ll link, with Issues: read (and write, if agents should comment). crew still limits every call to the linked repositories.
+                  <b>Use a fine-grained token</b> limited to the repositories you’ll link, with Issues: read (and write, if helpers should comment). crew still limits every call to the linked repositories.
                 </div>
               )}
               <div className="wk-src-box" data-testid="pm-test">
@@ -750,7 +750,7 @@ export function PmSourceSheet({ target, existing, servers, ghCli, agentsUnverifi
             </div>
             <div className="wk-src-col" data-testid="pm-sheet-tools">
               <div className="wk-src-field">
-                <span className="wk-src-label">Tools, reviewed before agents can use them</span>
+                <span className="wk-src-label">Tools, reviewed before helpers can use them</span>
                 <span className="wk-src-note">Each tool is bound to the trackers a project links: which argument names the {system === 'jira' ? 'site and project' : 'repository'}, and which field says where an answer came from.</span>
               </div>
               {tools === null ? <p className="wk-src-note wk-src-tone-fail" data-testid="pm-tools-unreadable">crew’s list of this source’s tools could not be read, so no review is shown.</p> : tools.length === 0 ? <p className="wk-src-note" data-testid="pm-tools-empty">{isNew ? 'Test the connection, and each tool crew finds is listed here with its review.' : 'crew listed no tools for this source.'}</p> : (
@@ -811,7 +811,7 @@ export function PmSourceSheet({ target, existing, servers, ghCli, agentsUnverifi
                   }}
                 />
               )}
-              {isNew && <p className="wk-src-note" data-testid="pm-agents-after-save">The Agents switches come with the saved source: agents can see its structure once you choose their projects, and read issues only once you turn that on.</p>}
+              {isNew && <p className="wk-src-note" data-testid="pm-agents-after-save">The Helpers switches come with the saved source: helpers can see its structure once you choose their projects, and read issues only once you turn that on.</p>}
             </div>
           </div>
         </div>

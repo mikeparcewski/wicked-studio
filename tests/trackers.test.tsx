@@ -103,9 +103,9 @@ describe('the project desk’s Linked trackers (mockup screen 2)', () => {
     // PAY's projection is pending: Understand follows once estate holds it.
     expect(within(rows[1]!).getByTestId('tracker-projection')).toHaveTextContent('Adding to Understand…');
     // ADO: Billing isn't ticked in its Agents box (Q-PM1): the card says so and opens the box.
-    expect(within(rows[2]!).getByTestId('tracker-agents-off')).toHaveTextContent('Billing’s agents can’t use acme-ado yet. Open its Agents box');
+    expect(within(rows[2]!).getByTestId('tracker-agents-off')).toHaveTextContent('Billing’s helpers can’t use acme-ado yet. Open its Helpers switches');
     expect(within(rows[0]!).queryByTestId('tracker-agents-off')).toBeNull();
-    fireEvent.click(within(rows[2]!).getByRole('link', { name: 'Open its Agents box' }));
+    fireEvent.click(within(rows[2]!).getByRole('link', { name: 'Open its Helpers switches' }));
     expect(nav).toHaveBeenCalledWith('/sources?source=acme-ado');
     const via = screen.getAllByTestId('project-tracker-via');
     expect(via).toHaveLength(1);
@@ -205,7 +205,7 @@ describe('NC4: the trackers a job can read are crew’s answer, and only crew’
     expect(items[0]).toHaveTextContent('linked to Billing');
     expect(items[1]).toHaveTextContent('through repo billing-api');
     expect(screen.getByTestId('tracker-set-count')).toHaveTextContent('2');
-    expect(screen.getByTestId('tracker-set-excluded')).toHaveTextContent('Not included: Payments Platform (acme-ado) is linked to Billing, but agents in Billing can’t use acme-ado yet.');
+    expect(screen.getByTestId('tracker-set-excluded')).toHaveTextContent('Not included: Payments Platform (acme-ado) is linked to Billing, but helpers in Billing can’t use acme-ado yet.');
   });
 
   it('a source crew says nothing about is not assumed in', () => {
@@ -249,7 +249,7 @@ describe('NC4: the trackers a job can read are crew’s answer, and only crew’
     // crew sends no switch decisions without a project: the card lists what is linked and claims no readable count.
     expect(screen.getByTestId('tracker-set')).toHaveTextContent('Trackers linked to its repository');
     expect(screen.queryByTestId('tracker-set-count')).toBeNull();
-    expect(screen.getByTestId('tracker-set')).toHaveTextContent('This job is in no project: agents read these only from tools whose Agents switches allow every project, and crew checks that at every call.');
+    expect(screen.getByTestId('tracker-set')).toHaveTextContent('This job is in no project: helpers read these only from tools whose Helpers switches allow every project, and crew checks that at every call.');
   });
 });
 
@@ -329,7 +329,7 @@ describe('review r1 folds', () => {
     routes['GET /tracker-links?project=proj_billing'] = async () => projectAnswer([link()], [adoVia]);
     render(<ProjectTrackers projectId="proj_billing" projectName="Billing" navigate={nav} />);
     const via = await screen.findByTestId('project-tracker-via');
-    expect(within(via).getByTestId('tracker-agents-off')).toHaveTextContent('Billing’s agents can’t use acme-ado yet.');
+    expect(within(via).getByTestId('tracker-agents-off')).toHaveTextContent('Billing’s helpers can’t use acme-ado yet.');
     expect(within(via).queryByTestId('tracker-remove')).toBeNull();
   });
 

@@ -13,6 +13,8 @@ import {
   confirmedAddress,
   declareRowWrite,
   EMPTY_FORM,
+  appUsableToolCount,
+  footReachWords,
   grantGate,
   previewKey,
   privilegeLine,
@@ -166,7 +168,7 @@ describe('the grant gate, in crew\'s order', () => {
 describe('the words', () => {
   it('what agents see names the declared enum types and says no values', () => {
     expect(agentsSeeWords('postgres', { ...CATALOG, relations: [TICKETS, ASSIGNMENTS] }))
-      .toBe('Table and column names, types, keys, row estimates, and the 1 enum type the schema declares (ticket_status). No values from rows, ever. Agents building an app can’t call this source.');
+      .toBe('Table and column names, types, keys, row estimates, and the 1 enum type the schema declares (ticket_status). No values from rows, ever. Helpers building an app can’t call this source.');
   });
   it('the privilege line: read only, or how many tables the login can also change', () => {
     expect(privilegeLine(READ_ONLY)).toEqual({ tone: 'ok', text: 'Read only: reader can’t change any table.' });
@@ -182,5 +184,46 @@ describe('the words', () => {
   it('crew\'s backticked identifiers become code; an unpaired backtick stays words', () => {
     expect(codeSpans('`s.t` has trigger `t1`: plain')).toEqual([{ code: true, text: 's.t' }, { code: false, text: ' has trigger ' }, { code: true, text: 't1' }, { code: false, text: ': plain' }]);
     expect(codeSpans('a `b')).toEqual([{ code: false, text: 'a ' }, { code: false, text: 'b' }]);
+  });
+});
+
+describe('studio#1117: the sheet footer says the source’s real reach, never “this project”', () => {
+  const access = (over: Partial<{ see: boolean; query: boolean; everyProject: boolean; projects: string[] }>) =>
+    ({ see: true, query: false, everyProject: false, projects: [], ...over });
+  it('a saved SQL source or upload: by its Helpers switches', () => {
+    expect(footReachWords('postgres', true, access({}), true)).toBe('Saved. No project can use it yet: choose its projects under Helpers.');
+    expect(footReachWords('upload', true, access({ projects: ['p1'] }), true)).toBe('Saved. Apps and helpers in the project chosen under Helpers can use it.');
+    expect(footReachWords('mysql', true, access({ projects: ['p1', 'p2'] }), true)).toBe('Saved. Apps and helpers in the 2 projects chosen under Helpers can use it.');
+    expect(footReachWords('postgres', true, access({ everyProject: true }), true)).toBe('Saved. Apps and helpers in every project can use it.');
+    expect(footReachWords('postgres', true, access({ see: false, everyProject: true }), true)).toBe('Saved. No app or helper can use it while “Helpers can see this structure” is off.');
+    // Switches studio couldn't read (or not verified since a write: the sheet passes null) claim nothing.
+    expect(footReachWords('postgres', true, null, true)).toBe('Saved.');
+  });
+  it('review r1: a source turned off reaches no app; one whose state is unknown claims nothing', () => {
+    expect(footReachWords('postgres', true, access({ everyProject: true }), false)).toBe('Saved. It is turned off, so no app can use it.');
+    expect(footReachWords('rest', true, null, false)).toBe('Saved. It is turned off, so no app can use it.');
+    expect(footReachWords('postgres', true, access({ everyProject: true }), null)).toBe('Saved.');
+    expect(footReachWords('mcp', true, null, null)).toBe('Saved.');
+  });
+  it('a REST or MCP server reaches apps through its tools; GraphQL claims nothing; a new source says what comes next', () => {
+    expect(footReachWords('rest', true, null, true, 2)).toBe('Saved. Apps in every project can use its registered tools.');
+    // review r2: a server with no tool registered now (none, or all gone) reaches no app; an unknown count claims nothing.
+    expect(footReachWords('mcp', true, null, true, 0)).toBe('Saved. None of its tools can be called now, so no app can use it.');
+    expect(footReachWords('rest', true, null, true, 0)).toBe('Saved. None of its tools can be called now, so no app can use it.');
+    expect(footReachWords('rest', true, null, true)).toBe('Saved.');
+    expect(footReachWords('graphql', true, null, true)).toBe('Saved.');
+    expect(footReachWords('postgres', false, null)).toBe('Once it is saved, choose the projects that may use it.');
+    expect(footReachWords('mcp', false, null)).toBe('Once it is saved, apps in every project can use its registered tools.');
+    for (const k of ['postgres', 'mysql', 'upload', 'rest', 'mcp', 'graphql'] as const) {
+      for (const saved of [true, false]) for (const on of [true, false, null]) for (const n of [0, 1, null]) expect(footReachWords(k, saved, access({}), on, n)).not.toMatch(/this project/);
+    }
+  });
+  it('coord: a REST or MCP server whose tools are all switched off (or not registered) reaches no app', () => {
+    expect(appUsableToolCount([{ name: 'a', status: 'registered', enabled: false }, { name: 'b', status: 'registered', enabled: false }])).toBe(0);
+    expect(appUsableToolCount([{ name: 'a', status: 'gone' }, { name: 'b', status: 'registered', enabled: false }])).toBe(0);
+    expect(appUsableToolCount([{ name: 'a', status: 'registered', enabled: true }, { name: 'b', status: 'registered' }, { name: 'c', status: 'registered', enabled: false }])).toBe(2);
+    expect(appUsableToolCount(undefined)).toBeNull();
+    const allOff = appUsableToolCount([{ name: 'a', status: 'registered', enabled: false }]);
+    expect(footReachWords('mcp', true, null, true, allOff)).toBe('Saved. None of its tools can be called now, so no app can use it.');
   });
 });

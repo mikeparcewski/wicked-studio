@@ -23,6 +23,7 @@ import { announceHistoryChange, keepEntryState, useHistoryEntryValue } from '../
 import { useMembershipStore } from '../store/membership.js';
 import { knowledgeOf, useRepoKnowledge, useRepoKnowledgeFor } from '../store/repoKnowledge.js';
 import { linksOf, useRepoLinks, useRepoLinksFor } from '../store/repoLinks.js';
+import { TrackerReadLine } from './trackers/TrackerReadLine.js';
 import { overlayLiveRuns } from '../board/liveRunOverlay.js';
 import { AddRepoToProject } from './AddRepoToProject.js';
 import { RepoWatchControls, RepoWatchLine } from './RepoWatchLine.js';
@@ -350,6 +351,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
     text === null ? '' : healthText(text.replace(/^the daemon refused this[^—]*—\s*/, '').split(/[\r\n]/)[0]!.trim());
   const marks = knowledgeMarks(repo, jobsFailed ? null : runs, knowledgeOf(knowledge, repo.id), now);
   const trackerCount = links !== null && links.state === 'ok' ? links.trackers : null;
+  const trackerSources = links !== null && links.state === 'ok' ? links.sources : [];
   const projects = links !== null && links.state === 'ok' ? links.projects : null;
   const jobProjects = (projectsByJobs(runs, new Map(sharedProjects.map((p) => [p.id, p.name])), nameByRun).get(repo.id) ?? [])
     .filter((n) => !(projects ?? []).some((p) => p.name === n));
@@ -579,7 +581,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                     </Section>
                     {trackerCount !== null && (
                       <Section title="Trackers" testId="repo-overview-trackers">
-                        <p className="wk-rp-note">{trackerCount === 0 ? 'No tracker is linked yet.' : <><b>{trackerCount} linked.</b> Jobs on this repository can read {trackerCount === 1 ? 'it' : 'them'}.</>}</p>
+                        <TrackerReadLine count={trackerCount} sources={trackerSources} navigate={navigate} />
                         <a className="wk-link wk-rp-more" href={tabPath('trackers')} onClick={(e) => { if (modified(e)) return; e.preventDefault(); goTab('trackers', true); }}>{trackerCount === 0 ? 'Link a tracker' : 'Manage trackers'}</a>
                       </Section>
                     )}
@@ -616,7 +618,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
             {shown === 'history' && <HistoryTab repoId={repo.id} repoName={repo.name} gitUrl={repo.git_url} />}
 
             {shown === 'trackers' && (
-              <RepoTrackers repoId={repo.id} repoName={repo.name} navigate={navigate} onChanged={() => useRepoLinks.getState().ensure([repo.id], true)} />
+              <RepoTrackers repoId={repo.id} repoName={repo.name} gitUrl={repo.git_url} navigate={navigate} onChanged={() => useRepoLinks.getState().ensure([repo.id], true)} />
             )}
 
             {shown === 'settings' && (

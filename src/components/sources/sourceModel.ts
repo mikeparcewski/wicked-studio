@@ -18,6 +18,7 @@ import type {
   SourceSafetyResponse,
   SqlSourceCatalog,
 } from '../../api/sources.js';
+import type { SourceAgentAccess } from '../../api/sourceAgents.js';
 
 /** The kinds rail, in the mockup's order. */
 export type SheetKind = 'postgres' | 'mysql' | 'rest' | 'graphql' | 'mcp' | 'upload' | 'crew';
@@ -273,21 +274,21 @@ export type AgentRows = 'hidden' | 'on' | 'off' | 'never' | 'unknown';
 export function agentsSeeWords(kind: SheetKind | 'sqlite', catalog: SourceCatalog | null, agentRows?: AgentRows): string {
   // With the Agents box, a SQL source's rows reach agents only once a person turns query on there.
   const tail = agentRows === 'on'
-    ? 'Agents in the projects below may also query it, and the rows they read go to their model provider.'
+    ? 'Helpers in the projects below may also query it, and the rows they read go to their model provider.'
     : agentRows === 'off'
-      ? 'No values from rows: agents can’t query it unless you turn that on below.'
+      ? 'No values from rows: helpers can’t query it unless you turn that on below.'
       : agentRows === 'never'
-        ? 'No values from rows: agents can read its structure only.'
-        : 'No values from rows, ever. Agents building an app can’t call this source.';
-  if (agentRows === 'unknown') return 'Not known here: studio couldn’t read crew’s agent switches for this source. Agents may see its structure, and its rows if crew lets them query it.';
-  if (agentRows === 'hidden') return 'Nothing while “Agents can see this structure” is off below: no agent lists it, reads its structure or queries it.';
-  if (kind === 'crew') return 'The allowlisted routes and the shape of what each answers. Reads run in crew as the person viewing. Agents building an app can’t call this source.';
+        ? 'No values from rows: helpers can read its structure only.'
+        : 'No values from rows, ever. Helpers building an app can’t call this source.';
+  if (agentRows === 'unknown') return 'Not known here: studio couldn’t read crew’s helper switches for this source. Helpers may see its structure, and its rows if crew lets them query it.';
+  if (agentRows === 'hidden') return 'Nothing while “Helpers can see this structure” is off below: no helper lists it, reads its structure or queries it.';
+  if (kind === 'crew') return 'The allowlisted routes and the shape of what each answers. Reads run in crew as the person viewing. Helpers building an app can’t call this source.';
   if (kind === 'rest' || kind === 'mcp') {
-    return 'Each operation’s name, arguments and response schema, and the enums the schema declares. No values from responses, ever. Agents building an app can’t call this source.';
+    return 'Each operation’s name, arguments and response schema, and the enums the schema declares. No values from responses, ever. Helpers building an app can’t call this source.';
   }
   if (kind === 'graphql') {
     const enums = catalog !== null && 'enums' in catalog ? catalog.enums.map((e) => e.name) : [];
-    return `Root fields, their arguments and types${enums.length > 0 ? `, and the ${plural(enums.length, 'enum')} the schema declares (${enums.join(', ')})` : ''}. No values from responses, ever. Agents building an app can’t call this source.`;
+    return `Root fields, their arguments and types${enums.length > 0 ? `, and the ${plural(enums.length, 'enum')} the schema declares (${enums.join(', ')})` : ''}. No values from responses, ever. Helpers building an app can’t call this source.`;
   }
   if (!isSqlCatalog(catalog)) return `Table and column names, types, keys and row estimates. ${tail}`;
   const enums = enumTypes(catalog);
@@ -415,4 +416,40 @@ export function codeSpans(words: string): Array<{ code: boolean; text: string }>
     out.push({ code, text });
   });
   return out;
+}
+
+/**
+ * (studio#1117) How many of a REST or MCP server's tools an app can call now: registered and not switched off (crew's
+ * registry skips a tool whose `enabled` is false). `null`: the record carries no tool list, so no claim.
+ */
+export function appUsableToolCount(tools: unknown): number | null {
+  if (!Array.isArray(tools)) return null;
+  return tools.filter((t: unknown) => typeof t === 'object' && t !== null
+    && (t as { status?: unknown }).status === 'registered' && (t as { enabled?: unknown }).enabled !== false).length;
+}
+
+/**
+ * (studio#1117) The sheet's footer: which apps can use the source, by its real reach. A SQL source or an upload
+ * reaches apps (and helpers) only in the projects its Helpers switches name (crew's app resolver, `anyAppReadable`); a
+ * REST or MCP server reaches every project's apps through its registered tools. Never "this project": the Data sources
+ * page has none. A reach studio can't read (`a` null, or switches not verified since a write) claims nothing. A REST or
+ * MCP server reaches apps only through a tool still registered and on (`appUsableToolCount`): `registered` is how many it holds
+ * now (`null`: unknown, so no claim).
+ */
+export function footReachWords(kind: SheetKind, saved: boolean, a: SourceAgentAccess | null, enabled: boolean | null = null, registered: number | null = null): string {
+  if (kind === 'graphql') return saved ? 'Saved.' : 'Not saved yet.';
+  const scoped = kind === 'postgres' || kind === 'mysql' || kind === 'upload';
+  if (!saved) return scoped ? 'Once it is saved, choose the projects that may use it.' : 'Once it is saved, apps in every project can use its registered tools.';
+  // A source crew holds turned off reaches no app (`anyAppReadable`); one studio can't see the state of claims nothing.
+  if (enabled === false) return 'Saved. It is turned off, so no app can use it.';
+  if (enabled === null) return 'Saved.';
+  if (!scoped) {
+    if (registered === null) return 'Saved.';
+    return registered === 0 ? 'Saved. None of its tools can be called now, so no app can use it.' : 'Saved. Apps in every project can use its registered tools.';
+  }
+  if (a === null) return 'Saved.';
+  if (!a.see) return 'Saved. No app or helper can use it while “Helpers can see this structure” is off.';
+  if (a.everyProject) return 'Saved. Apps and helpers in every project can use it.';
+  if (a.projects.length === 0) return 'Saved. No project can use it yet: choose its projects under Helpers.';
+  return `Saved. Apps and helpers in ${a.projects.length === 1 ? 'the project' : `the ${a.projects.length} projects`} chosen under Helpers can use it.`;
 }

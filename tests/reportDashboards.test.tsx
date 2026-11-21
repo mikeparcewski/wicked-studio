@@ -666,9 +666,9 @@ describe('9. projects and seeds', () => {
     fireEvent.click(screen.getByTestId('report-build'));
     await waitFor(() => expect(screen.getAllByTestId('apps-new-composer-suggestion').map((s) => s.textContent ?? '').join(' ')).toMatch(/remembers/u));
     const sheet = screen.getByTestId('report-build-sheet');
-    expect(sheet.querySelector('.wk-rep-build-sub')!.textContent).toMatch(/your data sources, or what this project knows/u);
+    expect(sheet.querySelector('.wk-rep-build-sub')!.textContent).toMatch(/the data sources this project may use, or what this project knows/u);
     expect(sheet.querySelector('.wk-rep-build-sub')!.textContent).not.toMatch(/from your data sources’ structure/u);
-    expect(screen.getByTestId('report-build-foot').textContent).toMatch(/It reads your data sources or what this project knows;/u);
+    expect(screen.getByTestId('report-build-foot').textContent).toMatch(/It reads the data sources this project may use or what this project knows;/u);
   });
 
   it('default and archived projects are refused, nothing is sent before a choice, and a project desk locks its project', async () => {

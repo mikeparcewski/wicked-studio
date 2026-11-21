@@ -327,7 +327,7 @@ function PmSourcesList({ sources, onOpen, onAdd }: { sources: readonly McpServer
         <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="pm-add-github" onClick={() => onAdd('github')}>Add GitHub Issues</button>
       </div>
       {sources.length === 0 ? (
-        <p className="wk-src-note" data-testid="pm-sources-empty">No tracker tool yet. Add Jira or GitHub Issues, then link its projects to your projects and repositories: agents read issues only from what you link.</p>
+        <p className="wk-src-note" data-testid="pm-sources-empty">No tracker tool yet. Add Jira or GitHub Issues, then link its projects to your projects and repositories: helpers read issues only from what you link.</p>
       ) : (
         <ul className="wk-src-list">
           {sources.map((s) => {
@@ -338,7 +338,7 @@ function PmSourcesList({ sources, onOpen, onAdd }: { sources: readonly McpServer
             const trackers = trackerLinksListOf((s as unknown as { trackers?: unknown }).trackers);
             const linked = trackers === null ? null : new Set(trackers.map((l) => l.trackerId)).size;
             const a = agentAccessOf(s as { agents?: unknown });
-            const agents = a === null ? null : !a.see || (!a.everyProject && a.projects.length === 0) ? 'agents can’t use it yet' : a.query ? 'agents can read issues' : 'agents see its structure';
+            const agents = a === null ? null : !a.see || (!a.everyProject && a.projects.length === 0) ? 'helpers can’t use it yet' : a.query ? 'helpers can read issues' : 'helpers see its structure';
             return (
               <li key={s.name}>
                 <button type="button" className="wk-src-row wk-src-row-main wk-pm-row" data-testid="pm-source" data-name={s.name} onClick={() => onOpen(s.name)}>
@@ -369,7 +369,7 @@ function WebSourceBox({ setup, onOpen }: { setup: WebSourceSetup | 'unreadable';
   const a = setup.agents;
   const state = !setup.installed
     ? setup.search.ready ? 'not installed' : 'needs a container engine'
-    : a === null || !a.see || (!a.everyProject && a.projects.length === 0) ? 'installed · agents can’t use it yet' : a.query ? 'installed · agents can search and read pages' : 'installed · agents can’t query it yet';
+    : a === null || !a.see || (!a.everyProject && a.projects.length === 0) ? 'installed · helpers can’t use it yet' : a.query ? 'installed · helpers can search and read pages' : 'installed · helpers can’t query it yet';
   return (
     <section className="wk-src-box wk-web-box" aria-labelledby="wk-web-box-title" data-testid="web-source" data-installed={setup.installed ? 'yes' : 'no'}>
       <div className="wk-src-box-head">

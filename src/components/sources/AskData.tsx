@@ -43,10 +43,10 @@ function draftFailure(e: unknown): { headline: string; why: string } {
   const code = codeOf(e);
   const why = words(e);
   if (code === 'no_seat' || code === 'ask_unavailable' || code === 'seat_failed') {
-    return { headline: 'No agent could draft a query on this crew right now. You can write the SQL yourself.', why };
+    return { headline: 'No helper could draft a query on this crew right now. You can write the SQL yourself.', why };
   }
-  if (code === 'no_draft') return { headline: 'The agent did not answer with a query. Ask again in other words, or write the SQL yourself.', why };
-  if (code === 'draft_holds_secret') return { headline: 'The agent’s answer held this source’s password, so nothing of it is shown. Write the SQL yourself, and change the password.', why };
+  if (code === 'no_draft') return { headline: 'The helper did not answer with a query. Ask again in other words, or write the SQL yourself.', why };
+  if (code === 'draft_holds_secret') return { headline: 'The helper’s answer held this source’s password, so nothing of it is shown. Write the SQL yourself, and change the password.', why };
   return { headline: 'The draft failed.', why };
 }
 
@@ -199,7 +199,7 @@ export function AskData({ source, 'data-testid': testId = 'source-ask' }: {
         <button type="submit" className="wk-btn wk-btn--secondary" data-testid={`${testId}-draft`} disabled={busy !== null || question.trim() === ''}>{busy === 'draft' ? 'Drafting…' : 'Draft a query'}</button>
       </form>
       <div className="wk-src-row-btns">
-        <span className="wk-src-cap wk-src-grow-text">A model drafts one read query from the structure only (what agents see, never a row). Nothing runs until you click Run.</span>
+        <span className="wk-src-cap wk-src-grow-text">A model drafts one read query from the structure only (what helpers see, never a row). Nothing runs until you click Run.</span>
         {!editing && <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid={`${testId}-write-own`} disabled={busy !== null} onClick={writeOwn}>Write the SQL yourself</button>}
       </div>
       {failure !== null && (

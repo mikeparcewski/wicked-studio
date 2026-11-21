@@ -17,7 +17,7 @@ export const READ_TIMEOUT_MS = 20_000;
 
 export type RepoLinksRead =
   | { state: 'loading' }
-  | { state: 'ok'; projects: ReadonlyArray<{ id: string; name: string }>; trackers: number }
+  | { state: 'ok'; projects: ReadonlyArray<{ id: string; name: string }>; trackers: number; /** The tools its links are on (studio#1013). */ sources: readonly string[] }
   | { state: 'failed' };
 
 const LOADING: RepoLinksRead = { state: 'loading' };
@@ -29,7 +29,7 @@ async function readLinks(id: string): Promise<RepoLinksRead> {
   const late = new Promise<RepoLinksRead>((res) => { t = setTimeout(() => { ctl.abort(); res(FAILED); }, READ_TIMEOUT_MS); });
   const read = trackersApi.links({ repo: id }, ctl.signal).then((raw): RepoLinksRead => {
     const links = trackerLinksOf(raw, { repo: id });
-    return links === null ? FAILED : { state: 'ok', projects: links.projects, trackers: links.links.length };
+    return links === null ? FAILED : { state: 'ok', projects: links.projects, trackers: links.links.length, sources: [...new Set(links.links.map((l) => l.source))] };
   }, () => FAILED);
   return Promise.race([read, late]).finally(() => clearTimeout(t));
 }
