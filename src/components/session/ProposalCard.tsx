@@ -482,7 +482,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
           {card.kind === 'deliver' && card.state === 'ask' && afterDelivery.length > 0 && (
             <div data-testid="session-proposal-after-delivery" className="wk-prop-why wk-gate2-p">
               <p>After delivery, check these on the pull request before you merge:</p>
-              <ul className="list-disc pl-5">{afterDelivery.map((item, i) => <li key={i}><Markdown>{item}</Markdown></li>)}</ul>
+              <ul className="list-disc pl-5">{afterDelivery.map((item, i) => <li key={i}><Markdown>{showText(item)}</Markdown></li>)}</ul>
             </div>
           )}
           {card.state === 'confirm' && card.confirm !== null ? (
