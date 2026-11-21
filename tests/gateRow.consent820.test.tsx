@@ -3,12 +3,12 @@
  * workers (default, marked, never preselected) / Also install into my CLIs / Decline — and each
  * shows the files it writes, `~/` form, the operator's own files said so.
  */
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as client from '../src/api/client.js';
 import type { CoreEvent } from '../src/api/types.js';
 import { useGateActionStore } from '../src/board/gateActions.js';
-import { consentChoicesOf, consentMissingOf, sessionGateChoices } from '../src/board/gateRowModel.js';
+import { consentAsksOf, consentChoicesOf, consentMissingOf, sessionGateChoices } from '../src/board/gateRowModel.js';
 import { setUndoWindowForTest } from '../src/board/undoQueue.js';
 import { GateRow } from '../src/components/session/GateRow.js';
 import { useRunEventStore } from '../src/store/events.js';
@@ -39,6 +39,54 @@ const FRAME = {
 const gate = (): OpenGate => ({
   runId: RUN, ord: 9, prompt: PROMPT, lifecycle: 'open', receivedAt: NOW, gateKind: 'consent',
   choices: ['consent:worker', 'consent:operator', 'reject'], recommended: 0,
+});
+
+const ASKS = [
+  { editor: 'notes', permission: 'artifact.read', why: 'Open the notes.' },
+  { editor: 'preview', permission: 'network.media', why: 'Show images.' },
+  { editor: 'notes', permission: 'artifact.write', why: 'Save changes.' },
+  { editor: 'notes', permission: 'future.permission', why: 'A newer permission.' },
+];
+const withAsks = (consentAsks: unknown): CoreEvent => ({ ...FRAME, consentAsks }) as unknown as CoreEvent;
+
+describe('crew#1424 — consent asks model', () => {
+  const model = (events: CoreEvent[]) => sessionGateChoices({ runId: RUN, gate: gate(), units: UNITS, events, pool: [], roster: null })!;
+
+  it('reads the latest awaitingHuman frame for this ord and exposes its asks', () => {
+    const events = [withAsks([ASKS[1]]), withAsks(ASKS), { ...withAsks([]), ord: 10 }, { ...withAsks([]), type: 'gateConfirmed' }] as CoreEvent[];
+    expect(consentAsksOf(gate(), events)).toEqual(ASKS);
+    expect(model(events).consentAsks).toEqual(ASKS);
+  });
+
+  it('drops malformed rows, requiring editor, permission and why to be strings', () => {
+    const events = [withAsks([
+      null, false, 7, 'ask', [], {},
+      { ...ASKS[0], editor: 1 }, { ...ASKS[0], permission: null },
+      { ...ASKS[0], why: false }, { editor: 'notes', permission: 'artifact.read' },
+      ...ASKS,
+    ])];
+    expect(consentAsksOf(gate(), events)).toEqual(ASKS);
+    expect(model(events).consentAsks).toEqual(ASKS);
+  });
+
+  it.each([undefined, null, {}, 'asks', [], [null, {}]])('omits empty or malformed asks: %j', (asks) => {
+    const events = [withAsks(asks)];
+    expect(consentAsksOf(gate(), events)).toBeUndefined();
+    expect(model(events)).not.toHaveProperty('consentAsks');
+  });
+
+  it('does not fall back to older or unrelated frames when asks are absent', () => {
+    for (const events of [[], [withAsks(ASKS), FRAME], [{ ...withAsks(ASKS), ord: 10 } as CoreEvent]]) {
+      expect(consentAsksOf(gate(), events)).toBeUndefined();
+      expect(model(events)).not.toHaveProperty('consentAsks');
+    }
+    expect(consentAsksOf(gate(), null)).toBeUndefined();
+  });
+
+  it('exposes asks even without install file lists', () => {
+    const frame = { ...withAsks(ASKS), writeTargets: undefined } as unknown as CoreEvent;
+    expect(model([frame]).consentAsks).toEqual(ASKS);
+  });
 });
 
 describe('core#820 — the model', () => {
@@ -105,6 +153,27 @@ describe('core#820 — the row', () => {
     vi.spyOn(client.api, 'getRunDiff').mockResolvedValue({ diff: '' } as never);
   });
   afterEach(() => cleanup());
+
+  it('shows asks under the choices, grouped by editor in permission words, with later Plugins consent', async () => {
+    useRunEventStore.setState({ byRun: { [RUN]: [withAsks(ASKS)] } });
+    render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS)} gate={gate()} />);
+    const block = await screen.findByTestId('gate-consent-asks');
+    expect(within(block).getByText('It will ask to:')).toBeVisible();
+    expect(within(block).getByText('notes: read what it opens, change it (you can undo), future.permission')).toBeVisible();
+    expect(within(block).getByText('preview: load images and fonts from the internet')).toBeVisible();
+    expect(within(block).getByText('You allow each one later in Plugins.')).toBeVisible();
+    expect(block.closest('details')).toBeNull();
+    const choices = screen.getByTestId('session-gate-choices');
+    expect(choices.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(client.api.confirmGate).not.toHaveBeenCalled();
+  });
+
+  it('shows no asks block when the frame has none', async () => {
+    render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS)} gate={gate()} />);
+    await screen.findAllByTestId('session-gate-choice');
+    expect(screen.queryByTestId('gate-consent-asks')).toBeNull();
+    expect(screen.queryByText('You allow each one later in Plugins.')).toBeNull();
+  });
 
   it('renders each choice\'s files and sends the chosen token', async () => {
     render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS)} gate={gate()} />);
