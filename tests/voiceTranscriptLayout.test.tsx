@@ -106,6 +106,70 @@ describe('voice transcript new turns', () => {
     expect(scroller.scrollTop).toBe(350);
   });
 
+  it('a chat reply filled in place into its "…" line puts the reply\'s first line at the top when it is long', () => {
+    let height = 400;
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(300);
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(() => height);
+    useVoiceStore.setState({ phase: 'full', lines: [{ id: 1, who: 'you', text: 'What is waiting?' }] });
+    render(<VoiceFullScreen />);
+    const scroller = screen.getByTestId('voice-trans');
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      // The reply line sits 350 px down the content; the question line and the scroller are at the top.
+      const reply = this.classList.contains('wk-voice-line') && !(this.textContent ?? '').includes('What is waiting?');
+      return { top: reply ? 350 - scroller.scrollTop : 0 } as DOMRect;
+    });
+    act(() => useVoiceStore.setState({ lines: [
+      { id: 1, who: 'you', text: 'What is waiting?' },
+      { id: 2, who: 'it', text: '…', partial: true },
+    ] }));
+    expect(scroller.scrollTop).toBe(100);
+    height = 900;
+    act(() => useVoiceStore.setState({ lines: [
+      { id: 1, who: 'you', text: 'What is waiting?' },
+      { id: 2, who: 'it', text: 'A long reply. '.repeat(40), partial: false },
+    ] }));
+    expect(scroller.scrollTop).toBe(350);
+  });
+
+  it('a short reply filled in place stays scrolled to the bottom', () => {
+    let height = 400;
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(300);
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(() => height);
+    useVoiceStore.setState({ phase: 'full', lines: [{ id: 1, who: 'you', text: 'What is waiting?' }] });
+    render(<VoiceFullScreen />);
+    const scroller = screen.getByTestId('voice-trans');
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const reply = this.classList.contains('wk-voice-line') && !(this.textContent ?? '').includes('What is waiting?');
+      return { top: reply ? 350 - scroller.scrollTop : 0 } as DOMRect;
+    });
+    act(() => useVoiceStore.setState({ lines: [
+      { id: 1, who: 'you', text: 'What is waiting?' },
+      { id: 2, who: 'it', text: '…', partial: true },
+    ] }));
+    height = 420;
+    act(() => useVoiceStore.setState({ lines: [
+      { id: 1, who: 'you', text: 'What is waiting?' },
+      { id: 2, who: 'it', text: 'Nothing.', partial: false },
+    ] }));
+    expect(scroller.scrollTop).toBe(120);
+  });
+
+  it('an older line patched in place (an answered ask\'s record) does not move the view', () => {
+    sizes();
+    useVoiceStore.setState({ lines: [
+      { id: 1, who: 'it', text: 'Approve the plan?' },
+      { id: 2, who: 'you', text: 'Later turn' },
+    ] });
+    render(<VoiceFullScreen />);
+    const scroller = screen.getByTestId('voice-trans');
+    scroller.scrollTop = 200;
+    act(() => useVoiceStore.setState({ lines: [
+      { id: 1, who: 'it', text: 'Approve the plan? Approved by you · by voice, confirmed' },
+      { id: 2, who: 'you', text: 'Later turn' },
+    ] }));
+    expect(scroller.scrollTop).toBe(200);
+  });
+
   it('lets the transcript frame fill the column without a viewport height cap', () => {
     expect(rule('.wk-voice-trans-frame')).not.toMatch(/max-height:/);
   });
