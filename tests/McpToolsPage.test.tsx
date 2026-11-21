@@ -24,7 +24,7 @@ import { approvals, policies, preview, server, serversResponse } from './mcpFixt
 let approved = new Set<string>();
 let calls: Array<{ path: string; method: string; body: unknown }> = [];
 
-function wire(over: { servers?: () => Promise<unknown> } = {}): void {
+function wire(over: { servers?: () => Promise<unknown>; preview?: () => Promise<unknown> } = {}): void {
   apiFetch.mockImplementation((path: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET';
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
@@ -41,7 +41,7 @@ function wire(over: { servers?: () => Promise<unknown> } = {}): void {
       approved = new Set([...approved].filter((s) => s !== subject));
       return Promise.resolve({ subject, approved: false, rulesChanged: ['MCP-FIRST-USE'] });
     }
-    if (path === '/mcp/servers/preview') return Promise.resolve(preview((body as { name: string }).name));
+    if (path === '/mcp/servers/preview') return over.preview ? over.preview() : Promise.resolve(preview((body as { name: string }).name));
     if (path === '/mcp/servers' && method === 'POST') return Promise.resolve({ ...serversResponse().servers[0], name: 'jira' });
     if (path.startsWith('/mcp/servers/') && path.endsWith('/secret') && method === 'PUT') {
       const name = path.slice('/mcp/servers/'.length, -'/secret'.length);
@@ -228,6 +228,146 @@ describe('MCP tools: Approve and Revoke are audited policy edits crew makes', ()
 });
 
 describe('MCP tools: add an existing server', () => {
+  describe('non-secret server settings (crew#1558)', () => {
+    const settingsLabel = 'Settings for the server (not secrets)';
+    const runtimeAdvice = 'A runtime control can change how the server starts, loads code, finds packages or trusts the network. Approve it only if you expect it.';
+
+    async function openForm() {
+      render(<McpToolsPage navigate={navigate} search="" />);
+      fireEvent.click(await screen.findByTestId('mcp-add-open'));
+      const panel = within(screen.getByTestId('mcp-add-panel'));
+      fireEvent.change(panel.getByTestId('mcp-add-name'), { target: { value: 'jira' } });
+      fireEvent.change(panel.getByTestId('mcp-add-target'), { target: { value: 'npx jira-mcp' } });
+      return panel;
+    }
+
+    it('sends typed settings in the stdio preview body, splitting only at the first equals sign', async () => {
+      wire();
+      const panel = await openForm();
+      const settings = panel.getByRole('textbox', { name: settingsLabel });
+      expect(settings.tagName).toBe('TEXTAREA');
+      expect(panel.getByText(/secrets go in the secret field/i)).toBeInTheDocument();
+      fireEvent.change(settings, { target: { value: 'A=1\nB=x=y' } });
+      fireEvent.click(panel.getByTestId('mcp-add-preview'));
+      await panel.findByTestId('mcp-add-preview-result');
+      expect(calls.find((c) => c.path === '/mcp/servers/preview')?.body).toMatchObject({
+        kind: 'mcp-stdio', env: { A: '1', B: 'x=y' },
+      });
+
+      fireEvent.change(settings, { target: { value: '\n A = 1 \r\n\t\nB=\n' } });
+      expect(panel.queryByTestId('mcp-add-preview-result')).toBeNull();
+      expect(panel.queryByTestId('mcp-add-save')).toBeNull();
+      fireEvent.click(panel.getByTestId('mcp-add-preview'));
+      await panel.findByTestId('mcp-add-preview-result');
+      expect(calls.filter((c) => c.path === '/mcp/servers/preview').at(-1)?.body).toMatchObject({
+        env: { A: ' 1 ', B: '' },
+      });
+    });
+
+    it.each([
+      ['a line without equals', 'A=1\nmissing-equals-value', /line 2/i, 'missing-equals-value'],
+      ['a duplicate name regardless of case', 'A=hidden-value\na=other-value', /duplicate.*a/i, 'hidden-value'],
+      ['an invalid name', 'BAD-NAME=hidden-value', /line 1|BAD-NAME/i, 'hidden-value'],
+      ['a name over 64 characters', `${'A'.repeat(65)}=hidden-value`, /line 1/i, 'hidden-value'],
+      ['more than 16 names', Array.from({ length: 17 }, (_, i) => `A${i}=hidden-value`).join('\n'), /line 17|A16/i, 'hidden-value'],
+      ['a value over 1024 characters', `A=${'x'.repeat(1025)}`, /line 1|\bA\b/i, 'x'.repeat(1025)],
+    ])('blocks Preview for %s with one inline error and no echoed value', async (_case, raw, error, hidden) => {
+      wire();
+      const panel = await openForm();
+      fireEvent.change(panel.getByRole('textbox', { name: settingsLabel }), { target: { value: raw } });
+      expect(panel.getByTestId('mcp-add-preview')).toBeDisabled();
+      const errors = panel.getAllByRole('alert');
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toHaveTextContent(error);
+      expect(errors[0]).not.toHaveTextContent(hidden);
+      fireEvent.click(panel.getByTestId('mcp-add-preview'));
+      expect(calls.some((c) => c.path === '/mcp/servers/preview')).toBe(false);
+
+      fireEvent.change(panel.getByRole('textbox', { name: settingsLabel }), { target: { value: 'A=fixed' } });
+      expect(panel.queryByRole('alert')).toBeNull();
+      expect(panel.getByTestId('mcp-add-preview')).toBeEnabled();
+    });
+
+    it('accepts the name/count/value limits and omits env for blank settings', async () => {
+      wire();
+      const panel = await openForm();
+      const settings = panel.getByRole('textbox', { name: settingsLabel });
+      const env = Object.fromEntries([
+        ['a'.repeat(64), 'x'.repeat(1024)],
+        ...Array.from({ length: 15 }, (_, i) => [`_A${i}`, '']),
+      ]);
+      fireEvent.change(settings, { target: { value: Object.entries(env).map(([n, v]) => `${n}=${v}`).join('\n') } });
+      expect(panel.getByTestId('mcp-add-preview')).toBeEnabled();
+      fireEvent.click(panel.getByTestId('mcp-add-preview'));
+      await panel.findByTestId('mcp-add-preview-result');
+      expect(calls.find((c) => c.path === '/mcp/servers/preview')?.body).toMatchObject({ env });
+      fireEvent.change(settings, { target: { value: ' \n\t\n' } });
+      fireEvent.click(panel.getByTestId('mcp-add-preview'));
+      await panel.findByTestId('mcp-add-preview-result');
+      expect(calls.filter((c) => c.path === '/mcp/servers/preview').at(-1)?.body).not.toHaveProperty('env');
+    });
+
+    it('shows the preview env names and class advice without values', async () => {
+      wire({ preview: () => Promise.resolve({ ...preview(),
+        server: { ...preview().server, env: { APP_MODE: 'private-app-value', NODE_OPTIONS: 'private-runtime-value' } },
+        envNames: [{ name: 'APP_MODE', class: 'app_setting' }, { name: 'NODE_OPTIONS', class: 'runtime_control' }],
+      }) });
+      const panel = await openForm();
+      fireEvent.click(panel.getByTestId('mcp-add-preview'));
+      const result = within(await panel.findByTestId('mcp-add-preview-result'));
+      const list = result.getByTestId('mcp-add-env-names');
+      expect(list.tagName).toBe('UL');
+      const rows = within(list).getAllByTestId('mcp-add-env-name');
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toHaveAttribute('data-class', 'app_setting');
+      expect(rows[0]).toHaveTextContent('APP_MODE');
+      expect(within(rows[0]!).getByText('App setting')).toHaveStyle({ color: 'var(--ink-dim)' });
+      expect(rows[1]).toHaveAttribute('data-class', 'runtime_control');
+      expect(rows[1]).toHaveTextContent('NODE_OPTIONS');
+      expect(within(rows[1]!).getByText('Runtime control')).toHaveStyle({ color: 'var(--status-warn)' });
+      expect(result.getByText(runtimeAdvice)).toBeInTheDocument();
+      expect(panel.getByTestId('mcp-add-preview-result')).not.toHaveTextContent('private-app-value');
+      expect(panel.getByTestId('mcp-add-preview-result')).not.toHaveTextContent('private-runtime-value');
+    });
+
+    it.each([
+      { envNames: undefined },
+      { envNames: [] },
+      { envNames: [{ name: 'APP_MODE', class: 'app_setting' }] },
+    ])('shows no runtime advice for envNames $envNames', async ({ envNames }) => {
+      wire({ preview: () => Promise.resolve({ ...preview(), ...(envNames === undefined ? {} : { envNames }) }) });
+      const panel = await openForm();
+      fireEvent.click(panel.getByTestId('mcp-add-preview'));
+      await panel.findByTestId('mcp-add-preview-result');
+      expect(panel.queryByTestId('mcp-add-env-names') !== null).toBe(Boolean(envNames?.length));
+      expect(panel.queryByText(runtimeAdvice)).toBeNull();
+    });
+
+    it('explains an env_human_only 403 in plain words', async () => {
+      wire({ preview: () => Promise.reject(new ApiError(403, 'raw operator refusal', { code: 'env_human_only' })) });
+      const panel = await openForm();
+      fireEvent.click(panel.getByTestId('mcp-add-preview'));
+      const error = await panel.findByTestId('mcp-add-error');
+      expect(within(error).getByText('Only a person signed in as the operator can approve settings for a server.')).toBeInTheDocument();
+      expect(error).not.toHaveTextContent('raw operator refusal');
+    });
+
+    it.each(['mcp-http', 'rest'])('hides the field and omits env for %s after typing stdio settings', async (kind) => {
+      wire();
+      const panel = await openForm();
+      fireEvent.change(panel.getByRole('textbox', { name: settingsLabel }), { target: { value: 'A=1\nbad-line' } });
+      fireEvent.change(panel.getByTestId('mcp-add-kind'), { target: { value: kind } });
+      expect(panel.queryByRole('textbox', { name: settingsLabel })).toBeNull();
+      expect(panel.queryByRole('alert')).toBeNull();
+      fireEvent.change(panel.getByTestId('mcp-add-target'), { target: { value: 'https://api.example.com' } });
+      if (kind === 'rest') fireEvent.change(panel.getByTestId('mcp-add-openapi-url'), { target: { value: 'https://api.example.com/openapi.json' } });
+      expect(panel.getByTestId('mcp-add-preview')).toBeEnabled();
+      fireEvent.click(panel.getByTestId('mcp-add-preview'));
+      await panel.findByTestId('mcp-add-preview-result');
+      expect(calls.find((c) => c.path === '/mcp/servers/preview')?.body).not.toHaveProperty('env');
+    });
+  });
+
   it.each(['mcp-http', 'rest'])('%s asks for a loopback range, previews on the tick, and drops consent for an edited URL (studio#1198)', async (kind) => {
     wire();
     const base = apiFetch.getMockImplementation() as (p: string, i?: RequestInit) => Promise<unknown>;
