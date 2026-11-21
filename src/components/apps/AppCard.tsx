@@ -48,12 +48,12 @@ function agoWords(at: number, now = Date.now()): string {
  * reads nothing from a source; without a snapshot it is the app's shape with no rows. The card's headline numbers are
  * the live part.
  */
-function TilePreview({ tile, editor, live }: { tile: AppTileData; editor: PreviewEditor; live: AppDataPort | null }): React.ReactElement {
+function TilePreview({ tile, detail, editor, live }: { tile: AppTileData; detail: AppDetail | null; editor: PreviewEditor; live: AppDataPort | null }): React.ReactElement {
   const box = useRef<HTMLDivElement | null>(null);
   const [torn, setTorn] = useState(false);
   useEffect(() => {
-    if (editor.kind !== 'ready' || box.current === null || tile.detail === null) return undefined;
-    const store = new FixedAppStore(tile.slug, tile.detail, tile.sample ? 'sample' : 'crew');
+    if (editor.kind !== 'ready' || box.current === null || detail === null) return undefined;
+    const store = new FixedAppStore(tile.slug, detail, tile.sample ? 'sample' : 'crew');
     const session = new AppSession(store);
     let host: EditorHost | null = null;
     let cancelled = false;
@@ -75,12 +75,12 @@ function TilePreview({ tile, editor, live }: { tile: AppTileData; editor: Previe
     const theme = new MutationObserver(() => host?.setTheme(readThemeTokens()));
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style', 'class'] });
     return () => { cancelled = true; theme.disconnect(); host?.teardown('The page was left'); session.dispose(); };
-  }, [tile, editor, live]);
+  }, [tile, detail, editor, live]);
   return (
     <div className="wk-appcard-prev" data-testid="apps-card-preview" aria-hidden="true">
       <div ref={box} className="wk-appcard-frame" />
-      {(editor.kind !== 'ready' || torn || tile.detail === null) && (
-        <p className="wk-appcard-noprev">{tile.detail === null ? 'Open it to see it' : editor.kind === 'loading' ? 'Loading preview' : editor.kind === 'absent' ? 'The App editor is not installed here' : editor.kind === 'unread' ? editor.message : 'Preview not shown'}</p>
+      {(editor.kind !== 'ready' || torn || detail === null) && (
+        <p className="wk-appcard-noprev">{detail === null ? 'Open it to see it' : editor.kind === 'loading' ? 'Loading preview' : editor.kind === 'absent' ? 'The App editor is not installed here' : editor.kind === 'unread' ? editor.message : 'Preview not shown'}</p>
       )}
     </div>
   );
@@ -184,18 +184,18 @@ export function AppCard({ tile, editor, navigate, scheduler, origin = null, acti
     } else { handle.seen(true); setSeen(true); }
     return () => { io?.disconnect(); handle.dispose(); };
   }, [crew, tile.slug, detail, scheduler]);
-  const snapAt = tile.detail === null ? null : snapshotAt(tile.slug, tile.detail.head.version);
-  const livePort = useMemo<AppDataPort | null>(() => (tile.detail !== null && snapAt !== null ? snapshotPort(tile.slug, tile.detail.head.version) : null), [tile, snapAt]);
+  const snapAt = detail === null ? null : snapshotAt(tile.slug, detail.head.version);
+  const livePort = useMemo<AppDataPort | null>(() => (detail !== null && snapAt !== null ? snapshotPort(tile.slug, detail.head.version) : null), [tile.slug, detail, snapAt]);
   const locale = typeof navigator !== 'undefined' ? navigator.language : 'en';
   const shownKpis = crew
     ? kpiDefs.map((k, i) => ({ title: k.title, value: live !== null && live.code === null && live.values[i]?.ok === true ? cellText(live.values[i]!.cell as never, k.format as never, locale) : null }))
     : tile.kpis;
   const open = appPath(tile.slug, 'preview', origin);
   return (
-    <article ref={el} className="wk-appcard" data-testid="apps-card" data-slug={tile.slug} data-live={crew ? (live === null ? 'waiting' : live.code === null ? 'ok' : 'error') : 'none'}>
+    <article ref={el} className="wk-appcard" data-testid="apps-tile" data-slug={tile.slug} data-live={crew ? (live === null ? 'waiting' : live.code === null ? 'ok' : 'error') : 'none'}>
       {crew && !seen
         ? <div className="wk-appcard-prev" data-testid="apps-card-preview" aria-hidden="true"><p className="wk-appcard-noprev">Shown when it scrolls into view</p></div>
-        : <TilePreview tile={tile} editor={editor} live={livePort} />}
+        : <TilePreview tile={tile} detail={detail} editor={editor} live={livePort} />}
       <div className="wk-appcard-body">
         <div className="wk-appcard-titlerow">
           <a href={open} className="wk-appcard-open" data-testid="apps-card-open" onClick={(e) => { e.preventDefault(); navigate(open); }}>

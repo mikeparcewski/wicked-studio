@@ -322,16 +322,16 @@ describe('/apps: Archive with Restore (never a delete)', () => {
       return undefined;
     });
     render(<AppsPage navigate={vi.fn()} />);
-    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByTestId('apps-tile')).toHaveLength(2));
     expect(screen.getByTestId('apps-scope')).toBeTruthy();
-    const desk = screen.getAllByTestId('apps-card').find((c) => c.getAttribute('data-slug') === 'desk')!;
+    const desk = screen.getAllByTestId('apps-tile').find((c) => c.getAttribute('data-slug') === 'desk')!;
     fireEvent.click(within(desk).getByTestId('apps-card-menu'));
     fireEvent.click(within(desk).getByTestId('apps-card-archive'));
-    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(1));
+    await waitFor(() => expect(screen.getAllByTestId('apps-tile')).toHaveLength(1));
     expect(calls.filter((c) => c.method === 'POST').map((c) => [c.path, c.body])).toStrictEqual([['/apps/desk/archive', {}]]);
     expect(screen.getByTestId('apps-archive-line').textContent).toMatch(/Archived “Desk”.*nothing was deleted/);
     fireEvent.click(screen.getByTestId('apps-archive-undo'));
-    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByTestId('apps-tile')).toHaveLength(2));
     expect(calls.filter((c) => c.method === 'POST').map((c) => c.path)).toStrictEqual(['/apps/desk/archive', '/apps/desk/unarchive']);
   });
 
@@ -347,12 +347,12 @@ describe('/apps: Archive with Restore (never a delete)', () => {
       return undefined;
     });
     render(<AppsPage navigate={vi.fn()} />);
-    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(1));
+    await waitFor(() => expect(screen.getAllByTestId('apps-tile')).toHaveLength(1));
     fireEvent.click(screen.getByTestId('apps-scope-archived'));
     await waitFor(() => expect(screen.queryByTestId('apps-card-archived')).not.toBeNull());
     // The whole list is read and kept to the scope here (so archive support is known when every app is archived).
     expect(calls.filter((c) => c.path === '/apps').every((c) => c.query === '?archived=all')).toBe(true);
-    const card = screen.getAllByTestId('apps-card')[0]!;
+    const card = screen.getAllByTestId('apps-tile')[0]!;
     expect(within(card).queryByTestId('apps-card-edit')).toBeNull();
     expect(within(card).queryByTestId('apps-card-share')).toBeNull();
     expect(within(card).queryByTestId('apps-card-menu')).toBeNull();
@@ -370,7 +370,7 @@ describe('/apps: Archive with Restore (never a delete)', () => {
       return undefined;
     });
     render(<AppsPage navigate={vi.fn()} />);
-    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(1));
+    await waitFor(() => expect(screen.getAllByTestId('apps-tile')).toHaveLength(1));
     expect(screen.queryByTestId('apps-scope')).toBeNull();
     fireEvent.click(screen.getByTestId('apps-card-menu'));
     expect(screen.queryByTestId('apps-card-archive')).toBeNull();
@@ -389,7 +389,7 @@ describe('/apps: Archive with Restore (never a delete)', () => {
       return undefined;
     });
     render(<AppsPage navigate={vi.fn()} />);
-    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(1));
+    await waitFor(() => expect(screen.getAllByTestId('apps-tile')).toHaveLength(1));
     expect(screen.queryByTestId('apps-card-edit')).toBeNull();
     // No menu: Show on Report and Archive both change something (codex/pi r1).
     expect(screen.queryByTestId('apps-card-menu')).toBeNull();
@@ -407,7 +407,7 @@ describe('/apps: Archive with Restore (never a delete)', () => {
       return undefined;
     });
     const r = render(<AppsPage navigate={vi.fn()} />);
-    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(1));
+    await waitFor(() => expect(screen.getAllByTestId('apps-tile')).toHaveLength(1));
     fireEvent.click(screen.getByTestId('apps-card-menu'));
     fireEvent.click(screen.getByTestId('apps-card-archive'));
     await waitFor(() => expect(screen.getByTestId('apps-archive-line').textContent).toMatch(/Not archived: A chat turn is changing the app/));
@@ -415,7 +415,7 @@ describe('/apps: Archive with Restore (never a delete)', () => {
     Object.defineProperty(window, 'top', { configurable: true, get: () => ({}) });
     try {
       render(<AppsPage navigate={vi.fn()} />);
-      await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(1));
+      await waitFor(() => expect(screen.getAllByTestId('apps-tile')).toHaveLength(1));
       fireEvent.click(screen.getByTestId('apps-card-menu'));
       expect(screen.queryByTestId('apps-card-archive')).toBeNull();
       fireEvent.click(screen.getByTestId('apps-scope-archived'));
@@ -469,7 +469,7 @@ describe('/apps: Archive with Restore (never a delete)', () => {
       return new Response('{}', { status: 404 });
     }) as typeof fetch);
     render(<AppsPage navigate={vi.fn()} />);
-    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(1));
+    await waitFor(() => expect(screen.getAllByTestId('apps-tile')).toHaveLength(1));
     fireEvent.click(screen.getByTestId('apps-card-menu'));
     fireEvent.click(screen.getByTestId('apps-card-archive'));
     fireEvent.click(screen.getByTestId('apps-scope-archived'));

@@ -139,6 +139,14 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
     return new Promise((resolve) => pending.set(id, resolve));
   };
   const say = (type: string, payload: Record<string, unknown>): void => post({ type, payload });
+  // Inline fields commit on blur, which can arrive after focus leaves the frame between focus polls.
+  let gestureAt = Number.NEGATIVE_INFINITY;
+  const inlineGesture = (): void => {
+    const now = Date.now();
+    if (now - gestureAt < 100) return;
+    gestureAt = now;
+    say('ui.gesture', {});
+  };
   // On the document, not the root: a redraw that drops the focused part leaves focus on <body>, and typing there is still the frame's.
   const onFrameKey = (e: KeyboardEvent): void => {
     // The document's onKey keeps Escape's existing deselection, along with undo/delete.
@@ -1254,7 +1262,9 @@ function initializeRuntime(cfg: { editor: string; surfaces: unknown }, connectio
       composing = false;
       if (deferred) { deferred = false; if (!done) draw(); }
     });
+    ed.addEventListener('input', () => { if (!done) inlineGesture(); });
     ed.addEventListener('keydown', (e: Event) => {
+      if (!done) inlineGesture();
       const k = e as KeyboardEvent;
       if (composing || k.isComposing || k.keyCode === 229) return;
       if (k.key === 'Escape') { k.preventDefault(); k.stopPropagation(); finish(false); return; }

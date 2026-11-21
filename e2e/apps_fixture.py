@@ -206,10 +206,6 @@ def _stale(a: dict, base, what: str):
     return None
 
 
-def _text(v) -> str:
-    return "null" if v is None else v if isinstance(v, str) else json.dumps(v)
-
-
 def _unbound(schema) -> list:
     """Required parameters nothing fills (crew's `unbound_param` rule, packages/crew/src/apps/spec.ts)."""
     props = (schema or {}).get("properties", {})
@@ -366,16 +362,17 @@ def _answer(method: str, path: str, body, locked: bool = False):
                 record = f"rec-{len(RECORDS) + 1}"
                 RECORDS[record] = {"app": slug, "version": head, "action": act["id"], "params": params, "state": "prepared", "expiresAt": _now() + RECORD_MS}
                 if act["kind"] == "row-write":
-                    card = {"kind": "row-write", "source": "support-pg-writer (postgres)", "operation": "UPDATE support.tickets",
-                            "rows": [{"label": "owner", "value": VIEWER, "from": "your sign-in"}],
-                            "key": f"id = {_text(params.get('id'))} (exactly 1 row, verified)",
+                    card = {"kind": "row-write", "app": slug, "action": act["id"], "source": "support-pg-writer",
+                            "login": VIEWER, "verb": "UPDATE", "table": "support.tickets",
+                            "columns": [{"name": "owner", "value": VIEWER, "from": "viewer", "label": "your sign-in"}],
+                            "key": [{"name": "id", "value": params.get("id"), "from": "param", "label": "you entered it"}],
+                            "rows": "exactly 1 row, verified",
                             "checks": "Checked just now: a plain table with no triggers, rules, inheritance, row security or cascading keys.",
-                            "request": "UPDATE ONLY support.tickets AS w SET owner = $1::text WHERE w.id = $2::int4 RETURNING pg_typeof(w.*), w.id, owner_ok",
-                            "says": None}
+                            "statement": "UPDATE ONLY support.tickets AS w SET owner = $1::text WHERE w.id = $2::int4 RETURNING pg_typeof(w.*), w.id, owner_ok"}
                 else:
-                    card = {"kind": "api", "source": "ops-api (rest)", "operation": "POST /ping",
-                            "rows": [{"label": "note", "value": "from the app", "from": "fixed by the app"}], "key": None, "checks": None,
-                            "request": 'POST https://ops.example.com/ping\n{"note": "from the app"}', "says": "Pings the on-call channel."}
+                    card = {"kind": "api", "app": slug, "action": act["id"], "source": "ops-api", "sourceKind": "rest", "operation": "POST /ping",
+                            "args": [{"name": "note", "value": "from the app", "from": "app", "label": "fixed by the app"}],
+                            "request": 'POST https://ops.example.com/ping\n{"note": "from the app"}', "appSays": "Pings the on-call channel."}
                 return 200, {"record": record, "card": card, "expiresAt": RECORDS[record]["expiresAt"]}
             rec = RECORDS.get(body.get("record"))
             if rec is None or rec["app"] != slug or rec["action"] != act["id"] or rec["state"] != "prepared":
@@ -388,7 +385,7 @@ def _answer(method: str, path: str, body, locked: bool = False):
                 for r in a["rows"].get("tickets", []):
                     if r[0] == rec["params"].get("id"):
                         r[2] = VIEWER
-            return 200, {"state": "succeeded", "reason": None}
+            return 200, {"record": body["record"], "state": "succeeded"}
         return _refuse(404, "bad_request", "no such route")
 
 

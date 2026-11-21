@@ -185,7 +185,7 @@ function report(projectId?: string, navigate = vi.fn()): ReturnType<typeof vi.fn
 }
 const cards = (): string[] => {
   const sec = screen.queryByTestId('report-dashboards');
-  return sec === null ? [] : within(sec).queryAllByTestId('apps-card').map((c) => c.getAttribute('data-slug') ?? '');
+  return sec === null ? [] : within(sec).queryAllByTestId('apps-tile').map((c) => c.getAttribute('data-slug') ?? '');
 };
 
 beforeEach(() => {
@@ -731,7 +731,7 @@ describe('10. every way in from Report leads back to that Report', () => {
       fireEvent.click(screen.getByTestId('apps-back-report'));
       expect(nav2).toHaveBeenLastCalledWith(target);
       // Report → Apps → the app: the card and its Edit carry the way back on (xreview r1).
-      await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(1));
+      await waitFor(() => expect(screen.getAllByTestId('apps-tile')).toHaveLength(1));
       fireEvent.click(screen.getByTestId('apps-card-open'));
       expect(nav2).toHaveBeenLastCalledWith(`/apps/esc?${from}`);
       fireEvent.click(screen.getByTestId('apps-card-edit'));
@@ -788,7 +788,7 @@ describe('11-12. only switched-on apps, and switching off removes the card', () 
     render(<AppsPage navigate={vi.fn()} />);
     report();
     await waitFor(() => expect(cards()).toStrictEqual(['ref']));
-    const ref = screen.getAllByTestId('apps-card').find((c) => c.getAttribute('data-slug') === 'ref' && c.closest('[data-testid="apps-page"]') !== null)!;
+    const ref = screen.getAllByTestId('apps-tile').find((c) => c.getAttribute('data-slug') === 'ref' && c.closest('[data-testid="apps-page"]') !== null)!;
     expect(within(ref).getByTestId('apps-card-onreport')).toBeTruthy();
     fireEvent.click(within(ref).getByTestId('apps-card-menu'));
     fireEvent.click(within(ref).getByTestId('show-on-report-switch'));
@@ -821,8 +821,8 @@ describe('13. at most 4, checked by the writer', () => {
     const props = (): HTMLElement => screen.getAllByTestId('show-on-report').find((n) => n.getAttribute('data-variant') === 'properties')!;
     await waitFor(() => expect(within(props()).getByTestId('show-on-report-why').textContent).toBe('Report shows 4 dashboards; turn one off first: A, B, C, D.'));
     expect((within(props()).getByTestId('show-on-report-switch') as HTMLButtonElement).disabled).toBe(true);
-    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(5));
-    const e = screen.getAllByTestId('apps-card').find((c) => c.getAttribute('data-slug') === 'e')!;
+    await waitFor(() => expect(screen.getAllByTestId('apps-tile')).toHaveLength(5));
+    const e = screen.getAllByTestId('apps-tile').find((c) => c.getAttribute('data-slug') === 'e')!;
     fireEvent.click(within(e).getByTestId('apps-card-menu'));
     expect(within(e).getByTestId('show-on-report-why').textContent).toBe('Report shows 4 dashboards; turn one off first: A, B, C, D.');
     expect((within(e).getByTestId('show-on-report-switch') as HTMLButtonElement).disabled).toBe(true);
@@ -863,8 +863,8 @@ describe('14-15. one writer: exact payloads, in order', () => {
     expect(screen.getByTestId('show-on-report-switch').getAttribute('aria-checked')).toBe('false');
     cleanup();
     render(<AppsPage navigate={vi.fn()} />);
-    await waitFor(() => expect(screen.getAllByTestId('apps-card')).toHaveLength(2));
-    const a1 = screen.getAllByTestId('apps-card').find((c) => c.getAttribute('data-slug') === 'a1')!;
+    await waitFor(() => expect(screen.getAllByTestId('apps-tile')).toHaveLength(2));
+    const a1 = screen.getAllByTestId('apps-tile').find((c) => c.getAttribute('data-slug') === 'a1')!;
     expect(within(a1).queryByTestId('apps-card-onreport')).toBeNull();
     fireEvent.click(within(a1).getByTestId('apps-card-menu'));
     expect(within(a1).getByTestId('show-on-report-switch').getAttribute('aria-checked')).toBe('false');

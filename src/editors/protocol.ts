@@ -147,6 +147,7 @@ export const EVENTS = {
   'ui.morph': null,
   'ui.key': null,
   'ui.typed': null,
+  'ui.gesture': null,
   'ui.status': null,
   'plugin.error': null,
   'options.values': null,
@@ -281,6 +282,7 @@ function payloadOk(type: string, p: Record<string, unknown>, protocol: number): 
     case 'data.action': return onlyKeys(p, ['action', 'params']) && isNamedId(p['action']) && (p['params'] === undefined || isParams(p['params']));
     case 'link.open': return onlyKeys(p, ['href']) && isLine(p['href'], 2_048);
     case 'ui.key': return isStr(p['key'], 40);
+    case 'ui.gesture': return Object.keys(p).length === 0;
     case 'ui.typed': return isStr(p['grapheme'], 64);
     case 'ui.status': return isLine(p['line'], LIMITS.statusChars);
     case 'plugin.error': return isStr(p['message'], 2_000);

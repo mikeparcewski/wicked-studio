@@ -970,6 +970,9 @@ export class EditorHost {
         this.snapshot(tab.id, p['rev'] as number, p['values'] as Record<string, unknown>);
         return;
       }
+      case 'ui.gesture':
+        this.noteGesture();
+        return;
       case 'ui.height':
         if (this.decl?.card.aspect !== 'auto') { this.log({ kind: 'dropped', type, why: 'the card is not aspect:auto' }); return; }
         this.o.ui.cardHeight?.(this.o.heightRange !== undefined

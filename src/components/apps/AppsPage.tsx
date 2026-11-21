@@ -3,7 +3,7 @@ import { api } from '../../api/client.js';
 import { listEditors } from '../../api/editors.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
 import { originOf, useOriginTarget } from '../../editors/apps/appOrigin.js';
-import { PREVIEW_LIMIT, loadAppsDirectory, setArchived, type AppTileData, type AppsDirectory } from '../../editors/apps/appsDirectory.js';
+import { loadAppsDirectory, setArchived, type AppTileData, type AppsDirectory } from '../../editors/apps/appsDirectory.js';
 import { fetchGrants } from '../../editors/model.js';
 import { APPS_EDITOR } from '../../editors/protocol.js';
 import { knowledgeAvailable, type SuggestionGrounds } from '../../editors/apps/suggestionGrounds.js';
@@ -198,9 +198,6 @@ export function AppsPage({ navigate, search = '' }: { navigate: (path: string) =
         <p className="wk-apps-dash-line wk-apps-dash-line--fail" data-testid="apps-error">
           The apps could not be read: {dir.message}. <button type="button" className="wk-btn wk-btn--link" data-testid="apps-retry" onClick={() => setAttempt((n) => n + 1)}>Try again</button>
         </p>
-      )}
-      {apps.length > PREVIEW_LIMIT && (
-        <p className="wk-apps-dash-line" data-testid="apps-preview-limit">The first {PREVIEW_LIMIT} of {apps.length} apps show a preview; open any app to see it.</p>
       )}
       {skipped > 0 && (
         <p className="wk-apps-dash-line" data-testid="apps-skipped">{skipped === 1 ? 'One app crew lists has' : `${skipped} apps crew lists have`} an address studio can’t open, so {skipped === 1 ? 'it is' : 'they are'} not shown.</p>
