@@ -62,6 +62,9 @@
 .wk-gate2 { gap: 14px; }
 .wk-gate2-q { margin: 0; font-size: var(--text-section); line-height: 1.35; font-weight: var(--weight-strong);  color: var(--ink-high); }
 .wk-gate2-p { margin: 0; font-size: var(--text-lead); line-height: 1.6; color: var(--ink-body); }
+/* wicked-studio#1255 / wicked-core#1702: bounded path text wraps without widening the phone card. */
+.wk-gate2-refused { display: flex; flex-direction: column; gap: 4px; min-width: 0; max-width: 100%; overflow-wrap: anywhere; font-size: var(--text-body); line-height: 1.5; color: var(--ink-body); }
+.wk-gate2-refused p { margin: 0; }
 .wk-gate2 > .wk-gate-consequence, .wk-gate2 > p.wk-gate-consequence { font-size: var(--text-body); line-height: 1.6; }
 .wk-gate2-fails { display: flex; flex-direction: column; gap: 12px; }
 .wk-gate2-new {

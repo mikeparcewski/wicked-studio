@@ -7,7 +7,7 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 
 import type { RosterSeat, SessionView as RunView } from '../../api/types.js';
 import { QeRefusalWarning } from '../QeRefusalWarning.js';
 import { GATE_HASH, IDLE_GATE_ACTION, commitGateDecision, commitGateReassign, gateKeyOf, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
-import { FLOOR_FIX_LABEL, listedOnlyChoices, namedSendBackNote, SEND_BACK_NAMED_LABEL, sessionGateChoices, soonestBack, type DeadSeat, type GateRowChoice, type GateRowModel } from '../../board/gateRowModel.js';
+import { FLOOR_FIX_LABEL, listedOnlyChoices, namedSendBackNote, SEND_BACK_NAMED_LABEL, sessionGateChoices, soonestBack, type DeadSeat, type GateRowChoice, type GateRowModel, type RefusedCall } from '../../board/gateRowModel.js';
 import { AskCard, AskRecord, type AskReason } from '../ask/AskCard.js';
 import { askFromGate, gateOption } from '../../board/askModel.js';
 import type { AskOption } from '../../api/ask.js';
@@ -53,6 +53,21 @@ import { FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_PLACEHOL
 /** How often a judge-unavailable gate re-reads whether a judge seat can rule now (a seat signed in
  *  elsewhere, an image built): the offer follows without a reload. */
 const REJUDGE_POLL_MS = 20_000;
+
+/** wicked-studio#1255 / wicked-core#1702: keep the path and rule beside the answer, including on a phone. */
+function RefusedCallLines({ call }: { call: RefusedCall }): React.ReactElement {
+  const verb = call.command.startsWith('cd ') || call.reason.includes('`cd`') ? 'cd into'
+    : call.access === 'write' ? 'write to' : 'read';
+  // studio#444 rule (src/board/homePath.ts): a home directory never renders, in the text or the tooltip.
+  const full = useDisplayPath()(call.path);
+  const path = full.length > 72 ? `${full.slice(0, 34)}…${full.slice(-37)}` : full;
+  return (
+    <div className="wk-gate2-refused">
+      <p>Tried to {verb} <span title={full}>{path}</span>, outside this job’s folder</p>
+      <p>Rule: <code>{call.rule}</code></p>
+    </div>
+  );
+}
 
 /**
  * (crew api-types 0.134.0) A judge-unavailable gate's re-judge offer, read from `GET /runs/:id/gate`
@@ -939,6 +954,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsReading = fal
     >
       {/* The question, in plain words: the dock's headline. */}
       <h2 data-testid="session-gate-question" className="wk-session-gate-question wk-gate2-q">{question}</h2>
+      {model.refused !== undefined && <RefusedCallLines call={model.refused} />}
       {rulesLine}
       {sentence !== null && <p data-testid={refusalLines !== null && sentence === refusalLines.lead ? 'session-gate-refusal' : model.qe !== undefined && sentence === model.qe.why ? 'session-gate-qe-why' : 'session-gate-sentence'} {...(model.qe !== undefined && sentence === model.qe.why ? { 'data-qe-outcome': model.qe.outcome } : {})} className="wk-session-gate-detail-item wk-gate2-p">{sentence}</p>}
       {model.reason === 'escalation' && model.failing.length > 0 && model.failingTests === undefined && <ReviewFindings key={gateKey} items={model.failing} />}

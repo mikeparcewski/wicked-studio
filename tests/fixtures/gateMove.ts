@@ -41,3 +41,27 @@ export const NOT_PASS_EVENTS = [
     denialSource: 'evaluator_verdict', verdictSummary: REVIEWER_REASON, outputCaptured: true,
   },
 ] as unknown as CoreEvent[];
+
+// wicked-studio#1255 / wicked-core#1702: e4ecd9ca ord 3, with the structured refused call.
+export const BOUNDARY_RUN = 'e4ecd9ca';
+export const BOUNDARY_REFUSED = {
+  evaluator: 'wicked-governance-boundary', rule: 'engine:filesystem-boundary-write', tool: 'Bash',
+  command: 'cd ../..; wicked-garden run scripts/domain/extract_loop.py',
+  reason: "Bash `cd` leaves the unit boundary: path outside this unit's boundary: /work/repos/tiny-math (write). Allowed: /work/repos/tiny-math/wicked-worktrees/e4ecd9ca",
+  path: '/work/repos/tiny-math', access: 'write',
+};
+export const BOUNDARY_DENIAL = {
+  source: 'input_governance', claimId: 'boundary-deny:unit-3', deniedTool: 'Bash', phase: 'unit-3',
+  ruleIds: ['engine:filesystem-boundary-write'],
+  reason: `input governance denied a tool-call in unit-3 (claim boundary-deny:unit-3): ${BOUNDARY_REFUSED.reason} (command: ${BOUNDARY_REFUSED.command})`,
+  refused: BOUNDARY_REFUSED,
+};
+export const BOUNDARY_PROMPT = 'Unit 3 was DENIED by input governance — a tool call was refused (`Bash`): Bash `cd` leaves the unit boundary: path outside this unit’s boundary: /work/repos/tiny-ma…';
+export const BOUNDARY_EVENTS = [
+  { type: 'gateEvaluated', session: BOUNDARY_RUN, ord: 3, attempt: 0, combined: false, denial: BOUNDARY_DENIAL },
+  { type: 'gateEscalated', session: BOUNDARY_RUN, ord: 3, condition: 'boundary_deny', denialSource: 'input_governance' },
+  { type: 'awaitingHuman', session: BOUNDARY_RUN, ord: 3, gateKind: 'escalation', prompt: BOUNDARY_PROMPT },
+] as unknown as CoreEvent[];
+export const BOUNDARY_UNITS: WorkUnit[] = [
+  makeUnit({ id: `${BOUNDARY_RUN}:extract`, session_id: BOUNDARY_RUN, ord: 3, stage: 'build', role: 'creator', status: 'rejected', assigned_cli: 'claude' }),
+];
