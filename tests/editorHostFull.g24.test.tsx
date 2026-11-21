@@ -14,6 +14,7 @@ vi.mock('../src/board/askAbout.js', () => ({
 const { HostPanel } = await import('../src/components/editorHost/HostPanel.js');
 const { PluginCard } = await import('../src/components/editorHost/PluginCard.js');
 const { RunHostProvider } = await import('../src/components/editorHost/RunHostContext.js');
+const { InteractiveDocSurfaceAdapter } = await import('../src/editors/adapters/interactiveDoc.js');
 const { FakeSurfaceAdapter } = await import('../src/editors/adapters/fake.js');
 const { RUN_TAB, useHostChrome, useHostPanel } = await import('../src/editors/hostApi.js');
 const { resetArtifactSizes } = await import('../src/store/artifactSizes.js');
@@ -87,6 +88,25 @@ afterEach(() => {
   for (const port of ports.splice(0)) port.close();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+it('T24: a deck uses its head HTML title in the card, full screen, and accessible name', async () => {
+  const binding: ArtifactBinding = { ...BINDING, title: 'presentation 32b47400', kind: 'deck', source: 'interactive-doc', projectId: 'p1', docId: 'deck1' };
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => String(url).includes('/versions')
+    ? new Response(JSON.stringify({ head: 2, versions: [{ version: 2, parent: 1, created_at: '', feedback_file: null }] }), { status: 200 })
+    : new Response('<html><head><title>Meet tiny-math</title></head><body><h1>A slide</h1></body></html>', { status: 200 })));
+  const adapter = new InteractiveDocSurfaceAdapter(binding);
+  render(<PluginCard binding={binding} editor={EDITOR} adapter={adapter} src="about:blank" grants={GRANTS} />);
+  await act(async () => { await adapter.read(); });
+  await waitFor(() => expect(screen.getByTestId('plugin-card').querySelector('.wk-pcard-title')?.textContent).toBe('Meet tiny-math'));
+  expect(screen.getByTestId('plugin-card').getAttribute('aria-label')).toBe('Page: Meet tiny-math');
+  act(() => useHostChrome.getState().enterFull(binding.artifactKey));
+  expect(screen.getByTestId('full-shell').textContent).toContain('Meet tiny-math');
+  expect(screen.getByTestId('full-shell').textContent).not.toContain('presentation 32b47400');
+  // Reading an older version must not rename the current document.
+  vi.mocked(fetch).mockResolvedValueOnce(new Response('<html><head><title>Earlier title</title></head></html>'));
+  await act(async () => { await adapter.read(1); });
+  expect(screen.getByTestId('full-shell').textContent).toContain('Meet tiny-math');
 });
 
 describe('G24: full screen keeps the card’s actions', () => {

@@ -20,7 +20,7 @@ const { resetJobLocal } = await import('../src/hooks/useJobStream.js');
 const { resetDecisionsForTest } = await import('../src/board/undoQueue.js');
 const { setCachedRoster } = await import('../src/store/rosterCache.js');
 const { asksForRepo, repoChoices } = await import('../src/components/session/JobRepoChoices.js');
-const { adoptMove, loadMoves, moveOf, MOVE_KEY_PREFIX, putMove, resetJobMoves, useJobMoves } = await import('../src/store/jobMoves.js');
+const { adoptMove, loadMoves, retireMoved, moveOf, MOVE_KEY_PREFIX, putMove, resetJobMoves, useJobMoves } = await import('../src/store/jobMoves.js');
 const { reposNamedIn } = await import('../src/store/repoProjects.js');
 const { postJob } = await import('../src/store/inlineStart.js');
 const { takesRepo } = await import('../src/board/slashCatalog.js');
@@ -55,6 +55,8 @@ let failRepos = false;
 let seedStatuses: number[] = [];
 let seedGate: Promise<void> = Promise.resolve();
 let membersGate: Promise<void> = Promise.resolve();
+let notNowGate: Promise<void> = Promise.resolve();
+let closeFails = false;
 let catalog: unknown = null;
 let repos = REPOS;
 const posts: Array<{ path: string; body: Record<string, unknown> }> = [];
@@ -71,6 +73,8 @@ beforeEach(() => {
   seedStatuses = [];
   seedGate = Promise.resolve();
   membersGate = Promise.resolve();
+  notNowGate = Promise.resolve();
+  closeFails = false;
   catalog = null;
   repos = REPOS;
   resetCatalogV2();
@@ -84,7 +88,9 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
     if (init?.method === 'POST') {
-      posts.push({ path, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+      posts.push({ path, body: JSON.parse(String(init.body ?? '{}')) as Record<string, unknown> });
+      if (path.startsWith(`/chats/${CHAT}/proposals/`)) return notNowGate.then(() => ok({ view: {} }));
+      if (path === `/chats/${CHAT}/close` && closeFails) return Promise.resolve(ok({ error: 'the daemon said no' }, 500));
       if (path === '/chats') {
         const st = seedStatuses.shift() ?? 201;
         return seedGate.then(() => (st >= 400 ? ok({ error: 'the daemon said no' }, st) : ok({ chatId: 'seeded-1', seats: [], scope: null, refused: [], proposal: { state: 'open', proposal: { pid: 'seeded-1:person:1', kind: 'job' } } }, 201)));
@@ -110,6 +116,58 @@ const repoChips = (): HTMLButtonElement[] => screen.queryAllByTestId('job-passag
 const projectChips = (): HTMLButtonElement[] => screen.queryAllByTestId('job-passage-project') as HTMLButtonElement[];
 const seeds = () => posts.filter((p) => p.path === '/chats');
 const notNows = () => posts.filter((p) => p.path.startsWith(`/chats/${CHAT}/proposals/`));
+
+describe('T6: the chat a job leaves', () => {
+  it('ends a proposal-only chat once, after Not now lands', async () => {
+    let release!: () => void;
+    notNowGate = new Promise((r) => { release = r; });
+    members = { p1: [{ member_kind: 'crew.repo', member_ref: 'rg2' }] };
+    page();
+    await waitFor(() => expect(repoChips().length).toBeGreaterThan(0));
+    fireEvent.click(repoChips()[0]!);
+    await waitFor(() => expect(notNows()).toHaveLength(1));
+    expect(posts.filter((p) => p.path === `/chats/${CHAT}/close`)).toEqual([]);
+    await act(async () => { release(); });
+    await waitFor(() => expect(posts.filter((p) => p.path === `/chats/${CHAT}/close`)).toHaveLength(1));
+    retireMoved(CHAT, asking().pid, useJobMoves.getState().moves[asking().pid]!);
+    expect(notNows()).toHaveLength(1);
+    expect(posts.map((p) => p.path)).toEqual(['/chats', `/chats/${CHAT}/proposals/${encodeURIComponent(asking().pid)}`, `/chats/${CHAT}/close`]);
+    expect(seeds()).toHaveLength(1);
+  });
+  it('a chat that could not be ended still reads moved, with no retry that re-sends Not now', async () => {
+    closeFails = true;
+    members = { p1: [{ member_kind: 'crew.repo', member_ref: 'rg2' }] };
+    page();
+    await waitFor(() => expect(repoChips().length).toBeGreaterThan(0));
+    fireEvent.click(repoChips()[0]!);
+    await waitFor(() => expect(posts.filter((p) => p.path === `/chats/${CHAT}/close`)).toHaveLength(1));
+    await waitFor(() => expect(useJobMoves.getState().moves[asking().pid]?.retired).toBe('done'));
+    expect(useJobMoves.getState().moves[asking().pid]?.error).toBeNull();
+    expect(screen.queryByTestId('job-passage-projects-error')).toBeNull();
+    expect(screen.queryByTestId('job-passage-projects-retire')).toBeNull();
+    expect(screen.getByTestId('job-passage-projects').textContent).toContain('This job moved to reqgraph.');
+    expect(notNows()).toHaveLength(1);
+  });
+  it('keeps a chat with a message turn and shows where the job moved', async () => {
+    messages.unshift({ at: T0 - 1, turnId: 'person:0', kind: 'user', text: 'Please keep this discussion.' });
+    members = { p1: [{ member_kind: 'crew.repo', member_ref: 'rg2' }] };
+    page();
+    await waitFor(() => expect(repoChips().length).toBeGreaterThan(0));
+    fireEvent.click(repoChips()[0]!);
+    await waitFor(() => expect(useJobMoves.getState().moves[asking().pid]?.retired).toBe('done'));
+    expect(posts.filter((p) => p.path === `/chats/${CHAT}/close`)).toEqual([]);
+    expect(screen.getByTestId('job-passage-projects').textContent).toContain('This job moved to reqgraph.');
+  });
+  it('keeps a chat with another proposal lineage', async () => {
+    messages.unshift({ at: T0 - 1, turnId: 'person:0', kind: 'proposal', proposal: asking({ pid: 'earlier', lineage: 'earlier' }) });
+    members = { p1: [{ member_kind: 'crew.repo', member_ref: 'rg2' }] };
+    page();
+    await waitFor(() => expect(repoChips().length).toBeGreaterThan(0));
+    fireEvent.click(repoChips()[0]!);
+    await waitFor(() => expect(useJobMoves.getState().moves[asking().pid]?.retired).toBe('done'));
+    expect(posts.filter((p) => p.path === `/chats/${CHAT}/close`)).toEqual([]);
+  });
+});
 
 describe('F41: "Which repository?" on a job in a new chat is answerable in the passage', () => {
   it('offers the registered repositories as chips, the one the words name first, under wicked’s question (no Start)', async () => {

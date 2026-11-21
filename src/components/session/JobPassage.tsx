@@ -81,9 +81,10 @@ const TOKEN_KIND: Readonly<Record<ProposalToken['kind'] | 'documents' | 'sources
   depth: 'how deep', checks: 'what checks it', detail: 'detail', documents: 'documents', sources: 'sources',
 };
 
-export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, navigate, say, onChanged }: {
+export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, endSourceChat = false, navigate, say, onChanged }: {
   chatId: string;
   lineage: JobLineage;
+  endSourceChat?: boolean;
   /** The chat's runs (the launched run is found here, by the lineage's result or `from_proposal`). */
   runs: readonly SessionView[];
   sessionId: string;
@@ -568,9 +569,9 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
           <span className="wk-pass-ask-who">{question.kind === 'lost_check' ? 'wicked asks · only your press changes the checks' : 'wicked asks'}</span>
           <p>{question.text}</p>
           {/* F39: crew asks for the project with nothing to press; the passage offers the projects (a new chat there). */}
-          {asksForProject(head.proposal) && <JobProjectChoices chatId={chatId} proposal={head.proposal} onError={setError} />}
+          {asksForProject(head.proposal) && <JobProjectChoices chatId={chatId} proposal={head.proposal} endSourceChat={endSourceChat} onError={setError} />}
           {/* F41: crew asks for the repository with nothing to press (a new chat has none in scope): the registered ones. */}
-          {asksForRepo(head.proposal) && <JobRepoChoices chatId={chatId} proposal={head.proposal} onError={setError} />}
+          {asksForRepo(head.proposal) && <JobRepoChoices chatId={chatId} proposal={head.proposal} endSourceChat={endSourceChat} onError={setError} />}
           {requirementsNeed !== undefined && (
             <JobRequirementsChoices key={`${pid}:${requirementsNeed.id}`} proposal={head.proposal} navigate={navigate}
               disabled={v.tokensHeld || local.deciding[lineage.lineage] === true}

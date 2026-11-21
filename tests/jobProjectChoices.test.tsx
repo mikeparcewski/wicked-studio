@@ -21,6 +21,9 @@ const { setCachedRoster } = await import('../src/store/rosterCache.js');
 const { asksForProject, useJobMoves } = await import('../src/components/session/JobProjectChoices.js');
 const { jobProposal } = await import('./jobFixtures.js');
 
+const { useProjectsStore } = await import('../src/store/projects.js');
+const { clearRepoCache } = await import('../src/store/repoCache.js');
+
 const CHAT = 'chat-j';
 const T0 = 1_700_000_000_000;
 const asking = () => jobProposal({
@@ -40,6 +43,9 @@ let members: Record<string, Array<{ member_kind: string; member_ref: string }>> 
 /** Members reads that fail (a project id), the projects read failing, and the Not now answer. */
 let failMembers = new Set<string>();
 let failProjects = false;
+let projectList = [{ id: 'default', name: 'Unfiled' }, { id: 'p1', name: 'reqgraph' }, { id: 'p2', name: 'other' }];
+let createStatus = 201;
+let attachStatus = 200;
 let notNowStatus = 200;
 /** Held until released: the Not now answer. */
 let notNowGate: Promise<void> = Promise.resolve();
@@ -54,11 +60,17 @@ function ok(body: unknown, status = 200): Response {
 beforeEach(() => {
   posts.length = 0;
   messages = [
+    { at: T0 - 1, turnId: 'person:0', kind: 'user', text: 'Map this repository.' },
     { at: T0, turnId: 'person:1', kind: 'proposal', proposal: asking() },
   ];
   members = { p1: [{ member_kind: 'crew.repo', member_ref: 'rg1' }], p2: [] };
   failMembers = new Set();
   failProjects = false;
+  createStatus = 201;
+  attachStatus = 200;
+  projectList = [{ id: 'default', name: 'Unfiled' }, { id: 'p1', name: 'reqgraph' }, { id: 'p2', name: 'other' }];
+  useProjectsStore.setState({ projects: [] });
+  clearRepoCache();
   notNowStatus = 200;
   notNowGate = Promise.resolve();
   chatMessages = {};
@@ -72,13 +84,16 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
     if (init?.method === 'POST') {
-      posts.push({ path, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+      posts.push({ path, body: JSON.parse(String(init.body ?? '{}')) as Record<string, unknown> });
+      if (path === '/projects') return Promise.resolve(createStatus >= 400 ? ok({ error: 'name already taken' }, createStatus) : ok({ project: { id: 'new-project', name: JSON.parse(String(init.body)).name } }, 201));
+      if (path === '/projects/new-project/members') return Promise.resolve(attachStatus >= 400 ? ok({ error: 'repository unavailable' }, attachStatus) : ok({ member: {} }));
       if (path.startsWith(`/chats/${CHAT}/proposals/`)) return notNowGate.then(() => (notNowStatus >= 400 ? ok({ error: 'the daemon said no' }, notNowStatus) : ok({ view: {} })));
       if (path === '/chats') return Promise.resolve(ok({ chatId: 'seeded-p1', seats: [], scope: null, refused: [], proposal: { state: 'open', proposal: { pid: 'seeded-p1:person:1', kind: 'job' } } }, 201));
       return Promise.resolve(ok({ view: {} }));
     }
     if (path === '/projects' && failProjects) return Promise.resolve(ok({ error: 'down' }, 503));
-    if (path === '/projects') return Promise.resolve(ok({ projects: [{ id: 'default', name: 'Unfiled' }, { id: 'p1', name: 'reqgraph' }, { id: 'p2', name: 'other' }] }));
+    if (path === '/projects') return Promise.resolve(ok({ projects: projectList }));
+    if (path === '/repos') return Promise.resolve(ok({ repos: [{ id: 'rg1', name: 'Repository name' }] }));
     const m = /^\/projects\/([^/]+)\/members$/.exec(path);
     if (m !== null) return Promise.resolve(failMembers.has(m[1]!) ? ok({ error: 'down' }, 503) : ok({ members: members[m[1]!] ?? [] }));
     const cm = /^\/chats\/([^/]+)/.exec(path);
@@ -92,6 +107,50 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); resetDecisionsForTest(); });
 
 const page = (id = CHAT) => render(<SessionPage sessionId={id} runs={[]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
 const chips = (): HTMLButtonElement[] => screen.queryAllByTestId('job-passage-project') as HTMLButtonElement[];
+
+describe('T16: make a project while answering Which project?', () => {
+  it('creates a named project, attaches the repository, and moves the job there', async () => {
+    projectList = [];
+    page();
+    fireEvent.click(await screen.findByRole('button', { name: 'New project' }));
+    const name = await screen.findByRole('textbox', { name: 'Project name' });
+    await waitFor(() => expect((name as HTMLInputElement).value).toBe('Repository name'));
+    fireEvent.change(name, { target: { value: 'Domain work' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => expect(posts.some((p) => p.path === '/chats')).toBe(true));
+    expect(posts.slice(0, 3)).toMatchObject([
+      { path: '/projects', body: { name: 'Domain work' } },
+      { path: '/projects/new-project/members', body: { kind: 'crew.repo', ref: 'rg1', attachedBy: 'studio' } },
+      { path: '/chats', body: { projectId: 'new-project', repoRefs: ['rg1'] } },
+    ]);
+    expect(useProjectsStore.getState().projects).toContainEqual(expect.objectContaining({ id: 'new-project', name: 'Domain work' }));
+  });
+  it('keeps a created project offered after attachment fails and retries attachment before moving', async () => {
+    attachStatus = 503;
+    page();
+    fireEvent.click(await screen.findByRole('button', { name: 'New project' }));
+    await screen.findByRole('textbox', { name: 'Project name' });
+    await waitFor(() => expect((screen.getByRole('textbox', { name: 'Project name' }) as HTMLInputElement).value).toBe('Repository name'));
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await screen.findByText(/The repository was not attached/);
+    expect(posts.some((p) => p.path === '/chats')).toBe(false);
+    expect(useProjectsStore.getState().projects.some((p) => p.id === 'new-project')).toBe(true);
+    attachStatus = 200;
+    fireEvent.click(chips().find((p) => p.dataset.project === 'new-project')!);
+    await waitFor(() => expect(posts.some((p) => p.path === '/chats')).toBe(true));
+    expect(posts.filter((p) => p.path === '/projects')).toHaveLength(1);
+    expect(posts.filter((p) => p.path === '/projects/new-project/members')).toHaveLength(2);
+  });
+  it('says when creation fails and sends no attachment or job', async () => {
+    createStatus = 409;
+    page();
+    fireEvent.click(await screen.findByRole('button', { name: 'New project' }));
+    await waitFor(() => expect((screen.getByRole('textbox', { name: 'Project name' }) as HTMLInputElement).value).toBe('Repository name'));
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await screen.findByText(/The project was not created/);
+    expect(posts.map((p) => p.path)).toEqual(['/projects']);
+  });
+});
 
 describe('F39: "Project?" on a job is answerable in the passage', () => {
   it('offers the projects that hold the job’s repository, as chips, under wicked’s question (no Start yet)', async () => {
