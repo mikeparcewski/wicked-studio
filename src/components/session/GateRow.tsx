@@ -47,7 +47,7 @@ import { builderResponder } from '../../board/responder.js';
 import { gateCause, gateQuestion, gateWithLogChoices, judgeSeats, runPoolOf, seatName } from '../../board/gateHeadline.js';
 
 export { gateWithLogChoices, judgeSeats };
-import { FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_PLACEHOLDER, FLOOR_OVERRIDE_SEND } from '../../board/floorOverride.js';
+import { FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_PLACEHOLDER, FLOOR_OVERRIDE_SEND, TOOL_CHECK_OVERRIDE_CONSEQUENCE, TOOL_CHECK_OVERRIDE_KEY, TOOL_CHECK_OVERRIDE_PLACEHOLDER, TOOL_CHECK_OVERRIDE_SEND } from '../../board/floorOverride.js';
 
 /** How often a judge-unavailable gate re-reads whether a judge seat can rule now (a seat signed in
  *  elsewhere, an image built): the offer follows without a reload. */
@@ -867,7 +867,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       : c.reassignCli !== undefined && builders.includes(c.reassignCli) ? { sub: `${builderName(c.reassignCli)} checks its own work (reduced assurance)` } : {}),
     // The suggested move says crew's consequence when crew wrote one for it.
     consequence: c.key === FLOOR_OVERRIDE_KEY && model.refusal !== undefined ? c.title
-      : c.key === recKey && model.consequence !== null ? model.consequence : c.key === FLOOR_OVERRIDE_KEY ? FLOOR_OVERRIDE_CONSEQUENCE : null,
+      : c.key === recKey && model.consequence !== null ? model.consequence : c.key === FLOOR_OVERRIDE_KEY ? FLOOR_OVERRIDE_CONSEQUENCE
+        : c.key === TOOL_CHECK_OVERRIDE_KEY ? TOOL_CHECK_OVERRIDE_CONSEQUENCE : null,
     recommended: c.key === recKey,
   }));
   const ask = askFromGate({ id: gateKey, prompt: question, from: 'The engine asks', options, recommended: recKey });
@@ -876,6 +877,9 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     // The floor override says what it does FIRST, then asks why (the rationale is required, never prefilled).
     if (o.id === FLOOR_OVERRIDE_KEY) return { label: 'Your rationale (required)', labelTestId: /* testid */ 'session-gate-floor-override-label', placeholder: FLOOR_OVERRIDE_PLACEHOLDER, send: FLOOR_OVERRIDE_SEND,
       consequenceTestId: /* testid */ 'session-gate-floor-override-consequence' };
+    // wicked-core#1318: the same judgment past a failed tool check at triage, in that check's words.
+    if (o.id === TOOL_CHECK_OVERRIDE_KEY) return { label: 'Your reason (required)', labelTestId: /* testid */ 'session-gate-tool-check-override-label', placeholder: TOOL_CHECK_OVERRIDE_PLACEHOLDER, send: TOOL_CHECK_OVERRIDE_SEND,
+      consequenceTestId: /* testid */ 'session-gate-tool-check-override-consequence' };
     if (o.id === SKIP_QE_KEY) return { label: 'Your reason (required, kept with the delivery)', placeholder: SKIP_QE_PLACEHOLDER, send: o.label };
     if (o.id === 'stop') return { label: 'Why stop? (kept with the record)', placeholder: 'One line is enough', send: 'Stop the run with this reason' };
     // studio#612: the floor fix's note is the fixing seat's whole task, not a steer.

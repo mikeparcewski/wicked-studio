@@ -1,6 +1,8 @@
 import type { CoreEvent, SessionView } from '../api/types.js';
 import { checkOutcome, floorOf, type GateFloorCheck, type GateFloorView } from '../components/gateVerdictModel.js';
 import { durableFloorOverrides, type AssuranceReceipt } from './assuranceModel.js';
+import { isToolCheckOverride, overrideLabel, overrideWhere } from './floorOverride.js';
+import { actorWords } from './actorWords.js';
 
 /**
  * What failed, on the card's face (rig 0.15.8, 2026-10-25): a failed repository-checks floor named only
@@ -234,6 +236,10 @@ function floorAt(events: readonly CoreEvent[], ord: number, attempt: number | nu
 export interface OverriddenFloors {
   /** The checks that failed where the operator overrode the floor, in first-seen order. */
   checks: string[];
+  /** (wicked-core#1318) The repository-checks floors overridden (absent: at least one, as before) and the failed tool
+   *  checks the operator counted at triage (layer `tool_check`): said in their own words, never as a floor. */
+  floors?: number;
+  toolChecks?: number;
   /** Every one of them failed on the run's base as well. */
   onBase: boolean;
   /** The distinct failing tests the runner named in those checks (0 when it named none). */
@@ -259,11 +265,15 @@ export function overriddenFloorsOf(
   /** The run: its durable record (`session.assurance.floorOverrides`) counts even when no gate receipt is in hand. */
   view?: SessionView | null,
 ): OverriddenFloors | null {
-  const overrides = (receipt?.operatorJudges ?? []).filter((j) => j.floorOverride !== undefined);
+  const all = (receipt?.operatorJudges ?? []).filter((j) => j.floorOverride !== undefined);
   for (const d of durableFloorOverrides(view)) {
-    if (!overrides.some((o) => o.floorOverride!.resultId !== '' && o.floorOverride!.resultId === d.floorOverride!.resultId)) overrides.push(d);
+    if (!all.some((o) => o.floorOverride!.resultId !== '' && o.floorOverride!.resultId === d.floorOverride!.resultId)) all.push(d);
   }
-  if (overrides.length === 0) return null;
+  if (all.length === 0) return null;
+  // wicked-core#1318: a tool check overridden at triage is no repository-checks floor: counted, never read as one.
+  const toolChecks = all.filter((j) => isToolCheckOverride(j.floorOverride)).length;
+  const overrides = all.filter((j) => !isToolCheckOverride(j.floorOverride));
+  if (overrides.length === 0) return { checks: [], onBase: false, floors: 0, toolChecks };
   const checks: string[] = [];
   const failing = new Set<string>();
   const shared = new Set<string>();
@@ -306,7 +316,13 @@ export function overriddenFloorsOf(
   // A test told apart in one record and not in another keeps the most definite word: the change's, then the base's.
   for (const n of fresh) { shared.delete(n); unknown.delete(n); }
   for (const n of shared) unknown.delete(n);
-  return { checks, onBase, failures: failing.size, unseparated, shared: shared.size, fresh: fresh.size, unknown: unknown.size };
+  return { checks, onBase, failures: failing.size, unseparated, shared: shared.size, fresh: fresh.size, unknown: unknown.size,
+    floors: overrides.length, ...(toolChecks > 0 ? { toolChecks } : {}) };
+}
+
+/** (wicked-core#1318) "a failed tool check" / "2 failed tool checks". */
+function toolChecksWords(n: number): string {
+  return n === 1 ? 'a failed tool check' : `${n} failed tool checks`;
 }
 
 function andList(items: readonly string[]): string {
@@ -319,6 +335,13 @@ function andList(items: readonly string[]): string {
  * from this change." The record keeps "Floor overridden by operator" (the details panel).
  */
 export function approvedLine(o: OverriddenFloors): string {
+  const tools = o.toolChecks ?? 0;
+  if (o.floors === 0) return `You approved ${toolChecksWords(tools)} on your own judgment; ${tools === 1 ? 'it' : 'they'} did not run again.`;
+  const line = floorApprovedLine(o);
+  return tools > 0 ? `${line} You also approved ${toolChecksWords(tools)} on your own judgment.` : line;
+}
+
+function floorApprovedLine(o: OverriddenFloors): string {
   const what = o.checks.length === 0 ? 'the repository checks' : `the ${andList(o.checks)} check${o.checks.length === 1 ? '' : 's'}`;
   const n = o.failures ?? 0;
   const single = n > 0 ? n === 1 : o.checks.length <= 1;
@@ -339,9 +362,25 @@ export function approvedLine(o: OverriddenFloors): string {
   return `You approved ${tests}.`;
 }
 
+/**
+ * (wicked-core#1318) The run's tool checks the operator overrode at triage, one line each, from the durable record
+ * (`session.assurance.floorOverrides`, layer `tool_check`) so the run says them while it is still going: the engine's
+ * label, where, who, and the reason they wrote.
+ */
+export function toolCheckOverrideLines(view: SessionView | null | undefined, stepOf: (ord: number) => string | null): string[] {
+  return durableFloorOverrides(view).filter((j) => isToolCheckOverride(j.floorOverride)).map((j) => {
+    const fo = j.floorOverride!;
+    const why = j.note !== null && j.note.trim() !== '' ? `: “${j.note.trim()}”` : ' (no reason recorded)';
+    return `${overrideLabel(fo)}: ${overrideWhere(fo, stepOf)}, by ${actorWords(j.by)}${why}.`;
+  });
+}
+
 /** "Overridden by you: test failed on this change and its base." — the one sentence every surface says
  *  for a hand-over whose failed floor the operator overrode. */
 export function overriddenLine(o: OverriddenFloors): string {
+  const tools = o.toolChecks ?? 0;
+  const counted = `${toolChecksWords(tools)} counted on your judgment`;
+  if (o.floors === 0) return `Overridden by you: ${counted}.`;
   const what = o.checks.length === 0 ? 'the repository checks' : andList(o.checks);
-  return `Overridden by you: ${what} failed on this change${o.onBase ? ' and its base' : ''}.`;
+  return `Overridden by you: ${what} failed on this change${o.onBase ? ' and its base' : ''}${tools > 0 ? `; ${counted}` : ''}.`;
 }
