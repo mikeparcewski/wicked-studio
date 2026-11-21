@@ -13,6 +13,7 @@ import {
   confirmedAddress,
   declareRowWrite,
   EMPTY_FORM,
+  appUsableToolCount,
   footReachWords,
   grantGate,
   previewKey,
@@ -207,8 +208,8 @@ describe('studio#1117: the sheet footer says the sourceâ€™s real reach, never â€
   it('a REST or MCP server reaches apps through its tools; GraphQL claims nothing; a new source says what comes next', () => {
     expect(footReachWords('rest', true, null, true, 2)).toBe('Saved. Apps in every project can use its registered tools.');
     // review r2: a server with no tool registered now (none, or all gone) reaches no app; an unknown count claims nothing.
-    expect(footReachWords('mcp', true, null, true, 0)).toBe('Saved. None of its tools is registered now, so no app can use it.');
-    expect(footReachWords('rest', true, null, true, 0)).toBe('Saved. None of its tools is registered now, so no app can use it.');
+    expect(footReachWords('mcp', true, null, true, 0)).toBe('Saved. None of its tools can be called now, so no app can use it.');
+    expect(footReachWords('rest', true, null, true, 0)).toBe('Saved. None of its tools can be called now, so no app can use it.');
     expect(footReachWords('rest', true, null, true)).toBe('Saved.');
     expect(footReachWords('graphql', true, null, true)).toBe('Saved.');
     expect(footReachWords('postgres', false, null)).toBe('Once it is saved, choose the projects that may use it.');
@@ -216,5 +217,13 @@ describe('studio#1117: the sheet footer says the sourceâ€™s real reach, never â€
     for (const k of ['postgres', 'mysql', 'upload', 'rest', 'mcp', 'graphql'] as const) {
       for (const saved of [true, false]) for (const on of [true, false, null]) for (const n of [0, 1, null]) expect(footReachWords(k, saved, access({}), on, n)).not.toMatch(/this project/);
     }
+  });
+  it('coord: a REST or MCP server whose tools are all switched off (or not registered) reaches no app', () => {
+    expect(appUsableToolCount([{ name: 'a', status: 'registered', enabled: false }, { name: 'b', status: 'registered', enabled: false }])).toBe(0);
+    expect(appUsableToolCount([{ name: 'a', status: 'gone' }, { name: 'b', status: 'registered', enabled: false }])).toBe(0);
+    expect(appUsableToolCount([{ name: 'a', status: 'registered', enabled: true }, { name: 'b', status: 'registered' }, { name: 'c', status: 'registered', enabled: false }])).toBe(2);
+    expect(appUsableToolCount(undefined)).toBeNull();
+    const allOff = appUsableToolCount([{ name: 'a', status: 'registered', enabled: false }]);
+    expect(footReachWords('mcp', true, null, true, allOff)).toBe('Saved. None of its tools can be called now, so no app can use it.');
   });
 });

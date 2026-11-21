@@ -419,11 +419,21 @@ export function codeSpans(words: string): Array<{ code: boolean; text: string }>
 }
 
 /**
+ * (studio#1117) How many of a REST or MCP server's tools an app can call now: registered and not switched off (crew's
+ * registry skips a tool whose `enabled` is false). `null`: the record carries no tool list, so no claim.
+ */
+export function appUsableToolCount(tools: unknown): number | null {
+  if (!Array.isArray(tools)) return null;
+  return tools.filter((t: unknown) => typeof t === 'object' && t !== null
+    && (t as { status?: unknown }).status === 'registered' && (t as { enabled?: unknown }).enabled !== false).length;
+}
+
+/**
  * (studio#1117) The sheet's footer: which apps can use the source, by its real reach. A SQL source or an upload
  * reaches apps (and helpers) only in the projects its Helpers switches name (crew's app resolver, `anyAppReadable`); a
  * REST or MCP server reaches every project's apps through its registered tools. Never "this project": the Data sources
  * page has none. A reach studio can't read (`a` null, or switches not verified since a write) claims nothing. A REST or
- * MCP server reaches apps only through a tool still registered (`anyAppReadable`): `registered` is how many it holds
+ * MCP server reaches apps only through a tool still registered and on (`appUsableToolCount`): `registered` is how many it holds
  * now (`null`: unknown, so no claim).
  */
 export function footReachWords(kind: SheetKind, saved: boolean, a: SourceAgentAccess | null, enabled: boolean | null = null, registered: number | null = null): string {
@@ -435,7 +445,7 @@ export function footReachWords(kind: SheetKind, saved: boolean, a: SourceAgentAc
   if (enabled === null) return 'Saved.';
   if (!scoped) {
     if (registered === null) return 'Saved.';
-    return registered === 0 ? 'Saved. None of its tools is registered now, so no app can use it.' : 'Saved. Apps in every project can use its registered tools.';
+    return registered === 0 ? 'Saved. None of its tools can be called now, so no app can use it.' : 'Saved. Apps in every project can use its registered tools.';
   }
   if (a === null) return 'Saved.';
   if (!a.see) return 'Saved. No app or helper can use it while “Helpers can see this structure” is off.';

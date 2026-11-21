@@ -29,6 +29,7 @@ import {
   defaultPort,
   describedLine,
   EMPTY_FORM,
+  appUsableToolCount,
   footReachWords,
   formBlocker,
   isApiKind,
@@ -464,8 +465,8 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
   const agentsUnreadable = agentAccess === null && !gone && agentsRecord !== null && agentsRecord.kind === 'sql' && (agentsRecord as { agents?: unknown }).agents !== undefined;
   /** crew couldn't be asked again after a write: the box holds its switches, and the summary claims nothing either. */
   const agentsUnverified = saved !== null && agentsUnverifiedSet?.has(saved.name) === true;
-  /** (studio#1117) How many of its tools crew holds registered now: a REST or MCP server reaches apps only through one. */
-  const registeredTools = agentsRecord === null || gone || !Array.isArray(agentsRecord.tools) ? null : agentsRecord.tools.filter((t) => t.status === 'registered').length;
+  /** (studio#1117) How many of its tools apps can call now (registered and on): a REST or MCP server reaches apps only through one. */
+  const registeredTools = agentsRecord === null || gone ? null : appUsableToolCount(agentsRecord.tools);
   const savedSheetKind = saved !== null ? sheetKindOf(saved) : null;
   const agentDialect = savedSheetKind === 'postgres' ? 'postgres' : savedSheetKind === 'mysql' ? 'mysql' : 'sqlite';
   const sql = saved?.sql ?? null;
