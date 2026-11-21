@@ -1,7 +1,7 @@
 import { useViewPrefsStore } from '../src/store/viewPrefs.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { RosterSeat } from '../src/api/types.js';
 import { useConnectionStore } from '../src/store/connection.js';
 
@@ -766,6 +766,19 @@ it('a refused rebuild shows the 503 reason', async () => {
   renderBoth();
   fireEvent.click(await screen.findByTestId('nc-slow-fix'));
   expect(await screen.findByTestId('seat-image-rebuild')).toHaveTextContent('The engine cannot start.');
+});
+
+it('a refusal clears once crew answers a newer snapshot (the row speaks then)', async () => {
+  const { ApiError } = await import('../src/api/errors.js');
+  const { useSystemStore } = await import('../src/store/systemSnapshot.js');
+  rebuildPost.mockRejectedValue(new ApiError(503, 'unavailable', { reason: 'The engine cannot start.' }));
+  systemAnswer = () => Promise.resolve(imagesSnapshot());
+  renderBoth();
+  fireEvent.click(await screen.findByTestId('nc-slow-fix'));
+  expect(await screen.findByTestId('seat-image-rebuild')).toHaveTextContent('The engine cannot start.');
+  const at = useSeatImageRebuild.getState().refusal!.at;
+  act(() => { useSystemStore.setState({ snapshotAt: at + 1 }); });
+  expect(screen.queryByTestId('seat-image-rebuild')).toBeNull();
 });
 
 it('a running rebuild shows only its last three safe tail lines and disables its fixes', async () => {

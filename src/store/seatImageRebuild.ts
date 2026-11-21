@@ -5,7 +5,8 @@ import { HEALTH_RECHECKED } from './systemSnapshot.js';
 
 interface SeatImageRebuildStore {
   phase: 'idle' | 'starting';
-  refusal: string | null;
+  /** A refusal to start and when it came: it holds only until crew's next snapshot (the row speaks then). */
+  refusal: { reason: string; at: number } | null;
   start: () => Promise<void>;
 }
 
@@ -24,7 +25,7 @@ export const useSeatImageRebuild = create<SeatImageRebuildStore>((set, get) => (
       } else {
         const body = e instanceof ApiError ? e.body as { reason?: unknown; error?: unknown } | null : null;
         const reason = body?.reason ?? body?.error;
-        set({ refusal: typeof reason === 'string' && reason !== '' ? reason : e instanceof Error ? e.message : String(e) });
+        set({ refusal: { reason: typeof reason === 'string' && reason !== '' ? reason : e instanceof Error ? e.message : String(e), at: Date.now() } });
       }
     } finally { set({ phase: 'idle' }); }
   },
