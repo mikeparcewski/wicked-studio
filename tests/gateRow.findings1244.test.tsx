@@ -7,7 +7,7 @@ import { useGateActionStore } from '../src/board/gateActions.js';
 import { setUndoWindowForTest, useUndoQueue } from '../src/board/undoQueue.js';
 import { GateRow } from '../src/components/session/GateRow.js';
 import { useRunEventStore } from '../src/store/events.js';
-import type { OpenGate } from '../src/store/gates.js';
+import { useGateStore, type OpenGate } from '../src/store/gates.js';
 import { useTeamPlanStore } from '../src/store/teamPlan.js';
 import { makeUnit, makeView } from './factories.js';
 import { chooseGate } from './askGateHelpers.js';
@@ -190,7 +190,7 @@ beforeEach(() => {
   vi.spyOn(teamPlanApi, 'team').mockResolvedValue({ rows: [], units: [] });
   vi.spyOn(api, 'confirmGate').mockResolvedValue({ status: 'ok' });
 });
-afterEach(() => { cleanup(); useUndoQueue.setState({ pending: [], results: [], restoredNotes: {} }); });
+afterEach(() => { cleanup(); useUndoQueue.setState({ pending: [], results: [], restoredNotes: {} }); useGateStore.setState({ gates: {} }); });
 
 function draw(index: number, over: Partial<OpenGate> = {}, events?: CoreEvent[]): void {
   const f = fixtures[index]!;
@@ -200,6 +200,8 @@ function draw(index: number, over: Partial<OpenGate> = {}, events?: CoreEvent[])
   const opened = f.events.find((e) => e.type === 'awaitingHuman')!;
   const gate: OpenGate = { runId: f.runId, ord: opened.ord, prompt: opened.prompt!, gateKind: opened.gateKind!, receivedAt: opened.ts, lifecycle: 'open', ...over };
   const units = f.units.map((u) => makeUnit({ ...u, session_id: f.runId } as never));
+  // The store holds the gate the card shows: a decision on a gate the store doesn't hold is refused (#1241).
+  useGateStore.getState().setGate(gate);
   render(<GateRow view={makeView({ id: f.runId, status: 'awaiting_human' } as never, units)} gate={gate} />);
 }
 function face(testid: string): HTMLElement {
