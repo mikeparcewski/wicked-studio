@@ -105,6 +105,30 @@ export interface ConsentWrite {
   operatorOwned: boolean;
 }
 
+/** An editor permission disclosed before install; each grant is decided later in Plugins. */
+export interface ConsentAsk {
+  editor: string;
+  permission: string;
+  why: string;
+}
+
+export function consentAsksOf(gate: OpenGate, events: readonly CoreEvent[] | null): ConsentAsk[] | undefined {
+  for (let i = (events ?? []).length - 1; i >= 0; i--) {
+    const e = events![i] as unknown as Record<string, unknown>;
+    if (e['type'] !== 'awaitingHuman' || e['ord'] !== gate.ord) continue;
+    const asks = e['consentAsks'];
+    if (!Array.isArray(asks)) return undefined;
+    const rows = asks.flatMap((r: unknown): ConsentAsk[] => {
+      const o = r as Record<string, unknown> | null;
+      if (o === null || typeof o !== 'object' || typeof o['editor'] !== 'string'
+        || typeof o['permission'] !== 'string' || typeof o['why'] !== 'string') return [];
+      return [{ editor: o['editor'], permission: o['permission'], why: o['why'] }];
+    });
+    return rows.length > 0 ? rows : undefined;
+  }
+  return undefined;
+}
+
 /**
  * core#820: a consent gate's install choices off its `awaitingHuman` frame — `choices`
  * (`consent:<id>` tokens and `reject`), `choiceLabels` and `writeTargets` keyed by token, and
@@ -206,6 +230,8 @@ export interface GateRowModel {
   qe?: QeGate;
   /** studio#639: a consent gate with no install plan — the engine's sentence on why no files are listed. */
   consentMissing?: string;
+  /** Editor permissions the install plan names, disclosed before the later Plugins grants. */
+  consentAsks?: ConsentAsk[];
   /** studio#835: the step's seat cannot work (out of quota, signed out, not installed) and the engine will not
    *  send the step to it again — the row says so first; absent on every other gate. */
   deadSeat?: DeadSeat;
@@ -738,14 +764,16 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // core#820: the engine's install choices, each with its file list; the default is marked, and
     // nothing is preselected.
     const install = consentChoicesOf(gate, events);
+    const consentAsks = consentAsksOf(gate, events);
     if (install !== null) {
-      return { reason: 'consent', question: gate.prompt, choices: install.slice(0, 4), overflow: install.slice(4), noteDefault: '', recommended: null, detailItems: [shownPrompt(gate.prompt)] };
+      return { reason: 'consent', question: gate.prompt, choices: install.slice(0, 4), overflow: install.slice(4), noteDefault: '', recommended: null, detailItems: [shownPrompt(gate.prompt)], ...(consentAsks !== undefined ? { consentAsks } : {}) };
     }
     const missing = consentMissingOf(gate, events);
     return {
       reason: 'consent',
       question: gate.prompt,
       ...(missing !== null ? { consentMissing: missing } : {}),
+      ...(consentAsks !== undefined ? { consentAsks } : {}),
       choices: consentFallbackChoices(gate, events),
       overflow: [],
       noteDefault: '',

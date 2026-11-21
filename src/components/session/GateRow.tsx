@@ -39,6 +39,7 @@ import { ruleCauses } from '../../board/ruleCauses.js';
 import { AssuranceReceipt, AssuranceReceiptTech, QeAcceptanceLabel, ReducedAssuranceLabel, RulesChecked } from './AssuranceReceipt.js';
 import { RunDataUse } from './RunDataUse.js';
 import { actionJobTitle, TrackerActions } from '../trackers/TrackerActions.js';
+import { PERMISSION_WORDS } from '../../editors/model.js';
 
 import { missingSeatsLine, OPERATOR_JUDGMENT_LABEL, rejudgeOfferOf, type RejudgeOffer } from '../../board/rejudge.js';
 import { baseCountOf, failureName, groupByFile, testPlace, testWords } from '../../board/failingChecks.js';
@@ -897,6 +898,12 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   // One sentence under the headline: the failures in a line, a refused hand-over's reason, a QE review's why.
   const sentence = split !== undefined ? null : refusalLines?.lead ?? model.qe?.why ?? null;
   const [more, setMore] = [moreOpen, setMoreOpen];
+  const consentAsks = new Map<string, string[]>();
+  for (const { editor, permission } of model.consentAsks ?? []) {
+    const words = consentAsks.get(editor) ?? [];
+    words.push(Object.hasOwn(PERMISSION_WORDS, permission) ? PERMISSION_WORDS[permission as keyof typeof PERMISSION_WORDS] : permission);
+    consentAsks.set(editor, words);
+  }
 
   return (
     <div
@@ -1006,6 +1013,13 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
           commit(c, a.reason);
         }}
       />
+      {consentAsks.size > 0 && (
+        <div data-testid="gate-consent-asks" className="wk-gate2-base">
+          <p className="wk-gate2-label">It will ask to:</p>
+          <ul>{[...consentAsks].map(([editor, words]) => <li key={editor}>{editor}: {words.join(', ')}</li>)}</ul>
+          <p className="wk-ask-foot">You allow each one later in Plugins.</p>
+        </div>
+      )}
       </div>
       {(extraItems !== null || unavailable !== null) && (
         <div className="wk-gate-ask-more">

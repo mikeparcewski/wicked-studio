@@ -7545,6 +7545,12 @@
       ]
     },
     {
+      "testId": "gate-consent-asks",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "gate-diff-drift",
       "files": [
         "src/components/session/GateRow.tsx"
