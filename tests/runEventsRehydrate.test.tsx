@@ -90,6 +90,53 @@ describe('useRunEvents reads the full log once per epoch', () => {
   });
 });
 
+describe('reads that race a reconnect (studio#1009 review)', () => {
+  it('a reconnect while a read is in flight reads again; the older answer landing last changes nothing', async () => {
+    const RUN = 'r-1009-f';
+    useConnectionStore.getState().setStatus('connected');
+    const answers: Array<(v: { events: CoreEvent[] }) => void> = [];
+    const read = vi.spyOn(client.api, 'getRunEvents').mockImplementation(() => new Promise((r) => { answers.push(r); }));
+    const { result } = renderHook(() => useRunEvents(RUN));
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    reconnect();
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    // the newer read answers first, then the one asked before the reconnect
+    await act(async () => { answers[1]!({ events: [verdict(RUN, 1, false), verdict(RUN, 2, true)] }); });
+    await waitFor(() => expect(result.current.events).toHaveLength(2));
+    await act(async () => { answers[0]!({ events: [verdict(RUN, 1, false)] }); });
+    expect(result.current.events!.map((e) => (e as { seq?: number }).seq)).toEqual([1, 2]);
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it('a log that already holds recorded frames is read again only after a reconnect', async () => {
+    const RUN = 'r-1009-g';
+    useConnectionStore.getState().setStatus('connected');
+    useRunEventStore.getState().hydrate(RUN, [verdict(RUN, 1, false)]);
+    const read = vi.spyOn(client.api, 'getRunEvents').mockResolvedValue({ events: [verdict(RUN, 1, false), verdict(RUN, 2, true)] });
+    const { result } = renderHook(() => useRunEvents(RUN));
+    await act(async () => { await Promise.resolve(); });
+    expect(read).not.toHaveBeenCalled();
+    reconnect();
+    await waitFor(() => expect(result.current.events).toHaveLength(2));
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed read is not a failure of the read after a reconnect', async () => {
+    const RUN = 'r-1009-h';
+    useConnectionStore.getState().setStatus('connected');
+    let answer!: (v: { events: CoreEvent[] }) => void;
+    vi.spyOn(client.api, 'getRunEvents')
+      .mockRejectedValueOnce(new Error('503'))
+      .mockImplementationOnce(() => new Promise((r) => { answer = r; }));
+    const { result } = renderHook(() => useRunEvents(RUN));
+    await waitFor(() => expect(result.current.failed).toBe(true));
+    reconnect();
+    await waitFor(() => expect(result.current.failed).toBe(false));
+    await act(async () => { answer({ events: [verdict(RUN, 1, true)] }); });
+    await waitFor(() => expect(result.current.events).toHaveLength(1));
+  });
+});
+
 describe('useRunEventsFor re-reads the rows\' logs after a reconnect', () => {
   it('a denial source that changed while the socket was down shows after it comes back', async () => {
     const RUN = 'r-1009-d';

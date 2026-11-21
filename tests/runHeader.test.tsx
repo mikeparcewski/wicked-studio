@@ -136,6 +136,33 @@ describe('arrival — what the jump button counts an entry as', () => {
     // the same turn read again: nothing new
     expect(newEntries(heldArrivals(arrivals([rec, more])), arrivals([rec, more]), 50)).toBe(0);
   });
+  it('history that lands late inside an entry is not new; a new message in an old turn is (studio#858 review)', () => {
+    const msg = (key: string, at: number) => ({ kind: 'turn', key, at, turnId: 't0', who: 'claude' });
+    // a turn on screen gains an older message (a transcript read filling in): not new
+    expect(newEntries(heldArrivals(arrivals([msg('m1', 10)])), arrivals([msg('m1', 10), msg('m2', 20)]), 50)).toBe(0);
+    // a turn first seen with an old message and a new one: one arrival
+    expect(newEntries(new Map(), arrivals([msg('m1', 10), msg('m2', 100)]), 50)).toBe(1);
+    // a turn on screen gains a new message: one arrival
+    expect(newEntries(heldArrivals(arrivals([msg('m1', 10)])), arrivals([msg('m1', 10), msg('m2', 100)]), 50)).toBe(1);
+  });
+  it('a message that blinks out and comes back is not new twice; a step that ran again is (studio#858 review)', () => {
+    const live = { kind: 'turn', key: 'live:t1:claude', at: 100, turnId: 't1', who: 'claude' };
+    const rec = { kind: 'turn', key: 'm7', at: 101, turnId: 't1', who: 'claude' };
+    const more = { kind: 'turn', key: 'm8', at: 102, turnId: 't1', who: 'claude' };
+    // the live reply is cleared a render before its record lands
+    let held = heldArrivals(arrivals([live]));
+    held = heldArrivals(arrivals([]), held);
+    expect(newEntries(held, arrivals([rec]), 50)).toBe(0);
+    // a second message shows, blinks out, comes back
+    held = heldArrivals(arrivals([rec, more]), held);
+    held = heldArrivals(arrivals([rec]), held);
+    expect(newEntries(held, arrivals([rec, more]), 50)).toBe(0);
+    // a run block's step is its state now: done, running again, done again is a new arrival
+    const run = (status: string) => ({ kind: 'run', key: 'r:y', at: 3, view: { units: [{ ord: 0, status }] } });
+    let steps = heldArrivals(arrivals([run('rejected')]));
+    steps = heldArrivals(arrivals([run('executing')]), steps);
+    expect(newEntries(steps, arrivals([run('rejected')]), 50)).toBe(1);
+  });
   it('a step question and a stalled hand-off are answered in the question card', () => {
     expect([...QUESTION_KINDS].sort()).toEqual(['Question', 'Stalled']);
   });

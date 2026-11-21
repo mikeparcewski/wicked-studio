@@ -1024,8 +1024,11 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   useEffect(() => {
     const now = arrivals(entries.filter((e) => e.kind !== 'typing' && e.kind !== 'working'));
     const prev = seenKeys.current;
-    const opened = prev !== null && prev.session === sessionId ? prev.opened : Date.now();
-    seenKeys.current = { session: sessionId, opened, keys: heldArrivals(now) };
+    const same = prev !== null && prev.session === sessionId;
+    const opened = same ? prev.opened : Date.now();
+    // What this session's thread has shown is kept: an entry that blinks out (a live reply cleared before its record
+    // lands) is not new again when it comes back.
+    seenKeys.current = { session: sessionId, opened, keys: heldArrivals(now, same ? prev.keys : undefined) };
     if (!ready || prev === null || prev.session !== sessionId || nearBottom.current || restore.current.pending) return;
     const n = newEntries(prev.keys, now, opened);
     if (n > 0) setUnseen((u) => u + n);
