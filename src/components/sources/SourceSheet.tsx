@@ -464,6 +464,8 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
   const agentsUnreadable = agentAccess === null && !gone && agentsRecord !== null && agentsRecord.kind === 'sql' && (agentsRecord as { agents?: unknown }).agents !== undefined;
   /** crew couldn't be asked again after a write: the box holds its switches, and the summary claims nothing either. */
   const agentsUnverified = saved !== null && agentsUnverifiedSet?.has(saved.name) === true;
+  /** (studio#1117) How many of its tools crew holds registered now: a REST or MCP server reaches apps only through one. */
+  const registeredTools = agentsRecord === null || gone || !Array.isArray(agentsRecord.tools) ? null : agentsRecord.tools.filter((t) => t.status === 'registered').length;
   const savedSheetKind = saved !== null ? sheetKindOf(saved) : null;
   const agentDialect = savedSheetKind === 'postgres' ? 'postgres' : savedSheetKind === 'mysql' ? 'mysql' : 'sqlite';
   const sql = saved?.sql ?? null;
@@ -814,7 +816,7 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
         </div>
         <footer className="wk-src-sheet-foot">
           {error !== null ? <p role="alert" className="wk-src-note wk-src-tone-fail wk-src-foot-msg" data-testid="source-sheet-error">{error}</p>
-            : <span className="wk-src-cap wk-src-foot-msg" data-testid="source-sheet-foot">{kind === 'crew' ? 'crew’s own API is always on: there is nothing to save.' : isNew ? (saveBlocker ?? footReachWords(kind, false, null)) : footReachWords(kind, true, agentsUnverified ? null : agentAccess, agentsRecord === null ? null : agentsRecord.enabled !== false)}</span>}
+            : <span className="wk-src-cap wk-src-foot-msg" data-testid="source-sheet-foot">{kind === 'crew' ? 'crew’s own API is always on: there is nothing to save.' : isNew ? (saveBlocker ?? footReachWords(kind, false, null)) : footReachWords(kind, true, agentsUnverified ? null : agentAccess, agentsRecord === null ? null : agentsRecord.enabled !== false, registeredTools)}</span>}
           {isNew ? (
             <>
               <button type="button" className="wk-btn wk-btn--secondary" data-testid="source-cancel" onClick={onClose}>Cancel</button>

@@ -422,16 +422,21 @@ export function codeSpans(words: string): Array<{ code: boolean; text: string }>
  * (studio#1117) The sheet's footer: which apps can use the source, by its real reach. A SQL source or an upload
  * reaches apps (and helpers) only in the projects its Helpers switches name (crew's app resolver, `anyAppReadable`); a
  * REST or MCP server reaches every project's apps through its registered tools. Never "this project": the Data sources
- * page has none. A reach studio can't read (`a` null, or switches not verified since a write) claims nothing.
+ * page has none. A reach studio can't read (`a` null, or switches not verified since a write) claims nothing. A REST or
+ * MCP server reaches apps only through a tool still registered (`anyAppReadable`): `registered` is how many it holds
+ * now (`null`: unknown, so no claim).
  */
-export function footReachWords(kind: SheetKind, saved: boolean, a: SourceAgentAccess | null, enabled: boolean | null = null): string {
+export function footReachWords(kind: SheetKind, saved: boolean, a: SourceAgentAccess | null, enabled: boolean | null = null, registered: number | null = null): string {
   if (kind === 'graphql') return saved ? 'Saved.' : 'Not saved yet.';
   const scoped = kind === 'postgres' || kind === 'mysql' || kind === 'upload';
   if (!saved) return scoped ? 'Once it is saved, choose the projects that may use it.' : 'Once it is saved, apps in every project can use its registered tools.';
   // A source crew holds turned off reaches no app (`anyAppReadable`); one studio can't see the state of claims nothing.
   if (enabled === false) return 'Saved. It is turned off, so no app can use it.';
   if (enabled === null) return 'Saved.';
-  if (!scoped) return 'Saved. Apps in every project can use its registered tools.';
+  if (!scoped) {
+    if (registered === null) return 'Saved.';
+    return registered === 0 ? 'Saved. None of its tools is registered now, so no app can use it.' : 'Saved. Apps in every project can use its registered tools.';
+  }
   if (a === null) return 'Saved.';
   if (!a.see) return 'Saved. No app or helper can use it while “Helpers can see this structure” is off.';
   if (a.everyProject) return 'Saved. Apps and helpers in every project can use it.';

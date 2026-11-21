@@ -55,6 +55,26 @@ describe('studio#1013: whether jobs can read a repository’s trackers', () => {
     expect(trackerReadOf(['x', 'y', 'x'], [t('x', access({ query: false })), t('y', null)])).toEqual({ kind: 'off', tools: [{ name: 'x', why: 'read' }] });
     // No tool named at all is never "can read" (review r1).
     expect(trackerReadOf([], [t('x', access())])).toEqual({ kind: 'unknown' });
+    // A tool turned off is off whatever its switches say, or whether they can be read (review r2).
+    expect(trackerReadOf(['x'], [{ name: 'x', access: access(), enabled: false }])).toEqual({ kind: 'off', tools: [{ name: 'x', why: 'turned-off' }] });
+    expect(trackerReadOf(['x', 'y'], [{ name: 'x', access: null, enabled: false }, { name: 'y', access: null }])).toEqual({ kind: 'off', tools: [{ name: 'x', why: 'turned-off' }] });
+  });
+
+  it('review r2: a tool turned off, with its Helpers switches still on, is never “can read it”', async () => {
+    servers = [{ ...gh(access()), enabled: false }];
+    render(<TrackerReadLine count={1} sources={['acme-gh']} navigate={nav} />);
+    await waitFor(() => expect(screen.getByTestId('repo-overview-trackers-read')).toHaveAttribute('data-read', 'off'));
+    expect(screen.getByTestId('repo-overview-trackers-read')).toHaveTextContent('1 linked. Helpers can’t read issues from acme-gh yet: it is turned off. Open acme-gh');
+  });
+
+  it('review r2: switches changed elsewhere are read again when the window comes back', async () => {
+    servers = [gh(access())];
+    render(<TrackerReadLine count={1} sources={['acme-gh']} navigate={nav} />);
+    await waitFor(() => expect(screen.getByTestId('repo-overview-trackers-read')).toHaveAttribute('data-read', 'all'));
+    servers = [gh(access({ query: false }))];
+    fireEvent.focus(window);
+    await waitFor(() => expect(screen.getByTestId('repo-overview-trackers-read')).toHaveAttribute('data-read', 'off'));
+    expect(screen.getByTestId('repo-overview-trackers-read').textContent).not.toMatch(/can read it/);
   });
 
   it('reading off at the tool (the default): says so and opens that tool, never “can read it”', async () => {
@@ -120,9 +140,13 @@ describe('studio#1012: the repository’s own GitHub remote is offered first', (
     expect(rows).toEqual(['acme/billing-api', 'someone/billing-api', 'other/billing-api']);
   });
 
-  it('review r1: a same-named repository on another GitHub host is not this repository', async () => {
+  it.each([
+    ['another host', { tenant: 'ghe.acme.example', tenantLabel: 'ghe.acme.example' }],
+    // review r2: a host with no dot is not github.com either.
+    ['a one-word site', { tenant: 'ghe' }],
+  ])('review r1: a same-named repository on %s is not this repository', async (_what, site) => {
     servers = [gh(access())];
-    const ghe = { tenant: 'ghe.acme.example', tenantLabel: 'ghe.acme.example', key: 'acme/billing-api', label: 'billing-api', links: [] };
+    const ghe = { ...site, key: 'acme/billing-api', label: 'billing-api', links: [] };
     routes['GET /tracker-links?repo=billing-api'] = async () => ({ target: { repo: 'billing-api' }, links: [], viaRepos: [], projects: [], agents: [] });
     routes['GET /sources/acme-gh/trackers'] = async () => ({ name: 'acme-gh', next: null, trackers: [ghe] });
     routes['GET /sources/acme-gh/trackers?q=acme%2Fbilling-api'] = async () => ({ name: 'acme-gh', next: null, trackers: [ghe] });

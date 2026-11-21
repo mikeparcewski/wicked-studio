@@ -13,9 +13,10 @@ import { TrackerBadge, usePmSources } from './TrackerParts.js';
  *
  * This is the ONLY caller of `trackersApi.link` (`tests/trackersHumanOnly.test.ts`), and it links only on a click.
  */
-/** A tracker on github.com: its site, as crew names it, is github.com (or names no host at all). */
+/** A tracker on github.com: its site, as crew names it (the tenant is the host), is github.com. Anything else is not. */
 function onGithubDotCom(t: SourceTracker): boolean {
-  return [t.tenant, t.tenantLabel].every((x) => x === undefined || !x.includes('.') || /^(?:api\.)?github\.com$/i.test(x));
+  const gh = (x: string): boolean => /^(?:api\.)?github\.com$/i.test(x);
+  return gh(t.tenant) && (t.tenantLabel === undefined || gh(t.tenantLabel));
 }
 
 export function LinkTrackerPicker({ target, targetName, own = null, onLinked, onClose, navigate }: {

@@ -7,16 +7,19 @@ function andList(names: readonly string[]): string {
   return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
+type OffWhy = 'turned-off' | 'read' | 'project';
+
 export type TrackerRead =
   /** The tools' switches are still being read: no claim yet. */
   | { kind: 'reading' }
   /** A linked tool's switches could not be read (or the tool is gone): no claim either way. */
   | { kind: 'unknown' }
   /**
-   * These tools keep helpers from reading issues: `read` = its see or "read issues" switch is off; `project` = both are
-   * on but it names no project. The other linked tools may be readable: the words name these only.
+   * These tools keep helpers from reading issues: `turned-off` = the tool itself is turned off; `read` = its see or
+   * "read issues" switch is off; `project` = both are on but it names no project. The other linked tools may be
+   * readable: the words name these only.
    */
-  | { kind: 'off'; tools: Array<{ name: string; why: 'read' | 'project' }> }
+  | { kind: 'off'; tools: Array<{ name: string; why: OffWhy }> }
   /** Every tool lets helpers read issues, some only in the projects they name. */
   | { kind: 'some'; tools: string[] }
   | { kind: 'all' };
@@ -24,18 +27,21 @@ export type TrackerRead =
 /**
  * (studio#1013) Whether jobs on a repository can read its linked trackers, from each linked tool's Helpers switches
  * (`McpServer.agents`, the same record the tool's page shows). A link never turns a switch on (Q-PM1), so a tracker
- * linked to a tool whose "Helpers can read issues" is off is linked but unread. Any tool off wins; then any tool
+ * linked to a tool whose "Helpers can read issues" is off (or a tool turned off: crew's PM gate refuses a disabled
+ * server first) is linked but unread. Any tool off wins; then any tool
  * studio can't read, or no tool named at all (no claim); then tools limited to named projects; else every job can.
  */
-export function trackerReadOf(linked: readonly string[], tools: ReadonlyArray<{ name: string; access: SourceAgentAccess | null }> | null): TrackerRead {
+export function trackerReadOf(linked: readonly string[], tools: ReadonlyArray<{ name: string; access: SourceAgentAccess | null; enabled?: boolean }> | null): TrackerRead {
   if (tools === null) return { kind: 'reading' };
   const names = [...new Set(linked)];
   if (names.length === 0) return { kind: 'unknown' };
-  const off: Array<{ name: string; why: 'read' | 'project' }> = [];
+  const off: Array<{ name: string; why: OffWhy }> = [];
   const some: string[] = [];
   let unknown = false;
   for (const name of names) {
-    const a = tools.find((t) => t.name === name)?.access ?? null;
+    const tool = tools.find((t) => t.name === name);
+    if (tool?.enabled === false) { off.push({ name, why: 'turned-off' }); continue; }
+    const a = tool?.access ?? null;
     if (a === null) { unknown = true; continue; }
     if (!a.see || !a.query) off.push({ name, why: 'read' });
     else if (!a.everyProject && a.projects.length === 0) off.push({ name, why: 'project' });
@@ -48,7 +54,8 @@ export function trackerReadOf(linked: readonly string[], tools: ReadonlyArray<{ 
 }
 
 /** Why helpers can't read issues from the tools named, when they share one reason. */
-function offWhy(tools: ReadonlyArray<{ why: 'read' | 'project' }>): string {
+function offWhy(tools: ReadonlyArray<{ why: OffWhy }>): string {
+  if (tools.every((t) => t.why === 'turned-off')) return tools.length === 1 ? ': it is turned off' : ': they are turned off';
   if (tools.every((t) => t.why === 'read')) return ': reading issues is off there';
   if (tools.every((t) => t.why === 'project')) return tools.length === 1 ? ': it names no project yet' : ': they name no project yet';
   return '';
@@ -56,9 +63,10 @@ function offWhy(tools: ReadonlyArray<{ why: 'read' | 'project' }>): string {
 
 /** The repository Overview's Trackers line: how many are linked, and whether jobs here can read them. */
 export function TrackerReadLine({ count, sources, navigate }: { count: number; sources: readonly string[]; navigate: (path: string) => void }): React.ReactElement {
-  const { sources: pm, error } = usePmSources(count > 0);
+  // Read again when the window comes back: the switches may have changed on Data sources in another tab.
+  const { sources: pm, error } = usePmSources(count > 0, { followFocus: true });
   // A read that failed claims nothing (never "reading" for good).
-  const tools = error !== null ? [] : pm === null ? null : pm.map((s) => ({ name: s.name, access: agentAccessOf(s.server as { agents?: unknown }) }));
+  const tools = error !== null ? [] : pm === null ? null : pm.map((s) => ({ name: s.name, access: agentAccessOf(s.server as { agents?: unknown }), enabled: (s.server as { enabled?: unknown }).enabled !== false }));
   const read = count === 0 ? null : trackerReadOf(sources, tools);
   const it = count === 1 ? 'it' : 'them';
   const open = (tool: string): React.ReactElement => (
