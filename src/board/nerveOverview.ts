@@ -1,8 +1,9 @@
+import type { Diagnostics } from '../api/diagnostics.js';
 import type { SystemAttention, SystemCli, SystemGovernanceCard, SystemInfra, SystemSnapshot } from '../api/system.js';
 import { neverWorked, notSetUp, seatNeeded, toResolveWords, type NerveState } from './nerveCenter.js';
 import type { NerveTab } from './nerveTabs.js';
 import { countWord } from './deskHome.js';
-import { rowLead } from './rowHeadline.js';
+import { healthText, rowLead } from './rowHeadline.js';
 
 /**
  * NERVE CENTER'S OVERVIEW (`/watch`, the operator-approved mockup `ui-v2-nerve`, 2026-10-27): the calm
@@ -67,7 +68,7 @@ export function cliTile(c: SystemCli): Tile {
   if (c.state === 'signed_in') return { ...base, state: 'Ready', tone: 'ok', line: week ?? (c.statsNote !== null ? 'Not counted this week' : null) };
   if (c.state === 'benched') {
     const quota = c.reason !== null && /quota|usage limit|rate limit|too many requests|\b429\b/i.test(c.reason);
-    return { ...base, state: c.benchedUntil !== null ? `Back at ${at(c.benchedUntil)}` : 'Resting', tone: 'warn', line: quota ? 'Out of quota' : 'Paused after errors' };
+    return { ...base, state: c.benchedUntil !== null ? `Back at ${at(c.benchedUntil)}` : 'Resting', tone: 'quiet', line: quota ? 'Out of quota' : 'Paused after errors' };
   }
   if (c.state === 'signed_out') return { ...base, state: 'Not signed in', tone: 'quiet', line: null, ...(c.canSignIn ? { signIn: c.key } : {}) };
   return { ...base, state: 'Not known', tone: 'quiet', line: null };
@@ -229,4 +230,12 @@ export function waitingWords(n: number): string | null {
 export function tidyWords(n: number, spendUsd: number | null): string | null {
   if (n <= 0) return null;
   return toResolveWords(n, spendUsd);
+}
+
+/** studio#1096: name the floor cache when it accounts for the most disk space. */
+export function floorCacheWords(d: Pick<Diagnostics, 'stores' | 'floorCache'>): string | null {
+  const cache = d.floorCache;
+  if (cache == null || 'error' in cache || cache.bytes === 0) return null;
+  if (cache.logs.bytes > cache.bytes || d.stores.some((s) => s.bytes > cache.bytes)) return null;
+  return healthText(`Repo-checks floor cache: ${bytesWords(cache.bytes)} of its ${bytesWords(cache.totalCapBytes)} cap (${cache.path})`);
 }

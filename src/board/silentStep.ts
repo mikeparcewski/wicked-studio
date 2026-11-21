@@ -1,3 +1,5 @@
+import { orphanedOf } from './sessionModel.js';
+import type { SystemRun } from '../api/system.js';
 import { isPowerPaused } from './heldRuns.js';
 import { runningFloor } from './floorRun.js';
 import type { CoreEvent, SessionView } from '../api/types.js';
@@ -40,6 +42,8 @@ export function lastActivityAt(events: readonly CoreEvent[]): number | null {
 export function silentStep(view: SessionView, events: readonly CoreEvent[] | null | undefined, now: number, opts: { gateOpen?: boolean; liveAt?: number | null } = {}): SilentStep | null {
   // A power run paused at a checkpoint waits on you: its quiet is the pause, not a silent step.
   if (view.session.status !== 'executing' || opts.gateOpen === true || isPowerPaused(view.session)) return null;
+  // studio#981: an orphan has no worker; Resume is its one move.
+  if (orphanedOf(view.session.status, events ?? undefined) !== null) return null;
   // The engine's checks floor is running (retime 0.16.11): the seat is idle on purpose, the floor is the work. The
   // silence warning is about a seat's own turn only (the page says "Running checks" instead, `floorRun.ts`).
   if (runningFloor(events, now) !== null) return null;
@@ -59,4 +63,10 @@ export function silentStep(view: SessionView, events: readonly CoreEvent[] | nul
 /** The header's and the thread's words: "No output for 21 min". */
 export function silentWords(s: SilentStep): string {
   return `No output for ${s.minutes} min`;
+}
+
+/** studio#932: Everything has crew's liveness verdict without a run's event log. */
+export function snapshotSilence(run: SystemRun | undefined): SilentStep | null {
+  if (run === undefined || (run.liveness !== 'quiet' && run.liveness !== 'stalled') || run.quietForMs == null || run.quietForMs < SILENT_AFTER_MS) return null;
+  return { minutes: Math.floor(run.quietForMs / 60_000), ord: null, cli: null };
 }

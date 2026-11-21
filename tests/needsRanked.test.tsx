@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { normalizeSnapshot, type SystemSnapshot } from '../src/api/system.js';
 import { nerveState, toResolveWords } from '../src/board/nerveCenter.js';
 import { agoRange, costWords, rankedSections, rankedSentence, resolveGroups } from '../src/board/rankedNeeds.js';
@@ -231,3 +231,16 @@ describe('To resolve stays calm (coordinator review of r5)', () => {
   });
 });
 
+
+it('studio#936: NeedsRanked rebuild uses the shared action and disables while running', async () => {
+  const { useSeatImageRebuild } = await import('../src/store/seatImageRebuild.js');
+  const start = vi.spyOn(useSeatImageRebuild.getState(), 'start').mockResolvedValue();
+  const snapshot = normalizeSnapshot({ attention: [{ id: 'infra:seat_images', source: 'infra', kind: 'slows', action: { kind: 'rebuild_seat_images' }, target: { kind: 'infra', key: 'seat_images' } }], infra: [{ key: 'seat_images', details: { rebuild: { running: true, tail: [] } } }] });
+  const r = render(<NeedsRanked snapshot={snapshot} runs={[]} needRows={[]} navigate={() => {}} now={NOW} />);
+  expect(screen.getByRole('button', { name: 'Rebuild seat images' })).toBeDisabled();
+  snapshot.infra[0]!.rebuild = null;
+  r.rerender(<NeedsRanked snapshot={snapshot} runs={[]} needRows={[]} navigate={() => {}} now={NOW} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Rebuild seat images' }));
+  await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+  start.mockRestore();
+});

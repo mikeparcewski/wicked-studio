@@ -3,6 +3,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { CoreEvent } from '../src/api/types.js';
 import { lastActivityAt, silentStep, silentWords, SILENT_AFTER_MS } from '../src/board/silentStep.js';
+import { RunQuestions } from '../src/components/session/ThreadQuestions.js';
 import { SilentStepCard } from '../src/components/session/SilentStepCard.js';
 import { api } from '../src/api/client.js';
 import { makeUnit, makeView } from './factories.js';
@@ -70,4 +71,27 @@ describe('pr-xreview on #924: a helper streaming output is not silent', () => {
       vi.useRealTimers();
     }
   });
+});
+
+// studio#932 / #981: one silence verdict for every surface.
+it('snapshot silence uses crew liveness and the five-minute mark', async () => {
+  const { snapshotSilence } = await import('../src/board/silentStep.js');
+  const { normalizeSnapshot } = await import('../src/api/system.js');
+  const run = (liveness: string, quietForMs: number) => normalizeSnapshot({ runs: [{ runId: 'r1', liveness, quietForMs }] }).runs[0];
+  expect(snapshotSilence(run('stalled', 19 * MIN))).toEqual({ minutes: 19, ord: null, cli: null });
+  expect(snapshotSilence(run('working', 19 * MIN))).toBeNull();
+  expect(snapshotSilence(run('quiet', 4 * MIN))).toBeNull();
+  expect(snapshotSilence(undefined)).toBeNull();
+});
+
+it('an orphaned executing run has no silence clock', () => {
+  expect(silentStep(view(), [ev('runOrphaned', T0)], T0 + 10 * MIN)).toBeNull();
+});
+
+it('RunQuestions shows no silent-step card on an orphaned run', async () => {
+  const { useRunEventStore } = await import('../src/store/events.js');
+  useRunEventStore.setState({ byRun: { r1: [ev('runOrphaned', Date.now() - 10 * MIN)] } });
+  const r = render(<RunQuestions view={view()} />);
+  expect(r.queryByTestId('silent-step')).toBeNull();
+  r.unmount();
 });

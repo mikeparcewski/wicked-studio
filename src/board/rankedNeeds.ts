@@ -53,6 +53,7 @@ export function rowVerb(a: SystemAttention, gateKind: string | null): string {
   const k = a.action?.kind;
   if (k === 'open-gate') return gateKind === 'deliver' ? 'Deliver' : 'Decide';
   if (k === 'sign-in') return 'Sign in';
+  if (k === 'rebuild-seat-images') return 'Rebuild seat images';
   if (k === 'recheck') return 'Re-check';
   return 'Open';
 }

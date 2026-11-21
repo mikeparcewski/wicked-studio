@@ -108,6 +108,36 @@ describe('Re-check supersedes a read in flight', () => {
     await flush();
     expect(healthQ).toHaveLength(1);
     healthQ[0]!.reject(new Error('x'));
+    await flush();
+    healthQ[1]!.reject(new Error('x'));
     await a;
   });
+});
+
+it('studio#931: retries a first health timeout before publishing failure', async () => {
+  vi.useFakeTimers();
+  try {
+    const p = useSystemStore.getState().refresh();
+    await flush();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(useSystemStore.getState().healthError).toBeNull();
+    expect(useSystemStore.getState().reading).toBe(true);
+    expect(healthQ).toHaveLength(2);
+    healthQ[1]!.resolve({ status: 'ok', capabilities: { system: true } });
+    await flush();
+    systemQ[0]!.resolve(SNAP([]));
+    await p;
+    expect(useSystemStore.getState().healthAt).not.toBeNull();
+    expect(useSystemStore.getState().healthError).toBeNull();
+  } finally { vi.useRealTimers(); }
+});
+
+it('studio#931: a failure after a success publishes without retry', async () => {
+  useSystemStore.setState({ healthAt: Date.now() });
+  const p = useSystemStore.getState().refresh();
+  await flush();
+  healthQ[0]!.reject(new Error('offline'));
+  await p;
+  expect(healthQ).toHaveLength(1);
+  expect(useSystemStore.getState().healthError).toBe('offline');
 });

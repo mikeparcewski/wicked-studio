@@ -1,3 +1,4 @@
+import { isReviewUnit } from './responder.js';
 import type { RosterSeat, SessionView } from '../api/types.js';
 import type { SeatRecord, SeatRecordResponse } from '../api/seatRecord.js';
 import { statusWord, type StatusWord } from './statusWords.js';
@@ -81,10 +82,13 @@ export function agentsOf(v: SessionView): string[] {
   return out;
 }
 
-/** The run's LEAD helper: the one that took the most steps (ties: the first to take one), or null. */
+/** The run's lead helper: the one that built the most steps (ties: first to take one), or null. */
 export function leadAgentOf(v: SessionView): string | null {
   const n = new Map<string, number>();
-  for (const u of v.units ?? []) {
+  // studio#988: the helper who built it owns the job's attribution.
+  const units = v.units ?? [];
+  const makers = units.filter((u) => u.role === 'creator' || (u.role == null && !isReviewUnit(u)));
+  for (const u of makers.length > 0 ? makers : units) {
     const c = u.assigned_cli;
     if (typeof c === 'string' && c !== '' && !TOOL_SEATS.has(c)) n.set(c, (n.get(c) ?? 0) + 1);
   }

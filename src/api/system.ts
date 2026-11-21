@@ -12,13 +12,14 @@
  * fabricated 0 or "ok"), and an unknown state word becomes `unknown`.
  */
 
+import type { RebuildSeatImagesResponse } from 'wicked-crew-api-types';
 import { apiFetch } from './client.js';
 import { isRouteUnsupported } from './errors.js';
 
 // ── The wire (mirror of api-types 0.136.0) ──────────────────────────────────────────────────────
 
 export type WireSystemState = 'ok' | 'degraded' | 'down' | 'unknown' | 'off';
-export type WireSystemActionKind = 'sign_in' | 'recheck' | 'open_gate' | 'open_run';
+export type WireSystemActionKind = 'sign_in' | 'recheck' | 'open_gate' | 'open_run' | 'rebuild_seat_images';
 export type WireSystemTarget =
   | { kind: 'infra'; key: string }
   | { kind: 'cli'; cli: string }
@@ -86,7 +87,7 @@ export type AttentionLevel = 'red' | 'yellow';
 
 /** The one existing action an item offers (rule 4): Sign in, Re-check, or open the run / its gate. */
 export interface SystemAction {
-  kind: 'sign-in' | 'recheck' | 'open-gate' | 'open-run';
+  kind: 'sign-in' | 'recheck' | 'open-gate' | 'open-run' | 'rebuild-seat-images';
   /** The CLI key (sign-in), the infra key (recheck) or the run id (open-gate / open-run). */
   target: string;
   /** The gate's unit ordinal, when the action opens a gate. */
@@ -170,6 +171,7 @@ export interface SystemRun {
   runId: string;
   title: string;
   liveness: RunLiveness;
+  quietForMs: number | null;
   phase: string | null;
   seat: string | null;
   lastEventAt: number | null;
@@ -181,6 +183,8 @@ export interface SystemRun {
 }
 
 export interface SystemInfra {
+  /** studio#936: crew's background seat image rebuild. */
+  rebuild: { running: boolean; rc: number | null; tail: string[]; error: string | null } | null;
   key: string;
   name: string;
   state: SystemState;
@@ -265,13 +269,13 @@ const STATES = ['ok', 'degraded', 'down', 'unknown', 'off'] as const;
 const LIVENESS = ['waiting_on_you', 'held', 'stalled', 'quiet', 'working'] as const;
 const CLI_STATES = ['signed_in', 'signed_out', 'benched', 'unknown'] as const;
 const PANEL_OF: Record<string, SystemAttention['panel']> = { infra: 'infra', cli: 'clis', run: 'runs', governance: 'governance' };
-const ACTION_OF: Record<string, SystemAction['kind']> = { sign_in: 'sign-in', recheck: 'recheck', open_gate: 'open-gate', open_run: 'open-run' };
+const ACTION_OF: Record<string, SystemAction['kind']> = { sign_in: 'sign-in', recheck: 'recheck', open_gate: 'open-gate', open_run: 'open-run', rebuild_seat_images: 'rebuild-seat-images' };
 
 function action(a: Bag, target: Bag): SystemAction | null {
   const kind = ACTION_OF[String(a['kind'])];
   if (kind === undefined) return null;
   const t = str(target['cli']) ?? str(target['runId']) ?? str(target['key']) ?? '';
-  if (t === '' && kind !== 'recheck') return null;
+  if (t === '' && kind !== 'recheck' && kind !== 'rebuild-seat-images') return null;
   return { kind, target: t, ord: num(target['gateOrd']), label: str(a['label']) };
 }
 
@@ -398,6 +402,7 @@ export function normalizeSnapshot(input: unknown): SystemSnapshot {
         runId: str(r['runId']) ?? '',
         title: str(r['title']) ?? 'A run',
         liveness,
+        quietForMs: num(r['quietForMs']),
         phase: str(r['phase']),
         seat: str(r['seat']),
         lastEventAt: when(r['lastEventAt']),
@@ -409,8 +414,11 @@ export function normalizeSnapshot(input: unknown): SystemSnapshot {
     infra: list(b['infra']).map((x) => {
       const r = bag(x);
       const key = str(r['key']) ?? 'component';
+      const rebuild = key === 'seat_images' ? bag(r['details'])['rebuild'] : null;
+      const rb = bag(rebuild);
       return {
         key,
+        rebuild: rebuild == null ? null : { running: rb['running'] === true, rc: num(rb['rc']), tail: list(rb['tail']).filter((line): line is string => typeof line === 'string'), error: str(rb['error']) },
         name: str(r['label']) ?? key,
         state: pick(r['state'], STATES, 'unknown'),
         reason: str(r['reason']),
@@ -450,4 +458,9 @@ export async function getSystem(): Promise<SystemSnapshot> {
 /** The route is absent (a crew that claims the capability but predates the route). */
 export function isSystemUnsupported(e: unknown): boolean {
   return isRouteUnsupported(e);
+}
+
+/** studio#936: start crew's background rebuild. */
+export function rebuildSeatImages(): Promise<RebuildSeatImagesResponse> {
+  return apiFetch<RebuildSeatImagesResponse>('/system/seat-images/rebuild', { method: 'POST' });
 }

@@ -264,9 +264,10 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
 
   // The panel's rows: the core sections at their places (Now first), the run plugins' sections between them by their
   // manifest's `order`, a pinned plugin section at the top (DES-LEARN §1.2).
+  const nowWord = held ? chatStatusWord([shown]).word : silent !== null ? silentWords(silent) : floor !== null ? floorWords(floor) : chatStatusWord([view]).word;
   const core: Record<PanelSectionId, React.ReactElement> = {
     now: (
-      <Section id="now" {...fold} summary={/* (crew#1042) held: it waits on you, no "working for N min" or silence clock */ held ? chatStatusWord([shown]).word : silent !== null ? silentWords(silent) : floor !== null ? floorWords(floor) : chatStatusWord([view]).word}>
+      <Section id="now" {...fold} summary={nowWord}>
         <div data-testid="run-tab-now" className="wk-run-tab-block">
           <p data-testid="run-tab-status" role="status" className="wk-run-tab-line">{statusSentence(shown, chain, gate, action, silent?.minutes ?? null)}</p>
           {(started !== null || ended !== null) && (
@@ -280,7 +281,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         </div>
         <div data-testid="run-tab-workflow" className="wk-run-tab-block">
           <p className="wk-run-tab-line">{workflowLabel(session.workflow_id)}{' '}
-            <span className="wk-run-tab-pill">{chatStatusWord([shown]).word}</span>
+            <span className="wk-run-tab-pill" data-testid="run-tab-pill">{silent !== null && !held ? silentWords(silent) : chatStatusWord([shown]).word}</span>
           </p>
           {typeof session.repo_ref === 'string' && session.repo_ref.trim() !== '' && (
             <p data-testid="run-tab-repo" className="wk-run-tab-line"><code>{session.repo_ref}</code></p>

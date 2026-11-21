@@ -1,3 +1,5 @@
+import { SeatImageRebuildNote } from './SeatImageRebuildNote.js';
+import { useSeatImageRebuild } from '../../store/seatImageRebuild.js';
 import type { SystemAction, SystemAttention, SystemSnapshot } from '../../api/system.js';
 import type { RosterSeat } from '../../api/types.js';
 import type { NerveState } from '../../board/nerveCenter.js';
@@ -38,7 +40,7 @@ const NO_RUNS: readonly SessionView[] = [];
 /** Where "See what needs you" goes: Needs you in full. */
 const NEEDS_PATH = '/needs';
 
-const ACTION_WORD: Record<SystemAction['kind'], string> = { 'sign-in': 'Sign in', recheck: 'Check again', 'open-gate': 'Open the gate', 'open-run': 'Open the job' };
+const ACTION_WORD: Record<SystemAction['kind'], string> = { 'rebuild-seat-images': 'Rebuild seat images', 'sign-in': 'Sign in', recheck: 'Check again', 'open-gate': 'Open the gate', 'open-run': 'Open the job' };
 
 const PANEL_TAB: Record<SystemAttention['panel'], NerveTab> = { clis: 'clis', runs: 'runs', infra: 'infra', governance: 'governance' };
 
@@ -84,7 +86,7 @@ function fallbackSystemTiles(registry: HealthRegistry): Tile[] {
  * tiles. Every tile opens the tabbed detail (`?tab=`), where run ids, paths and raw checks live.
  * Read-only apart from Check again, Sign in and an item's own fix.
  */
-export function NerveOverview({ state, snapshot, registry, reading, needCount, search, navigate, onRecheck, onAct, notes, runs = NO_RUNS }: {
+export function NerveOverview({ state, snapshot, registry, reading, needCount, search, navigate, onRecheck, onAct, notes, floorCache = null, runs = NO_RUNS }: {
   /** The board's runs (a slowing item that opens a gate is worded as the dock words it). */
   runs?: readonly SessionView[];
   state: NerveState;
@@ -100,12 +102,15 @@ export function NerveOverview({ state, snapshot, registry, reading, needCount, s
   onAct: (a: SystemAction) => void;
   /** The upgrade notes (an older crew), under everything. */
   notes?: React.ReactNode;
+  floorCache?: string | null;
 }): React.ReactElement {
   const go = (path: string) => (e: React.MouseEvent): void => {
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
     navigate(path);
   };
+  const starting = useSeatImageRebuild((s) => s.phase === 'starting');
+  const imageRebuild = snapshot?.infra.find((r) => r.key === 'seat_images')?.rebuild ?? null;
   const slowing = slowingItems(state.attention);
   const causes = useRowHeadlines(slowing, runs);
   const waiting = snapshot !== null ? waitingItems(state.attention).length : needCount;
@@ -129,7 +134,7 @@ export function NerveOverview({ state, snapshot, registry, reading, needCount, s
     if (a.action !== null) {
       const action = a.action;
       return (
-        <button type="button" className="wk-calm-btn wk-calm-btn--link wk-ncv-fix" data-testid="nc-slow-fix" data-kind={action.kind} onClick={() => onAct(action)}>
+        <button type="button" className="wk-calm-btn wk-calm-btn--link wk-ncv-fix" data-testid="nc-slow-fix" data-kind={action.kind} disabled={action.kind === 'rebuild-seat-images' && (starting || imageRebuild?.running === true)} onClick={() => onAct(action)}>
           {healthText(action.label ?? ACTION_WORD[action.kind])} <span aria-hidden>→</span>
         </button>
       );
@@ -167,6 +172,9 @@ export function NerveOverview({ state, snapshot, registry, reading, needCount, s
                 <span className="wk-ncv-slow-text">
                   <span className="wk-ncv-slow-title"><span className="sr-only">{a.level === 'red' ? 'Stopping work: ' : 'Slowing work: '}</span>{rowHeadline(a, causes.get(a.id) ?? null)}</span>
                   {slowingLine(a, snapshot?.infra ?? null, causes.get(a.id) ?? null) !== null && <span className="wk-ncv-slow-line">{healthText(slowingLine(a, snapshot?.infra ?? null, causes.get(a.id) ?? null) ?? '')}</span>}
+                  {a.id === 'infra:disk' && floorCache !== null && <span className="wk-ncv-slow-line" data-testid="nc-slow-floor-cache">{floorCache}</span>}
+                  {a.remedy !== null && a.remedy.trim() !== '' && a.remedy !== 'Re-check.' && a.remedy !== slowingLine(a, snapshot?.infra ?? null, causes.get(a.id) ?? null) && <span className="wk-nc-line" data-testid="nc-slow-remedy">{healthText(a.remedy)}</span>}
+                  {a.id === 'infra:seat_images' && <SeatImageRebuildNote rebuild={imageRebuild} />}
                 </span>
                 {fix(a)}
               </li>

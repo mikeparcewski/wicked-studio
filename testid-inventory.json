@@ -12077,6 +12077,12 @@
       ]
     },
     {
+      "testId": "nc-infra-floor-cache",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
       "testId": "nc-infra-recheck",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx"
@@ -12200,6 +12206,18 @@
     },
     {
       "testId": "nc-slow-fix",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-slow-floor-cache",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-slow-remedy",
       "files": [
         "src/components/nerve/NerveOverview.tsx"
       ]
@@ -18977,6 +18995,12 @@
       ]
     },
     {
+      "testId": "run-tab-pill",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
       "testId": "run-tab-pr",
       "files": [
         "src/components/session/RunTab.tsx"
@@ -19324,6 +19348,12 @@
       "testId": "seat-citations-toggle",
       "files": [
         "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "seat-image-rebuild",
+      "files": [
+        "src/components/nerve/SeatImageRebuildNote.tsx"
       ]
     },
     {
