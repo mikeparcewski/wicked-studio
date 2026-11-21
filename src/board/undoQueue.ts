@@ -594,6 +594,8 @@ const ESCALATION_PREVIEW: Record<string, string> = {
   // (DES-RULE-CHECK-001 S2) A rules hold's answers: the step does not run again, so never "the run resumes".
   retry_rules: 'The steering-rule check runs again on the same work; the step does not run again.',
   skip_rules: 'The selected rules are skipped with your reason, labelled on the run, the gate and the delivery; then the rule check runs again.',
+  // The operator's own judgment (a failed floor, a failed tool check at triage, no judge seat): the words are its reason, never guidance.
+  operator_judgment: 'Approved on your own judgment: your reason is recorded on the run and the delivery, and the run goes on past this gate.',
 };
 
 export function describeDecision(

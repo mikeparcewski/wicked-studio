@@ -14,7 +14,8 @@ import { isCommandPath, isHelperSeat, isReviewUnit } from '../../board/responder
 import { executingOrd } from '../../api/run-state.js';
 import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
-import { overriddenFloorsOf, overriddenLine } from '../../board/failingChecks.js';
+import { overriddenFloorsOf, overriddenLine, toolCheckOverrideLines } from '../../board/failingChecks.js';
+import { stepWord } from '../../board/runConversation.js';
 import { useGateStore } from '../../store/gates.js';
 import { openSheet, stopRun, useSheets } from '../../store/sheets.js';
 import { useRunChain } from './ChainLine.js';
@@ -159,6 +160,13 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   const rulesRows = receipt === null ? runRuleRows(view, events ?? null, recorded) : [];
   // rig 0.15.8: a failed floor the operator overrode is said as that — the deliver card's words — never "Passed".
   const overridden = overriddenFloorsOf(runReceipt, events ?? null, view);
+  // wicked-core#1318: a failed tool check the operator counted as done, said while the run is still going.
+  const toolOverrides = toolCheckOverrideLines(view, (ord) => {
+    const u = view.units.find((x) => x.ord === ord);
+    if (u === undefined) return null;
+    const key = u.id.includes(':') ? u.id.slice(u.id.indexOf(':') + 1) : String(u.stage ?? '');
+    return key === '' ? null : stepWord(key);
+  });
   const started = startedMs(view);
   const ended = isTerminal(view) ? (endedAtMs(view) ?? finishedAtMs(view)) : null;
   const doneSteps = chain.steps.filter((s) => s.state === 'done' || s.state === 'checked').length;
@@ -359,18 +367,19 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
       </Section>
     ),
     checks: (
-      <Section id="checks" {...fold} summary={quiet.has('checks') ? 'Nothing checked yet' : acceptancePassed === false ? 'Not passed' : overridden !== null ? 'Overridden by you' : acceptancePassed === true ? 'Passed' : ''}>
+      <Section id="checks" {...fold} summary={quiet.has('checks') ? 'Nothing checked yet' : acceptancePassed === false ? 'Not passed' : overridden !== null || toolOverrides.length > 0 ? 'Overridden by you' : acceptancePassed === true ? 'Passed' : ''}>
         <div data-testid="run-tab-checks" className="wk-run-tab-block">
           <RunAssuranceLabel view={view} />
           {rulesRows.length > 0 && <RulesChecked rows={rulesRows} testId="run-tab-rules" soFar={!isTerminal(view)} />}
           {/* crew's acceptance line (WT-W3 `summary.line`; a bare string from an older read). An acceptance not passed leads;
               a passed one under an override is QE acceptance's word only, so it goes behind Technical details. */}
           {acceptanceLine !== null && (overridden === null || acceptancePassed === false) && <p data-testid="run-tab-acceptance" className="wk-run-tab-line">{acceptanceLine}</p>}
-          {overridden !== null && <p data-testid="run-tab-overridden" className="wk-run-tab-line wk-prop-accept--overridden">{overriddenLine(overridden)}</p>}
+          {overridden !== null && overridden.floors !== 0 && <p data-testid="run-tab-overridden" className="wk-run-tab-line wk-prop-accept--overridden">{overriddenLine(overridden)}</p>}
+          {toolOverrides.map((line, i) => <p key={i} data-testid="run-tab-tool-check-overridden" className="wk-run-tab-line wk-prop-accept--overridden">{line}</p>)}
           {acceptanceLine !== null && overridden !== null && acceptancePassed !== false && <TechDetails data-testid="run-tab-acceptance-detail" summary="What QE acceptance recorded" text={acceptanceLine} />}
           {coverage !== null && <p data-testid="run-tab-coverage" className="wk-run-tab-line">{coverage.line}</p>}
           {coverage !== null && coverage.reasons.length > 0 && <TechDetails data-testid="run-tab-coverage-why" text={coverage.reasons} />}
-          {acceptanceLine === null && coverage === null && overridden === null && rulesRows.length === 0 && <p className="wk-run-tab-muted">{quiet.has('checks') ? 'Nothing has been checked yet.' : 'No acceptance check recorded.'}</p>}
+          {acceptanceLine === null && coverage === null && overridden === null && toolOverrides.length === 0 && rulesRows.length === 0 && <p className="wk-run-tab-muted">{quiet.has('checks') ? 'Nothing has been checked yet.' : 'No acceptance check recorded.'}</p>}
         </div>
         <Item section="checks" id="evidence">{() => <EvidenceTab runId={id} />}</Item>
         <Item section="checks" id="governance">{() => <RunSection id="governance" view={view} runs={allRuns} navigate={go} />}</Item>
