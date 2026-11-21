@@ -6,9 +6,9 @@ import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
 import { useConnectionStore } from '../store/connection.js';
 import { useCapabilities } from '../store/capabilities.js';
-import { useGateStore } from '../store/gates.js';
+import { needsRecheck, useGateStore } from '../store/gates.js';
 import { answerShapeOf, askerOf, useElicitationStore } from '../store/elicitations.js';
-import { GATE_READS_IN_FLIGHT, ensureGate, inGateSlot, reconcileGateRetries, rememberWorkTitles } from '../board/gateActions.js';
+import { GATE_READS_IN_FLIGHT, ensureGate, refreshGate, inGateSlot, reconcileGateRetries, rememberWorkTitles } from '../board/gateActions.js';
 
 /**
  * Owns the run list + the late-join reconcile (DES-STUDIO-001 §2.1, §3.3). A
@@ -164,8 +164,9 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
       // drops it if the run's gate moved meanwhile. A failed read leaves the id-only gate working and is tried again on
       // the next pass.
       await Promise.all(awaiting.map((id) => inGateSlot(async () => {
-        if (cancelled || useGateStore.getState().gates[id] !== undefined) return;
-        await ensureGate(id);
+        if (cancelled) return;
+        if (useGateStore.getState().gates[id] === undefined) await ensureGate(id);
+        else if (needsRecheck(id)) await refreshGate(id);
       })));
     })();
 

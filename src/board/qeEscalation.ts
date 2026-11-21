@@ -1,3 +1,4 @@
+import { engineOptionsStart } from './gateOffers.js';
 import type { CoreEvent, WorkUnit } from '../api/types.js';
 
 /**
@@ -50,7 +51,13 @@ const QE_REDO_OFFER = ` Redo the QE check (action \`${QE_REDO_ACTION}\`): the QE
 
 /** Whether the engine's gate prompt offers the redo — it drops the offer at the cap. */
 export function offersQeRedo(prompt: string | undefined): boolean {
-  return prompt !== undefined && prompt.includes(QE_REDO_OFFER);
+  if (prompt === undefined) return false;
+  const arms = engineOptionsStart(prompt, [' Approve to judge it yourself', ' Or confirm to retry the phase']);
+  if (arms < 0) return false;
+  const offer = prompt.lastIndexOf(QE_REDO_OFFER, arms);
+  if (offer < 0) return false;
+  const clause = prompt.slice(offer, arms);
+  return /after this one\)\.\s*$/.test(clause) && !clause.includes('The QE check is not offered again:');
 }
 
 /** Whether the engine's prompt is its INCONCLUSIVE QE gate (its opening words, never a quote inside a reason). */

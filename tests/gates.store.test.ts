@@ -143,3 +143,19 @@ describe('gate cache (§3.3 — event-sourced, self-healing, keyed by run id)', 
     expect(useGateStore.getState().gates['run-2']).toBeUndefined();
   });
 });
+
+describe('studio#1023 read bookkeeping pruning', () => {
+  it('B: prune deletes bookkeeping and drops even a first-generation read after the id returns', async () => {
+    const store = await import('../src/store/gates.js');
+    useGateStore.getState().reconcile([]);
+    const first = store.beginGateRead('pruned-first');
+    expect(first.gen).toBeGreaterThan(0);
+    useGateStore.getState().reconcile([]);
+    expect(store.gateBookkeepingSizeForTest()).toEqual({ generations: 0, readSeq: 0, appliedSeq: 0 });
+    const second = store.beginGateRead('pruned-first');
+    expect(useGateStore.getState().applyGateRead(first, gate({ runId: 'pruned-first' }))).toBe(false);
+    expect(useGateStore.getState().applyGateRead(second, gate({ runId: 'pruned-first', ord: 3 }))).toBe(true);
+    useGateStore.getState().reconcile([]);
+    expect(store.gateBookkeepingSizeForTest()).toEqual({ generations: 0, readSeq: 0, appliedSeq: 0 });
+  });
+});

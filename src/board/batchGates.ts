@@ -1,7 +1,8 @@
+import { useGateStore } from '../store/gates.js';
 import { create } from 'zustand';
 import type { GateDecision } from '../api/types.js';
 import {
-  IDLE_GATE_ACTION, gateKeyOf, isDecisionPending, sendGateDecision, unwatchDecision, useGateActionStore, watchDecision,
+  type GateInstance, IDLE_GATE_ACTION, gateKeyOf, isDecisionPending, sendGateDecision, unwatchDecision, useGateActionStore, watchDecision,
 } from './gateActions.js';
 import { describeDecision, queueDecision, reportDecision, restoreNote } from './undoQueue.js';
 import { PLAN_UNSEEN_TEXT, seenPlanRev } from './planRevBinding.js';
@@ -43,7 +44,7 @@ export interface BatchFailure {
 
 /** What the last fan-out sent to each run (its plan revision and gate included), so a retry answers exactly that
  *  target. Module state beside the store: the store's shape is the bar's. */
-const sentByRun = new Map<string, { decision: GateDecision; ord: number | undefined }>();
+const sentByRun = new Map<string, { decision: GateDecision; ord: number | undefined; instance?: GateInstance }>();
 
 interface BatchGateStore {
   /** Selected run ids, in selection order — the fan-out order. */
@@ -94,11 +95,8 @@ export function clearBatchSelection(): void {
 
 /** One decision for one id through the shared SEND path; returns the named error or null.
  *  (The undo window was the batch's, once, before the fan-out began.) */
-async function decideOne(runId: string, decision: GateDecision, ord?: number): Promise<string | null> {
-  await sendGateDecision(runId, ord === undefined ? decision : { ...decision, ord });
-  const after = useGateActionStore.getState().byGate[runId] ?? IDLE_GATE_ACTION;
-  if (after.answered !== null) return null;
-  return after.error ?? 'not sent — already answered or still in flight';
+async function decideOne(runId: string, decision: GateDecision, ord?: number, instance?: GateInstance): Promise<string | null> {
+  return sendGateDecision(runId, ord === undefined ? decision : { ...decision, ord }, instance);
 }
 
 /**
@@ -146,6 +144,11 @@ export function runBatchDecision(decision: GateDecision): Promise<void> {
   useBatchGateStore.setState({ queued: true });
   markQueued(true);
   let ords: Record<string, number | undefined> = {};
+  const instances: Record<string, GateInstance> = {};
+  for (const id of ids) {
+    const gate = useGateStore.getState().gates[id];
+    if (gate !== undefined) instances[id] = { ord: gate.ord, receivedAt: gate.receivedAt };
+  }
   const release = (): void => {
     unwatchDecision(ids);
     markQueued(false);
@@ -162,7 +165,7 @@ export function runBatchDecision(decision: GateDecision): Promise<void> {
       amend,
       commit: async () => {
         release();
-        await fanOut(ids, decision, ords, revs);
+        await fanOut(ids, decision, ords, revs, instances);
         const { failures } = useBatchGateStore.getState();
         if (failures.length === 0) reportDecision('sent', `${ids.length} gates answered.`, { keys: batchKeys });
         else reportDecision('failed', `Sent ${ids.length - failures.length} of ${ids.length}. Couldn’t send ${failures.length}:`, { keys: batchKeys });
@@ -188,7 +191,7 @@ export function runBatchDecision(decision: GateDecision): Promise<void> {
  * A second call while one runs is dropped (plus `sendGateDecision`'s own per-run
  * guard underneath — the shared-store double-submit contract).
  */
-async function fanOut(ids: string[], decision: GateDecision, ords: Record<string, number | undefined> = {}, revs: Record<string, number> = {}): Promise<void> {
+async function fanOut(ids: string[], decision: GateDecision, ords: Record<string, number | undefined> = {}, revs: Record<string, number> = {}, instances: Record<string, GateInstance> = {}): Promise<void> {
   if (useBatchGateStore.getState().running) return;
   sentByRun.clear(); // only the newest fan-out's targets are retried
   useBatchGateStore.setState({
@@ -197,8 +200,8 @@ async function fanOut(ids: string[], decision: GateDecision, ords: Record<string
   for (const runId of ids) {
     const rev = revs[runId];
     const sent = rev !== undefined ? { ...decision, planRev: rev } : decision;
-    sentByRun.set(runId, { decision: sent, ord: ords[runId] });
-    const error = await decideOne(runId, sent, ords[runId]);
+    sentByRun.set(runId, { decision: sent, ord: ords[runId], ...(instances[runId] !== undefined ? { instance: instances[runId] } : {}) });
+    const error = await decideOne(runId, sent, ords[runId], instances[runId]);
     useBatchGateStore.setState((cur) => ({
       done: cur.done + 1,
       // Success leaves the selection (its answered state now shows on the
@@ -245,7 +248,7 @@ export async function retryBatchOne(runId: string): Promise<void> {
     if (now !== sentRev) { reportDecision('not-sent', 'Not sent: this job’s plan changed since the batch answered it. Read the new plan and decide again.', { keys: [BATCH_KEY] }); return; }
   }
   useBatchGateStore.setState({ running: true });
-  const error = await decideOne(runId, decision, sentBefore?.ord);
+  const error = await decideOne(runId, decision, sentBefore?.ord, sentBefore?.instance);
   useBatchGateStore.setState((cur) => ({
     running: false,
     selected: error === null ? cur.selected.filter((id) => id !== runId) : cur.selected,
