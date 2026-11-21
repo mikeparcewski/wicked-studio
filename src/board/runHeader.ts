@@ -148,21 +148,76 @@ export function atEnd(el: { scrollHeight: number; scrollTop: number; clientHeigh
   return el.scrollHeight - el.scrollTop - el.clientHeight < AT_END_PX;
 }
 
+/** What the jump button counts: one thread entry, and what it holds that reads as messages (`parts`). */
+export interface Arrival {
+  key: string;
+  at: number;
+  /** What the entry holds that arrives inside it (a run block's finished steps): an entry already on screen that
+   *  gains a part is an arrival too (studio#858). */
+  parts?: readonly string[];
+}
+
+/** A run block's step that has its message in the block: finished, sent back, or failed. */
+const SPOKEN_UNIT: ReadonlySet<string> = new Set(['done', 'rejected', 'failed', 'denied']);
+
 /** What the jump button counts a thread entry as: a turn by its turn and seat (the live reply and the transcript's
- *  record of it are one message), a line by its own time (a finding placed under an older reply is still new),
- *  anything else by its key. */
-export function arrival(e: { kind: string; key: string; at: number; turnId?: string | null; who?: string; line?: { at: number } }): { key: string; at: number } {
-  return {
-    key: e.kind === 'turn' && typeof e.turnId === 'string' ? `turn:${e.turnId}:${e.who ?? ''}` : e.key,
-    at: e.kind === 'line' && e.line !== undefined ? e.line.at : e.at,
-  };
+ *  record of it are one message), a line by its own time (a finding placed under an older reply is still new), a run
+ *  block with its finished steps as parts (a step's output lands inside the block), anything else by its key. */
+export function arrival(e: {
+  kind: string; key: string; at: number; turnId?: string | null; who?: string; line?: { at: number };
+  view?: { units?: readonly { ord: number; status?: unknown }[] };
+}): Arrival {
+  const key = e.kind === 'turn' && typeof e.turnId === 'string' ? `turn:${e.turnId}:${e.who ?? ''}` : e.key;
+  const at = e.kind === 'line' && e.line !== undefined ? e.line.at : e.at;
+  if (e.kind === 'run' && e.view !== undefined) {
+    const parts = (e.view.units ?? []).filter((u) => SPOKEN_UNIT.has(String(u.status))).map((u) => `${u.ord}:${String(u.status)}`);
+    return { key, at, parts };
+  }
+  return { key, at };
+}
+
+/** The thread's arrivals: entries that share a key (a turn's seat that wrote twice) are one arrival whose later
+ *  messages are its parts, so a message appended to the same turn counts while the live reply and its transcript
+ *  record stay one. */
+export function arrivals(entries: readonly Parameters<typeof arrival>[0][]): Arrival[] {
+  const out: Arrival[] = [];
+  const byKey = new Map<string, { at: number; parts: string[]; n: number }>();
+  for (const e of entries) {
+    const a = arrival(e);
+    const held = byKey.get(a.key);
+    if (held === undefined) {
+      byKey.set(a.key, { at: a.at, parts: [...(a.parts ?? [])], n: 1 });
+      out.push({ key: a.key, at: a.at });
+      continue;
+    }
+    held.parts.push(`#${held.n}`, ...(a.parts ?? []));
+    held.n += 1;
+  }
+  return out.map((a) => {
+    const held = byKey.get(a.key)!;
+    return held.parts.length > 0 ? { key: a.key, at: held.at, parts: held.parts } : { key: a.key, at: held.at };
+  });
+}
+
+/** What the thread held: each arrival's key and its parts. */
+export function heldArrivals(next: readonly Arrival[]): Map<string, ReadonlySet<string>> {
+  return new Map(next.map((a) => [a.key, new Set(a.parts ?? [])]));
 }
 
 /** How many entries arrived: those in `next` that `prev` did not hold, dated at or after `since` (older history that
- *  lands late — a transcript read, the team rows — is not new). */
-export function newEntries(prev: ReadonlySet<string>, next: readonly { key: string; at: number }[], since: number): number {
+ *  lands late — a transcript read, the team rows — is not new); and ONCE each entry `prev` held that gained a part
+ *  (a step's output inside its run block: one arrival however many parts one read brings). */
+export function newEntries(prev: ReadonlySet<string> | ReadonlyMap<string, ReadonlySet<string>>, next: readonly Arrival[], since: number): number {
+  const none: ReadonlySet<string> = new Set();
   let n = 0;
-  for (const e of next) if (!prev.has(e.key) && e.at >= since) n += 1;
+  for (const e of next) {
+    const held = 'get' in prev ? prev.get(e.key) : prev.has(e.key) ? none : undefined;
+    if (held === undefined) {
+      if (e.at >= since) n += 1;
+    } else if ((e.parts ?? []).some((p) => !held.has(p))) {
+      n += 1;
+    }
+  }
   return n;
 }
 

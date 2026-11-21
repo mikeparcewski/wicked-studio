@@ -6,7 +6,7 @@ import * as client from '../src/api/client.js';
 import type { SessionView } from '../src/api/types.js';
 import type { NeedRow } from '../src/board/needsYou.js';
 import {
-  AT_END_PX, DETAILS_OPEN_KEY, QUESTION_KINDS, arrival, atEnd, headerBadge, jumpLabel, needsWords, newEntries, readDetailsOpen, waitingItems, writeDetailsOpen,
+  AT_END_PX, DETAILS_OPEN_KEY, QUESTION_KINDS, arrival, arrivals, atEnd, headerBadge, heldArrivals, jumpLabel, needsWords, newEntries, readDetailsOpen, waitingItems, writeDetailsOpen,
   type WaitingItem,
 } from '../src/board/runHeader.js';
 import { NeedsBanner } from '../src/components/session/NeedsBanner.js';
@@ -105,6 +105,36 @@ describe('arrival — what the jump button counts an entry as', () => {
     expect(arrival({ kind: 'turn', key: 'answer:r:2', at: 5, turnId: null, who: 'pa' })).toEqual({ key: 'answer:r:2', at: 5 });
     expect(arrival({ kind: 'line', key: 'a:9', at: 10.5, line: { at: 200 } })).toEqual({ key: 'a:9', at: 200 });
     expect(arrival({ kind: 'run', key: 'r:x', at: 3 })).toEqual({ key: 'r:x', at: 3 });
+  });
+  it('output that lands inside a block on screen counts once per arrival (studio#858)', () => {
+    const run = (statuses: string[]) => ({ kind: 'run', key: 'r:x', at: 3, view: { units: statuses.map((status, ord) => ({ ord, status })) } });
+    const since = 50;
+    // a run block launched before the page opened: on screen, and not new
+    let held = heldArrivals(arrivals([run(['done', 'executing', 'pending'])]));
+    // its next step finishes: one arrival
+    let next = arrivals([run(['done', 'done', 'executing'])]);
+    expect(newEntries(held, next, since)).toBe(1);
+    held = heldArrivals(next);
+    // nothing new inside it: nothing counted (a re-read of the same run)
+    expect(newEntries(held, arrivals([run(['done', 'done', 'executing'])]), since)).toBe(0);
+    // two steps finish in one read: still one arrival
+    next = arrivals([run(['done', 'done', 'done', 'done'])]);
+    expect(newEntries(held, next, since)).toBe(1);
+    held = heldArrivals(next);
+    // a step that failed has its message in the block too
+    expect(newEntries(held, arrivals([run(['done', 'done', 'done', 'done', 'failed'])]), since)).toBe(1);
+  });
+  it('a seat\'s second message in the same turn counts; the live reply and its record stay one (studio#858, #855)', () => {
+    const live = { kind: 'turn', key: 'live:t1:claude', at: 100, turnId: 't1', who: 'claude' };
+    const rec = { kind: 'turn', key: 'm7', at: 101, turnId: 't1', who: 'claude' };
+    const more = { kind: 'turn', key: 'm8', at: 102, turnId: 't1', who: 'claude' };
+    const held = heldArrivals(arrivals([live]));
+    expect(newEntries(held, arrivals([rec]), 50)).toBe(0);
+    expect(newEntries(heldArrivals(arrivals([rec])), arrivals([rec, more]), 50)).toBe(1);
+    // a brand-new turn that already holds two messages is one arrival
+    expect(newEntries(new Map(), arrivals([rec, more]), 50)).toBe(1);
+    // the same turn read again: nothing new
+    expect(newEntries(heldArrivals(arrivals([rec, more])), arrivals([rec, more]), 50)).toBe(0);
   });
   it('a step question and a stalled hand-off are answered in the question card', () => {
     expect([...QUESTION_KINDS].sort()).toEqual(['Question', 'Stalled']);

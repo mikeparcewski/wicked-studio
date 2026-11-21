@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { CoreEvent } from '../api/types.js';
+import { useConnectionStore } from '../store/connection.js';
 import { useRunEventStore } from '../store/events.js';
 
 /**
@@ -12,12 +13,26 @@ import { useRunEventStore } from '../store/events.js';
  * in-flight read per run, folded into the run event store once.
  *
  * A failed read is NOT an empty log: the store is left untouched (fail closed) and `failed` says so;
- * `retry()` asks again. Each caller reads once per mount while the store holds nothing for the run.
+ * `retry()` asks again.
+ *
+ * studio#1009: a run's full log is read once per connection epoch, whatever the store holds. Live frames that reached
+ * the store before any reader are only the log's tail, and frames sent while the socket was down are lost, so a log
+ * read before the last reconnect is read again. `hydrate` merges by fingerprint (the recorded trail as the prefix, the
+ * live remainder behind it), so a re-read never counts a frame twice.
  */
 const inflight = new Map<string, Promise<void>>();
+/** The connection epoch in which each run's full log was last read (a read stamps the epoch it was ASKED in, so a
+ *  reconnect while it was in flight still reads again). */
+const readIn = new Map<string, number>();
 
-function hydrateRunEvents(runId: string): Promise<void> {
-  const open = inflight.get(runId);
+/** Does this run's log need a full read in this epoch? */
+export function needsRunEventsRead(runId: string, epoch: number): boolean {
+  return (readIn.get(runId) ?? -1) < epoch;
+}
+
+function hydrateRunEvents(runId: string, epoch: number): Promise<void> {
+  const key = `${runId}@${epoch}`;
+  const open = inflight.get(key);
   if (open !== undefined) return open;
   const read = api.getRunEvents(runId)
     .then(({ events }) => {
@@ -25,9 +40,10 @@ function hydrateRunEvents(runId: string): Promise<void> {
       if (useRunEventStore.getState().byRun[runId] === undefined) {
         useRunEventStore.setState((s) => ({ byRun: { ...s.byRun, [runId]: [] as CoreEvent[] } }));
       }
+      if (needsRunEventsRead(runId, epoch)) readIn.set(runId, epoch);
     })
-    .finally(() => { inflight.delete(runId); });
-  inflight.set(runId, read);
+    .finally(() => { inflight.delete(key); });
+  inflight.set(key, read);
   return read;
 }
 
@@ -42,17 +58,20 @@ export interface RunEventsRead {
 
 export function useRunEvents(runId: string, enabled = true): RunEventsRead {
   const raw = useRunEventStore((s) => s.byRun[runId]);
+  const epoch = useConnectionStore((s) => s.epoch);
   const askedFor = useRef<string | null>(null);
   const [failedFor, setFailedFor] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    if (!enabled || raw !== undefined || askedFor.current === runId) return;
-    askedFor.current = runId;
-    hydrateRunEvents(runId).then(
+    const key = `${runId}@${epoch}`;
+    // Read when this epoch has no full read of the run (live frames alone are only its tail), or when the store lost it.
+    if (!enabled || askedFor.current === key || (raw !== undefined && !needsRunEventsRead(runId, epoch))) return;
+    askedFor.current = key;
+    hydrateRunEvents(runId, epoch).then(
       () => { setFailedFor((f) => (f === runId ? null : f)); },
-      () => { if (askedFor.current === runId) setFailedFor(runId); },
+      () => { if (askedFor.current === key) setFailedFor(runId); },
     );
-  }, [runId, raw, enabled, attempt]);
+  }, [runId, raw, enabled, attempt, epoch]);
   const retry = useCallback(() => {
     askedFor.current = null;
     setFailedFor(null);
@@ -63,16 +82,18 @@ export function useRunEvents(runId: string, enabled = true): RunEventsRead {
 
 /**
  * Several runs' logs at once (a list of rows that each name a gate: Needs you, the project home): each run is read
- * once through the same one-in-flight hydration, and a failed read stays `undefined` (never an empty log).
+ * once per connection epoch through the same one-in-flight hydration, and a failed read stays `undefined` (never an
+ * empty log).
  */
 export function useRunEventsFor(runIds: readonly string[]): Readonly<Record<string, CoreEvent[] | undefined>> {
   const byRun = useRunEventStore((s) => s.byRun);
+  const epoch = useConnectionStore((s) => s.epoch);
   const key = [...new Set(runIds)].sort().join(',');
   useEffect(() => {
     if (key === '') return;
     for (const id of key.split(',')) {
-      if (useRunEventStore.getState().byRun[id] === undefined) hydrateRunEvents(id).catch(() => { /* fail closed: the row keeps crew's words */ });
+      if (needsRunEventsRead(id, epoch)) hydrateRunEvents(id, epoch).catch(() => { /* fail closed: the row keeps crew's words */ });
     }
-  }, [key]);
+  }, [key, epoch]);
   return byRun;
 }

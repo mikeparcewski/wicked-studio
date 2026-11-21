@@ -34,7 +34,7 @@ import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { ChatQuestions } from './ThreadQuestions.js';
 import { SourceChips } from './SourceChips.js';
 import { NeedsBanner } from './NeedsBanner.js';
-import { arrival, atEnd, headerBadge, jumpLabel, newEntries, QUESTION_KINDS, readDetailsOpen, needsForSession, writeDetailsOpen, type WaitingItem } from '../../board/runHeader.js';
+import { arrivals, atEnd, headerBadge, heldArrivals, jumpLabel, newEntries, QUESTION_KINDS, readDetailsOpen, needsForSession, writeDetailsOpen, type WaitingItem } from '../../board/runHeader.js';
 import { needsSource } from '../../board/attention.js';
 import { Composer, type ComposerSend, type ComposerSuggestion } from './Composer.js';
 import { quoteLabel } from '../../board/aboutChips.js';
@@ -1018,12 +1018,14 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // line is not a message).
   // History that lands after the page is ready (the transcript, the team rows, a restored place's thread) is not new:
   // only entries dated after this session was opened count.
-  const seenKeys = useRef<{ session: string; opened: number; keys: Set<string> } | null>(null);
+  // studio#858: output that lands inside a block already on screen (a run's step finishing, a seat's second message in
+  // the same turn) counts once too: each entry is held with its parts.
+  const seenKeys = useRef<{ session: string; opened: number; keys: Map<string, ReadonlySet<string>> } | null>(null);
   useEffect(() => {
-    const now = entries.filter((e) => e.kind !== 'typing' && e.kind !== 'working').map(arrival);
+    const now = arrivals(entries.filter((e) => e.kind !== 'typing' && e.kind !== 'working'));
     const prev = seenKeys.current;
     const opened = prev !== null && prev.session === sessionId ? prev.opened : Date.now();
-    seenKeys.current = { session: sessionId, opened, keys: new Set(now.map((e) => e.key)) };
+    seenKeys.current = { session: sessionId, opened, keys: heldArrivals(now) };
     if (!ready || prev === null || prev.session !== sessionId || nearBottom.current || restore.current.pending) return;
     const n = newEntries(prev.keys, now, opened);
     if (n > 0) setUnseen((u) => u + n);
