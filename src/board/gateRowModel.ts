@@ -176,6 +176,8 @@ export function consentChoicesOf(gate: OpenGate, events: readonly CoreEvent[] | 
 
 export interface GateRowModel {
   reason: SessionGateReason;
+  /** wicked-studio#1255 / wicked-core#1702: the current blocked call, on the card face. */
+  refused?: RefusedCall;
   /** Finding ids for the team dispute on this unit. */
   disputeIds?: string[];
   question: string;
@@ -342,6 +344,39 @@ export function disputeFindingIds(events: readonly CoreEvent[] | null, ord: numb
   }
   const m = /without a council YES:\s*([^.]+)/i.exec(prompt);
   return m === null ? [] : m[1]!.split(',').map((x) => x.trim()).filter((x) => x !== '');
+}
+
+export interface RefusedCall {
+  tool: string;
+  path: string;
+  access: string;
+  rule: string;
+  command: string;
+  reason: string;
+}
+
+/** wicked-studio#1255 / wicked-core#1702: only this unit's latest evaluation can name a current refusal. */
+export function refusedCall(events: readonly CoreEvent[] | null, ord: number): RefusedCall | null {
+  for (let i = (events ?? []).length - 1; i >= 0; i--) {
+    const e = events![i] as unknown as Record<string, unknown>;
+    if (e['type'] !== 'gateEvaluated' || e['ord'] !== ord) continue;
+    const denial = e['denial'];
+    if (denial === null || typeof denial !== 'object' || Array.isArray(denial)) return null;
+    const refused: unknown = (denial as Record<string, unknown>)['refused'];
+    if (refused === null || typeof refused !== 'object' || Array.isArray(refused)) return null;
+    const call = refused as Record<string, unknown>;
+    const path = call['path'];
+    const rule = call['rule'];
+    if (typeof path !== 'string' || path.trim() === '' || typeof rule !== 'string' || rule.trim() === '') return null;
+    return {
+      tool: typeof call['tool'] === 'string' ? call['tool'] : '',
+      path, rule,
+      access: typeof call['access'] === 'string' ? call['access'] : '',
+      command: typeof call['command'] === 'string' ? call['command'] : '',
+      reason: typeof call['reason'] === 'string' ? call['reason'] : '',
+    };
+  }
+  return null;
 }
 
 /** studio#547: the note a dispute's Send back opens on — the findings the creator must address. */
@@ -978,6 +1013,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // RE-RUNS the phase (suggested when the floor and the judge passed), steer, Stop. No Send back:
     // there is no reviewer finding to return, and no reviewer note to pre-fill.
     const deniedUnit = isDeniedUnitEscalation(gate.prompt, verdict, gate.ord);
+    const refused = deniedUnit ? refusedCall(events, gate.ord) : null;
     if (deniedUnit) noteDefault = '';
     // studio#761: the QE review's gate. The engine's Approve re-dispatches the QE unit alone, so the
     // retry is named for what it does. When the reviewer recorded NO verdict nothing was judged:
@@ -1206,7 +1242,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     if (!deniedUnit && !qeNoVerdict && !qeRedo && !rejudgeOffered && !overridePath && backAt < 0 && recommended !== null && rec?.kind === 'retry-findings' && rec.prefill !== null) {
       noteDefault = rec.prefill;
     }
-    return { reason, question, choices: escInline, overflow, noteDefault, recommended, detailItems, ...(whyNot.length > 0 ? { whyNot } : {}), ...(qe !== null ? { qe } : {}), ...(deadSeat !== null ? { deadSeat } : {}), ...(judgeWait ? { operatorJudgment } : {}), ...(withheld.length > 0 ? { withheldSeats: withheld } : {}) };
+    return { reason, question, choices: escInline, overflow, noteDefault, recommended, detailItems, ...(refused !== null ? { refused } : {}), ...(whyNot.length > 0 ? { whyNot } : {}), ...(qe !== null ? { qe } : {}), ...(deadSeat !== null ? { deadSeat } : {}), ...(judgeWait ? { operatorJudgment } : {}), ...(withheld.length > 0 ? { withheldSeats: withheld } : {}) };
   }
 
   if (reason === 'retry') {
