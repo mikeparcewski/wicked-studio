@@ -29,9 +29,11 @@ const WIN_NAME = String.raw`${RUN}(?:['.]${RUN})*`;
 /** A Windows name with spaces, only when a separator follows (so prose after a bare one is safe). */
 const WIN_SPACED = String.raw`${WIN_NAME}(?: +${WIN_NAME})+(?=[\\\/])`;
 const USERS = String.raw`[Uu][Ss][Ee][Rr][Ss]`;
+/** A Windows separator as plain text or doubled inside JSON text. */
+const WIN_SEP = String.raw`(?:\\\\|[\\\/])`;
 /** The three spellings of a home directory, at the start of a path. */
 const HOME_HEAD =
-  String.raw`(?:\/Users\/${NAME}|\/home\/${NAME}|\/root|[A-Za-z]:[\\\/]${USERS}[\\\/](?:${WIN_SPACED}|${WIN_NAME}))`;
+  String.raw`(?:\/Users\/${NAME}|\/home\/${NAME}|\/root|[A-Za-z]:${WIN_SEP}${USERS}${WIN_SEP}(?:${WIN_SPACED}|${WIN_NAME}))`;
 
 /** A path field: the home directory is the whole path, or is followed by a separator. */
 const PATH_RE = new RegExp(String.raw`^${HOME_HEAD}(?=$|[\\\/])`);

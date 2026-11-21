@@ -290,6 +290,7 @@ export function resolveEnforcementBanner(
 }
 
 function EnforcementBannerView({ banner }: { banner: Exclude<EnforcementBanner, null> }): React.ReactElement {
+  const showText = useDisplayText();
   if (banner.kind === 'unenforced') {
     return (
       <div
@@ -304,7 +305,7 @@ function EnforcementBannerView({ banner }: { banner: Exclude<EnforcementBanner, 
         <ul className="flex flex-col gap-0.5">
           {banner.rows.map((r) => (
             <li key={r.ord} data-testid="governance-unenforced-unit" className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>
-              unit #{r.ord} · {r.cli} — {r.reason}
+              unit #{r.ord} · {r.cli} — {showText(r.reason)}
             </li>
           ))}
         </ul>
@@ -330,7 +331,7 @@ function EnforcementBannerView({ banner }: { banner: Exclude<EnforcementBanner, 
       style={{ background: s.bg, border: '1px solid var(--surface-raised)' }}
     >
       <p className="text-xs font-mono font-semibold" style={{ color: s.color }}>{s.label}</p>
-      <p className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>{banner.detail}</p>
+      <p className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>{showText(banner.detail)}</p>
     </div>
   );
 }
@@ -535,7 +536,7 @@ export function GovernanceAudit({ model }: Props): React.ReactElement {
                   >
                     DENY
                   </span>
-                  <span style={{ color: 'var(--ink-muted)' }}>unit #{d.ord} · {d.detail}</span>
+                  <span style={{ color: 'var(--ink-muted)' }}>unit #{d.ord} · {showText(d.detail)}</span>
                 </li>
               ))}
             </ul>

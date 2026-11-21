@@ -1091,6 +1091,7 @@ const FAILING_SHOWN = 5;
 
 /** Failing tests grouped by file: the first {@link FAILING_SHOWN}, the rest behind "and N more". */
 export function FailingGroups({ ids }: { ids: readonly string[] }): React.ReactElement {
+  const showText = useDisplayText();
   const [all, setAll] = useState(false);
   const groups = groupByFile(ids);
   let left = all ? Number.POSITIVE_INFINITY : FAILING_SHOWN;
@@ -1106,11 +1107,11 @@ export function FailingGroups({ ids }: { ids: readonly string[] }): React.ReactE
       <ul className="wk-gate2-group-list">
         {shown.map((g) => (
           <li key={g.file} data-testid="session-gate-failing-group" data-file={g.file} className="wk-gate2-group">
-            <code className="wk-gate2-new-id" title={g.file}>{g.file}{g.total > 1 ? ` · ${g.total}` : ''}</code>
+            <code className="wk-gate2-new-id" title={showText(g.file)}>{showText(g.file)}{g.total > 1 ? ` · ${g.total}` : ''}</code>
             <ul>
               {g.tests.map((n) => (
-                <li key={n} title={n}>
-                  <span className="wk-gate2-new-t">{failureName(n) === g.file ? 'the whole file failed' : testWords(failureName(n))}</span>
+                <li key={n} title={showText(n)}>
+                  <span className="wk-gate2-new-t">{failureName(n) === g.file ? 'the whole file failed' : showText(testWords(failureName(n)))}</span>
                 </li>
               ))}
             </ul>

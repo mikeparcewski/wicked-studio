@@ -1,3 +1,4 @@
+import { useDisplayText } from '../hooks/useHomePath.js';
 import type { RunModel, UnitModel } from '../hooks/useRunModel.js';
 import { useRuntimeStore } from '../store/runtime.js';
 import { isUnanimous, lostQuorum, quorumLabel } from './councilQuorum.js';
@@ -29,6 +30,7 @@ function routingSummary(r: NonNullable<UnitModel['routing']>): string {
 }
 
 export function AssumptionsPanel({ model }: Props): React.ReactElement {
+  const showText = useDisplayText();
   const routed = model.units.filter((u) => u.resolved && u.routing != null);
   const recorded = useRuntimeStore((s) => s.assumptions[model.session.id]) ?? [];
 
@@ -90,7 +92,7 @@ export function AssumptionsPanel({ model }: Props): React.ReactElement {
                   {u.description.split(' — ')[0]}
                 </span>
               )}{' '}
-              — {routingSummary(u.routing!)}
+              — {showText(routingSummary(u.routing!))}
             </li>
           ))}
         </ul>

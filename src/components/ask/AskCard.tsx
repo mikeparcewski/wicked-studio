@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import type { Ask, AskAnswer, AskOption } from '../../api/ask.js';
 import { initialOption, initialPicks, pickBounds } from '../../board/askModel.js';
+import { useDisplayText } from '../../hooks/useHomePath.js';
 
 /**
  * THE GUIDED ASK (design DES-GUIDED-CHAT; the operator's approved mockup learn-and-panels state h). One renderer for
@@ -85,12 +86,12 @@ export interface AskCardProps {
 
 const tid = (ids: AskCardProps['testIds'], k: keyof NonNullable<AskCardProps['testIds']>, d: string): string => ids?.[k] ?? d;
 
-function consequenceText(text: string, ids: readonly string[]): React.ReactNode {
+function consequenceText(text: string, ids: readonly string[], showText: (text: string) => string): React.ReactNode {
   const known = [...new Set(ids)].filter(Boolean).sort((a, b) => b.length - a.length);
-  if (known.length === 0) return text;
+  if (known.length === 0) return showText(text);
   const pattern = new RegExp(`(${known.map((id) => id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'g');
   return text.split(pattern).map((part, i) => known.includes(part)
-    ? <span key={i} className="wk-rule-id" title={part}>{part}</span> : part);
+    ? <span key={i} className="wk-rule-id" title={showText(part)}>{showText(part)}</span> : showText(part));
 }
 
 /** Leave room for the dock's sticky primary, including when its button row wraps. */
@@ -104,6 +105,7 @@ function scrollAbovePrimary(el: HTMLElement): void {
 }
 
 export function AskCard(props: AskCardProps): React.ReactElement {
+  const showText = useDisplayText();
   const { ask, header = true } = props;
   return (
     <div
@@ -111,7 +113,7 @@ export function AskCard(props: AskCardProps): React.ReactElement {
       data-ask-kind={ask.kind}
       data-ask-host={ask.host}
       role="group"
-      aria-label={ask.prompt}
+      aria-label={showText(ask.prompt)}
       className={`wk-ask${ask.host === 'gate' ? ' wk-ask--gate' : ''}${header ? '' : ' wk-ask--bare'}`}
     >
       {header && (
@@ -120,8 +122,8 @@ export function AskCard(props: AskCardProps): React.ReactElement {
             {props.tag !== undefined && <span className="wk-ask-tag" data-tone={ask.host === 'gate' ? 'gate' : 'accent'}>{props.tag}</span>}
             <span>{ask.from.label}</span>
           </p>
-          <p className="wk-ask-q" data-testid="ask-question">{ask.prompt}</p>
-          {ask.detail !== undefined && <p className="wk-ask-sub">{ask.detail}</p>}
+          <p className="wk-ask-q" data-testid="ask-question">{showText(ask.prompt)}</p>
+          {ask.detail !== undefined && <p className="wk-ask-sub">{showText(ask.detail)}</p>}
         </>
       )}
       {ask.kind === 'choose' || ask.kind === 'confirm' || ask.kind === 'confirm_reason' ? <ChooseBody {...props} />
@@ -134,6 +136,7 @@ export function AskCard(props: AskCardProps): React.ReactElement {
 
 /** Choose one (and confirm, confirm_reason): radio cards, the consequence line, the reason box, the primary. */
 function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, consequenceIds = [], confirmLabel, optionProps, optionExtra, confirmProps, confirmExtra, footnote, aside, leadAct, onSelect, onReasonOpen, onCancelReason, testIds, reasonId }: AskCardProps): React.ReactElement {
+  const showText = useDisplayText();
   const options = useMemo(() => ask.options ?? [], [ask.options]);
   const enabled = options.filter((o) => o.disabled === undefined);
   const [sel, setSel] = useState<string | null>(() => initialOption(ask, start));
@@ -254,7 +257,7 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, consequence
       <div
         ref={groupRef}
         role="radiogroup"
-        aria-label={ask.prompt}
+        aria-label={showText(ask.prompt)}
         aria-describedby={consId}
         data-testid={tid(testIds, 'group', /* testid */ 'ask-options')}
         // A typed letter goes on to the page's composer (§5.6 rule 4): only arrows, digits and Enter act here.
@@ -290,7 +293,7 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, consequence
               {...(o.id === tabStop ? { 'data-ask-focus': 'true' } : {})}
               disabled={busy || o.disabled !== undefined}
               aria-disabled={o.disabled !== undefined ? true : undefined}
-              title={o.disabled ?? o.consequence ?? o.label}
+              title={showText(o.disabled ?? o.consequence ?? o.label)}
               className="wk-ask-opt"
               onClick={() => pick(o)}
               onKeyDown={(e) => onKey(e, o)}
@@ -300,10 +303,10 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, consequence
               aria-labelledby={`${id}-label`}
               aria-describedby={describedBy || undefined}
             >
-              <b id={`${id}-label`} className="wk-ask-opt-label">{o.label}</b>
-              {o.sub !== undefined && <span id={`${id}-sub`} className="wk-ask-opt-sub">{o.sub}</span>}
-              {o.disabled !== undefined && <span id={`${id}-why`} className="wk-ask-opt-sub wk-ask-opt-why" data-testid="ask-option-why">{o.disabled}</span>}
-              {o.meta !== undefined && <span id={`${id}-meta`} className="wk-ask-meta" data-testid="ask-option-meta">{o.meta}</span>}
+              <b id={`${id}-label`} className="wk-ask-opt-label">{showText(o.label)}</b>
+              {o.sub !== undefined && <span id={`${id}-sub`} className="wk-ask-opt-sub">{showText(o.sub)}</span>}
+              {o.disabled !== undefined && <span id={`${id}-why`} className="wk-ask-opt-sub wk-ask-opt-why" data-testid="ask-option-why">{showText(o.disabled)}</span>}
+              {o.meta !== undefined && <span id={`${id}-meta`} className="wk-ask-meta" data-testid="ask-option-meta">{showText(o.meta)}</span>}
               {content != null && content !== false && <span id={`${id}-extra`} style={{ display: 'contents' }}>{content}</span>}
               {recommended && <span id={`${id}-recommended`} className="wk-ask-rec" data-testid="ask-recommended">Recommended</span>}
             </button>
@@ -312,11 +315,11 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, consequence
       </div>
       {/* What will be sent, for the SELECTED option: reserved height, so hovering never moves a card. */}
       <p id={consId} data-testid={tid(testIds, 'consequence', /* testid */ 'ask-consequence')} {...(current !== null ? { 'data-option': current.id } : {})} aria-live="polite" className="wk-ask-cons">
-        {current?.consequence !== undefined ? <><b>If you choose this:</b> <span data-testid={reasonCfg?.consequenceTestId}>{consequenceText(current.consequence, consequenceIds)}</span></> : null}
+        {current?.consequence !== undefined ? <><b>If you choose this:</b> <span data-testid={reasonCfg?.consequenceTestId}>{consequenceText(current.consequence, consequenceIds, showText)}</span></> : null}
       </p>
       {/* A hovered other option, visibly a preview and never the confirmation; its own reserved line. */}
       <p data-testid={`${tid(testIds, 'consequence', /* testid */ 'ask-consequence')}-preview`} {...(preview !== null ? { 'data-preview': 'true', 'data-option': preview.id } : {})} className="wk-ask-preview">
-        {preview?.consequence !== undefined ? <><b>Preview:</b> {preview.label}: {preview.consequence}</> : null}
+        {preview?.consequence !== undefined ? <><b>Preview:</b> {showText(preview.label)}: {showText(preview.consequence)}</> : null}
       </p>
       {reasonCfg !== null && current !== null && (
         <div className="wk-ask-reason" data-testid="ask-reason">
@@ -353,7 +356,7 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, consequence
               className={`wk-gate2-btn ${current?.tone === 'danger' ? 'wk-ask-btn--danger' : 'wk-gate2-btn--primary'}`}
               {...(confirmProps?.(current) ?? {})}
             >
-              {busy ? 'Sending…' : confirmWords}
+              {busy ? 'Sending…' : showText(confirmWords)}
               {!busy && confirmExtra?.(current)}
             </button>
           )}
@@ -367,6 +370,7 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, consequence
 
 /** Pick several: checkbox chips, a count with the bounds, Select all, the primary. */
 function PickBody({ ask, onAnswer, busy = false, footnote, aside, testIds }: AskCardProps): React.ReactElement {
+  const showText = useDisplayText();
   const options = ask.options ?? [];
   const [picked, setPicked] = useState<string[]>(() => initialPicks(ask));
   const { min, max } = pickBounds(ask);
@@ -384,7 +388,7 @@ function PickBody({ ask, onAnswer, busy = false, footnote, aside, testIds }: Ask
     : `${n} picked${n < min ? ` · pick at least ${min}` : ''}${max < usable.length ? ` · at most ${max}` : ''}`;
   return (
     <>
-      <div role="group" aria-label={ask.prompt} data-testid={tid(testIds, 'group', /* testid */ 'ask-options')} className="wk-ask-chips">
+      <div role="group" aria-label={showText(ask.prompt)} data-testid={tid(testIds, 'group', /* testid */ 'ask-options')} className="wk-ask-chips">
         {options.map((o) => {
           const on = picked.includes(o.id);
           return (
@@ -398,21 +402,21 @@ function PickBody({ ask, onAnswer, busy = false, footnote, aside, testIds }: Ask
               data-testid={tid(testIds, 'option', /* testid */ 'ask-option')}
               disabled={busy || o.disabled !== undefined || (!on && n >= max)}
               aria-disabled={o.disabled !== undefined ? true : undefined}
-              title={o.disabled ?? o.consequence ?? o.label}
-              aria-label={`${o.label}${o.meta !== undefined ? `, ${o.meta}` : ''}${o.disabled !== undefined ? `, not available: ${o.disabled}` : ''}`}
+              title={showText(o.disabled ?? o.consequence ?? o.label)}
+              aria-label={showText(`${o.label}${o.meta !== undefined ? `, ${o.meta}` : ''}${o.disabled !== undefined ? `, not available: ${o.disabled}` : ''}`)}
               className="wk-ask-chip"
               onClick={() => toggle(o)}
             >
               <i aria-hidden className="wk-ask-box"><Check size={12} strokeWidth={3} /></i>
-              {o.label}
-              {o.meta !== undefined && <small aria-hidden>{o.meta}</small>}
+              {showText(o.label)}
+              {o.meta !== undefined && <small aria-hidden>{showText(o.meta)}</small>}
             </button>
           );
         })}
       </div>
       {options.some((o) => o.disabled !== undefined) && (
         <p className="wk-ask-why-off" data-testid="ask-options-off">
-          {options.filter((o) => o.disabled !== undefined).map((o) => `${o.label}: ${o.disabled}`).join(' · ')}
+          {showText(options.filter((o) => o.disabled !== undefined).map((o) => `${o.label}: ${o.disabled}`).join(' · '))}
         </p>
       )}
       <div className="wk-ask-go">
@@ -435,6 +439,7 @@ function PickBody({ ask, onAnswer, busy = false, footnote, aside, testIds }: Ask
 
 /** A point on a scale: a slider over named steps (or a number range) and what the step means. */
 function ScaleBody({ ask, onAnswer, busy = false, testIds }: AskCardProps): React.ReactElement {
+  const showText = useDisplayText();
   const scale = ask.scale ?? { steps: ['Low', 'High'] };
   const named = 'steps' in scale;
   const lo = named ? 0 : scale.min;
@@ -446,14 +451,14 @@ function ScaleBody({ ask, onAnswer, busy = false, testIds }: AskCardProps): Reac
   return (
     <>
       <div className="wk-ask-scale">
-        <span aria-hidden>{named ? scale.steps[0] : scale.labels[0]}</span>
+        <span aria-hidden>{showText((named ? scale.steps[0] : scale.labels[0]) ?? '')}</span>
         <input type="range" data-ask-focus="true" min={lo} max={hi} step={step} value={v} disabled={busy}
-          data-testid={tid(testIds, 'option', /* testid */ 'ask-scale')} aria-label={ask.prompt} aria-valuetext={label}
+          data-testid={tid(testIds, 'option', /* testid */ 'ask-scale')} aria-label={showText(ask.prompt)} aria-valuetext={showText(label)}
           onChange={(e) => setV(Number(e.target.value))} />
-        <span aria-hidden>{named ? scale.steps[scale.steps.length - 1] : scale.labels[1]}</span>
-        <span className="wk-ask-scale-v" data-testid="ask-scale-value">{label}</span>
+        <span aria-hidden>{showText((named ? scale.steps[scale.steps.length - 1] : scale.labels[1]) ?? '')}</span>
+        <span className="wk-ask-scale-v" data-testid="ask-scale-value">{showText(label)}</span>
       </div>
-      <p data-testid={tid(testIds, 'consequence', /* testid */ 'ask-consequence')} aria-live="polite" className="wk-ask-cons">{cons ?? null}</p>
+      <p data-testid={tid(testIds, 'consequence', /* testid */ 'ask-consequence')} aria-live="polite" className="wk-ask-cons">{cons !== undefined ? showText(cons) : null}</p>
       <div className="wk-ask-go">
         <button type="button" data-testid={tid(testIds, 'confirm', /* testid */ 'ask-confirm')} disabled={busy} onClick={() => onAnswer({ askId: ask.id, value: v })} className="wk-gate2-btn wk-gate2-btn--primary">
           {busy ? 'Sending…' : 'Set it'}
@@ -465,6 +470,7 @@ function ScaleBody({ ask, onAnswer, busy = false, testIds }: AskCardProps): Reac
 
 /** Short text: a box, Send, and "Nothing to add" when the answer is optional. */
 function TextBody({ ask, onAnswer, busy = false, testIds, aside }: AskCardProps): React.ReactElement {
+  const showText = useDisplayText();
   const [t, setT] = useState('');
   const id = useId();
   const max = ask.text?.maxChars;
@@ -472,7 +478,7 @@ function TextBody({ ask, onAnswer, busy = false, testIds, aside }: AskCardProps)
   const send = (): void => { if (busy || (t.trim() === '' && !optional)) return; onAnswer({ askId: ask.id, text: t.trim() }); };
   return (
     <>
-      <label htmlFor={id} className="sr-only">{ask.prompt}</label>
+      <label htmlFor={id} className="sr-only">{showText(ask.prompt)}</label>
       <textarea id={id} data-ask-focus="true" data-testid={tid(testIds, 'reason', /* testid */ 'ask-text')} className="wk-ask-text" rows={2} value={t} disabled={busy}
         placeholder={ask.text?.placeholder} {...(max !== undefined ? { maxLength: max } : {})}
         onChange={(e) => setT(e.target.value)}
@@ -493,10 +499,11 @@ function TextBody({ ask, onAnswer, busy = false, testIds, aside }: AskCardProps)
  * undo countdown ("Sends in 8 s · Undo"), "sent" and the time, or "just now".
  */
 export function AskRecord({ line, meta, testId = 'ask-record', className }: { line: string; meta?: React.ReactNode; testId?: string; className?: string }): React.ReactElement {
+  const showText = useDisplayText();
   return (
     <div data-testid="ask-record-row" role="status" className={`wk-ask-record${className !== undefined ? ` ${className}` : ''}`}>
       <Check size={16} aria-hidden className="wk-ask-record-ok" />
-      <span data-testid={testId}>{line}</span>
+      <span data-testid={testId}>{showText(line)}</span>
       {meta !== undefined && meta !== null && <span className="wk-ask-record-meta">{meta}</span>}
     </div>
   );

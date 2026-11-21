@@ -1,3 +1,4 @@
+import { useDisplayText } from '../../hooks/useHomePath.js';
 import { useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { ChatCitations } from '../../api/chat-wire.js';
@@ -22,6 +23,7 @@ export function SourceChips({ citations, runs }: {
   /** The session's runs with a worktree, newest first: where a passage can be read from. */
   runs: readonly { id: string; workdir: string | null }[];
 }): React.ReactElement | null {
+  const showText = useDisplayText();
   const sources = sourcesOf(citations);
   const [open, setOpenState] = useState<Passage | null>(null);
   // Only the newest request may land: a slow read never reopens a passage after Back, or
@@ -76,7 +78,7 @@ export function SourceChips({ citations, runs }: {
           data-testid="session-source"
           data-source={s.key}
           aria-expanded={open?.key === s.key}
-          title={s.hover}
+          title={showText(s.hover)}
           onClick={() => { void openSource(s); }}
           className="wk-source-chip"
         >
@@ -86,7 +88,7 @@ export function SourceChips({ citations, runs }: {
       {open !== null && (
         <div data-testid="session-passage" data-source={open.key} data-state={open.state} className="wk-passage">
           <p className="wk-passage-head">
-            <span>{open.key}</span>
+            <span>{showText(open.key)}</span>
             <button type="button" data-testid="session-passage-back" onClick={() => back(open.key)} className="wk-since-toggle">Back to the reply</button>
           </p>
           {open.state === 'loading' && <p className="wk-session-grey">Reading it…</p>}

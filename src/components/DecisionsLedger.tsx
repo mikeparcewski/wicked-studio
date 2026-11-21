@@ -1,3 +1,4 @@
+import { useDisplayText } from '../hooks/useHomePath.js';
 import type { RunModel, UnitModel } from '../hooks/useRunModel.js';
 import { RoutingProvenance } from './RoutingProvenance.js';
 
@@ -33,6 +34,7 @@ function gateDecider(g: UnitModel['gateEvals'][number]): string {
 }
 
 export function DecisionsLedger({ model }: Props): React.ReactElement {
+  const showText = useDisplayText();
   const { units, session, pendingGate } = model;
 
   const decidedUnits = units.filter(
@@ -113,7 +115,7 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
               <RoutingProvenance routing={u.routing} />
               {u.skillRef && (
                 <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
-                  skill: <span style={{ color: 'var(--ink-muted)' }}>{u.skillRef}</span>
+                  skill: <span style={{ color: 'var(--ink-muted)' }}>{showText(u.skillRef)}</span>
                 </p>
               )}
 
@@ -135,7 +137,7 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
                           nothing twice. An ungated allow is ONE honest line. */}
                       {g.combined && gateDecider(g) === 'ungated' && !g.criterion
                         ? ' · allowed — no policy applied'
-                        : <>{' · '}{gateDecider(g)}{g.criterion ? ` · ${g.criterion}` : ' · no criterion recorded'}</>}
+                        : <>{' · '}{gateDecider(g)}{g.criterion ? ` · ${showText(g.criterion)}` : ' · no criterion recorded'}</>}
                     </span>
                   </p>
                   {g.hasDeterministicFloor && (
@@ -146,7 +148,7 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
                   {g.agentVerdict !== null && (
                     <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
                       agent: {g.agentVerdict}
-                      {g.agentReasoning ? ` — ${g.agentReasoning}` : ''}
+                      {g.agentReasoning ? ` — ${showText(g.agentReasoning)}` : ''}
                     </p>
                   )}
                   {/* studio#306: a judge the engine deliberately did not run is no verdict. */}
@@ -169,7 +171,7 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
                   )}
                   {g.denialReason && (
                     <p className="text-xs font-mono" style={{ color: 'var(--status-fail)' }}>
-                      reason: {g.denialReason}
+                      reason: {showText(g.denialReason)}
                     </p>
                   )}
                 </div>
@@ -177,7 +179,7 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
 
               {u.denialReason && u.gateEvals.length === 0 && (
                 <p className="mt-1 text-xs font-mono" style={{ color: 'var(--status-fail)' }} data-testid="ledger-denial">
-                  denied: {u.denialReason}
+                  denied: {showText(u.denialReason)}
                 </p>
               )}
             </li>
@@ -195,7 +197,7 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
             >
               <span className="font-semibold">PENDING</span> · awaiting human · before unit #
               {pendingGate.ord}
-              {pendingGate.prompt ? ` — ${pendingGate.prompt}` : ''}
+              {pendingGate.prompt ? ` — ${showText(pendingGate.prompt)}` : ''}
             </li>
           )}
           {nextUnitOrd !== null && (
