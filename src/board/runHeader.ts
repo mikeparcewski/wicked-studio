@@ -206,7 +206,8 @@ export function arrivals(entries: readonly Parameters<typeof arrival>[0][]): Arr
   }
   return out.map((a) => {
     const held = byKey.get(a.key)!;
-    if (held.parts.length === 0) return { key: a.key, at: a.at };
+    // A snapshot with no parts still says so: its steps were all taken back (a step running again).
+    if (held.parts.length === 0 && a.snapshot !== true) return { key: a.key, at: a.at };
     return { key: a.key, at: a.at, parts: held.parts, ...(a.snapshot === true ? { snapshot: true } : {}) };
   });
 }
