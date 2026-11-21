@@ -180,7 +180,7 @@ export function BuildDashboardSheet({ projectId, period, navigate, onClose, fram
           <h2 id="wk-rep-build-title" className="wk-rep-build-title">Build a dashboard</h2>
           <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm wk-rep-build-x" data-testid="report-build-close" aria-label="Close" onClick={onClose}>×</button>
         </header>
-        <p className="wk-rep-build-sub">Say what it should show: the data sources its project may use{knows ? ', or what this project knows (its documents, memories, steering rules and data shapes)' : ''}. A source in no project needs one first, on Data sources. A helper builds it, another reviews it, and it’s pinned here.</p>
+        <p className="wk-rep-build-sub">Say what it should show: the data sources this project may use{knows ? ', or what this project knows (its documents, memories, steering rules and data shapes)' : ''}. A source in no project needs one first, on Data sources. A helper builds it, another reviews it, and it’s pinned here.</p>
         {made !== null ? (
           <div ref={status} className="wk-rep-build-made" data-testid="report-build-made" data-verdict={made.busy ? 'pending' : made.verdict.kind}>
             {made.busy ? <p className="wk-rep-build-line" role="status">Made {made.name}. Putting it on Report…</p> : (
@@ -216,7 +216,7 @@ export function BuildDashboardSheet({ projectId, period, navigate, onClose, fram
             <p className="wk-rep-build-foot" data-testid="report-build-foot">
               {full ? 'Its Show on Report switch can be turned on later, from its Properties.'
                 : <>It shows on this Report when it’s made: <b>Show on Report</b> starts on ({shown.length} of {REPORT_MAX} shown).</>}
-              {' '}It reads your data sources{knows ? ' or what this project knows' : ''}; Report’s own numbers, such as spend and steps, can’t go on a dashboard yet.
+              {' '}It reads the data sources this project may use{knows ? ' or what this project knows' : ''}; Report’s own numbers, such as spend and steps, can’t go on a dashboard yet.
             </p>
             {run.failNote !== null && <p className="wk-rep-build-line" data-tone="warn" data-testid="report-build-failnote">{run.failNote}</p>}
             {load === 'failed' && <p className="wk-rep-build-line" data-tone="warn">{UNREAD_WHY}: it is tried again when the app is made.</p>}

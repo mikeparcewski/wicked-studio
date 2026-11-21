@@ -222,7 +222,7 @@ export const systemBadge = (s: PmSystem): string => SYSTEM_BADGES[s];
  */
 export function githubSlugOf(gitUrl: string | null | undefined): string | null {
   if (typeof gitUrl !== 'string') return null;
-  const m = /^(?:(?:https?|ssh|git):\/\/(?:[^@/\s]+@)?|[^@/\s:]+@)github\.com[:/]([A-Za-z0-9-]+)\/([A-Za-z0-9._-]+?)(?:\.git)?\/?$/i.exec(gitUrl.trim());
+  const m = /^(?:(?:https?|ssh|git):\/\/(?:[^@/\s]+@)?|[^@/\s:]+@)github\.com(?::(?:22|443))?[:/]([A-Za-z0-9-]+)\/([A-Za-z0-9._-]+?)(?:\.git)?\/?$/i.exec(gitUrl.trim());
   return m === null ? null : `${m[1]}/${m[2]}`;
 }
 

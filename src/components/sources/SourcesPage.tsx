@@ -343,7 +343,7 @@ function PmSourcesList({ sources, onOpen, onAdd }: { sources: readonly McpServer
               <li key={s.name}>
                 <button type="button" className="wk-src-row wk-src-row-main wk-pm-row" data-testid="pm-source" data-name={s.name} onClick={() => onOpen(s.name)}>
                   <TrackerBadge system={system} small />
-                  <span className="wk-src-row-name"><b>{s.name}</b> <span className="wk-src-cap">{systemName(system)} · {linked === null ? 'its links can’t be read' : linked === 1 ? '1 tracker linked' : `${linked} trackers linked`}{agents !== null ? ` · ${helpers}` : ''}</span></span>
+                  <span className="wk-src-row-name"><b>{s.name}</b> <span className="wk-src-cap">{systemName(system)} · {linked === null ? 'its links can’t be read' : linked === 1 ? '1 tracker linked' : `${linked} trackers linked`}{agents !== null ? ` · ${agents}` : ''}</span></span>
                 </button>
               </li>
             );

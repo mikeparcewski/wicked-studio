@@ -814,7 +814,7 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
         </div>
         <footer className="wk-src-sheet-foot">
           {error !== null ? <p role="alert" className="wk-src-note wk-src-tone-fail wk-src-foot-msg" data-testid="source-sheet-error">{error}</p>
-            : <span className="wk-src-cap wk-src-foot-msg" data-testid="source-sheet-foot">{kind === 'crew' ? 'crew’s own API is always on: there is nothing to save.' : isNew ? (saveBlocker ?? footReachWords(kind, false, null)) : footReachWords(kind, true, agentAccess)}</span>}
+            : <span className="wk-src-cap wk-src-foot-msg" data-testid="source-sheet-foot">{kind === 'crew' ? 'crew’s own API is always on: there is nothing to save.' : isNew ? (saveBlocker ?? footReachWords(kind, false, null)) : footReachWords(kind, true, agentsUnverified ? null : agentAccess, agentsRecord === null ? null : agentsRecord.enabled !== false)}</span>}
           {isNew ? (
             <>
               <button type="button" className="wk-btn wk-btn--secondary" data-testid="source-cancel" onClick={onClose}>Cancel</button>
