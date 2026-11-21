@@ -34,9 +34,10 @@ export function repoChoices<R extends Pick<RepoEntry, 'id' | 'name'>>(words: str
  * single project holds, asks which project next (F39's chips for that repository); that press moves it. The old
  * proposal is then set aside. Reads are GETs; the only writes are the press's.
  */
-export function JobRepoChoices({ chatId, proposal, onError }: {
+export function JobRepoChoices({ chatId, proposal, onError, endSourceChat = false }: {
   chatId: string;
   proposal: ArtifactProposal;
+  endSourceChat?: boolean;
   onError: (words: string | null) => void;
 }): React.ReactElement | null {
   const [repos, setRepos] = useState<RepoEntry[] | 'failed' | null>(null);
@@ -73,7 +74,7 @@ export function JobRepoChoices({ chatId, proposal, onError }: {
   if (picked !== null) {
     return (
       <div ref={nextRef} tabIndex={-1} data-testid="job-passage-repo-picked" aria-live="polite" className="wk-pass-sub">
-        <JobProjectChoices chatId={chatId} proposal={proposal} onError={onError} repo={picked.id} repoName={picked.name} />
+        <JobProjectChoices chatId={chatId} proposal={proposal} endSourceChat={endSourceChat} onError={onError} repo={picked.id} repoName={picked.name} />
         <button type="button" data-testid="job-passage-repos-back" className="wk-btn wk-btn--link wk-btn--sm" disabled={moving}
           onClick={() => { turned.current = true; setPicked(null); }}>Another repository</button>
       </div>
@@ -109,7 +110,7 @@ export function JobRepoChoices({ chatId, proposal, onError }: {
           return;
         }
       }
-      await moveJob({ fromChatId: chatId, proposal, projectId, repoRef: r.id, where, pickKey: `${proposal.pid}:repo:${r.id}`, here });
+      await moveJob({ fromChatId: chatId, endSourceChat, proposal, projectId, repoRef: r.id, where, pickKey: `${proposal.pid}:repo:${r.id}`, here });
     })().catch(
       (e: unknown) => onError(`The job was not moved to ${r.name}: ${e instanceof Error ? e.message : String(e)}. Pick a repository again.`),
     ).finally(() => { busyRef.current = false; setBusy(null); });

@@ -480,6 +480,42 @@ describe('review folds (r1): the path holds under failure, races and edge input'
     await waitFor(() => expect(proposals()).toHaveLength(1));
     expect(chatSends).toEqual([]);
   });
+  it('T19: Enter on a typed deck command resumes once the catalog arrives', async () => {
+    let release!: () => void;
+    v2Gate = new Promise((r) => { release = r; });
+    render(<Harness chatId={null} />);
+    type('/document deck Meet tiny-math');
+    enter();
+    expect(screen.getByTestId('composer-note').textContent).toMatch(/Reading/);
+    expect(nonGets()).toEqual([]);
+    await act(async () => { release(); });
+    await waitFor(() => expect(nonGets().filter((c) => c.path === '/chats')).toHaveLength(1));
+    expect(nonGets()[0]!.body).toMatchObject({ seed: { card: 'document', option: 'presentation', words: 'Meet tiny-math', source: 'command' } });
+    expect(useChatFlow.getState().request?.chatId).toBe('seeded-1');
+    expect(chatSends).toEqual([]);
+  });
+  it('T19: editing a held command drops the Enter even if the original words return', async () => {
+    let release!: () => void;
+    v2Gate = new Promise((r) => { release = r; });
+    render(<Harness />);
+    type('/document deck Meet tiny-math');
+    enter();
+    type('/document deck Different words');
+    type('/document deck Meet tiny-math');
+    await act(async () => { release(); });
+    expect(nonGets()).toEqual([]);
+  });
+  it('T19: a failed catalog read answers the held Enter', async () => {
+    let release!: () => void;
+    v2Gate = new Promise((r) => { release = r; });
+    v2 = {};
+    render(<Harness />);
+    type('/document deck Meet tiny-math');
+    enter();
+    await act(async () => { release(); });
+    await waitFor(() => expect(screen.getByTestId('composer-note').textContent).toBe('Couldn’t read the workflows. Type / again to try again.'));
+    expect(nonGets()).toEqual([]);
+  });
   it('a command typed before the list is read is held, never sent as a chat message', async () => {
     let release!: () => void;
     v2Gate = new Promise((r) => { release = r; });

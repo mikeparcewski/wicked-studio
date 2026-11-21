@@ -8697,6 +8697,24 @@
       ]
     },
     {
+      "testId": "job-passage-project-create",
+      "files": [
+        "src/components/session/JobProjectChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-project-name",
+      "files": [
+        "src/components/session/JobProjectChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-project-new",
+      "files": [
+        "src/components/session/JobProjectChoices.tsx"
+      ]
+    },
+    {
       "testId": "job-passage-projects",
       "files": [
         "src/components/session/JobProjectChoices.tsx"

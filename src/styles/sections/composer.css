@@ -186,6 +186,12 @@
 /* ux-tonight: the start row under a card on the composer (what Enter starts, and the choices it still needs). */
 .wk-composer-start-need { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .wk-composer-start-need .wk-link { font-size: var(--text-xs); }
+/* studio#1260: "New project" under Which project? — the chip reads pressed while its name field is open. */
+.wk-composer-start-need .wk-composer-chip[aria-pressed='true'] { border-color: var(--accent); }
+.wk-composer-start-create { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.wk-composer-start-create label { display: inline-flex; align-items: center; gap: 6px; }
+.wk-composer-start-name { width: 18ch; max-width: 100%; padding: 5px 8px; border: 1px solid var(--border-input); border-radius: var(--radius-sm); background: var(--surface-base); color: var(--ink-high); font: inherit; font-size: var(--text-sm); box-sizing: border-box; }
+.wk-composer-start-name:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
 
 /* DES-CATALOG-002 §8.4 (Lane E2): the v2 command list. A row is its command (the wire's spelling), the card's title and
    its one line; a variant is an indented sub-command under its card. */
