@@ -135,10 +135,6 @@ def shot(page, name: str) -> None:
 
 def layout_checks(page, frame, width: int) -> None:
     """Rendered geometry, focus and refresh regression checks at desktop and phone sizes."""
-    toggle = page.locator('[data-testid="app-panel-toggle"][aria-expanded="true"]')
-    if width == 390 and toggle.count():
-        toggle.click()
-        page.wait_for_selector('[data-testid="app-panel"][data-collapsed="true"]')
     if width == 390:
         # studio#1119: no right gutter beside the app on a phone, the panel minimised or not.
         frame_w = page.evaluate("() => document.querySelector('.wk-apps-frame').getBoundingClientRect().width")
@@ -662,6 +658,7 @@ def main() -> None:
         check("phone", pp.locator('[data-testid="apps-mode-edit"]').count() == 0 and pp.locator('[data-testid="apps-undo"]').count() == 0
               and pp.locator('[data-testid="apps-versions-open"]').count() == 0 and pp.locator('[data-testid="apps-phone-note"]').count() == 1
               and len(lefts) == 1 and no_style(pf) == 0, lefts=lefts)
+        check("phone_panel_starts_minimised", pp.locator('[data-testid="app-panel"]').get_attribute("data-collapsed") == "true")
         layout_checks(pp, pf, 390)
         phone.close()
 

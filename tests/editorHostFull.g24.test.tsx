@@ -53,9 +53,9 @@ class ExportingFake extends FakeSurfaceAdapter {
   }
 }
 
-async function openCard(withChat: boolean) {
-  const adapter = new ExportingFake(BINDING);
-  const card = <><PluginCard binding={BINDING} editor={EDITOR} adapter={adapter} src="about:blank" grants={GRANTS} /><HostPanel /></>;
+async function openCard(withChat: boolean, binding = BINDING, declaration = DECL) {
+  const adapter = new ExportingFake(binding);
+  const card = <><PluginCard binding={binding} editor={EDITOR} adapter={adapter} src="about:blank" grants={GRANTS} /><HostPanel /></>;
   render(withChat ? <RunHostProvider value={{ renderChat: () => <p>the thread</p> } as never}>{card}</RunHostProvider> : card);
   let frame: HTMLIFrameElement | null = null;
   await waitFor(() => {
@@ -65,7 +65,7 @@ async function openCard(withChat: boolean) {
   let transferred: MessagePort | undefined;
   vi.spyOn(frame!.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { transferred = tr?.[0] as MessagePort | undefined; }) as never);
   act(() => {
-    window.dispatchEvent(new MessageEvent('message', { data: env('plugin.ready', { editor: EDITOR.id, version: EDITOR.version, protocol: [2], surfaces: DECL }), source: frame!.contentWindow }));
+    window.dispatchEvent(new MessageEvent('message', { data: env('plugin.ready', { editor: EDITOR.id, version: EDITOR.version, protocol: [2], surfaces: declaration }), source: frame!.contentWindow }));
   });
   ports.push(transferred!);
   await waitFor(() => expect(screen.getByTestId('plugin-card-full')).toBeTruthy());
@@ -262,4 +262,31 @@ describe('G24: Export waits while the full screen shows an older version', () =>
     expect(exportBtn().disabled).toBe(true);
     expect(adapter.made).toEqual([]);
   });
+});
+
+it.each(['demo', 'interactive-doc'] as const)('full-screen chat explains video editing only for source %s', async (source) => {
+  await openCard(true, { ...BINDING, source });
+  fireEvent.click(screen.getByTestId('plugin-card-full'));
+  act(() => useHostChrome.getState().setChatOpen(true));
+  const words = "This chat can't change the video. Change it here by hand (rename, trims, captions), or use Record it again.";
+  if (source === 'demo') expect(screen.getByText(words)).toBeTruthy();
+  else expect(screen.queryByText(words)).toBeNull();
+});
+
+it('an action writes a version then reports status beside Undo', async () => {
+  const declaration = { ...DECL, card: { interactive: true, actions: [{ id: 'change', label: 'Change', verb: 'plugin' }] } };
+  const { port, adapter } = await openCard(false, BINDING, declaration);
+  let actionId: string | undefined;
+  port.onmessage = (event) => {
+    const m = event.data as { type?: string; id?: string; re?: string };
+    if (m.re === 'write') port.postMessage({ p: 'wicked.editor', v: 1, re: actionId, ok: true, payload: { handled: true, status: 'Title updated' } });
+    if (m.type === 'host.action') {
+      actionId = m.id;
+      port.postMessage(env('version.write', { base: 1, ops: [{ op: 'text', anchor: 'hero-title', value: 'New title', before: 'Book a study room in under a minute' }], summary: 'Changed the title' }, 'write'));
+    }
+  };
+  fireEvent.click(screen.getByTestId('plugin-card-action'));
+  await waitFor(() => expect(screen.getByTestId('page-line').textContent).toContain('Title updated'));
+  expect(adapter.artifact().head).toBe(2);
+  expect(screen.getByTestId('page-undo')).toBeTruthy();
 });

@@ -691,7 +691,7 @@ export function putLearnedTheme(
   docId: string,
   tokens: Record<string, unknown>,
   apply: boolean,
-): Promise<{ document_id: string; written: boolean; version: number | null; parent: number | null; kind: string | null; unchanged?: boolean }> {
+): Promise<{ document_id: string; written: boolean; version: number | null; parent: number | null; kind: string | null; unchanged?: boolean; reason?: string; message?: string }> {
   return iFetch(`${docBase(projectId, docId)}/api/theme/learned`, { method: 'PUT', body: JSON.stringify({ tokens, apply }) });
 }
 
@@ -747,18 +747,6 @@ export function listDemos(projectId: string): Promise<DocSummary[]> {
 }
 
 /**
- * Queue a new recording run — the CORRECTED wire (DES-FEEDBACK-001 §7.2/§7.4).
- *
- * Slice 13 invented `POST /d/:demoId/api/demo/record`; the bridge has no such route
- * (verified against `wicked-interactive/src/service/server.js` — its demo surface is
- * `POST /api/demo/gif`, `GET /api/demo/recording/:name`, `GET /api/demo/player/:v`).
- * The real record trigger is the bus: `wicked.interactive.demo.requested` is
- * UI-emittable (`events.js` ownership table) and a COMMAND the per-doc workspace
- * materializes (`materializeDemo` runs the authored spec in a real browser). So the
- * wrapper keeps its name and shape, and speaks `POST /api/events` underneath —
- * the same top-level route every other UI-originated intent rides.
- */
-/**
  * `GET /d/:demoId/api/demo/status` — the demo's current recording state
  * (crew#501 / wicked-interactive). Polled on mount and on every `status.posted`
  * thread frame to drive the video-record button from the doc's in_flight state
@@ -787,13 +775,6 @@ export interface DemoStatus {
 /** `GET /d/:demoId/api/demo/status` — the demo's recording state. */
 export function getDemoStatus(projectId: string, demoId: string): Promise<DemoStatus> {
   return iFetch<DemoStatus>(`${docBase(projectId, demoId)}/api/demo/status`);
-}
-
-export function requestRecord(projectId: string, demoId: string): Promise<{ queued: boolean }> {
-  return postEvent(projectId, {
-    event_type: 'wicked.interactive.demo.requested',
-    payload: { document_id: demoId },
-  }).then(() => ({ queued: true }));
 }
 
 /**

@@ -59,12 +59,13 @@ const DOCUMENT_KINDS: readonly string[] = ['page', 'document', 'deck'];
 /** The editor test page for one editor. */
 export function devHostHref(e: Pick<EditorView, 'id' | 'version' | 'sha256' | 'title'> & { kinds?: readonly string[] }): string {
   const q = new URLSearchParams({ editor: e.id, version: e.version, sha: e.sha256, title: e.title });
-  // A deck editor opens over a sample deck (P-D1), a video editor over the sample four-chapter cut; everything else
-  // over the sample page.
+  // Choose the content the editor accepts; an unknown kind gets the test page's no-sample explanation.
   // An app editor (DES-APPS-001 K4) opens over a sample app, or crew's own app when the page names one.
-  if (e.kinds?.includes('app') === true && !e.kinds.includes('page')) q.set('kind', 'app');
+  if (e.kinds?.includes('run-insights') === true && !e.kinds.includes('page')) q.set('kind', 'run-insights');
+  else if (e.kinds?.includes('app') === true && !e.kinds.includes('page')) q.set('kind', 'app');
   else if (e.kinds?.includes('deck') === true && !e.kinds.includes('page')) q.set('kind', 'deck');
   else if ((e.kinds?.includes('demo-video') === true || e.kinds?.includes('walkthrough') === true) && !e.kinds.includes('page')) q.set('kind', 'demo-video');
+  else if (e.kinds !== undefined && e.kinds.length > 0 && !e.kinds.includes('page')) q.set('kind', e.kinds[0]!);
   return `/editors/dev?${q.toString()}`;
 }
 

@@ -1,3 +1,5 @@
+import { InsightsAdapter } from '../insightsAdapter.js';
+import { SAMPLE_INSIGHTS } from '../fixtures/insights.js';
 import { FakeDocAdapter, SAMPLE_DECK, SAMPLE_PAGE } from '../fakeAdapter.js';
 import { fakeDemoCutAdapter } from '../fixtures/demoCut4.js';
 import { registerAdapter, type AdapterCapability, type ArtifactBinding, type StatusPill, type SurfaceAdapter } from '../hostApi.js';
@@ -27,6 +29,11 @@ function fakeCutSurface(): SurfaceAdapter {
 
 /** The test page's sample for a binding's kind: a cut for a recording kind, else a page or a deck. */
 export function fakeSurfaceFor(binding: Pick<ArtifactBinding, 'kind' | 'title'>): SurfaceAdapter {
+  if (binding.kind === 'run-insights') return Object.assign(new InsightsAdapter(SAMPLE_INSIGHTS), {
+    source: 'fake' as const,
+    capabilities: (): readonly AdapterCapability[] => ['read'],
+    pills: (): readonly StatusPill[] => [],
+  });
   return binding.kind === 'demo-video' || binding.kind === 'walkthrough' ? fakeCutSurface() : new FakeSurfaceAdapter(binding);
 }
 

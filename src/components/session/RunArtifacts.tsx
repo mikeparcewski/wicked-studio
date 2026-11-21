@@ -232,7 +232,7 @@ export function RunArtifacts({ view, composerKey, chain, only, frame }: {
       {insights && (
         <ArtifactMorph
           artifactKey={artifactKey('run', 'run-insights', runId)} title="Run insights" projectId={projectId ?? ''} docId="" composerKey={composerKey}
-          slot={{ kind: 'run-insights', body: (size) => <RunInsightsSlot runId={runId} runStatus={view.session.status} size={size} /> }}
+          slot={{ kind: 'run-insights', body: (size) => <RunInsightsSlot composerKey={composerKey} runId={runId} runStatus={view.session.status} size={size} /> }}
         />
       )}
       {app && <RunAppCard runId={runId} runStatus={view.session.status} />}

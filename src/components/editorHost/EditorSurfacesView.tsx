@@ -20,7 +20,7 @@ export function EditorSurfacesView({ editor, version, sha, title, kind }: { edit
     permissions: [], first_party: editor.startsWith('wicked-'), enabled: true,
   } as unknown as EditorView), [editor, title, version, sha, kind]);
   const binding = useMemo<ArtifactBinding>(() => ({
-    artifactKey: `test:${editor}@${version}`, title: kind === 'deck' ? 'Library room booking · deck' : kind === 'demo-video' ? 'Build a team · demo video' : 'Library room booking', kind, source: 'fake',
+    artifactKey: `test:${editor}@${version}`, title: kind === 'run-insights' ? 'Sample run insights' : kind === 'deck' ? 'Library room booking · deck' : kind === 'demo-video' ? 'Build a team · demo video' : 'Library room booking', kind, source: 'fake',
     projectId: '', composerKey: 'editor-test', producedBy: 'Claude Code',
   }), [editor, version, kind]);
   const adapter = useMemo(() => fakeSurfaceFor(binding), [binding]);

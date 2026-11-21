@@ -25,6 +25,7 @@ import { cellText } from '../../plugins/wicked-apps/runtime/format.js';
  */
 
 export interface EditorEntry { version: string; sha: string; grants: PermissionId[] }
+export type PreviewEditor = { kind: 'loading' } | { kind: 'absent' } | { kind: 'unread'; message: string } | { kind: 'ready'; entry: EditorEntry };
 
 /** An app's address; `origin` (a Report) rides along so the app's crumb leads back there. */
 export function appPath(slug: string, mode: 'preview' | 'edit' = 'preview', origin: AppOrigin | null = null): string {
@@ -47,11 +48,11 @@ function agoWords(at: number, now = Date.now()): string {
  * reads nothing from a source; without a snapshot it is the app's shape with no rows. The card's headline numbers are
  * the live part.
  */
-function TilePreview({ tile, editor, live }: { tile: AppTileData; editor: EditorEntry | null; live: AppDataPort | null }): React.ReactElement {
+function TilePreview({ tile, editor, live }: { tile: AppTileData; editor: PreviewEditor; live: AppDataPort | null }): React.ReactElement {
   const box = useRef<HTMLDivElement | null>(null);
   const [torn, setTorn] = useState(false);
   useEffect(() => {
-    if (editor === null || box.current === null || tile.detail === null) return undefined;
+    if (editor.kind !== 'ready' || box.current === null || tile.detail === null) return undefined;
     const store = new FixedAppStore(tile.slug, tile.detail, tile.sample ? 'sample' : 'crew');
     const session = new AppSession(store);
     let host: EditorHost | null = null;
@@ -61,8 +62,8 @@ function TilePreview({ tile, editor, live }: { tile: AppTileData; editor: Editor
       // Rows only from what is at hand: a sample's own rows in this browser. With crew, no query is ever sent.
       const port = tileHostPort(session, tile, live);
       host = new EditorHost({
-        container: box.current, src: bundleUrl(apiBase(), APPS_EDITOR, editor.version, editor.sha), editor: APPS_EDITOR, version: editor.version,
-        name: 'App', title: `Preview of ${tile.name}`, size: 'inline', surface: 'card', grants: editor.grants, theme: readThemeTokens(),
+        container: box.current, src: bundleUrl(apiBase(), APPS_EDITOR, editor.entry.version, editor.entry.sha), editor: APPS_EDITOR, version: editor.entry.version,
+        name: 'App', title: `Preview of ${tile.name}`, size: 'inline', surface: 'card', grants: editor.entry.grants, theme: readThemeTokens(),
         prefs: { reducedMotion: true, techDetails: false, locale: navigator.language }, firstParty: true,
         adapter: new AppAdapter(session, tile.name), app: port,
         ui: { chips: () => {}, draft: () => {}, typed: () => {}, key: () => {}, morph: () => {}, status: () => {}, notes: () => {}, thread: () => {}, fullscreen: async () => false, torn: () => setTorn(true), log: () => {} },
@@ -78,8 +79,8 @@ function TilePreview({ tile, editor, live }: { tile: AppTileData; editor: Editor
   return (
     <div className="wk-appcard-prev" data-testid="apps-card-preview" aria-hidden="true">
       <div ref={box} className="wk-appcard-frame" />
-      {(editor === null || torn || tile.detail === null) && (
-        <p className="wk-appcard-noprev">{tile.detail === null ? 'Open it to see it' : editor === null ? 'The App editor is not installed here' : 'Preview not shown'}</p>
+      {(editor.kind !== 'ready' || torn || tile.detail === null) && (
+        <p className="wk-appcard-noprev">{tile.detail === null ? 'Open it to see it' : editor.kind === 'loading' ? 'Loading preview' : editor.kind === 'absent' ? 'The App editor is not installed here' : editor.kind === 'unread' ? editor.message : 'Preview not shown'}</p>
       )}
     </div>
   );
@@ -127,7 +128,7 @@ function CardMenu({ name, children }: { name: string; children: React.ReactNode 
 
 export function AppCard({ tile, editor, navigate, scheduler, origin = null, actions, menu = null, badge = null }: {
   tile: AppTileData;
-  editor: EditorEntry | null;
+  editor: PreviewEditor;
   navigate: (p: string) => void;
   scheduler: TileScheduler | null;
   /** The Report this card is on: its title (and the page's own Open) carry it. */

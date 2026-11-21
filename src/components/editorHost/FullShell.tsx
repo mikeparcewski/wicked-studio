@@ -11,9 +11,11 @@ import { useHostChrome } from '../../editors/hostApi.js';
  * from the same declared actions, so opening full screen never takes a verb away. Below 600 px the header wraps
  * (tag, title and Esc on the first row) and the chat drawer lies over the artifact (G14).
  */
-export function FullShell({ open, tag, title, phase, modes, mode, onMode, gateActions, actions, chat, onExit, onEscape, children }: FullShellProps & {
+export function FullShell({ open, tag, title, phase, modes, mode, onMode, gateActions, actions, chat, chatNote, onExit, onEscape, children }: FullShellProps & {
   /** The card's actions (its declared verbs and Options), in the header. */
   actions?: ReactNode;
+  /** One line between the drawer's head and its thread (its own row, so the thread and composer keep their height). */
+  chatNote?: ReactNode;
   /** What the Esc KEY does (default: leave, as the Esc button does). The card closes its options over the full screen
    *  first (G24). */
   onEscape?: () => void;
@@ -87,6 +89,7 @@ export function FullShell({ open, tag, title, phase, modes, mode, onMode, gateAc
         {drawer && (
           <aside data-testid="full-shell-drawer" aria-label="Chat" className="wk-full-drawer">
             <div className="wk-full-drawer-head"><b>Chat</b> <span>the run’s own thread</span></div>
+            {chatNote}
             <div className="wk-full-drawer-body">{chat}</div>
           </aside>
         )}

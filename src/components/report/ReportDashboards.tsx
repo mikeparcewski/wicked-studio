@@ -32,6 +32,8 @@ export interface AppsGates {
   turns: boolean;
   query: boolean;
   editor: EditorEntry | null;
+  /** The editors list did not answer: the cards say so, never that the App editor is not installed (D1). */
+  editorUnread?: boolean;
   /** Read them again (a crew that did not answer). */
   retry?: () => void;
 }
@@ -47,11 +49,11 @@ export function useAppsGates(): AppsGates {
     setG(NO_GATES);
     void (async () => {
       try {
-        const [h, editors] = await Promise.all([api.getHealth(), listEditors().catch(() => null)]);
+        const [h, editors] = await Promise.all([api.getHealth(), listEditors().catch(() => undefined)]);
         const caps = h?.capabilities?.apps;
         const e = editors?.find((x) => x.id === APPS_EDITOR && x.enabled !== false) ?? null;
         const editor = e === null ? null : { version: e.version, sha: e.sha256, grants: (await fetchGrants(e.id, e.version, e.sha256, null)).grants };
-        if (live) setG({ state: 'ok', store: caps !== undefined, turns: caps?.turns === true, query: caps?.query === true, editor });
+        if (live) setG({ state: 'ok', store: caps !== undefined, turns: caps?.turns === true, query: caps?.query === true, editor, ...(editors === undefined ? { editorUnread: true } : {}) });
       } catch {
         if (live) setG({ ...NO_GATES, state: 'failed' });
       }
@@ -192,7 +194,7 @@ export function ReportDashboards({ projectId, navigate, gates, onBuild }: {
       {here.length > 0 && (
         <div className="wk-rep-dash-grid" data-testid="report-dash-grid">
           {here.map(({ tile }) => (
-            <AppCard key={tile!.slug} tile={tile!} editor={gates.editor} navigate={navigate} scheduler={gates.query ? scheduler : null} origin={origin}
+            <AppCard key={tile!.slug} tile={tile!} editor={gates.editor !== null ? { kind: 'ready', entry: gates.editor } : gates.state === 'loading' ? { kind: 'loading' } : gates.editorUnread === true ? { kind: 'unread', message: 'Preview not shown: the editors list did not answer' } : { kind: 'absent' }} navigate={navigate} scheduler={gates.query ? scheduler : null} origin={origin}
               actions={(
                 <>
                   <a href={appPath(tile!.slug, 'preview', origin)} className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="report-dash-open"

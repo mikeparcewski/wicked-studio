@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Project } from '../../api/types.js';
 import { createByChat } from '../../editors/apps/appTurns.js';
 import { dataSeedsWhen, knowledgeSeeds, mixSeeds } from '../../editors/apps/knowledgeSeeds.js';
-import { readSuggestionGrounds, type SuggestionGrounds } from '../../editors/apps/suggestionGrounds.js';
+import { knowledgeAvailable, readSuggestionGrounds, type SuggestionGrounds } from '../../editors/apps/suggestionGrounds.js';
 import { useProjectsStore } from '../../store/projects.js';
 import type { ComposerSuggestion } from '../session/Composer.js';
 import { stashDraft } from './AppChat.js';
@@ -27,7 +27,7 @@ const NOT_A_HOME = (p: Project): boolean => p.id === 'default' || p.status !== '
 
 export function NewAppChat({
   navigate, framed, projectOfApps = null, composerKey = 'apps:new', heading = true, lock = null, eligibleOnly = false,
-  suggestions: given, onProject, onSend, onFailed, onMade, before = null, blocked = null, placeholder = 'Describe the app you want…', ariaLabel = 'Describe the app you want', testId = 'apps-new-chat',
+  suggestions: given, onProject, onGrounds, onSend, onFailed, onMade, before = null, blocked = null, placeholder = 'Describe the app you want…', ariaLabel = 'Describe the app you want', testId = 'apps-new-chat',
 }: {
   navigate: (p: string) => void;
   framed: boolean;
@@ -44,6 +44,8 @@ export function NewAppChat({
   suggestions?: readonly string[];
   /** The chosen project changed (the Build sheet reads its sources again). */
   onProject?: (id: string | null) => void;
+  /** The same read that supplies suggestions also sets the Apps page's intro. */
+  onGrounds?: (grounds: SuggestionGrounds | null) => void;
   /** Right before crew is asked to make the app (Report notes whether its cap was full at that moment). */
   onSend?: () => void;
   /** crew made no app (its words): the caller that keeps the operation outside this component hears it. */
@@ -84,6 +86,8 @@ export function NewAppChat({
   // Only an answer for THIS project counts; data suggestions name only sources its summary lists as built on and an
   // app query can read (`dataSourcesFor`).
   const current = grounds !== null && grounds.projectId === chosen ? grounds : null;
+  useEffect(() => { onGrounds?.(current); }, [current, onGrounds]);
+  const knows = knowledgeAvailable(current?.summary);
   const dataSources = current?.data ?? [];
   const s0 = dataSources[0];
   const data = (s0 !== undefined
@@ -147,7 +151,7 @@ export function NewAppChat({
       {heading && (
         <div className="wk-newapp-head">
           <h2 className="wk-newapp-title">Make a new app</h2>
-          <span className="wk-newapp-sub">Say what it should show: your data sources, or what this project knows (its documents, memories, steering rules and data shapes). An agent builds it, another reviews it, and it opens here.</span>
+          <span className="wk-newapp-sub">Say what it should show: your data sources{knows ? ', or what this project knows (its documents, memories, steering rules and data shapes)' : ''}. An agent builds it, another reviews it, and it opens here.</span>
         </div>
       )}
       {before}

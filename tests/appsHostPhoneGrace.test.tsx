@@ -81,3 +81,12 @@ describe('a phone ends the Edit grace at once (codex r2, r3)', () => {
     expect(ports[0]!.editing!()).toBe(false);
   });
 });
+
+it('a phone starts with the panel minimised without changing the desktop preference', async () => {
+  phoneQuery().set(true);
+  localStorage.clear();
+  crew();
+  render(<AppHostView editor="wicked-apps" version="0.13.0" sha={'a'.repeat(64)} app="desk" sample={null} caps={{ apps: CAPS.apps }} />);
+  await waitFor(() => expect(screen.getByTestId('app-panel').getAttribute('data-collapsed')).toBe('true'));
+  expect(localStorage.getItem('wicked.apps.panel.collapsed')).toBeNull();
+});

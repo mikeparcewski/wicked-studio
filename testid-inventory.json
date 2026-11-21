@@ -6317,6 +6317,12 @@
       ]
     },
     {
+      "testId": "editor-no-sample",
+      "files": [
+        "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
       "testId": "editor-notes",
       "files": [
         "src/components/editors/EditorHostPage.tsx"
@@ -7997,6 +8003,12 @@
       "testId": "host-panel-v1",
       "files": [
         "src/components/editorHost/HostPanel.tsx"
+      ]
+    },
+    {
+      "testId": "host-video-chat-note",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
       ]
     },
     {

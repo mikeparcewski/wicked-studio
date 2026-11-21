@@ -7,6 +7,8 @@ import { runPattern } from '../../store/runPlugins.js';
 import { apiBase } from '../../api/client.js';
 import { EditorHost, sizeOfSurface, type HostLogEntry, type Surface } from '../../editors/host.js';
 import type { FullMode } from '../../editors/surfaces.js';
+import { InsightsAdapter } from '../../editors/insightsAdapter.js';
+import { hasEditorSample, SAMPLE_INSIGHTS } from '../../editors/fixtures/insights.js';
 import { FakeDocAdapter, SAMPLE_DECK, SAMPLE_PAGE } from '../../editors/fakeAdapter.js';
 import { bundleUrl, fetchGrants, type Chip } from '../../editors/model.js';
 import { grantNote } from '../editorHost/GrantNote.js';
@@ -39,8 +41,7 @@ interface Page {
   title: string;
   grants: PermissionId[] | null;
   firstParty: boolean;
-  /** The kind the sample is (P-D1: `deck` opens a sample deck, `demo-video` the sample cut, `app` the app host;
-   *  anything else the sample page). */
+  /** The requested sample kind; kinds without a sample are explained before mounting. */
   kind: string;
   /** DES-APPS-001 K4, kind `app`: crew's app to open (`?app=<slug>`), else the named sample (`?sample=`). */
   app: string | null;
@@ -64,7 +65,7 @@ function readPage(search: string, mode: 'dev' | 'conformance'): Page {
     title: q.get('title') ?? (editor === '' ? 'Editor' : editor),
     grants: grants === null ? null : grants.split(',').filter((g): g is PermissionId => PERMISSIONS.includes(g as PermissionId)),
     firstParty: editor.startsWith('wicked-'),
-    kind: q.get('kind') === 'deck' ? 'deck' : q.get('kind') === 'demo-video' ? 'demo-video' : q.get('kind') === 'app' ? 'app' : 'page',
+    kind: q.get('kind') ?? 'page',
     app: q.get('app'),
     sample: q.get('sample'),
     surface: mode === 'conformance' && ['card', 'options', 'full'].includes(q.get('surface') ?? '') ? q.get('surface') as Surface : null,
@@ -86,7 +87,7 @@ declare global {
     };
     __wickedEditor?: {
       log: HostLogEntry[];
-      adapter: FakeDocAdapter;
+      adapter: FakeDocAdapter | InsightsAdapter;
       host: () => EditorHost | null;
       setSize: (s: Size) => void;
       setTheme: (t: Record<string, string>) => void;
@@ -126,14 +127,14 @@ function ArtifactHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'; nav
   const log = useRef<HostLogEntry[]>([]);
   const optionsSeen = useRef<Record<string, Record<string, unknown>>>({});
   const hostRef = useRef<EditorHost | null>(null);
-  const adapter = useMemo(() => (page.kind === 'deck'
+  const adapter = useMemo(() => (page.kind === 'run-insights' ? new InsightsAdapter(SAMPLE_INSIGHTS) : page.kind === 'deck'
     ? new FakeDocAdapter(SAMPLE_DECK, 'Library room booking (deck)', { kind: 'deck' })
     : new FakeDocAdapter(SAMPLE_PAGE)), [page.kind]);
   const live = useRef({ text, chips, drafted, thread, status, notes });
   live.current = { text, chips, drafted, thread, status, notes };
 
   useEffect(() => {
-    if (page.editor === '' || page.version === '' || page.sha === '' || frameBox.current === null) return;
+    if (!hasEditorSample(page.kind) || page.editor === '' || page.version === '' || page.sha === '' || frameBox.current === null) return;
     let cancelled = false;
     setTorn(null);
     const start = async (): Promise<void> => {
@@ -204,7 +205,7 @@ function ArtifactHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'; nav
       host: () => hostRef.current,
       setSize: (s) => setSize(s),
       setTheme: (t) => hostRef.current?.setTheme(t),
-      agentVersion: () => { const v = adapter.agentEdit(); hostRef.current?.artifactChanged(v, 'generated'); },
+      agentVersion: () => { if (adapter instanceof FakeDocAdapter) { const v = adapter.agentEdit(); hostRef.current?.artifactChanged(v, 'generated'); } },
       inject: (msg) => hostRef.current?.inject(msg),
       composer: () => ({ ...live.current, keys: [...keys.current] }),
       optionsValues: () => ({ ...optionsSeen.current }),
@@ -222,6 +223,10 @@ function ArtifactHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'; nav
     );
   }
 
+  if (!hasEditorSample(page.kind)) {
+    return <div data-testid="editor-host-page" className="wk-editor-page"><p data-testid="editor-no-sample" className="wk-host-note">The test page has no sample of {page.kind.replace(/-/gu, ' ')} to open this editor on.</p></div>;
+  }
+
   // DES-APPS-001 K4: an app opens in the app host (its own header, the card dock), on the dev page only. The
   // conformance host keeps its one-frame view (it never holds an app's data permissions).
   if (page.kind === 'app' && mode === 'dev') {
@@ -234,6 +239,7 @@ function ArtifactHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'; nav
 
   return (
     <div data-testid="editor-host-page" data-mode={mode} className="wk-editor-page">
+      {page.kind === 'run-insights' && <p className="wk-host-note">This is a sample review with made-up runs.</p>}
       {/* H7: the three surfaces, drawn by the run page's own host components from the plugin's declaration. */}
       {mode === 'dev' && (
         <>

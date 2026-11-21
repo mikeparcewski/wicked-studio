@@ -388,7 +388,7 @@ export class InteractiveDocAdapter implements HostAdapter {
     if (this.head !== base) return { error: 'head_moved', message: 'the artifact changed since', head: this.head };
     try {
       const r = await putLearnedTheme(this.projectId, this.docId, tokens, true);
-      if (r.version === null) return { error: 'refused', message: r.unchanged === true ? 'that theme changes nothing on this version' : 'no version was made' };
+      if (r.version === null) return { error: 'refused', message: typeof r.reason === 'string' && typeof r.message === 'string' && r.message.trim() !== '' ? r.message : r.unchanged === true ? 'that theme changes nothing on this version' : 'no version was made' };
       // Interactive's PUT has no expected head, so a helper's version can land between the read above and the
       // re-theme. Undo forks the version the engine says it themed (`parent`), never the `base` we asked for, so a
       // helper's change in between is never discarded (codex h4-r1 P1).
