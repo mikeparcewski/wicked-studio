@@ -69,7 +69,7 @@ export function TrackerSet({ projectId, projectName, repoId, kind = 'job', 'data
         {set !== null && pid !== null && <span className="wk-tag" data-testid={`${testId}-count`}>{set.included.length}</span>}
       </div>
       <p className="wk-src-note">
-        {pid === null ? `This ${kind} is in no project: agents read these only from tools whose Agents switches allow every project, and crew checks that at every call.`
+        {pid === null ? `This ${kind} is in no project: helpers read these only from tools whose Helpers switches allow every project, and crew checks that at every call.`
           : kind === 'chat' ? `${who}’s own links, plus the links of its repositories.` : `${who}’s own links, plus the links of the repositories it works on.`}
       </p>
       <ReadState read={read} onRetry={() => void reload()} what={`the trackers this ${kind} can read`} />
@@ -85,19 +85,19 @@ export function TrackerSet({ projectId, projectName, repoId, kind = 'job', 'data
             <>
               {e.viaProject && <FromTag via="project">linked to {who}</FromTag>}
               {e.viaRepos.map((r) => <FromTag key={r} via="repo">through repo {r}</FromTag>)}
-              {e.agents !== null && !e.agents.query && <span className="wk-tag" data-testid={`${testId}-structure-only`} title="The source’s “Agents can read issues” switch is off.">structure only</span>}
+              {e.agents !== null && !e.agents.query && <span className="wk-tag" data-testid={`${testId}-structure-only`} title="The source’s “Helpers can read issues” switch is off.">structure only</span>}
             </>
           )}
         />
       ))}
       {set !== null && set.included.length > 0 && (
-        <p className="wk-trk-bound"><ShieldCheck size={14} aria-hidden /><span>Searches are limited to these. An issue outside them is refused, and is dropped from a search before the agent sees it.</span></p>
+        <p className="wk-trk-bound"><ShieldCheck size={14} aria-hidden /><span>Searches are limited to these. An issue outside them is refused, and is dropped from a search before the helper sees it.</span></p>
       )}
       {set !== null && set.excluded.length > 0 && (
         <p className="wk-trk-excl" data-testid={`${testId}-excluded`}>
           <b>Not included:</b>{' '}
           {set.excluded.map((e, i) => (
-            <span key={e.link.trackerId}>{i > 0 ? '; ' : ''}{trackerTitle(e.link)} ({e.link.source}) is linked{e.viaProject ? ` to ${who}` : ` through repo ${e.viaRepos[0] ?? ''}`}, but agents in {who} can’t use {e.link.source} yet</span>
+            <span key={e.link.trackerId}>{i > 0 ? '; ' : ''}{trackerTitle(e.link)} ({e.link.source}) is linked{e.viaProject ? ` to ${who}` : ` through repo ${e.viaRepos[0] ?? ''}`}, but helpers in {who} can’t use {e.link.source} yet</span>
           ))}.
         </p>
       )}

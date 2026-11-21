@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
-import { useTrackerLinksSupported } from '../api/trackers.js';
+import { githubSlugOf, useTrackerLinksSupported } from '../api/trackers.js';
 import { projectDetailPath } from '../hooks/useRoute.js';
 import { ReadState } from './ProjectTrackers.js';
 import { LinkTrackerPicker } from './trackers/LinkTrackerPicker.js';
@@ -19,8 +19,10 @@ function andList(names: readonly string[]): string {
  * the card says so. Everything shown is crew's answer (`GET /tracker-links?repo=`). Hidden on a crew without tracker
  * links.
  */
-export function RepoTrackers({ repoId, repoName, navigate, onChanged }: {
+export function RepoTrackers({ repoId, repoName, gitUrl = null, navigate, onChanged }: {
   repoId: string; repoName: string; navigate: (path: string) => void;
+  /** The repository's remote: on GitHub, the picker offers its own repository first (studio#1012). */
+  gitUrl?: string | null | undefined;
   /** After a link or a removal settles (the page's tracker count reads again). */
   onChanged?: () => void;
 }): React.ReactElement | null {
@@ -56,7 +58,7 @@ export function RepoTrackers({ repoId, repoName, navigate, onChanged }: {
         ))}
         {links !== null && <p className="wk-src-note" data-testid="repo-trackers-stay">Trackers linked to a project stay in that project: they never reach another project through this repository.</p>}
         {error !== null && <p role="alert" className="wk-src-note wk-src-tone-fail" data-testid="repo-trackers-error">{error}</p>}
-        {picking && <LinkTrackerPicker target={{ kind: 'repo', id: repoId }} targetName={repoName} onLinked={reload} onClose={() => setPicking(false)} navigate={navigate} />}
+        {picking && <LinkTrackerPicker target={{ kind: 'repo', id: repoId }} targetName={repoName} own={githubSlugOf(gitUrl)} onLinked={reload} onClose={() => setPicking(false)} navigate={navigate} />}
       </section>
       {links !== null && links.projects.length > 0 && (
         <section className="wk-card wk-trk-card" aria-labelledby="wk-trk-inproj-title" data-testid="repo-trackers-projects">

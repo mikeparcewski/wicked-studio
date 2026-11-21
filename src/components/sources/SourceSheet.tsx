@@ -29,6 +29,7 @@ import {
   defaultPort,
   describedLine,
   EMPTY_FORM,
+  footReachWords,
   formBlocker,
   isApiKind,
   isSqlCatalog,
@@ -594,7 +595,7 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
                   label={isSqlKind(kind) ? 'Password' : 'Secret (token or key)'}
                   note={(() => {
                     const k = isNew || saved === null || saved.authState === 'none' ? 'none' : secretRefKind(saved);
-                    return k === 'env' || k === 'other' ? elsewhereWords(k, isSqlKind(kind) ? 'password' : 'secret') : 'Kept in your keychain; never in the app, an export or an agent.';
+                    return k === 'env' || k === 'other' ? elsewhereWords(k, isSqlKind(kind) ? 'password' : 'secret') : 'Kept in your keychain; never in the app, an export or a helper.';
                   })()}
                   savedState={isNew ? null : (saved?.authState ?? 'none')}
                   disabled={busy !== null}
@@ -603,7 +604,7 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
                     onOpen: (open) => { setReplacing(open); setError(null); setRekeyStatus(''); setRekeyWarn(''); },
                     submit: () => void rekey(),
                     replace: isSqlKind(kind) ? 'Replace password' : 'Replace secret',
-                    note: 'Type it again. Only the secret changes: the source, its Allow writes and agent access stay as they are.',
+                    note: 'Type it again. Only the secret changes: the source, its Allow writes and helper access stay as they are.',
                   }}
                   onEdit={(has) => { setHasSecret(has); setSecretEdits((n) => n + 1); setError(null); }}
                 />
@@ -741,7 +742,7 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
                   {upload.sample.length > 0 && (
                     <div className="wk-src-scroll">
                       <table className="wk-src-table" data-testid="source-upload-sample">
-                        <caption className="wk-src-cap">The first {upload.sample.length} rows, shown to you only (agents never get values)</caption>
+                        <caption className="wk-src-cap">The first {upload.sample.length} rows, shown to you only (helpers never get values)</caption>
                         {upload.header !== null && <thead><tr>{upload.header.columns.map((c) => <th key={c} scope="col">{c}</th>)}</tr></thead>}
                         <tbody>{upload.sample.map((row, i) => <tr key={i}>{row.map((v, j) => <td key={j}>{v}</td>)}</tr>)}</tbody>
                       </table>
@@ -786,7 +787,7 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
               )}
               {kind !== 'upload' || upload !== null ? (
                 <div className="wk-src-box" data-testid="source-agents-see">
-                  <p className="wk-src-okline wk-src-strong"><Eye size={16} aria-hidden className="wk-src-ico" />What agents see</p>
+                  <p className="wk-src-okline wk-src-strong"><Eye size={16} aria-hidden className="wk-src-ico" />What helpers see</p>
                   <p className="wk-src-note">{agentsSeeWords(kind === 'upload' ? 'sqlite' : kind, shownCatalog, agentAccess === null ? (agentsUnreadable ? 'unknown' : undefined) : agentsUnverified ? 'unknown' : !agentAccess.see ? 'hidden' : agentDialect !== 'postgres' ? 'never' : agentAccess.query ? 'on' : 'off')}</p>
                 </div>
               ) : null}
@@ -813,7 +814,7 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
         </div>
         <footer className="wk-src-sheet-foot">
           {error !== null ? <p role="alert" className="wk-src-note wk-src-tone-fail wk-src-foot-msg" data-testid="source-sheet-error">{error}</p>
-            : <span className="wk-src-cap wk-src-foot-msg" data-testid="source-sheet-foot">{kind === 'crew' ? 'crew’s own API is always on: there is nothing to save.' : isNew ? (saveBlocker ?? 'Saved sources appear in every app in this project.') : 'Saved. It appears in every app in this project.'}</span>}
+            : <span className="wk-src-cap wk-src-foot-msg" data-testid="source-sheet-foot">{kind === 'crew' ? 'crew’s own API is always on: there is nothing to save.' : isNew ? (saveBlocker ?? footReachWords(kind, false, null)) : footReachWords(kind, true, agentAccess)}</span>}
           {isNew ? (
             <>
               <button type="button" className="wk-btn wk-btn--secondary" data-testid="source-cancel" onClick={onClose}>Cancel</button>

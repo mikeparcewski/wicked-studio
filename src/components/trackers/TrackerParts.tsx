@@ -82,8 +82,8 @@ export function AgentsOffWarning({ who, link, navigate }: { who: string; link: T
   return (
     <span data-testid="tracker-agents-off">
       <AlertTriangle size={13} aria-hidden />
-      <span>{who}’s agents can’t use {link.source} yet.{' '}
-        <a className="wk-link" href={href} onClick={(e) => { e.preventDefault(); navigate(href); }}>Open its Agents box</a></span>
+      <span>{who}’s helpers can’t use {link.source} yet.{' '}
+        <a className="wk-link" href={href} onClick={(e) => { e.preventDefault(); navigate(href); }}>Open its Helpers switches</a></span>
     </span>
   );
 }

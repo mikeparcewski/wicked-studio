@@ -65,7 +65,7 @@ describe('the web source sheet', () => {
     fireEvent.click(screen.getByTestId('web-lock-toggle'));
     const list = screen.getByTestId('web-lock-list');
     for (const h of [H('b'), H('c'), H('d'), H('e')]) expect(list.textContent).toContain(h);
-    expect(screen.getByTestId('web-agents-after-install').textContent).toContain('Agents stay off');
+    expect(screen.getByTestId('web-agents-after-install').textContent).toContain('Helpers stay off');
   });
 
   it('with no container engine says so plainly and offers no Install', () => {

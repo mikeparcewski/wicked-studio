@@ -9,7 +9,7 @@ import { useDialogFocus } from './useDialogFocus.js';
 
 /** What the web source does, said before anything is installed (CS9). */
 export const WEB_SOURCE_DOES = [
-  'Agents search the web and read public pages, for research jobs.',
+  'Helpers search the web and read public pages, for research jobs.',
   'robots.txt is obeyed. Private, local and cloud-metadata addresses are refused, checked as each connection opens.',
   'A page download is cut at 2 MB. No cookies, logins or tokens are sent.',
   'Every search and page read is recorded with its URL or query and the time.',
@@ -130,7 +130,7 @@ export function WebSourceSheet({ initial, onClose, onChanged, unverified = false
               {setup.registered && setup.agents !== null ? (
                 <AgentAccess source={WEB_SOURCE_NAME} dialect="web" agents={setup.agents} unverified={unverified} {...(onReread !== undefined ? { onReread } : {})} data-testid="web-agent-controls" onChanged={onAgents} />
               ) : (
-                <p className="wk-src-note" data-testid="web-agents-after-install">Agents stay off after the install: nothing searches or reads the web until you turn on “Agents can query” here and choose the projects.</p>
+                <p className="wk-src-note" data-testid="web-agents-after-install">Helpers stay off after the install: nothing searches or reads the web until you turn on “Helpers can query” here and choose the projects.</p>
               )}
             </div>
           </div>
@@ -140,7 +140,7 @@ export function WebSourceSheet({ initial, onClose, onChanged, unverified = false
             <p role="alert" className="wk-src-note wk-src-tone-fail wk-src-foot-msg" data-testid="web-sheet-error">{error}</p>
           ) : (
             <span className="wk-src-cap wk-src-foot-msg" data-testid="web-sheet-foot">
-              {setup.installed ? 'Installed. Turn on “Agents can query” when a job should read the web.' : blockers.length > 0 ? blockers[0] : busy || setup.installing ? 'Installing: building the page reader and pulling the search image. This can take a few minutes.' : 'Install builds the page reader from the lock and pulls the search image, exactly as listed.'}
+              {setup.installed ? 'Installed. Turn on “Helpers can query” when a job should read the web.' : blockers.length > 0 ? blockers[0] : busy || setup.installing ? 'Installing: building the page reader and pulling the search image. This can take a few minutes.' : 'Install builds the page reader from the lock and pulls the search image, exactly as listed.'}
             </span>
           )}
           {setup.installed ? (

@@ -16844,6 +16844,18 @@
       ]
     },
     {
+      "testId": "repo-overview-trackers-read",
+      "files": [
+        "src/components/trackers/TrackerReadLine.tsx"
+      ]
+    },
+    {
+      "testId": "repo-overview-trackers-tool",
+      "files": [
+        "src/components/trackers/TrackerReadLine.tsx"
+      ]
+    },
+    {
       "testId": "repo-overview-working",
       "files": [
         "src/components/RepoDetailPage.tsx"
@@ -24857,6 +24869,18 @@
     },
     {
       "testId": "tracker-picker-option",
+      "files": [
+        "src/components/trackers/LinkTrackerPicker.tsx"
+      ]
+    },
+    {
+      "testId": "tracker-picker-own",
+      "files": [
+        "src/components/trackers/LinkTrackerPicker.tsx"
+      ]
+    },
+    {
+      "testId": "tracker-picker-own-tag",
       "files": [
         "src/components/trackers/LinkTrackerPicker.tsx"
       ]

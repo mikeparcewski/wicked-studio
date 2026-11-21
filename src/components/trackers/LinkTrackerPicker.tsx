@@ -13,10 +13,12 @@ import { TrackerBadge, usePmSources } from './TrackerParts.js';
  *
  * This is the ONLY caller of `trackersApi.link` (`tests/trackersHumanOnly.test.ts`), and it links only on a click.
  */
-export function LinkTrackerPicker({ target, targetName, onLinked, onClose, navigate }: {
+export function LinkTrackerPicker({ target, targetName, own = null, onLinked, onClose, navigate }: {
   target: TrackerLinkTarget;
   /** The project's or repo's name, for the line that says whom the link reaches. */
   targetName: string;
+  /** (studio#1012) On a repository: its own `owner/name` on GitHub, offered first when the tool is GitHub Issues. */
+  own?: string | null;
   onLinked: () => Promise<void>;
   onClose: () => void;
   navigate: (path: string) => void;
@@ -82,6 +84,25 @@ export function LinkTrackerPicker({ target, targetName, onLinked, onClose, navig
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
+  // studio#1012: on a repository whose remote is on GitHub, its own repository is read by its full name and offered
+  // first (a search by its short name lists look-alike public repositories before it). Read once per tool.
+  const ownKey = target.kind === 'repo' && picked?.system === 'github' && own !== null && own !== '' ? own : null;
+  const [ownRead, setOwnRead] = useState<{ source: string; key: string; tracker: SourceTracker | null } | null>(null);
+  useEffect(() => {
+    if (source === null || ownKey === null) return undefined;
+    let live = true;
+    trackersApi.sourceTrackers(source, { q: ownKey }).then(
+      (raw) => {
+        if (!live) return;
+        const hit = sourceTrackersOf(raw, source)?.trackers.find((t) => t.key.toLowerCase() === ownKey.toLowerCase()) ?? null;
+        setOwnRead({ source, key: ownKey, tracker: hit });
+      },
+      // Not found or not readable: the search below is all there is, as before.
+      () => { if (live) setOwnRead({ source, key: ownKey, tracker: null }); },
+    );
+    return () => { live = false; };
+  }, [source, ownKey]);
+
   const more = async (): Promise<void> => {
     if (source === null || page === null || page.next === null) return;
     const mine = ++gen.current;
@@ -125,6 +146,26 @@ export function LinkTrackerPicker({ target, targetName, onLinked, onClose, navig
   const systemWord = picked === null ? 'project' : picked.system === 'github' ? 'repository' : `${systemName(picked.system)} project`;
   const reach = target.kind === 'project' ? `Linking reaches jobs and chats in ${targetName} only.` : `Linking reaches every project ${targetName} is in, and any job that works on it.`;
   const options = useMemo(() => sources ?? [], [sources]);
+  const typed = q.trim().toLowerCase();
+  const ownTracker = ownRead !== null && ownRead.source === source && ownRead.key === ownKey ? ownRead.tracker : null;
+  /** This repository's own, shown first while the search could match it (and on the site picked, if one is). */
+  const ownShown = ownTracker !== null && (typed === '' || ownTracker.key.toLowerCase().includes(typed)) && (tenant === null || tenant === ownTracker.tenant) ? ownTracker : null;
+  const sameTracker = (a: SourceTracker, b: SourceTracker): boolean => a.tenant === b.tenant && a.key.toLowerCase() === b.key.toLowerCase();
+  const row = (t: SourceTracker, mine: boolean): React.ReactElement => {
+    const here = linkedHere(t);
+    const busy = linking === `${t.tenant}\u0000${t.key}`;
+    return (
+      <div key={`${mine ? 'own' : 'opt'}\u0000${t.tenant}\u0000${t.key}`} className="wk-trk-opt" data-testid={mine ? 'tracker-picker-own' : 'tracker-picker-option'} data-key={t.key}>
+        <b>{t.key}</b>
+        <span className="wk-trk-opt-label">{t.label}{labelSites ? <span className="wk-src-cap"> · {t.tenantLabel ?? t.tenant}</span> : null}</span>
+        {mine && <span className="wk-tag" data-testid="tracker-picker-own-tag">This repository</span>}
+        <span className="wk-src-sp" />
+        <button type="button" className={`wk-btn wk-btn--sm ${here ? 'wk-btn--quiet' : 'wk-btn--secondary'}`} data-testid="tracker-picker-link" disabled={here || linking !== null} onClick={() => void link(t)}>
+          {here ? 'Linked' : busy ? 'Linking…' : 'Link'}
+        </button>
+      </div>
+    );
+  };
 
   return (
     <div className="wk-trk-pop" role="dialog" aria-labelledby={titleId} data-testid="tracker-picker">
@@ -164,22 +205,10 @@ export function LinkTrackerPicker({ target, targetName, onLinked, onClose, navig
             </span>
           </label>
           <div className="wk-trk-opts" data-testid="tracker-picker-results" aria-busy={reading}>
+            {ownShown !== null && row(ownShown, true)}
             {shown === null && reading && <p className="wk-src-cap">Searching…</p>}
-            {shown !== null && shown.trackers.length === 0 && <p className="wk-src-note" data-testid="tracker-picker-empty">No {systemWord} matches.</p>}
-            {shown?.trackers.map((t) => {
-              const here = linkedHere(t);
-              const busy = linking === `${t.tenant}\u0000${t.key}`;
-              return (
-                <div key={`${t.tenant}\u0000${t.key}`} className="wk-trk-opt" data-testid="tracker-picker-option" data-key={t.key}>
-                  <b>{t.key}</b>
-                  <span className="wk-trk-opt-label">{t.label}{labelSites ? <span className="wk-src-cap"> · {t.tenantLabel ?? t.tenant}</span> : null}</span>
-                  <span className="wk-src-sp" />
-                  <button type="button" className={`wk-btn wk-btn--sm ${here ? 'wk-btn--quiet' : 'wk-btn--secondary'}`} data-testid="tracker-picker-link" disabled={here || linking !== null} onClick={() => void link(t)}>
-                    {here ? 'Linked' : busy ? 'Linking…' : 'Link'}
-                  </button>
-                </div>
-              );
-            })}
+            {shown !== null && shown.trackers.length === 0 && ownShown === null && <p className="wk-src-note" data-testid="tracker-picker-empty">No {systemWord} matches.</p>}
+            {shown?.trackers.filter((t) => ownShown === null || !sameTracker(t, ownShown)).map((t) => row(t, false))}
             {shown !== null && shown.next !== null && <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="tracker-picker-more" disabled={reading} onClick={() => void more()}>More</button>}
           </div>
           {error !== null && <p role="alert" className="wk-src-note wk-src-tone-fail" data-testid="tracker-picker-error">{error}</p>}

@@ -98,7 +98,7 @@ describe('the Jira sheet (mockup screen 1a)', () => {
     expect(screen.getAllByTestId('pm-tool-verdict').map((v) => v.textContent)).toEqual(['Reviewed', 'Reviewed', 'Asks you']);
     expect(screen.getAllByTestId('pm-tool-group').map((g) => g.dataset.group)).toEqual(['agents', 'writes', 'unscoped']);
     expect(screen.getAllByTestId('pm-tool-chip').map((t) => [t.dataset.tool, t.dataset.verdict])).toEqual([['getVisibleJiraProjects', 'not_for_agents']]);
-    expect(screen.getAllByTestId('pm-tool-group-head')[2]).toHaveTextContent('Not for agents (1): Can’t be limited to your linked Jira projects.');
+    expect(screen.getAllByTestId('pm-tool-group-head')[2]).toHaveTextContent('Not for helpers (1): Can’t be limited to your linked Jira projects.');
     // The write tool is granted only by its tick (crew's G1 `enabledWrites`): the person ticks the comment tool.
     const grants = screen.getAllByTestId('pm-tool-grant');
     expect(grants).toHaveLength(1);
@@ -113,8 +113,8 @@ describe('the Jira sheet (mockup screen 1a)', () => {
     expect(onSaved).toHaveBeenCalledTimes(1);
     // The saved source's Agents switches, in PM words.
     const box = await screen.findByTestId('pm-agent-controls');
-    expect(within(box).getByText('Agents can see its structure')).toBeInTheDocument();
-    expect(within(box).getByText('Agents can read issues')).toBeInTheDocument();
+    expect(within(box).getByText('Helpers can see its structure')).toBeInTheDocument();
+    expect(within(box).getByText('Helpers can read issues')).toBeInTheDocument();
   });
 
   it('a saved tool whose binding is no longer in force says to review it again', () => {
@@ -167,7 +167,7 @@ describe('the Data sources page', () => {
     render(<SourcesPage navigate={navigate} search="" />);
     const row = await screen.findByTestId('pm-source');
     expect(row).toHaveTextContent('jira');
-    expect(row).toHaveTextContent('Jira · 1 tracker linked · agents see its structure');
+    expect(row).toHaveTextContent('Jira · 1 tracker linked · helpers see its structure');
     fireEvent.click(screen.getByTestId('sources-add'));
     fireEvent.click(await screen.findByTestId('source-kind-jira'));
     expect(await screen.findByTestId('pm-sheet')).toHaveAttribute('data-system', 'jira');
@@ -243,7 +243,7 @@ describe('review r2 folds: crew answers studio can’t read whole', () => {
   });
 
   it('a hostile tool name finds no inherited note, and an unknown class claims nothing', () => {
-    expect(toolReview({ name: '__proto__', class: 'read', binding: null }).note).toBe('crew can’t limit it to the trackers you link, so no agent gets it.');
+    expect(toolReview({ name: '__proto__', class: 'read', binding: null }).note).toBe('crew can’t limit it to the trackers you link, so no helper gets it.');
     expect(toolReview({ name: 'constructor', class: 'read', binding: { policy: 'p' } }).note).toBe('Bound to the trackers you link: crew names the site and project, and drops anything else from an answer.');
     expect(toolReview({ name: 'x', class: 'admin', binding: { policy: 'p', inForce: true } }, true).verdict).toBe('unknown');
   });
@@ -268,7 +268,7 @@ describe('the real Atlassian v2 server (pm-real-jira)', () => {
       ['confluence', ['getConfluenceContent', 'createConfluenceContent', 'searchConfluence']],
       ['graph', ['getLoomObjectsContent', 'getGraphContext', 'getGraphObject', 'addGraphContext', 'getCollaborators', 'getPeopleInfo', 'getWorkActivity', 'getWorkPortfolio']],
     ]);
-    expect(groups.find((g) => g.key === 'writes')!.reason).toBe('You confirm each one at delivery: an agent never sends one itself.');
+    expect(groups.find((g) => g.key === 'writes')!.reason).toBe('You confirm each one at delivery: a helper never sends one itself.');
     expect(groups.find((g) => g.key === 'confluence')!.reason).toBe('Not part of trackers (Confluence).');
     expect(groups.find((g) => g.key === 'agents')!.tools.filter((t) => t.kind === 'account').map((t) => t.name)).toEqual(['getAccessibleAtlassianResources', 'atlassianUserInfo']);
   });
