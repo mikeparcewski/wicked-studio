@@ -122,7 +122,7 @@ export type AppsDirectory =
   }
   | { source: 'error'; message: string };
 
-/** Crew's apps get a preview (one detail read each) up to this many; the rest show from the list alone. */
+/** Details read up front; the remaining cards read theirs when they first scroll into view. */
 export const PREVIEW_LIMIT = 24;
 
 export function receiptWords(app: AppDetail): string {

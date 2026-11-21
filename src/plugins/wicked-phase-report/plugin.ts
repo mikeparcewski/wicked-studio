@@ -17,7 +17,7 @@
 
 import { PROTOCOL, ENVELOPE, type Envelope } from '../_shared/v2.js';
 import surfaces from './surfaces.json';
-import { dashboard, emptyReport, foldRows, openGates, panelLine, phaseDashboard, phaseSummary, scopeOf, stepWord, summaryLine, writesDoc, type PhaseScope, type Report, type Row } from './model.js';
+import { chatTurn, dashboard, emptyReport, foldRows, openGates, panelLine, phaseDashboard, phaseSummary, scopeOf, stepWord, summaryLine, writesDoc, type PhaseScope, type Report, type Row } from './model.js';
 import { SECTION_LABELS, SECTIONS, addedLines, contextWords, sectionEffect, seenByWords, steerNote, docLines, ownQuestionLines, pluginWritesLines, represents, reconcileSection, sectionAuthor, trailLines, type DocView, type SectionId } from './workingDoc.js';
 
 const ID = 'wicked-phase-report';
@@ -98,7 +98,7 @@ export function start(): void {
     $('sum').title = folded ? 'Show the phase report' : 'Fold the phase report';
     $('sum-text').textContent = scope !== null ? phaseSummary(report, scope) : summaryLine(report);
     const dot = $('dot');
-    dot.className = `dot${report.finished !== null ? (report.finished.outcome === 'completed' ? ' done' : ' bad') : openGates(report).length > 0 ? ' wait' : ''}`;
+    dot.className = `dot${report.finished !== null ? (report.finished.outcome === 'completed' ? ' done' : ' bad') : chatTurn(report) ? ' done' : openGates(report).length > 0 ? ' wait' : ''}`;
     const dash = $('dash');
     dash.hidden = folded;
     dash.replaceChildren();

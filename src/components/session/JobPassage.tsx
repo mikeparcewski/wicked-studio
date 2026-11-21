@@ -103,7 +103,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [ticking]);
-  const { view: v, run, inputs, planRetry, runRetry } = useJobView(lineage, runs, now);
+  const { view: v, run, inputs, planRetry, runRetry, gateRead, gateRetry } = useJobView(lineage, runs, now);
   /** Where this job went when it was moved to a new chat (F39/F41): said instead of "Not started". */
   const moved = useJobMoves((st) => movedFrom(st.moves, lineage));
   const roster = useRoster();
@@ -694,7 +694,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
           </p>
           {progress.current !== null && run !== null && (v.phase === 'running' || v.phase === 'gate' || v.phase === 'runQuestion') && (
             <div data-testid="job-passage-now" className="wk-pass-now">
-              <p><span className="n">{progress.current.ord + 1}</span> <b>{progress.current.label}</b>{progress.current.state === 'waiting' && <em className="wk-pass-asks"> asks you</em>}</p>
+              <p><span className="n">{progress.rows.indexOf(progress.current) + 1}</span> <b>{progress.current.label}</b>{progress.current.state === 'waiting' && <em className="wk-pass-asks"> asks you</em>}</p>
               {v.phase === 'running' && (
                 <div className={`wk-pass-report${moreOpen ? '' : ' wk-pass-report--clamp'}`}>
                   <LiveActivity runId={run.session.id} ord={progress.current.ord} kind="step" seat={progress.current.seat} label="this step" />
@@ -707,7 +707,15 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
             </div>
           )}
           {/* The gate unfolds under its step, anchored to its own ord (drawn even when no step row matches it). */}
-          {run !== null && v.phase === 'gate' && <PassageGate run={run} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />}
+          {run !== null && v.phase === 'gate' && (
+            gateRead === 'reading' ? <p data-testid="job-passage-gate-reading" className="wk-pass-sub wk-pass-grey">Reading the question…</p>
+              : gateRead === 'failed' ? (
+                <p data-testid="job-passage-gate-unread" role="alert" className="wk-pass-sub wk-pass-error">
+                  The question hasn’t loaded yet (the daemon is slow); it is trying again.{' '}
+                  <button type="button" className="wk-pass-inl" data-testid="job-passage-gate-retry" onClick={gateRetry}>Retry</button>
+                </p>
+              ) : <PassageGate run={run} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />
+          )}
           {/* A run's question (and a stalled step handed to you), answered here: never only a marker for a dock it isn't in. */}
           {run !== null && (v.phase === 'running' || v.phase === 'gate' || v.phase === 'runQuestion') && (
             <div className="wk-pass-gate" data-testid="job-passage-run-question"><Undocked><RunQuestions view={run} /></Undocked></div>
