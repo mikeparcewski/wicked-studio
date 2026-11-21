@@ -76,6 +76,112 @@ describe('the end card line', () => {
       vi.useRealTimers();
     }
   });
+
+  it('a failed read while distilling is tried again, longer each time, until the answer says done (studio#943)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      apiFetch
+        .mockResolvedValueOnce(learnings({ proposed: 0, pending: 0, approved: 0, distilling: true }))
+        .mockRejectedValueOnce(new ApiError(502, 'bad gateway'))
+        .mockRejectedValueOnce(new ApiError(502, 'bad gateway'))
+        .mockResolvedValue(learnings({ proposed: 2, pending: 2, approved: 0 }));
+      render(<RunLearningsLine runId="run-1" />);
+      expect(await screen.findByTestId('run-learnings-line')).toHaveAttribute('data-distilling', 'true');
+      await vi.advanceTimersByTimeAsync(15_000);
+      await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2));
+      // the first retry waits the poll interval again, the next one twice that
+      await vi.advanceTimersByTimeAsync(15_000);
+      await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(3));
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(apiFetch).toHaveBeenCalledTimes(3);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await waitFor(() => expect(screen.getByTestId('run-learnings-line')).toHaveTextContent('2 learnings proposed · 2 waiting for you'));
+      expect(screen.getByTestId('run-learnings-line')).toHaveAttribute('data-distilling', 'false');
+      expect(apiFetch).toHaveBeenCalledTimes(4);
+      // a terminal answer ends the reads
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(apiFetch).toHaveBeenCalledTimes(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('retries wait at most a minute, and a good read starts the waits over (studio#943 review)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const distilling = learnings({ proposed: 0, pending: 0, approved: 0, distilling: true });
+      const down = new ApiError(502, 'bad gateway');
+      apiFetch
+        .mockResolvedValueOnce(distilling)
+        .mockRejectedValueOnce(down).mockRejectedValueOnce(down).mockRejectedValueOnce(down).mockRejectedValueOnce(down)
+        .mockResolvedValueOnce(distilling)
+        .mockRejectedValueOnce(down)
+        .mockResolvedValue(learnings({ proposed: 1, pending: 1, approved: 0 }));
+      render(<RunLearningsLine runId="run-1" />);
+      await screen.findByTestId('run-learnings-line');
+      // the poll (15 s), then retries after 15, 30, 60 and 60 s (capped)
+      for (const [wait, calls] of [[15_000, 2], [15_000, 3], [30_000, 4], [60_000, 5], [60_000, 6]] as const) {
+        // a second short of the wait nothing is read yet (a second's margin: the fake clock also follows real time)
+        await vi.advanceTimersByTimeAsync(wait - 1_000);
+        expect(apiFetch).toHaveBeenCalledTimes(calls - 1);
+        await vi.advanceTimersByTimeAsync(1_000);
+        await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(calls));
+      }
+      // the 6th read said distilling again: the poll is 15 s, and the failure after it waits 15 s again
+      await vi.advanceTimersByTimeAsync(15_000);
+      await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(7));
+      await vi.advanceTimersByTimeAsync(15_000);
+      await waitFor(() => expect(screen.getByTestId('run-learnings-line')).toHaveTextContent('1 learning proposed'));
+      expect(apiFetch).toHaveBeenCalledTimes(8);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('nothing is read after the line is gone, whether a read or a retry was pending (studio#943 review)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let fail!: (e: unknown) => void;
+      apiFetch
+        .mockResolvedValueOnce(learnings({ proposed: 0, pending: 0, approved: 0, distilling: true }))
+        .mockImplementationOnce(() => new Promise((_resolve, reject) => { fail = reject; }))
+        .mockRejectedValue(new ApiError(502, 'bad gateway'));
+      const a = render(<RunLearningsLine runId="run-1" />);
+      await screen.findByTestId('run-learnings-line');
+      await vi.advanceTimersByTimeAsync(15_000);
+      await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2));
+      a.unmount();
+      fail(new ApiError(502, 'bad gateway'));
+      await vi.advanceTimersByTimeAsync(300_000);
+      expect(apiFetch).toHaveBeenCalledTimes(2);
+      // a retry timer pending at unmount is cleared
+      apiFetch.mockReset();
+      apiFetch.mockResolvedValueOnce(learnings({ proposed: 0, pending: 0, approved: 0, distilling: true })).mockRejectedValue(new ApiError(502, 'bad gateway'));
+      const b = render(<RunLearningsLine runId="run-1" />);
+      await screen.findByTestId('run-learnings-line');
+      await vi.advanceTimersByTimeAsync(15_000);
+      await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2));
+      b.unmount();
+      await vi.advanceTimersByTimeAsync(300_000);
+      expect(apiFetch).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a failed first read is not retried: nothing said it was distilling (studio#943)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      apiFetch.mockRejectedValue(new ApiError(502, 'bad gateway'));
+      render(<RunLearningsLine runId="run-1" />);
+      await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(1));
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(apiFetch).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId('run-learnings-line')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('the Memory queue, from a run', () => {
