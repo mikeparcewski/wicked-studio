@@ -1,12 +1,12 @@
 import { actorWords } from '../../board/actorWords.js';
 import type { SessionView } from '../../api/types.js';
-import { councilRulingOf, rulesSummary, type RuleRow } from '../../board/assuranceModel.js';
+import { councilRulingOf, operatorOnly, rulesSummary, type RuleRow } from '../../board/assuranceModel.js';
 import type { RulePosition } from '../../api/types.js';
 import { QE_FORCE_DISCLOSURE, QE_FORCE_LABEL, QE_SKIP_DISCLOSURE, QE_SKIP_LABEL, REDUCED_ASSURANCE_LABEL, REDUCED_OPT_IN_DISCLOSURE, REDUCED_OPT_IN_LABEL, isReduced, qeSkippedText, qeWords, sessionQe, unverifiedDeliveryLine, type DeliveryAssuranceView, type QeDecision, receiptWords, sessionAssurance, type AssuranceReceipt as Receipt } from '../../board/assuranceModel.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
 import { TechDetails } from '../ui/index.js';
-import { FLOOR_OVERRIDDEN_LABEL, overrideWhere } from '../../board/floorOverride.js';
+import { FLOOR_OVERRIDDEN_LABEL, isToolCheckOverride, overrideLabel, overrideWhere } from '../../board/floorOverride.js';
 import { stepWord } from '../../board/runConversation.js';
 
 /** "you" opens a sentence as "You"; a person's own id is said as recorded. */
@@ -34,9 +34,13 @@ export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-r
 }): React.ReactElement {
   const w = receiptWords(receipt, passed);
   const judged = (receipt.operatorJudges ?? []).filter((j) => j.floorOverride === undefined);
-  const overrides = (receipt.operatorJudges ?? []).filter((j) => j.floorOverride !== undefined);
+  // wicked-core#1318: a failed tool check the operator overrode at triage is its own record, said in its own label.
+  const overrides = (receipt.operatorJudges ?? []).filter((j) => j.floorOverride !== undefined && !isToolCheckOverride(j.floorOverride));
+  // studio#935 (wicked-core#1168): a carried override was given at an earlier gate, never another act here.
   const given = overrides.filter((j) => j.floorOverride?.carriedFrom === null);
   const carried = overrides.filter((j) => j.floorOverride?.carriedFrom !== null);
+  const toolChecks = (receipt.operatorJudges ?? []).filter((j) => isToolCheckOverride(j.floorOverride));
+  const toolCheckedBy = [...new Set(toolChecks.map((j) => actorWords(j.by)))];
   // Never an actor id ("local (human)"): the local operator is "you" (operator 2026-10-29).
   const judgedBy = [...new Set(judged.map((j) => actorWords(j.by)))];
   const judgedGates = judged.length;
@@ -47,7 +51,9 @@ export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-r
     const key = u.id.includes(':') ? u.id.slice(u.id.indexOf(':') + 1) : String(u.stage ?? '');
     return key === '' ? null : stepWord(key);
   };
-  const lead = w.kind === 'floor-only' ? 'Only automatic checks ran'
+  // wicked-core#1318: nothing but the operator's judgment ran (a failed tool check counted at triage): never "automatic checks".
+  const lead = w.kind === 'floor-only' && operatorOnly(receipt) ? w.label
+    : w.kind === 'floor-only' ? 'Only automatic checks ran'
     : w.kind === 'same-seat' ? 'The helper checked its own work'
       : w.kind === 'unchecked' ? 'Nothing was verified'
         : w.kind === 'partial' ? 'Some checks ran independently' : w.label;
@@ -58,6 +64,7 @@ export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-r
         {w.reduced && <ReducedAssuranceLabel />}
         {judgedBy.length > 0 && <OperatorJudgedLabel />}
         {overrides.length > 0 && <FloorOverriddenLabel />}
+        {toolChecks.length > 0 && <ToolCheckOverriddenLabel label={overrideLabel(toolChecks[0]!.floorOverride!)} />}
       </p>
       {overriddenBy.length > 0 && (
         <p data-testid="assurance-floor-overridden-line" className="wk-assurance-line">
@@ -78,6 +85,22 @@ export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-r
             <li key={`${o.floorOverride?.resultId ?? ''}-${i}`} data-testid="assurance-floor-override">
               {o.floorOverride?.carriedFrom !== null ? 'Override carried' : capitalize(actorWords(o.by))}{o.floorOverride !== undefined ? `, at ${overrideWhere(o.floorOverride, stepOf)}` : ''}
               {o.note !== null ? <>: <q>{o.note}</q></> : ' (no rationale recorded)'}
+            </li>
+          ))}
+        </ul>
+      )}
+      {toolChecks.length > 0 && (
+        <p data-testid="assurance-tool-check-overridden-line" className="wk-assurance-line">
+          {toolChecks.length === 1 ? `At one gate ${overrideWhere(toolChecks[0]!.floorOverride!, stepOf)}` : `At ${toolChecks.length} gates a tool check`} failed and {toolCheckedBy.join(', ')} overrode it
+          {toolChecks.length === 1 && toolChecks[0]!.note !== null ? <>: <q>{toolChecks[0]!.note}</q></> : null}. The check did not run again; QE acceptance is still required.
+        </p>
+      )}
+      {toolChecks.length > 1 && (
+        <ul data-testid="assurance-tool-check-overrides" className="wk-assurance-list">
+          {toolChecks.map((o, i) => (
+            <li key={`${o.floorOverride?.resultId ?? ''}-${i}`} data-testid="assurance-tool-check-override">
+              {capitalize(actorWords(o.by))}, at {overrideWhere(o.floorOverride!, stepOf)}
+              {o.note !== null ? <>: <q>{o.note}</q></> : ' (no reason recorded)'}
             </li>
           ))}
         </ul>
@@ -242,6 +265,19 @@ export function FloorOverriddenLabel({ testId = 'assurance-floor-overridden' }: 
       title="The repository checks failed at this gate and the operator overrode them with a written rationale. Every other check still applied; QE acceptance is still required."
     >
       {FLOOR_OVERRIDDEN_LABEL}
+    </span>
+  );
+}
+
+/** (wicked-core#1318) A failed tool check the operator overrode: the engine's own label, never the floor's. */
+export function ToolCheckOverriddenLabel({ label, testId = 'assurance-tool-check-overridden' }: { label: string; testId?: string }): React.ReactElement {
+  return (
+    <span
+      data-testid={testId}
+      className="wk-assurance-reduced wk-assurance-operator"
+      title="A tool check failed at its triage gate and the operator counted the step as done with a written reason. The check did not run again; QE acceptance is still required."
+    >
+      {label}
     </span>
   );
 }

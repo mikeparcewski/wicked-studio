@@ -2635,6 +2635,30 @@
       ]
     },
     {
+      "testId": "assurance-tool-check-overridden",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-tool-check-overridden-line",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-tool-check-override",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-tool-check-overrides",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
       "testId": "assurance-where",
       "files": [
         "src/components/session/AssuranceReceipt.tsx"
@@ -19127,6 +19151,12 @@
       ]
     },
     {
+      "testId": "run-tab-tool-check-overridden",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
       "testId": "run-tab-trackers",
       "files": [
         "src/components/session/RunTab.tsx"
@@ -19591,6 +19621,30 @@
       ]
     },
     {
+      "testId": "session-gate-dispute-council",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-dispute-finding",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-dispute-findings",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-dispute-loading",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-error",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -19664,6 +19718,24 @@
     },
     {
       "testId": "session-gate-failing-words",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-finding",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-findings",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-findings-toggle",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -19870,6 +19942,18 @@
       "testId": "session-gate-source",
       "files": [
         "src/components/session/GateDepth.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-tool-check-override-consequence",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-tool-check-override-label",
+      "files": [
+        "src/components/session/GateRow.tsx"
       ]
     },
     {

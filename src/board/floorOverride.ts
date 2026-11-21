@@ -32,6 +32,32 @@ export const FLOOR_OVERRIDE_SEND = 'Approve with this rationale';
 /** The engine's label, as every surface shows it. */
 export const FLOOR_OVERRIDDEN_LABEL = 'Floor overridden by operator';
 
+/**
+ * (wicked-core#1318, #1675) The same judgment at a `triage` gate of a failed tool check (a Test step that runs a command,
+ * qe-author-tests' `verify`): the engine lists `operator_judgment` there, and taking it counts the step as done without
+ * running the check again. Its record is a `floorOverride` with layer `tool_check` and its own label ("tool check
+ * overridden by operator"), with no deliver-floor key; QE acceptance is untouched. It is never said as a repo-checks floor.
+ */
+export const TOOL_CHECK_LAYER = 'tool_check';
+/** The choice key on a triage gate row. */
+export const TOOL_CHECK_OVERRIDE_KEY = 'tool-check-judgment';
+export const TOOL_CHECK_OVERRIDE_CONSEQUENCE = 'Overrides the failed tool check: the step counts as done on your judgment, '
+  + 'recorded on the run and the delivery as "tool check overridden by operator". The check does not run again; QE acceptance is still required.';
+export const TOOL_CHECK_OVERRIDE_TITLE = `${TOOL_CHECK_OVERRIDE_CONSEQUENCE} Write why the failure is not this work's.`;
+export const TOOL_CHECK_OVERRIDE_PLACEHOLDER = "Why the failed check is not this work's (a known flaky check, output you inspected)…";
+export const TOOL_CHECK_OVERRIDE_SEND = 'Approve with this reason';
+
+/** A `tool_check` record (core#1318), as opposed to a repo-checks floor override. */
+export function isToolCheckOverride(o: { layer: string } | null | undefined): boolean {
+  return o?.layer === TOOL_CHECK_LAYER;
+}
+
+/** The engine's own label for an override, as a line starts ("Tool check overridden by operator"). */
+export function overrideLabel(o: { label: string }): string {
+  const l = o.label.trim() === '' ? 'floor overridden by operator' : o.label.trim();
+  return l.charAt(0).toUpperCase() + l.slice(1);
+}
+
 /** The engine's offer clause (wicked-core `floor_override_offer`), verbatim. */
 const OFFER_CLAUSE = 'judge it yourself with a written rationale when the evidence shows the failures are not the work\'s '
   + '(action `operator_judgment`: it overrides the failed floor, labelled "floor overridden by operator" on the run and the '
@@ -118,7 +144,7 @@ const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
  */
 export function overrideWhere(o: Pick<FloorOverrideView, 'ord' | 'attempt' | 'layer'>, stepOf: (ord: number) => string | null): string {
   const name = o.ord !== null ? stepOf(o.ord) : null;
-  const what = o.layer === 'repo_checks' || o.layer === '' ? 'checks' : o.layer.replace(/_/g, ' ');
+  const what = o.layer === 'repo_checks' || o.layer === '' ? 'checks' : o.layer === TOOL_CHECK_LAYER ? 'tool check' : o.layer.replace(/_/g, ' ');
   const at = name !== null ? `the ${name} step’s ${what}` : o.ord !== null ? `step ${o.ord}’s ${what}` : `the ${what}`;
   return o.attempt !== null ? `${at} (attempt ${o.attempt + 1})` : at;
 }

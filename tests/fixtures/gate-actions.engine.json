@@ -44,6 +44,15 @@
   "adj-rules": {
     "actions": [
       {
+        "action": "approve",
+        "intent": "land_with_carried_items",
+        "note": "required",
+        "noteIntent": "skip_rules",
+        "rules": [
+          "R1"
+        ]
+      },
+      {
         "action": "retry_rules",
         "intent": "retry_rules",
         "note": "none"
@@ -528,5 +537,36 @@
     ],
     "gateKind": "escalation",
     "ord": 3
+  },
+  "triage-tool-check": {
+    "actions": [
+      {
+        "action": "approve",
+        "intent": "retry",
+        "note": "optional"
+      },
+      {
+        "action": "operator_judgment",
+        "intent": "operator_judgment",
+        "note": "required"
+      },
+      {
+        "action": "amend_intent",
+        "intent": "amend_intent",
+        "note": "required"
+      },
+      {
+        "action": "request_changes",
+        "intent": "send_back",
+        "note": "optional"
+      },
+      {
+        "action": "reject",
+        "intent": "stop",
+        "note": "none"
+      }
+    ],
+    "gateKind": "triage",
+    "ord": 4
   }
 }

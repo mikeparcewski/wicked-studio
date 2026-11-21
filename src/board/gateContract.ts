@@ -12,7 +12,7 @@
  */
 import type { GateAnswer } from './gateActions.js';
 import type { GateRowChoice } from './gateRowModel.js';
-import { FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_TITLE } from './floorOverride.js';
+import { FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_TITLE, TOOL_CHECK_OVERRIDE_KEY, TOOL_CHECK_OVERRIDE_TITLE } from './floorOverride.js';
 import { QE_REDO_KEY, QE_REDO_LABEL, QE_REDO_TITLE } from './qeEscalation.js';
 import { SKIP_QE_GATE_TITLE, SKIP_QE_KEY, SKIP_QE_LABEL } from './qeSkip.js';
 import { OPERATOR_JUDGMENT_LABEL, OPERATOR_JUDGMENT_TITLE, REJUDGE_LABEL } from './rejudge.js';
@@ -102,8 +102,17 @@ function decisionFor(a: GateAction): GateAnswer {
   return { approve: true, action: a.action } as unknown as GateAnswer;
 }
 
+/** What the list alone does not say about the gate it answers: its kind (`gateKind`, else its frame's). */
+export interface GateContext {
+  gateKind?: string | null;
+}
+
 /** The controls a listed answer draws — one, or for an approve that takes an optional note, two; one per seat for a reassign. */
-export function choicesForAction(a: GateAction, seatLabel: (cli: string) => string): GateRowChoice[] {
+export function choicesForAction(a: GateAction, seatLabel: (cli: string) => string, ctx: GateContext = {}): GateRowChoice[] {
+  // wicked-core#1318: at a triage gate the judgment overrides a failed tool check, never a repo-checks floor.
+  if (a.action === 'operator_judgment' && ctx.gateKind === 'triage') {
+    return [{ key: TOOL_CHECK_OVERRIDE_KEY, label: OPERATOR_JUDGMENT_LABEL, decision: decisionFor(a), note: a.note, title: TOOL_CHECK_OVERRIDE_TITLE }];
+  }
   if (a.action === 'reassign') {
     const benched = new Set(a.benchedSeats ?? []);
     return (a.seats ?? []).map((cli) => ({
@@ -114,6 +123,14 @@ export function choicesForAction(a: GateAction, seatLabel: (cli: string) => stri
     }));
   }
   if (a.action === 'approve') {
+    if (a.noteIntent === 'skip_rules') {
+      const ids = a.rules ?? [];
+      return [{
+        key: 'steer', label: `Land, skipping ${ids.length === 1 ? ids[0] : `${ids.length} rules`}`, decision: decisionFor(a), note: 'required',
+        landSkipsRules: ids,
+        title: `Accept the work as it stands with the reviewer's open items carried; ${ids.join(', ')} are recorded as skipped by you, with your note as the reason. The review does not run again.`,
+      }];
+    }
     const [plain, noted, title] = APPROVE_WORDS[a.intent] ?? ['Approve', 'Approve with a note', 'Approve the gate.'];
     const out: GateRowChoice[] = [];
     const ask = noteAsk(a.note);
@@ -143,8 +160,8 @@ export function choicesForAction(a: GateAction, seatLabel: (cli: string) => stri
 }
 
 /** The listed answers as row controls: at most three inline before Stop (always the last inline), the rest under ⋯. */
-export function contractChoices(actions: readonly GateAction[], seatLabel: (cli: string) => string): { choices: GateRowChoice[]; overflow: GateRowChoice[] } {
-  const all = actions.flatMap((a) => choicesForAction(a, seatLabel));
+export function contractChoices(actions: readonly GateAction[], seatLabel: (cli: string) => string, ctx: GateContext = {}): { choices: GateRowChoice[]; overflow: GateRowChoice[] } {
+  const all = actions.flatMap((a) => choicesForAction(a, seatLabel, ctx));
   const stop = all.filter((c) => c.key === 'stop');
   const rest = all.filter((c) => c.key !== 'stop');
   return { choices: [...rest.slice(0, 3), ...stop], overflow: rest.slice(3) };
