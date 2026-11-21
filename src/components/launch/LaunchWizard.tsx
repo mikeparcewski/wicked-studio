@@ -531,6 +531,7 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
           {step === 'workflow' && (
             <WorkflowCatalog
               view={catalog}
+              contextRepoName={(repos ?? []).find((r) => r.id === draft.contextRepo || r.name === draft.contextRepo)?.name}
               failed={catalogLoad.state === 'error' && catalog === null}
               pickedId={draft.workflowId}
               pickedEntryId={draft.catalogEntryId}

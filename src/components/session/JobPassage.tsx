@@ -43,6 +43,7 @@ import { OrphanedRow } from './RunConversation.js';
 import { RunArtifacts } from './RunArtifacts.js';
 import { asksForProject, JobProjectChoices } from './JobProjectChoices.js';
 import { asksForRepo, JobRepoChoices } from './JobRepoChoices.js';
+import { asksForRequirements, JobRequirementsChoices } from './JobRequirementsChoices.js';
 import { movedFrom, useJobMoves } from '../../store/jobMoves.js';
 import { openChat } from '../../store/chatFlow.js';
 import { PowerPauseCard } from './PowerMode.js';
@@ -516,11 +517,13 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
     : v.phase === 'revising' || v.phase === 'swapPending' || v.phase === 'planning' || v.phase === 'replanning' || v.phase === 'starting' ? ' wk-pass--busy' : '';
   const replies = v.replies;
   const progress = v.progress;
-  const headQuestion = head.proposal.question;
+  const headQuestion = head.proposal.question ?? null;
+  const requirementsQuestion = asksForRequirements(head.proposal);
+  const requirementsNeed = requirementsQuestion ? head.proposal.needs?.find((n) => n.required && n.status === 'missing') : undefined;
   const textQuestion = headQuestion?.choices.length === 0 && headQuestion.input?.edit.startsWith('inputs.') === true
-    && !asksForProject(head.proposal) && !asksForRepo(head.proposal) ? headQuestion : null;
+    && !asksForProject(head.proposal) && !asksForRepo(head.proposal) && !requirementsQuestion ? headQuestion : null;
   // Keep this form visible but disabled until crew answers the revision.
-  const question = v.question ?? (v.tokensHeld ? textQuestion : null);
+  const question = v.question ?? (v.tokensHeld ? textQuestion ?? (requirementsQuestion ? headQuestion : null) : null);
 
   return (
     <section
@@ -568,6 +571,15 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
           {asksForProject(head.proposal) && <JobProjectChoices chatId={chatId} proposal={head.proposal} onError={setError} />}
           {/* F41: crew asks for the repository with nothing to press (a new chat has none in scope): the registered ones. */}
           {asksForRepo(head.proposal) && <JobRepoChoices chatId={chatId} proposal={head.proposal} onError={setError} />}
+          {requirementsNeed !== undefined && (
+            <JobRequirementsChoices key={`${pid}:${requirementsNeed.id}`} proposal={head.proposal} navigate={navigate}
+              disabled={v.tokensHeld || local.deciding[lineage.lineage] === true}
+              onPick={(refs) => {
+                const st = useJobLocal.getState();
+                if (v.phase !== 'asking' || st.swapPending[lineage.lineage] === pid || st.deciding[lineage.lineage] === true) return;
+                revise({ inputs: { [requirementsNeed.id]: { kind: 'requirements', refs } } }, 'question', undefined, null, null);
+              }} />
+          )}
           {textQuestion?.input !== undefined && (
             // Keyed by the lineage and the input it fills, so a re-resolution of the same question keeps what was typed
             // (review r1); disabled while a change or a Start/Not now of this job is in flight.
