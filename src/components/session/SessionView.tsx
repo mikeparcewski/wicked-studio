@@ -1130,7 +1130,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     },
     runs: mine,
     started: entries.length > 0,
-    chatHasPersonMessage: entries.some((e) => e.kind === 'turn' && e.who === 'you' && !e.kickoff),
+    // A run launched in the chat (its kickoff) fixes the seats as a first message does.
+    chatHasPersonMessage: mine.length > 0 || entries.some((e) => e.kind === 'turn' && e.who === 'you'),
     navigate,
     // ux-tonight: a card started on this chat's composer files its job in the chat's project: the fresh mark before
     // the daemon knows the chat, then the scope crew answered with (codex r1 on #982).

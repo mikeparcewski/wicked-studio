@@ -9,16 +9,19 @@ function words(e: unknown): string {
 }
 
 /** A seed has seats before it has a person message. Crew owns every edit and its admission result. */
-export function ChatHelpers({ chatId, roster }: { chatId: string; roster: RosterSeat[] | null }): React.ReactElement {
+export function ChatHelpers({ chatId, roster }: { chatId: string; roster: RosterSeat[] | null }): React.ReactElement | null {
   const [seats, setSeats] = useState<string[] | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // A chat read with no seats (a run's session, an ended chat) has none to change here: no row.
+  const [noSeats, setNoSeats] = useState(false);
   const busy = useRef(false);
   const live = useRef(true);
   useEffect(() => {
     live.current = true;
     void api.getChat(chatId).then((r) => {
-      if (live.current) setSeats(r.seats);
+      if (!live.current) return;
+      if (Array.isArray(r.seats)) setSeats(r.seats); else setNoSeats(true);
     }).catch((e: unknown) => { if (live.current) setNote(words(e)); });
     return () => { live.current = false; };
   }, [chatId]);
@@ -35,7 +38,8 @@ export function ChatHelpers({ chatId, roster }: { chatId: string; roster: Roster
     setNote(null);
     const reread = async (): Promise<void> => {
       const r = await api.getChat(chatId);
-      if (live.current) setSeats(r.seats);
+      if (!live.current) return;
+      if (Array.isArray(r.seats)) setSeats(r.seats); else setNoSeats(true);
     };
     try {
       const r = await api.reseatChat(chatId, keys.filter((k) => next.has(k))) as Awaited<ReturnType<typeof api.reseatChat>> & { reseated?: false; note?: string };
@@ -56,6 +60,7 @@ export function ChatHelpers({ chatId, roster }: { chatId: string; roster: Roster
     }
   };
 
+  if (noSeats) return null;
   return (
     <div data-testid="composer-seats" role="group" aria-label="Helpers in this chat" className="wk-composer-chips">
       <span className="wk-composer-note">Helpers</span>

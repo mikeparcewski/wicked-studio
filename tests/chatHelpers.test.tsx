@@ -238,3 +238,12 @@ it.each([
     ...(dropped ? { removeSeats: ['codex'] } : {}),
   });
 });
+
+it('B1: a chat read that carries no seats draws no helper row and does not throw', async () => {
+  // CI on #1249: a run's session reads GET /chats/:id without `seats`; the row must step aside, not crash the page.
+  seats = undefined as unknown as string[];
+  render(composer());
+  await waitFor(() => expect(calls.some((c) => c.path === '/chats/seeded' && c.method === 'GET')).toBe(true));
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+  expect(screen.queryByTestId('composer-seats')).toBeNull();
+});
