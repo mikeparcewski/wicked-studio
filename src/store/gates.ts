@@ -194,6 +194,8 @@ const readSeq: Record<string, number> = {};
 const appliedSeq: Record<string, number> = {};
 const recheck = new Set<string>();
 const noGateAt: Record<string, number> = {};
+/** studio#1023: crew's own receivedAt of the run's last applied gate read (a kept instance shows the earlier time). */
+const crewAt: Record<string, number> = {};
 export const hasNoGate = (runId: string): boolean => noGateAt[runId] === gateGen(runId);
 export const needsRecheck = (runId: string): boolean => recheck.has(runId);
 export function doneRecheck(runId: string): void { recheck.delete(runId); }
@@ -272,7 +274,12 @@ export const useGateStore = create<GateStore>((set) => {
       // A read keeps the toast group of a gate already cached for the run (a refresh never promotes a live gate, and a
       // read gate stays read); a gate the store did not hold yet is marked as read.
       const prev = useGateStore.getState().gates[runId];
-      const same = prev !== undefined && prev.ord === gate.ord && prev.prompt === gate.prompt && prev.gateKind === gate.gateKind;
+      // studio#1023: a live frame stamps receivedAt with this browser's clock, a read with crew's, so the two never
+      // compare: a read of the gate a live frame put here (same ord, prompt and kind) keeps its instance. Between reads
+      // crew's own times compare (`crewAt`), so a same-ord gate asked again still reads as a new one.
+      const sameShape = prev !== undefined && prev.ord === gate.ord && prev.prompt === gate.prompt && prev.gateKind === gate.gateKind;
+      const same = sameShape && (prev.actionsRead !== true || crewAt[runId] === gate.receivedAt);
+      crewAt[runId] = gate.receivedAt;
       const next = same ? { ...gate, receivedAt: prev.receivedAt } : gate;
       put(prev === undefined || prev.fromRead === true ? { ...next, fromRead: true } : next);
       return true;
@@ -382,6 +389,7 @@ export const useGateStore = create<GateStore>((set) => {
       delete readSeq[id];
       delete appliedSeq[id];
       delete noGateAt[id];
+      delete crewAt[id];
       recheck.delete(id);
     }
     set((s) => {
