@@ -50,7 +50,7 @@ export function gateActionsOf(info: unknown): GateAction[] | undefined {
 /** The card and passage send the same listed answer, with words only where the wire takes them. */
 export function listedGateAnswer(token: string, words: string | undefined, ord: number): GateAnswer {
   const note = words?.trim() ?? '';
-  if (token === 'reject') return { approve: false, ...(note !== '' ? { amend: note } : {}) };
+  if (token === 'reject') return { approve: false, ord, ...(note !== '' ? { amend: note } : {}) };
   if (token === 'request_changes') return { approve: false, action: 'request_changes', ...(note !== '' ? { amend: note } : {}), ord } as GateAnswer;
   return { approve: true, action: token, ...(note !== '' ? { amend: note } : {}), ord } as GateAnswer;
 }

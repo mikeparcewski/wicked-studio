@@ -819,6 +819,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   /** Commit one choice (its words, when it asks for them) through the one gate wire and its 10 s undo window. */
   const commit = (choice: GateRowChoice, words?: string): void => {
     const key = gateKey;
+    const expect = gate === undefined ? {} : { expect: { ord: gate.ord, receivedAt: gate.receivedAt } };
     const label = choice.key === 'rerun' && rerunOffer !== null ? `Rerun from ${rerunOffer.phase}` : choice.label;
     setChosen({ key, label, sentAt: null });
     const done = (outcome: string): void => {
@@ -826,7 +827,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       else setChosen(null);
     };
     if (choice.reassignCli !== undefined) {
-      void commitGateReassign(runId, choice.reassignCli, choice.label, words).then(done, () => setChosen(null));
+      void commitGateReassign(runId, choice.reassignCli, choice.label, words, expect.expect).then(done, () => setChosen(null));
       return;
     }
     if (choice.decision === null) { setChosen(null); return; }
@@ -837,11 +838,11 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       const reason = (words ?? '').trim();
       if (reason === '') { setChosen(null); return; }
       const skip = { ...choice.decision, skipRules: choice.skipRuleIds.map((id) => ({ id, reason })) } as unknown as GateAnswer;
-      void commitGateDecision(runId, skip, { receipt: { kind: 'row', chosenLabel: label } }).then(done, () => setChosen(null));
+      void commitGateDecision(runId, skip, { ...expect, receipt: { kind: 'row', chosenLabel: label } }).then(done, () => setChosen(null));
       return;
     }
     const decision: GateAnswer = words !== undefined && words.trim() !== '' ? { ...choice.decision, amend: words.trim() } : choice.decision;
-    void commitGateDecision(runId, decision, { receipt: { kind: 'row', chosenLabel: label } }).then(done, () => setChosen(null));
+    void commitGateDecision(runId, decision, { ...expect, receipt: { kind: 'row', chosenLabel: label } }).then(done, () => setChosen(null));
   };
 
   // The reply box's send: the note choice with the typed words as its note, through the same path and undo window.

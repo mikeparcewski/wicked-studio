@@ -163,10 +163,10 @@ with sync_playwright() as p:
 
     # 1. the dashboard reads live numbers
     page.goto(BASE + "/apps", wait_until="domcontentloaded")
-    page.get_by_test_id("apps-card").first.wait_for(timeout=30000)
-    card = page.locator(f'[data-testid="apps-card"][data-slug="{args.card}"]')
+    page.get_by_test_id("apps-tile").first.wait_for(timeout=30000)
+    card = page.locator(f'[data-testid="apps-tile"][data-slug="{args.card}"]')
     card.scroll_into_view_if_needed()
-    page.wait_for_function(f"""() => {{ const c = document.querySelector('[data-testid="apps-card"][data-slug="{args.card}"]'); return c && c.getAttribute('data-live') !== 'waiting'; }}""", timeout=60000)
+    page.wait_for_function(f"""() => {{ const c = document.querySelector('[data-testid="apps-tile"][data-slug="{args.card}"]'); return c && c.getAttribute('data-live') !== 'waiting'; }}""", timeout=60000)
     values = [v.inner_text() for v in card.get_by_test_id("apps-card-kpi-value").all()]
     updated = card.get_by_test_id("apps-card-updated").inner_text() if card.get_by_test_id("apps-card-updated").count() else None
     page.screenshot(path=f"{args.shots}/k5-dash-live.png")

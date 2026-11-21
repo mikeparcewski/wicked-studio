@@ -192,8 +192,20 @@ interface GateStore {
 const generations: Record<string, number> = {};
 const readSeq: Record<string, number> = {};
 const appliedSeq: Record<string, number> = {};
+const recheck = new Set<string>();
+const noGateAt: Record<string, number> = {};
+/** studio#1023: crew's own receivedAt of the run's last applied gate read (a kept instance shows the earlier time). */
+const crewAt: Record<string, number> = {};
+export const hasNoGate = (runId: string): boolean => noGateAt[runId] === gateGen(runId);
+export const needsRecheck = (runId: string): boolean => recheck.has(runId);
+export function doneRecheck(runId: string): void { recheck.delete(runId); }
+let clock = 0;
 function bump(runId: string): void {
-  generations[runId] = (generations[runId] ?? 0) + 1;
+  generations[runId] = ++clock;
+}
+/** Test seam for per-run bookkeeping pruning. */
+export function gateBookkeepingSizeForTest(): { generations: number; readSeq: number; appliedSeq: number } {
+  return { generations: Object.keys(generations).length, readSeq: Object.keys(readSeq).length, appliedSeq: Object.keys(appliedSeq).length };
 }
 /** The run's gate generation now. */
 export function gateGen(runId: string): number {
@@ -213,6 +225,7 @@ export function invalidateGateReads(): void {
 }
 /** Begin a gate read: take its ticket before the request goes out. */
 export function beginGateRead(runId: string): GateReadTicket {
+  if (generations[runId] === undefined) bump(runId);
   const seq = (readSeq[runId] ?? 0) + 1;
   readSeq[runId] = seq;
   return { runId, gen: gateGen(runId), seq };
@@ -261,9 +274,17 @@ export const useGateStore = create<GateStore>((set) => {
       // A read keeps the toast group of a gate already cached for the run (a refresh never promotes a live gate, and a
       // read gate stays read); a gate the store did not hold yet is marked as read.
       const prev = useGateStore.getState().gates[runId];
-      put(prev === undefined || prev.fromRead === true ? { ...gate, fromRead: true } : gate);
+      // studio#1023: a live frame stamps receivedAt with this browser's clock, a read with crew's, so the two never
+      // compare: a read of the gate a live frame put here (same ord, prompt and kind) keeps its instance. Between reads
+      // crew's own times compare (`crewAt`), so a same-ord gate asked again still reads as a new one.
+      const sameShape = prev !== undefined && prev.ord === gate.ord && prev.prompt === gate.prompt && prev.gateKind === gate.gateKind;
+      const same = sameShape && (prev.actionsRead !== true || crewAt[runId] === gate.receivedAt);
+      crewAt[runId] = gate.receivedAt;
+      const next = same ? { ...gate, receivedAt: prev.receivedAt } : gate;
+      put(prev === undefined || prev.fromRead === true ? { ...next, fromRead: true } : next);
       return true;
     }
+    noGateAt[runId] = gateGen(runId);
     set((s) => {
       if (!(runId in s.gates)) return s;
       const next = { ...s.gates };
@@ -362,8 +383,14 @@ export const useGateStore = create<GateStore>((set) => {
   reconcile: (awaitingRunIds) => {
     const keep = new Set(awaitingRunIds);
     // F31: a run read but not cached (a read still on its way) is pruned too: its read must not land after this.
-    for (const id of Object.keys(readSeq)) {
-      if (!keep.has(id) && !isAwaitingPinned(id)) bump(id);
+    for (const id of new Set([...Object.keys(generations), ...Object.keys(readSeq)])) {
+      if (keep.has(id) || isAwaitingPinned(id)) continue;
+      delete generations[id];
+      delete readSeq[id];
+      delete appliedSeq[id];
+      delete noGateAt[id];
+      delete crewAt[id];
+      recheck.delete(id);
     }
     set((s) => {
       const next: Record<string, OpenGate> = {};
@@ -373,7 +400,7 @@ export const useGateStore = create<GateStore>((set) => {
         // against (§11.5 — a chat-keyed gate is never in GET /runs); only a
         // real resolution (ingest/clearGate) may retire them.
         if (keep.has(id) || isAwaitingPinned(id)) next[id] = gate;
-        else { changed = true; bump(id); }
+        else changed = true;
       }
       return changed ? { gates: next } : s;
     });
@@ -383,5 +410,8 @@ export const useGateStore = create<GateStore>((set) => {
 
 // F31: a drop or a reconnect makes every gate read begun before it obsolete.
 useConnectionStore.subscribe((now, before) => {
-  if (now.status !== before.status) invalidateGateReads();
+  if (now.status !== before.status) {
+    invalidateGateReads();
+    if (now.status === 'connected') for (const id of Object.keys(useGateStore.getState().gates)) recheck.add(id);
+  }
 });

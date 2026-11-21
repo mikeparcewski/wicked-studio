@@ -1,3 +1,5 @@
+import { engineOptionsStart } from './gateOffers.js';
+
 /**
  * SKIP QE ACCEPTANCE IN PLACE (studio#923; J4 0.16.6). Crew takes the operator's skip as a gate answer —
  * `POST /runs/:id/gate {approve: true, action: 'skip_qe', amend: <reason>}` (crew 0.16.6 `GateSchema`, a blank reason is a
@@ -18,7 +20,11 @@ export const SKIP_QE_PLACEHOLDER = 'Why QE acceptance is skipped (the seats coul
  *  ("Skip QE acceptance with a reason (action `skip_qe` … and this gate re-opens on the floor alone", "skip QE acceptance
  *  with a written reason (action `skip_qe`: the step counts"), never the deferral "at delivery, where you can skip it". */
 export function offersSkipQeHere(prompt: string | undefined): boolean {
-  if (prompt === undefined || !/action `skip_qe`/.test(prompt)) return false;
+  if (prompt === undefined) return false;
+  const at = engineOptionsStart(prompt, 'confirm to retry the phase');
+  if (at < 0) return false;
+  prompt = prompt.slice(at);
+  if (!/action `skip_qe`/.test(prompt)) return false;
   return /skip QE acceptance with a (?:written )?reason \(action `skip_qe`(?!, labelled "QE acceptance skipped by operator"\))/i.test(prompt)
     || /this gate re-opens on the floor alone/.test(prompt);
 }

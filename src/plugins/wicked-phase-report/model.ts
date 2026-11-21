@@ -248,8 +248,19 @@ export function gateWord(kind: string): string {
   return GATE_WORDS[kind] ?? kind.replace(/[_-]+/g, ' ').replace(/^./u, (c) => c.toUpperCase());
 }
 
+/** A completed answer stays parked for the person's next message; its turn gate is not a decision (T17). */
+export function chatTurn(r: Report): boolean {
+  return r.finished === null && r.units.size > 0
+    && [...r.units.values()].every((u) => u.step !== null && /^answer-\d+$/.test(u.step) && u.state === 'done');
+}
+
+/** The decisions a report lists: every gate, except a chat's open turn (it is the next message, not a decision). */
+function listedGates(r: Report): GateInfo[] {
+  return chatTurn(r) ? r.gates.filter((g) => g.answeredAt !== null) : r.gates;
+}
+
 export function openGates(r: Report): GateInfo[] {
-  return r.finished !== null ? [] : r.gates.filter((g) => g.answeredAt === null);
+  return r.finished !== null || chatTurn(r) ? [] : r.gates.filter((g) => g.answeredAt === null);
 }
 
 /** The ords the plan holds, in order (a unit seen only by its start counts too). */
@@ -322,6 +333,8 @@ export function summaryLine(r: Report): string {
     const done = [...r.units.values()].filter((u) => u.state === 'done').length;
     parts.push(r.finished.outcome === 'completed' ? 'Finished' : r.finished.outcome === 'cancelled' ? 'Stopped' : 'Failed');
     if (ords.length > 0) parts.push(`${done} of ${plural(ords.length, 'step')} done`);
+  } else if (chatTurn(r)) {
+    parts.push('Answered', `${ords.length} of ${plural(ords.length, 'step')} done`);
   } else {
     const now = currentUnit(r);
     if (now !== null) {
@@ -369,6 +382,8 @@ export function dashboard(r: Report, nowMs: number): Dashboard {
   let now: Dashboard['now'];
   if (r.finished !== null) {
     now = { value: summaryLine(r).split(' · ')[0] ?? 'Finished', sub: `${plural(ords.length, 'step')} · ${plural(r.gates.length, 'decision')} · ${clock(r.startedAt)}–${clock(r.finished.at)}` };
+  } else if (chatTurn(r)) {
+    now = { value: 'Answered', sub: 'Waiting for your next message' };
   } else if (open.length > 0) {
     const g = open[open.length - 1]!;
     now = { value: `Waiting on you · ${gateWord(g.kind)}`, sub: `${stepWord(r.units.get(g.ord))} · since ${clock(g.openedAt)}` };
@@ -396,7 +411,7 @@ export function dashboard(r: Report, nowMs: number): Dashboard {
   const decisions = {
     open: open.length,
     answered: decided.length,
-    items: r.gates.slice(-5).map((g) => ({
+    items: listedGates(r).slice(-5).map((g) => ({
       // A gate that is its own step's name (the plan, delivery) is not said twice.
       text: STANDALONE_GATES.has(g.kind) ? gateWord(g.kind) : `${gateWord(g.kind)} · ${stepWord(r.units.get(g.ord))}`,
       when: g.answeredAt !== null ? `answered ${clock(g.answeredAt)}` : open.includes(g) ? `open since ${clock(g.openedAt)}` : clock(g.openedAt),
@@ -671,9 +686,9 @@ export function phaseDashboard(r: Report, scope: PhaseScope, nowMs: number): Das
   const checksSpans = own !== null ? buildSpans(r, scope.ords[0]!).checks : null;
   const inChecks = (g: GateInfo): boolean => checksSpans !== null && checksSpans.some((x) => g.openedAt >= x.start && (x.end === null || g.openedAt <= x.end));
   const ofPhase = (g: GateInfo): boolean => inScope(scope, g.ord) && (checksSpans === null || inChecks(g) === (scope.phase === 'checks'));
-  const decisions = r.gates.filter(ofPhase);
+  const decisions = listedGates(r).filter(ofPhase);
   const open = openGates(r).filter(ofPhase);
-  const items = decisions.map((g) => ({ at: g.openedAt, text: gateWord(g.kind), when: g.answeredAt !== null ? `answered ${clock(g.answeredAt)}` : `open since ${clock(g.openedAt)}`, open: open.includes(g) }));
+  const items = decisions.map((g) => ({ at: g.openedAt, text: gateWord(g.kind), when: g.answeredAt !== null ? `answered ${clock(g.answeredAt)}` : open.includes(g) ? `open since ${clock(g.openedAt)}` : clock(g.openedAt), open: open.includes(g) }));
   // A checkpoint pause stops the orchestrator's turn: it is the Build's decision.
   const pauses = scope.phase === 'build' && own !== null ? r.power?.pauses ?? [] : [];
   for (const pz of pauses) items.push({ at: pz.at, text: `Checkpoint ${pz.n} pause`, when: pz.answeredAt !== null ? `answered ${clock(pz.answeredAt)}` : `open since ${clock(pz.at)}`, open: pz.answeredAt === null });
@@ -716,7 +731,7 @@ export function phaseDashboard(r: Report, scope: PhaseScope, nowMs: number): Das
  *  the line is what follows it ("3 turns · checkpoint 3 · working"), with the dot's tone. */
 export function panelLine(r: Report, scope: PhaseScope | null): { text: string; tone: 'none' | 'run' | 'wait' | 'ok' | 'fail' } {
   if (scope === null) {
-    const tone = !r.loaded ? 'none' : r.finished !== null ? (r.finished.outcome === 'completed' ? 'ok' : 'fail') : openGates(r).length > 0 ? 'wait' : 'run';
+    const tone = !r.loaded ? 'none' : r.finished !== null ? (r.finished.outcome === 'completed' ? 'ok' : 'fail') : chatTurn(r) ? 'ok' : openGates(r).length > 0 ? 'wait' : 'run';
     return { text: summaryLine(r), tone };
   }
   const full = phaseSummary(r, scope, { times: false });

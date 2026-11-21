@@ -1,13 +1,14 @@
 import { rememberProposalRuns } from '../board/planRevBinding.js';
+import { isAskTurnRun } from '../board/askTurn.js';
 import { useAskThreadStore } from '../store/askThread.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
 import { useConnectionStore } from '../store/connection.js';
 import { useCapabilities } from '../store/capabilities.js';
-import { useGateStore } from '../store/gates.js';
+import { needsRecheck, useGateStore } from '../store/gates.js';
 import { answerShapeOf, askerOf, useElicitationStore } from '../store/elicitations.js';
-import { GATE_READS_IN_FLIGHT, ensureGate, inGateSlot, reconcileGateRetries, rememberWorkTitles } from '../board/gateActions.js';
+import { GATE_READS_IN_FLIGHT, ensureGate, refreshGate, inGateSlot, reconcileGateRetries, rememberWorkTitles } from '../board/gateActions.js';
 
 /**
  * Owns the run list + the late-join reconcile (DES-STUDIO-001 §2.1, §3.3). A
@@ -134,6 +135,7 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
 
       const awaiting = fetched
         .filter((v) => v.session.status === 'awaiting_human')
+        .sort((a, b) => Number(isAskTurnRun(a.session)) - Number(isAskTurnRun(b.session)))
         .map((v) => v.session.id);
       reconcileGates(awaiting);
       // studio#1197: a gate read that is being retried stops when its run no longer waits on a person.
@@ -156,14 +158,15 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
       // cleared for a broken daemon).
       void hydrateElicitations(fetched, () => cancelled);
 
-      // F31: in the list's order, as before (so the toast strip leads as it did), but a few reads at a time across passes
-      // (`inGateSlot`) instead of one by one; the run a person is looking at reads its own gate first (RunBlock). A
+      // T17/F31: real decisions before parked chat turns, preserving list order within each group; a few reads at a
+      // time across passes (`inGateSlot`). The visible run reads its own gate first through `useOwnGateRead`. A
       // refresh that cancels this pass stops its new reads; a read that lands still applies, because `applyGateRead`
       // drops it if the run's gate moved meanwhile. A failed read leaves the id-only gate working and is tried again on
       // the next pass.
       await Promise.all(awaiting.map((id) => inGateSlot(async () => {
-        if (cancelled || useGateStore.getState().gates[id] !== undefined) return;
-        await ensureGate(id);
+        if (cancelled) return;
+        if (useGateStore.getState().gates[id] === undefined) await ensureGate(id);
+        else if (needsRecheck(id)) await refreshGate(id);
       })));
     })();
 

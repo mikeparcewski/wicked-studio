@@ -252,8 +252,8 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     // The note of THIS attempt, or none: a retry carries exactly what the failed attempt carried (xreview r3).
     if (amend !== '') sentPlanNotes.set(noteKey, amend); else sentPlanNotes.delete(noteKey);
     const answer: GateAnswer = amend !== '' ? { ...base, amend } : base;
-    // A note answers the gate it was typed at (xreview r1 P1): if the gate moved on, nothing is sent.
-    const expect = amend !== '' ? { expect: { ord: gate.ord, receivedAt: gate.receivedAt } } : {};
+    // studio#1121: every answer names the gate the card showed.
+    const expect = { expect: { ord: gate.ord, receivedAt: gate.receivedAt } };
     commitGateDecision(runId, answer, { ...deliver, ...expect, receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: card.act ?? 'Approve' } })
       .then((outcome) => {
         if (outcome === 'sent' && draft !== null) dropGateDraft(runId, draft.gateKey);
@@ -283,7 +283,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     if (sending.current || gate === undefined) return;
     sending.current = true;
     commitGateDecision(runId, { approve: true, plan: { steps: ask.acceptedSteps.map((s) => ({ catalog: s.catalog, id: s.id })) } },
-      { notice: { preview: 'The conversation goes on; nothing is built. The proposal stays in the thread.', sent: 'Not now — the conversation goes on; nothing was built.' }, receipt: { kind: 'plan', chosenLabel: 'Not now' } })
+      { expect: { ord: gate.ord, receivedAt: gate.receivedAt }, notice: { preview: 'The conversation goes on; nothing is built. The proposal stays in the thread.', sent: 'Not now — the conversation goes on; nothing was built.' }, receipt: { kind: 'plan', chosenLabel: 'Not now' } })
       .then((outcome) => { if (outcome === 'sent') setUi({ dismissed: instance, confirming: null }); })
       .catch(() => { /* the refusal is in the shared action state, which the card renders */ })
       .finally(() => { sending.current = false; });
@@ -298,7 +298,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     // crew#1181's offer (`GET /runs/:id/gate .skipQe`, action `skip_qe`, a reason required); the gate's `ord` pins the
     // answer to this hand-over (a moved gate is a 409, never a skip somewhere else).
     commitGateDecision(runId, { approve: true, action: SKIP_QE_ACTION, amend: reason, ord: gate.ord } as unknown as GateAnswer,
-      { ...deliver, receipt: { kind: 'deliver', chosenLabel: SKIP_QE_SEND } })
+      { ...deliver, expect: { ord: gate.ord, receivedAt: gate.receivedAt }, receipt: { kind: 'deliver', chosenLabel: SKIP_QE_SEND } })
       .catch(() => { /* the refusal is in the shared action state, which the card renders */ })
       .finally(() => { sending.current = false; });
   };
@@ -307,7 +307,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     if (sending.current || gate === undefined) return;
     sending.current = true;
     commitGateDecision(runId, listedGateAnswer(token, why, gate.ord),
-      { receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: token } })
+      { expect: { ord: gate.ord, receivedAt: gate.receivedAt }, receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: token } })
       .catch(() => { /* said in the shared action state */ })
       .finally(() => { sending.current = false; });
   };
@@ -317,7 +317,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     if (sending.current || gate === undefined) return;
     sending.current = true;
     commitGateDecision(runId, listedGateAnswer(OFFER_REQUEST_CHANGES, note, gate.ord),
-      { receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: 'Sent back' } })
+      { expect: { ord: gate.ord, receivedAt: gate.receivedAt }, receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: 'Sent back' } })
       .catch(() => { /* said in the shared action state */ })
       .finally(() => { sending.current = false; });
   };
@@ -332,7 +332,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
         ? { preview: 'The job stops before anything is built.', sent: 'Stopped the job; nothing was built.' }
         : { preview: 'The conversation ends; the helpers stand down.', sent: 'Ended the conversation.' };
     // Stop asks why (DES-GUIDED-CHAT §4): the words ride the reject into the Decisions ledger.
-    commitGateDecision(runId, listedGateAnswer(OFFER_REJECT, why, gate.ord), { notice, receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: card.end ?? PLAN_STOP } })
+    commitGateDecision(runId, listedGateAnswer(OFFER_REJECT, why, gate.ord), { expect: { ord: gate.ord, receivedAt: gate.receivedAt }, notice, receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: card.end ?? PLAN_STOP } })
       .catch(() => { /* said in the shared action state */ })
       .finally(() => { sending.current = false; });
   };
@@ -363,9 +363,10 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     run: () => go(),
   });
   // studio#1113: a send-back the gate lists (a plan gate's: the plan goes back to its lead with your note) is drawn too.
-  if (listed !== undefined && offered.has(OFFER_REQUEST_CHANGES)) {
+  // studio#1114: a gate whose payload `choices` name it (no list yet: a live frame before its read) draws it too.
+  if (offered.has(OFFER_REQUEST_CHANGES)) {
     ways.push({ id: 'send-back', token: OFFER_REQUEST_CHANGES, label: card.kind === 'plan' ? 'Send the plan back…' : 'Send back…',
-      ...noteOption(listed.find((a) => a.action === OFFER_REQUEST_CHANGES)?.note ?? 'required'),
+      ...noteOption(listed?.find((a) => a.action === OFFER_REQUEST_CHANGES)?.note ?? 'required'),
       testid: 'session-proposal-send-back',
       consequence: card.kind === 'plan' ? 'The plan goes back to its lead with your note, and comes back here as a new revision. Nothing runs meanwhile.'
         : 'The work goes back to the builder with your note.',

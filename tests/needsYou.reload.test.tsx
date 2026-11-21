@@ -87,7 +87,8 @@ describe('needs-you after a reload (studio#284)', () => {
     reassignRun.mockResolvedValue({ status: 'ok', ord: 5, cli: 'codex' });
     fireEvent.click(screen.getByTestId('needs-you-reassign'));
     await waitFor(() => expect(screen.getByTestId('needs-you-note')).toHaveTextContent('Step 5 is running again on codex.'));
-    expect(reassignRun).toHaveBeenCalledWith(RUN);
+    // studio#1121: the move names the stalled step it shows.
+    expect(reassignRun).toHaveBeenCalledWith(RUN, undefined, undefined, 5);
     expect(screen.getByTestId('needs-you-nudge')).toBeEnabled();
   });
 

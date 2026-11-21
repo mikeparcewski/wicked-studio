@@ -84,7 +84,7 @@ export function QuestionRow({ runId, units, openPath, openLabel, onOpen }: {
     setChosen({ key, label: c.label, sent: false });
     const settle = (next: { key: string; label: string; sent: boolean } | null): void =>
       setChosen((cur) => (cur !== null && cur.key === key ? next : cur));
-    void commitGateDecision(runId, c.decision).then(
+    void commitGateDecision(runId, c.decision, gate === undefined ? {} : { expect: { ord: gate.ord, receivedAt: gate.receivedAt } }).then(
       (outcome) => {
         if (outcome === 'sent') settle({ key, label: c.label, sent: true });
         else {
