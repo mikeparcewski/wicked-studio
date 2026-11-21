@@ -46,7 +46,7 @@ export function RunStory({ view, navigate, events = EMPTY }: {
   const runId = view.session.id;
   const status = view.session.status;
   const stopped = status === 'cancelled' || status === 'failed';
-  useEffect(() => { if (stopped) useProvenanceStore.getState().load(runId); }, [runId, stopped]);
+  useEffect(() => { if (stopped) useProvenanceStore.getState().load(runId, true); }, [runId, stopped]);
   const rejectNote = useProvenanceStore((s) => s.rejectNotes[runId] ?? null);
   // The engine headline quotes the engine's first line: paths read `~`, technical details or not
   // (the same rule as Technical details below it — codex r3).
@@ -55,20 +55,25 @@ export function RunStory({ view, navigate, events = EMPTY }: {
   if (!stopped) return null;
 
   if (status === 'cancelled') {
-    const engineStopped = rejectNote === null && story?.engineTimedOut === true;
-    const sendBack = rejectNote === null ? story?.sendBackNote ?? null : null;
+    const stop = story?.stop ?? null;
+    const shownStop = stop !== null && (stop.byPerson || stop.reason !== null) ? stop : null;
+    const engineStopped = shownStop === null && rejectNote === null && story?.engineTimedOut === true;
+    const sendBack = shownStop === null && rejectNote === null ? story?.sendBackNote ?? null : null;
     return (
-      <div data-testid="failure-banner" data-kind="cancelled" data-cause={rejectNote !== null ? 'rejected' : engineStopped ? 'engine-timeout' : 'unattributed'} className="wk-session-run-story">
+      <div data-testid="failure-banner" data-kind="cancelled" data-cause={shownStop !== null ? 'stopped' : rejectNote !== null ? 'rejected' : engineStopped ? 'engine-timeout' : 'unattributed'} className="wk-session-run-story">
         {/* The status sentence already says "Cancelled"; the story says only WHY, when it is known. */}
         {engineStopped && <p className="wk-session-run-story-line">It was stopped automatically: a step ran past its time limit.</p>}
-        {rejectNote !== null && (
+        {shownStop !== null && (
+          <p className="wk-session-run-story-note">{shownStop.byPerson ? 'You stopped it' : 'It was stopped'}{shownStop.reason !== null ? <>: “{show(shownStop.reason)}”</> : '; no reason was given.'}</p>
+        )}
+        {shownStop === null && rejectNote !== null && (
           <p data-testid="failure-reject-note" className="wk-session-run-story-note">You rejected it: “{show(rejectNote)}”</p>
         )}
         {sendBack !== null && (
           <p data-testid="failure-send-back-note" className="wk-session-run-story-note">Your last send-back to the creator (acted on — not a rejection): “{show(sendBack)}”</p>
         )}
         {/* The door to the other stopped runs rides with a story; alone it is a stray link. */}
-        {navigate !== undefined && (engineStopped || rejectNote !== null || sendBack !== null) && <AllRunsLink navigate={navigate} filter="cancelled" />}
+        {navigate !== undefined && (shownStop !== null || engineStopped || rejectNote !== null || sendBack !== null) && <AllRunsLink navigate={navigate} filter="cancelled" />}
       </div>
     );
   }

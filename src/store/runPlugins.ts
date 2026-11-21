@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { create } from 'zustand';
 import { apiBase } from '../api/client.js';
 import { lastEditorsRead, listEditors, type RunPluginView } from '../api/editors.js';
+import type { EditorGrantsChangedFrame } from '../api/editorGrants-wire.js';
+import type { CoreEvent } from '../api/types.js';
 import { parsePanels } from '../board/runPluginPanels.js';
 import { bundleUrl } from '../editors/model.js';
 import { validPattern } from '../editors/runEvents.js';
@@ -79,6 +81,11 @@ const refresh = (): void => {
   pending = true;
   void listEditors().catch(() => undefined).finally(() => { pending = false; });
 };
+
+/** Grant changes bypass freshness; listEditors shares any registry read already in flight. */
+export function ingestEditorGrantsChanged(e: CoreEvent | EditorGrantsChangedFrame): void {
+  if (e.type === 'editorGrantsChanged') void listEditors().catch(() => undefined);
+}
 
 /** Keep a job open across installs made by a run or another tab, even without a registry event. */
 export function useRunPlugins(catalog = false): RunPlugin[] {

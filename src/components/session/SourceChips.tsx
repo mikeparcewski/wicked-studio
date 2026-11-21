@@ -25,6 +25,7 @@ export function SourceChips({ citations, runs }: {
 }): React.ReactElement | null {
   const showText = useDisplayText();
   const sources = sourcesOf(citations);
+  const [showAll, setShowAll] = useState(false);
   const [open, setOpenState] = useState<Passage | null>(null);
   // Only the newest request may land: a slow read never reopens a passage after Back, or
   // overwrites the chip clicked after it (codex).
@@ -70,7 +71,7 @@ export function SourceChips({ citations, runs }: {
   return (
     <div data-testid="session-sources" className="wk-sources">
       <span className="wk-sources-line">{line}:</span>
-      {sources.map((s) => (
+      {(showAll ? sources : sources.slice(0, 6)).map((s) => (
         <button
           key={s.key}
           ref={(el) => { if (el !== null) chipRefs.current.set(s.key, el); else chipRefs.current.delete(s.key); }}
@@ -85,6 +86,7 @@ export function SourceChips({ citations, runs }: {
           {s.label}
         </button>
       ))}
+      {!showAll && sources.length > 6 && <button type="button" data-testid="session-sources-more" className="wk-source-chip" aria-expanded={false} onClick={() => setShowAll(true)}>+{sources.length - 6} more</button>}
       {open !== null && (
         <div data-testid="session-passage" data-source={open.key} data-state={open.state} className="wk-passage">
           <p className="wk-passage-head">

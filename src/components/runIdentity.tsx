@@ -204,7 +204,7 @@ const TERMINAL: ReadonlySet<string> = new Set(['completed', 'failed', 'cancelled
 const NO_COST_TITLE = 'cost is not in the run record — wicked-crew#496 (2026-09-18) has not landed on this daemon yet';
 
 function formatCostUsd(usd: number): string {
-  return usd < 0.01 ? '<$0.01' : `$${usd.toFixed(2)}`;
+  return usd > 0 && usd < 0.01 ? '<$0.01' : `$${usd.toFixed(2)}`;
 }
 
 /** One rendered cost value — `title` carries the crew#496 note when cost is absent. */
@@ -217,7 +217,7 @@ export interface RunCostView {
  * Derives the cost display from the run record's optional-unknown cost fields
  * (wicked-crew#496, 2026-09-18). Three states:
  *  - `cost_usd` is a finite number → "$X.XX" with optional seat suffix
- *  - `cost_usd` is `null` → "unmetered"
+ *  - `cost_usd` is `null` → "not metered"
  *  - `cost_usd` absent/non-number → "cost not in run record" with crew#496 in title
  *
  * Read as optional-unknown (no api-types bump needed).
@@ -227,7 +227,7 @@ export function deriveRunCost(session: unknown): RunCostView {
     ? (session as Record<string, unknown>)
     : {} as Record<string, unknown>;
   const costUsd = s['cost_usd'];
-  if (costUsd === null) return { text: 'unmetered' };
+  if (costUsd === null) return { text: 'not metered' };
   if (typeof costUsd !== 'number' || !Number.isFinite(costUsd)) {
     return { text: 'cost not in run record', title: NO_COST_TITLE };
   }
@@ -235,17 +235,11 @@ export function deriveRunCost(session: unknown): RunCostView {
     ? (s['usage_seats_reported'] as unknown[]).filter((x): x is string => typeof x === 'string').join(', ')
     : '';
   const unmetered = s['usage_seats_unmetered'];
-  let suffix = '';
-  if (Array.isArray(unmetered)) {
-    const u = (unmetered as unknown[]).filter((x): x is string => typeof x === 'string').join(', ');
-    if (u) suffix = reported ? ` · ${reported} (${u} unmetered)` : ` (${u} unmetered)`;
-    else if (reported) suffix = ` · ${reported}`;
-  } else if (unmetered === true) {
-    suffix = reported ? ` · ${reported} (unmetered)` : ' (unmetered)';
-  } else if (reported) {
-    suffix = ` · ${reported}`;
+  const missing = Array.isArray(unmetered) ? unmetered.filter((x): x is string => typeof x === 'string').join(', ') : '';
+  if (missing !== '' || unmetered === true) {
+    return { text: `${formatCostUsd(costUsd)} partial (${missing !== '' ? missing : 'some seats'} not metered)` };
   }
-  return { text: `${formatCostUsd(costUsd)}${suffix}` };
+  return { text: `${formatCostUsd(costUsd)}${reported !== '' ? ` · ${reported}` : ''}` };
 }
 
 /**

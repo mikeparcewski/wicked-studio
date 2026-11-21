@@ -3754,12 +3754,14 @@
     {
       "testId": "composer-seat",
       "files": [
+        "src/components/session/ChatHelpers.tsx",
         "src/components/session/Composer.tsx"
       ]
     },
     {
       "testId": "composer-seats",
       "files": [
+        "src/components/session/ChatHelpers.tsx",
         "src/components/session/Composer.tsx"
       ]
     },
@@ -18965,6 +18967,12 @@
       ]
     },
     {
+      "testId": "run-tab-glance-stop-reason",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
       "testId": "run-tab-goto-question",
       "files": [
         "src/components/session/RunTab.tsx"
@@ -19062,6 +19070,12 @@
     },
     {
       "testId": "run-tab-stop-keep",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-stop-reason",
       "files": [
         "src/components/session/RunTab.tsx"
       ]
@@ -20161,6 +20175,12 @@
       ]
     },
     {
+      "testId": "session-proposal-after-delivery",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "session-proposal-ask",
       "files": [
         "src/components/session/ProposalCard.tsx"
@@ -20578,6 +20598,12 @@
       ]
     },
     {
+      "testId": "session-sources-more",
+      "files": [
+        "src/components/session/SourceChips.tsx"
+      ]
+    },
+    {
       "testId": "session-status",
       "files": [
         "src/board/objectActions.ts",
@@ -20617,6 +20643,12 @@
     },
     {
       "testId": "session-stop-keep",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-stop-reason",
       "files": [
         "src/components/session/SessionView.tsx"
       ]

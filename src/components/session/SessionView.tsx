@@ -1,3 +1,4 @@
+import { intentOf } from '../../board/problemIntent.js';
 import { useSilentStep } from '../../hooks/useSilentStep.js';
 import { silentWords } from '../../board/silentStep.js';
 import { useRunningFloor } from '../../hooks/useRunningFloor.js';
@@ -497,7 +498,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       out.unshift({ key: 'transport', at: 0, kind: 'transport', text: `Un-teamed: the team transport was unavailable${snap.reason !== null ? ` — ${snap.reason}` : ''}. The answer still comes; no reviewer or helpers this time.`, detail: [], tone: 'problem', ord: null });
     }
     if (askTeamError !== null) {
-      out.unshift({ key: 'team-error', at: 0, kind: 'transport', text: `Could not read the team's rows (${askTeamError}); showing the conversation without them.`, detail: [], tone: 'problem', ord: null, action: 'retry' });
+      out.unshift({ key: 'team-error', at: 0, kind: 'transport', text: 'Couldn\u2019t read the team\u2019s rows; the conversation shows without them.', detail: [askTeamError], tone: 'problem', ord: null, action: 'retry' });
     }
     return out;
   }, [askRows, askFold, askTeamError]);
@@ -711,7 +712,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     // is crew's scope briefing, never your words (askTitle; crew#823), so it never stands in.
     const transcriptLacksYou = conversation === 'closed' && !out.some((e) => e.kind === 'turn' && e.who === 'you');
     for (const v of mine) {
-      const problem = (v.session.problem ?? '').trim();
+      const problem = intentOf(v.session.problem ?? '').trim();
       if (problem !== '' && !isChatScopeProblem(problem) && (runChatIdOf(v) === null || transcriptLacksYou)) {
         out.push({ kind: 'turn', key: `kick:${v.session.id}`, at: launchedMs(v) - 1, who: 'you', text: problem, ok: true, turnId: null, kickoff: true, clock: launchedMs(v) > 0 ? launchedMs(v) : null });
       }
@@ -1002,7 +1003,14 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     && !(v.session.status === 'awaiting_human' && isAskTurnRun(v.session))).map((v) => v.session.id), [mine]);
   const stopping = useSheets((s) => liveRuns.length > 0 && liveRuns.every((id) => s.stopping[id] !== undefined));
   const [confirmStop, setConfirmStop] = useState(false);
+  const [stopReason, setStopReason] = useState('');
   const stopWords = liveRuns.length > 1 ? `Stop ${liveRuns.length} runs` : 'Stop run';
+  const confirmRunStop = (): void => {
+    setConfirmStop(false);
+    const reason = stopReason.trim();
+    if (reason !== '') stopRun(liveRuns, `“${title}”`, { reason });
+    else stopRun(liveRuns, `“${title}”`);
+  };
   useEffect(() => { setConfirmStop(false); }, [sessionId]);
   // A runs read still pending after 15 s (host load) is said, with Retry — never a silent skeleton.
   const [slow, setSlow] = useState(false);
@@ -1130,6 +1138,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     },
     runs: mine,
     started: entries.length > 0,
+    // A run launched in the chat (its kickoff) fixes the seats as a first message does.
+    chatHasPersonMessage: mine.length > 0 || entries.some((e) => e.kind === 'turn' && e.who === 'you'),
     navigate,
     // ux-tonight: a card started on this chat's composer files its job in the chat's project: the fresh mark before
     // the daemon knows the chat, then the scope crew answered with (codex r1 on #982).
@@ -1219,7 +1229,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
             data-testid="session-stop"
             disabled={stopping}
             title={stopping ? 'Stopping — Undo is under the header' : 'Stop this work — you confirm first, then 10 s to undo; what it did so far is kept'}
-            onClick={() => setConfirmStop(true)}
+            onClick={() => { setStopReason(''); setConfirmStop(true); }}
             className="wk-btn wk-btn--sm wk-stop-btn"
           >
             {stopping ? 'Stopping…' : stopWords}
@@ -1228,7 +1238,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
         {liveRuns.length > 0 && confirmStop && (
           <span data-testid="session-stop-confirm-row" role="group" aria-label={`${stopWords}?`} className="wk-session-stop-confirm">
             <span className="wk-session-grey">{`${stopWords}?`}</span>
-            <button type="button" data-testid="session-stop-confirm" autoFocus onClick={() => { setConfirmStop(false); stopRun(liveRuns, `“${title}”`); }} className="wk-btn wk-btn--sm wk-stop-btn wk-stop-btn--confirm">{stopWords}</button>
+            <label className="wk-stop-reason">Why? (optional, kept with the record)<input type="text" data-testid="session-stop-reason" value={stopReason} maxLength={2000} placeholder="One line is enough" onChange={(e) => setStopReason(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); confirmRunStop(); } }} /></label>
+            <button type="button" data-testid="session-stop-confirm" autoFocus onClick={confirmRunStop} className="wk-btn wk-btn--sm wk-stop-btn wk-stop-btn--confirm">{stopWords}</button>
             <button type="button" data-testid="session-stop-keep" onClick={() => setConfirmStop(false)} className="wk-btn wk-btn--quiet wk-btn--sm">Keep going</button>
           </span>
         )}

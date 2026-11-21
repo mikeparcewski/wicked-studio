@@ -152,7 +152,7 @@ function CappedCard(props: PluginCardProps & { editor: EditorView }): React.Reac
   );
 }
 
-function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants: grantsProp, declared }: PluginCardProps & { editor: EditorView }): React.ReactElement {
+function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants: grantsProp, regrant: regrantProp, declared }: PluginCardProps & { editor: EditorView }): React.ReactElement {
   const run = useRunHost();
   const frameBox = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<EditorHost | null>(null);
@@ -176,7 +176,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   /** An Ask pressed in full screen, run once the screen it needs (the drawer, or the card) has rendered (G24). */
   const [pendingAsk, setPendingAsk] = useState<ArtifactBinding | null>(null);
   const [, bump] = useState(0);
-  const loaded = useRef<{ src: string; grants: readonly PermissionId[] } | null>(null);
+  const loaded = useRef<{ src: string; grants: readonly PermissionId[]; regrant?: () => Promise<readonly PermissionId[]> } | null>(null);
   const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
 
@@ -247,7 +247,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       if (panel.tab.owner === 'run') panel.setTab(firstTabOf(panel.group));
       return;
     }
-    openGroup({ key: group, binding, editor, surfaces: decl, protocol, src: loaded.current.src, grants: loaded.current.grants, adapter });
+    openGroup({ key: group, binding, editor, surfaces: decl, protocol, ...loaded.current, adapter });
   }, [adapter, decl, group, binding, editor, protocol, openGroup]);
   const openOptionsRef = useRef(openOptions);
   /** Every host-approved Options opener (button, the plugin's accepted offer, the options-only catch) goes through the
@@ -277,7 +277,10 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       if (cancelled || frameBox.current === null) return;
       setNote(grantNote(decided));
       const src = srcProp ?? bundleUrl(apiBase(), editor.id, editor.version, editor.sha256);
-      loaded.current = { src, grants: decided.grants };
+      const regrant = grantsProp === undefined
+        ? async () => (await fetchGrants(editor.id, editor.version, editor.sha256, binding.projectId === '' ? null : binding.projectId)).grants
+        : regrantProp;
+      loaded.current = { src, grants: decided.grants, ...(regrant === undefined ? {} : { regrant }) };
       const bridge = adapter.mcpBridge?.();
       const startedFull = fullRef.current;
       const host = new EditorHost({
@@ -290,6 +293,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
         size: startedFull ? 'full' : 'inline',
         surface: startedFull ? 'full' : 'card',
         grants: decided.grants,
+        ...(regrant === undefined ? {} : { regrant }),
         theme: readThemeTokens(),
         prefs: { reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false, techDetails: false, locale: navigator.language },
         firstParty: editor.first_party,

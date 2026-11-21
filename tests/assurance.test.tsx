@@ -145,7 +145,7 @@ describe('the receipt model', () => {
     const units = [1, 2, 3].map((ord) => makeUnit({ id: `${RUN}:u${ord}`, session_id: RUN, ord, role: 'creator', status: 'done', stage: 'build', assigned_cli: 'claude' }));
     const ju = (ord: number) => ({ by: 'local (human)', at: 100 + ord, note: null });
     const carried = { by: 'local (human)', at: 50, note: 'flaky in untouched files',
-      floorOverride: { layer: 'repo_checks', resultId: `${RUN}:unit-1:attempt-1:repo_checks`, label: 'override carried from Build (unit 1), same tree', ord: 1, attempt: 1 } };
+      floorOverride: { layer: 'repo_checks', resultId: `${RUN}:unit-1:attempt-1:repo_checks`, label: 'override carried from Build (unit 1), same tree', ord: 1, attempt: 1, carriedFrom: `${RUN}:unit-1:attempt-1:repo_checks`, carriedFromOrd: 1 } };
     // Unit 3's record: the carried override (also on its logged receipt) AND the operator's later judgment of its gate.
     (units[2] as unknown as { assurance: unknown }).assurance = wire({ ran: ['repo_checks', 'operator_judge'], attempt: 0, operatorJudges: [carried, ju(3)] });
     const view = makeView({ id: RUN, status: 'awaiting_human', assurance: { mode: 'full', required: ['judge'] } } as never, units);
@@ -352,7 +352,7 @@ describe('the receipt renders', () => {
       expect(statusP.nextElementSibling).toBe(labels);
       expect(qeLabel.textContent).toBe('QE acceptance: off on this computer (Settings)');
       expect(qeLabel.getAttribute('title')).toBe(offReason);
-      expect(statusP.textContent).toBe('Finished · kept on this machine, not pushed · 1 of 2 done');
+      expect(statusP.textContent).toBe('Finished · kept on this machine, not pushed');
       cleanup();
     }
   });

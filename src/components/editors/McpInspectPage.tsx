@@ -183,6 +183,13 @@ export function McpInspectPage({ navigate, search }: { navigate: (p: string) => 
     return () => { alive = false; };
   }, [editor]);
   const granted = grants?.includes('mcp.session') === true;
+  // (crew#1423) The card's host re-reads the same set after a grant change, and this page's notice follows it.
+  const regrant = useCallback(async (): Promise<readonly PermissionId[]> => {
+    if (editor === null) return [];
+    const d = await fetchGrants(editor.id, editor.version, editor.sha256, null);
+    setGrants(d.grants);
+    return d.grants;
+  }, [editor]);
 
   // ── the session ─────────────────────────────────────────────────────────────────────────
   const pushState = useCallback((next: Live | null) => {
@@ -627,7 +634,7 @@ export function McpInspectPage({ navigate, search }: { navigate: (p: string) => 
         </p>
         <div className="wk-made-open-row">
           <div className="wk-made-open-card">
-            {grants !== null && <PluginCard binding={binding} editor={editor} adapter={adapter} grants={grants} />}
+            {grants !== null && <PluginCard binding={binding} editor={editor} adapter={adapter} grants={grants} regrant={regrant} />}
           </div>
           {grouped && <HostPanel />}
         </div>

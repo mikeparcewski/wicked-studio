@@ -221,7 +221,7 @@ with sync_playwright() as p:
           why=why, sure=sure, undo_headline=u_head, undo_preview=u_prev, leaks=leaks, tech_hidden=tech_hidden,
           posts=len(posts(DELIVER)))
 
-    # ── 6. #445: delivered = Deliver done, 8 of 8 ─────────────────────────────────
+    # ── 6. #445: delivered = Deliver done, 8 of 8 (the count is said once, on the chain: #709) ──
     page.goto(session_url(DONE), wait_until="domcontentloaded")
     try:
         page.wait_for_function(
@@ -232,7 +232,7 @@ with sync_playwright() as p:
     d = page.evaluate(CHAIN, DONE)
     page.screenshot(path=str(SHOTS / "desk-reel-words-delivered.png"))
     check("445-delivered-8-of-8", d["steps"][-1] == ["deliver", "done"] and d["labels"][-1] == "Deliver"
-          and d["sentence"] == "8 of 8 done" and d["status"] == "Finished · branch pushed · 8 of 8 done",
+          and d["sentence"] == "8 of 8 done" and d["status"] == "Finished · branch pushed",
           chain=d)
 
     hs = page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth")

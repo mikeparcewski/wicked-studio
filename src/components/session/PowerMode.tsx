@@ -1,4 +1,5 @@
 import { useDisplayText } from '../../hooks/useHomePath.js';
+import { durableFloorOverrides } from '../../board/assuranceModel.js';
 import { useEffect, useId, useRef, useState } from 'react';
 import { CircleCheck, CircleX, FileText, Flag, GitCommitHorizontal, MessageCircle, Pencil, ShieldCheck, Terminal, TrendingDown, TrendingUp, Zap } from 'lucide-react';
 import { ApiError } from '../../api/errors.js';
@@ -272,14 +273,15 @@ function Mark({ testId, tone, icon, head, tail, at, extra = {} }: {
 }
 
 /** The hand-off as it ran: one row per step (checks, the distinct reviewer, QE, compliance), each with its status. */
-export function HandoffCard({ round, steps, rigor }: { round: number; steps: readonly HandoffStep[]; rigor: Rigor | null }): React.ReactElement {
+export function HandoffCard({ round, steps, rigor, overrides = [] }: { round: number; steps: readonly HandoffStep[]; rigor: Rigor | null; overrides?: ReturnType<typeof durableFloorOverrides> }): React.ReactElement {
   const showText = useDisplayText();
   const roster = useRoster();
   const name = (cli: string): string => seatResponder(cli, roster).name;
   return (
     <div role="list" aria-label="Hand-off results" data-testid="power-handoff" data-round={round} className="pm-handoff">
       {steps.map((s) => {
-        const w = handoffRow(s, rigor, name);
+        const over = s.step === 'checks' && s.status === 'failed' && s.ord !== null ? overrides.find((o) => o.floorOverride?.ord === s.ord)?.floorOverride : undefined;
+        const w = handoffRow(s, rigor, name, over === undefined ? false : over.carriedFrom !== null ? 'carried' : true);
         return (
           <div key={s.step} role="listitem" data-testid="power-handoff-row" data-step={s.step} data-status={s.status} className="pm-hrow">
             <span aria-hidden className={`pm-hrow-dot${w.initial === null ? ' pm-hrow-dot--icon' : ''}`}>{w.initial ?? (s.step === 'checks' ? <Terminal /> : <ShieldCheck />)}</span>
@@ -354,7 +356,7 @@ export function PowerThread({ view, power, items, part }: { view: SessionView; p
             return (
               <div key={it.key} data-testid="power-handoff-block" data-rigor={applied ?? ''} style={{ display: 'contents' }}>
                 <p className="wk-chat-divider" data-testid="power-handoff-divider">Hand-off{it.round > 1 ? ` · round ${it.round}` : ''}{it.at !== null ? ` · ${clockTime(it.at)}` : ''}</p>
-                <HandoffCard round={it.round} steps={steps} rigor={applied} />
+                <HandoffCard round={it.round} steps={steps} rigor={applied} overrides={durableFloorOverrides(view)} />
               </div>
             );
           }
