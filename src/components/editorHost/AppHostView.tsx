@@ -315,6 +315,7 @@ export function AppHostView({ editor, version, sha, app: slug, sample, initialMo
         title: `App: ${loaded.name}, version ${loaded.head.version}`,
         size: 'full', surface: 'full',
         grants: decided.grants,
+        regrant: async () => (await fetchGrants(editor, version, sha, null)).grants,
         theme: readThemeTokens(),
         prefs: { reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false, techDetails: false, locale: navigator.language },
         firstParty: editor.startsWith('wicked-'),

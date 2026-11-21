@@ -150,6 +150,7 @@ function ArtifactHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'; nav
         title: `${page.title}: ${adapter.artifact().title}, version ${adapter.artifact().version}`,
         size,
         grants: decided.grants,
+        ...(page.grants === null ? { regrant: async () => (await fetchGrants(page.editor, page.version, page.sha, null)).grants } : {}),
         theme: readThemeTokens(),
         prefs: { reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false, techDetails: false, locale: navigator.language },
         firstParty: page.firstParty,
