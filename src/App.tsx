@@ -247,7 +247,7 @@ export function App(): React.ReactElement {
     }
     if (tab === 'repositories' && project === null) {
       return <div className="wk-desk2-repos flex-1 overflow-hidden">
-        <RepositoriesPanel onSelectRun={selectRun} autoShowRegister={u.pathname === '/repos/new'} navigate={navigate} ambientProject={ambientProjectId(u.pathname, hs)} />
+        <RepositoriesPanel onSelectRun={selectRun} autoShowRegister={u.pathname === '/repos/new'} navigate={navigate} ambientProject={ambientProjectId(u.pathname, hs)} liveRuns={runsLoaded ? runs : undefined} />
       </div>;
     }
     if (tab === 'evaluate') {
