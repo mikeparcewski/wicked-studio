@@ -34,6 +34,11 @@ afterEach(() => vi.useRealTimers());
 describe('isDocRun — the seams\' write-root grammars', () => {
   it('matches the draft, ask, edit and demo directories named by this doc, and nothing else', () => {
     expect(isDocRun(run('d', `${STATE}/interactive-drafts/${DOC}`), DOC)).toBe(true);
+    // crew#1280: a draft's folder is keyed by mount and doc.
+    expect(isDocRun(run('d2', `${STATE}/interactive-drafts/_unfiled__${DOC}`), DOC)).toBe(true);
+    expect(isDocRun(run('d3', `${STATE}/interactive-drafts/proj_a__${DOC}`), DOC)).toBe(true);
+    expect(isDocRun(run('d4', `${STATE}/interactive-drafts/proj_a__${DOC}-2`), DOC)).toBe(false);
+    expect(isDocRun(run('d5', `${STATE}/interactive-drafts/__${DOC}`), DOC)).toBe(false);
     expect(isDocRun(run('c', `${STATE}/interactive-chats/${DOC}-m-dmsg-7`), DOC)).toBe(true);
     expect(isDocRun(run('c2', `${STATE}/interactive-chats/${DOC}-e-4412`), DOC)).toBe(true);
     expect(isDocRun(run('e', `${STATE}/interactive-edits/${DOC}-v3`), DOC)).toBe(true);
