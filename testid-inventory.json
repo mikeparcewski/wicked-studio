@@ -851,7 +851,6 @@
     {
       "testId": "apps-card",
       "files": [
-        "src/components/apps/AppCard.tsx",
         "src/components/editorHost/AppHostView.tsx"
       ]
     },
@@ -1248,12 +1247,6 @@
       ]
     },
     {
-      "testId": "apps-preview-limit",
-      "files": [
-        "src/components/apps/AppsPage.tsx"
-      ]
-    },
-    {
       "testId": "apps-publish",
       "files": [
         "src/components/apps/PublishSheet.tsx"
@@ -1437,6 +1430,12 @@
       "testId": "apps-status",
       "files": [
         "src/components/editorHost/AppHostView.tsx"
+      ]
+    },
+    {
+      "testId": "apps-tile",
+      "files": [
+        "src/components/apps/AppCard.tsx"
       ]
     },
     {

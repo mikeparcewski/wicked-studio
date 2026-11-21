@@ -495,7 +495,7 @@ def main() -> None:
         dash = ctx.new_page()
         dash.on("pageerror", lambda e: errors.append(str(e)))
         dash.goto(f"{origin}/apps")
-        dash.wait_for_selector('[data-testid="apps-card"] >> nth=1', timeout=20_000)
+        dash.wait_for_selector('[data-testid="apps-tile"] >> nth=1', timeout=20_000)
         dash.wait_for_timeout(2_000)  # the tiles' frames load and draw
         names = dash.eval_on_selector_all('[data-testid="apps-card-name"]', "els => els.map(e => e.textContent)")
         nav_current = dash.get_attribute('[data-testid="nav-apps"]', "aria-current")
@@ -507,7 +507,7 @@ def main() -> None:
         shot(dash, "5-dashboard")
         # K5: a card on screen reads its first page's KPI queries (live numbers) and nothing else: the previews read
         # nothing (they draw the last render's snapshot, and this page has none). Fixture desk's one KPI shows live.
-        dash.wait_for_selector('[data-testid="apps-card"][data-slug="fixture-app"] [data-testid="apps-card-kpi-value"]', timeout=20_000)
+        dash.wait_for_selector('[data-testid="apps-tile"][data-slug="fixture-app"] [data-testid="apps-card-kpi-value"]', timeout=20_000)
         want = sorted(f"{slug_}:{c['data']['query']}" for slug_, spec_ in (("fixture-app", apps_fixture.SPEC_A), ("other-app", apps_fixture.SPEC_B))
                       for c in [x for x in spec_["pages"][0]["components"] if x["type"] == "kpi"][:3])
         got_reads = sorted(f"{c['path'].split('/')[4]}:{(c.get('body') or {}).get('query')}" for c in calls(origin)[n0:] if c["method"] == "POST" and c["path"].endswith("/query"))
@@ -520,12 +520,12 @@ def main() -> None:
             narrow = browser.new_context(viewport={"width": w, "height": 800})
             np_ = narrow.new_page()
             np_.goto(f"{origin}/apps")
-            np_.wait_for_selector('[data-testid="apps-card"] >> nth=1', timeout=20_000)
+            np_.wait_for_selector('[data-testid="apps-tile"] >> nth=1', timeout=20_000)
             got = cols(np_)
             narrow.close()
             check(f"dashboard_{w}", got == want, columns=got)
         # Share, not published (other-app), from its card: plain words, Publish disabled, a studio link labelled as one
-        dash.locator('[data-testid="apps-card"][data-slug="other-app"] [data-testid="apps-card-share"]').click()
+        dash.locator('[data-testid="apps-tile"][data-slug="other-app"] [data-testid="apps-card-share"]').click()
         dash.wait_for_selector('[data-testid="apps-share"][data-published="false"]')
         unpub = {"publish_disabled": dash.is_disabled('[data-testid="apps-share-publish"]'), "studio": dash.input_value('[data-testid="apps-share-studio-field"]'),
                  "title": dash.text_content("#wk-share-title"), "link": dash.locator('[data-testid="apps-share-link-field"]').count()}
@@ -533,7 +533,7 @@ def main() -> None:
         check("share_unpublished", unpub["publish_disabled"] and unpub["studio"] == f"{origin}/apps/other-app" and unpub["link"] == 0
               and unpub["title"] == "Share “<script>window.__pwned=5</script> Other app”", **unpub)
         # A card opens its app (Preview), and its Share shows the published copy crew reports
-        dash.locator('[data-testid="apps-card"][data-slug="fixture-app"] [data-testid="apps-card-open"]').click()
+        dash.locator('[data-testid="apps-tile"][data-slug="fixture-app"] [data-testid="apps-card-open"]').click()
         dash.wait_for_url(f"{origin}/apps/fixture-app")
         af = app_frame(dash)
         af.wait_for_selector(".wk-table tbody tr", timeout=20_000)
@@ -592,6 +592,53 @@ def main() -> None:
               and top0 == top1 and e3 - e2 == 1 and landed_label == "Ping now"
               and ef.evaluate("() => window.__pwned === undefined"), hint=hint, landed=e1 - e0, after_escape_edits=e2 - e1, title=shown_title, imgs=imgs,
               frame_top=[top0, top1], label_edits=e3 - e2, label=landed_label)
+        # Native IME: a theme redraw must defer moving the composing field until its word is committed.
+        if BROWSER == "chromium":
+            ime_edits0 = count(origin, "POST", "/edits")
+            ime_head = get_json(f"{origin}/api/v1/apps/fixture-app")["app"]["head"]["version"]
+            ef.dblclick('[data-component="tickets"] .wk-cell-title')
+            ime_field = ef.wait_for_selector('[data-testid="apps-inline"]')
+            ime_field.fill("")
+            ef.evaluate("""() => {
+                window.__imeField = document.querySelector('[data-testid="apps-inline"]');
+                window.__imeState = { composing: false, theme: false, starts: 0, ends: 0 };
+                window.__imeField.addEventListener('compositionstart', () => {
+                    window.__imeState.composing = true; window.__imeState.starts += 1;
+                });
+                window.__imeField.addEventListener('compositionend', () => {
+                    window.__imeState.composing = false; window.__imeState.ends += 1;
+                });
+                window.__k4port.addEventListener('message', e => {
+                    if (e.data?.type === 'host.theme') window.__imeState.theme = true;
+                });
+            }""")
+            cdp = ctx.new_cdp_session(dash)
+            cdp.send("Input.imeSetComposition", {"text": "にほん", "selectionStart": 3, "selectionEnd": 3})
+            ef.wait_for_function("() => window.__imeState.composing && window.__imeField.value === 'にほん'")
+            old_theme = dash.evaluate("() => document.documentElement.getAttribute('data-theme')")
+            dash.evaluate("() => document.documentElement.setAttribute('data-theme', document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light')")
+            # Observe the host event as proof the runtime received the redraw while native composition was open.
+            ef.wait_for_function("() => window.__imeState.theme")
+            during = ef.evaluate("""() => ({ ...window.__imeState,
+                same: window.__imeField === document.querySelector('[data-testid="apps-inline"]'),
+                focused: document.activeElement === window.__imeField, value: window.__imeField.value })""")
+            cdp.send("Input.insertText", {"text": "日本"})
+            ef.wait_for_function("() => !window.__imeState.composing && window.__imeField.value === '日本'")
+            ime_field.press("Enter")
+            dash.wait_for_selector(f'[data-testid="apps-version"]:has-text("v{ime_head + 1}")')
+            dash.wait_for_timeout(1_600)
+            ime_posts = [c for c in calls(origin) if c["method"] == "POST" and c["path"].endswith("/edits")][ime_edits0:]
+            ime_app = get_json(f"{origin}/api/v1/apps/fixture-app")["app"]
+            ime_title = next(c.get("title") for c in ime_app["spec"]["pages"][0]["components"] if c["id"] == "tickets")
+            ended = ef.evaluate("() => window.__imeState.ends")
+            check("ime_redraw", during["same"] and during["focused"] and during["composing"] and during["starts"] == 1
+                  and during["value"] == "にほん" and ended == 1 and len(ime_posts) == 1 and ime_posts[0]["status"] == 200
+                  and ime_app["head"]["version"] == ime_head + 1 and ime_title == "日本",
+                  during=during, ends=ended, edits=len(ime_posts), title=ime_title, head=ime_app["head"]["version"])
+            dash.evaluate("t => t === null ? document.documentElement.removeAttribute('data-theme') : document.documentElement.setAttribute('data-theme', t)", old_theme)
+            cdp.detach()
+        else:
+            print(f"SKIP ime_redraw: native CDP IME composition requires chromium ({BROWSER})")
         dash.close()
 
         # 9c. two touch taps on a Link's label open it in place in every engine (none fires dblclick for them: codex r9)

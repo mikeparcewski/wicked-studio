@@ -509,14 +509,14 @@ describe('the dashboard\'s live numbers', () => {
     });
     render(<AppsPage navigate={vi.fn()} />);
     await waitFor(() => expect(screen.getAllByTestId('apps-card-kpi-value').length).toBeGreaterThan(0), { timeout: 4000 });
-    const desk = screen.getAllByTestId('apps-card').find((c) => c.getAttribute('data-slug') === 'desk')!;
+    const desk = screen.getAllByTestId('apps-tile').find((c) => c.getAttribute('data-slug') === 'desk')!;
     const values = [...desk.querySelectorAll('[data-testid="apps-card-kpi-value"]')].map((d) => d.textContent ?? '');
     expect(values).toHaveLength(3);
     expect(values[0]).toMatch(/^5[,.\s ]?100$/u);
     expect(values.every((v) => v !== '—')).toBe(true);
     expect(desk.querySelector('[data-testid="apps-card-updated"]')!.textContent).toMatch(/^updated \d+s ago$/u);
     await waitFor(() => expect(screen.getByTestId('apps-card-code').textContent).toBe('not_accepted'), { timeout: 4000 });
-    const ops = screen.getAllByTestId('apps-card').find((c) => c.getAttribute('data-slug') === 'ops')!;
+    const ops = screen.getAllByTestId('apps-tile').find((c) => c.getAttribute('data-slug') === 'ops')!;
     expect(ops.querySelectorAll('[data-testid="apps-card-kpi-value"]')).toHaveLength(0);
     // Every read went through crew's query route with the app's version, and the new-app chat is offered.
     expect(calls.filter((c) => c.path.endsWith('/query')).every((c) => (c.body as { version?: unknown }).version === 3)).toBe(true);
