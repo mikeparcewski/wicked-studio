@@ -218,6 +218,23 @@ describe('late decision capture', () => {
     expect(decisionReads).toBe(2);
   });
 
+  it('a replayed chat of 10 settled turns makes at most 2 decision reads, again after a remount', async () => {
+    const messages = Array.from({ length: 10 }, (_, i) => [
+      { at: T0 + i * 10_000, turnId: `old-${i}`, kind: 'user', seats: ['claude'], text: `question ${i}` },
+      { at: T0 + i * 10_000 + 1000, turnId: `old-${i}`, kind: 'seat', cliKey: 'claude', ok: true, usage: null, text: `answer ${i}` },
+    ]).flat();
+    chatBody = { ...chatBody, messages };
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const first = page();
+    await screen.findByText('answer 9');
+    await act(async () => { await vi.advanceTimersByTimeAsync(16000); });
+    first.unmount();
+    page();
+    await screen.findByText('answer 9');
+    await act(async () => { await vi.advanceTimersByTimeAsync(16000); });
+    expect(decisionReads).toBeLessThanOrEqual(2);
+  });
+
   it('re-reads decisions on reconnect for the chat on screen without a transcript decision record', async () => {
     page();
     await screen.findByText(/greet\(\) does not trim its input/);

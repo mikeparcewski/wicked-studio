@@ -48,7 +48,7 @@ function workingStepWord(key: string): string {
   return stepLabelOf(key.replace(/#\d+$/, ''));
 }
 import type { DecisionView } from '../../api/decisions.js';
-import { turnKey, useDecisionsStore } from '../../store/decisions.js';
+import { DECISION_READ_DELAYS, decisionChecks, turnKey, useDecisionsStore } from '../../store/decisions.js';
 import { DecisionLine } from '../decisions/DecisionLine.js';
 import { TurnConsidered } from '../decisions/ConsideredLine.js';
 import { collapseArtifacts, paneOpen, useArtifactSizes } from '../../store/artifactSizes.js';
@@ -789,42 +789,65 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
 
   const decisionsMode = useDecisionsStore((s) => s.mode);
   const decisionsByTurn = useDecisionsStore((s) => s.byTurn);
-  const decisionChecks = useRef(new Map<string, { at: number | null; reads: number }>());
-  useEffect(() => { decisionChecks.current.clear(); }, [chatId]);
+  // Turns this mount saw happen: unanswered, answering, or a reply that came in as a live frame. Only those settle
+  // here, so only those wait for the recorder. A replayed past turn settled before the page read it; its record came
+  // with the transcript (and the one read above).
+  const liveDecisionTurns = useRef(new Set<string>());
+  useEffect(() => { liveDecisionTurns.current.clear(); }, [chatId]);
   useEffect(() => {
     if (chatId === null || decisionsMode !== 'on') return;
     const operators = new Set<string>();
     const pending = new Set<string>();
+    const replied = new Set<string>();
     for (const e of entries) {
       if (e.kind !== 'turn' || e.turnId === null) continue;
+      if (e.key.startsWith('live:')) liveDecisionTurns.current.add(turnKey(chatId, e.turnId));
       if (e.who === 'you') operators.add(e.turnId);
-      else if (e.pending === true) pending.add(e.turnId);
+      else {
+        replied.add(e.turnId);
+        if (e.pending === true) pending.add(e.turnId);
+      }
+    }
+    for (const turnId of operators) {
+      if (pending.has(turnId) || !replied.has(turnId)) liveDecisionTurns.current.add(turnKey(chatId, turnId));
     }
     const settled = new Set<string>();
     for (const e of entries) {
       if (e.kind !== 'turn' || e.who === 'you' || e.pending === true || e.turnId === null || !operators.has(e.turnId) || pending.has(e.turnId)) continue;
       const key = turnKey(chatId, e.turnId);
-      settled.add(key);
+      if (liveDecisionTurns.current.has(key)) settled.add(key);
     }
-    for (const [key, check] of decisionChecks.current) {
-      if (!settled.has(key)) check.at = null;
+    for (const [key, check] of decisionChecks) {
+      if (key.startsWith(turnKey(chatId, '')) && !settled.has(key)) check.at = null;
     }
-    // The recorder runs after the replies. Keep both deadlines through transcript re-reads.
-    const timers: ReturnType<typeof setTimeout>[] = [];
+    // The recorder runs after the replies. Keep both deadlines through transcript re-reads and remounts; turns that
+    // settled together share one read per deadline.
+    const now = Date.now();
+    const due = new Map<number, [key: string, stage: number][]>();
     for (const key of settled) {
       if ((decisionsByTurn[key]?.length ?? 0) > 0) continue;
-      const check = decisionChecks.current.get(key) ?? { at: null, reads: 0 };
-      const at = check.at ?? Date.now();
+      const check = decisionChecks.get(key) ?? { at: null, reads: 0 };
+      const at = check.at ?? now;
       check.at = at;
-      decisionChecks.current.set(key, check);
-      for (const [i, delay] of [2000, 8000].entries()) {
+      decisionChecks.set(key, check);
+      for (const [i, delay] of DECISION_READ_DELAYS.entries()) {
         if (i < check.reads) continue;
-        timers.push(setTimeout(() => {
-          check.reads = i + 1;
-          const store = useDecisionsStore.getState();
-          if (store.mode === 'on' && (store.byTurn[key]?.length ?? 0) === 0) void store.syncChat(chatId, { force: true });
-        }, Math.max(0, at + delay - Date.now())));
+        // A deadline already past (a remount after it) is due now, with the others past it.
+        const when = Math.max(at + delay, now);
+        due.set(when, [...(due.get(when) ?? []), [key, i]]);
       }
+    }
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    for (const [when, owed] of due) {
+      timers.push(setTimeout(() => {
+        const store = useDecisionsStore.getState();
+        const waiting = owed.some(([key]) => (store.byTurn[key]?.length ?? 0) === 0);
+        for (const [key, stage] of owed) {
+          const check = decisionChecks.get(key);
+          if (check !== undefined) check.reads = Math.max(check.reads, stage + 1);
+        }
+        if (store.mode === 'on' && waiting) void store.syncChat(chatId, { force: true });
+      }, Math.max(0, when - Date.now())));
     }
     return () => { for (const timer of timers) clearTimeout(timer); };
   }, [chatId, entries, decisionsMode, decisionsByTurn]);
