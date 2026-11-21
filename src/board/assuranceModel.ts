@@ -1,6 +1,6 @@
 import { actorWords } from './actorWords.js';
 import type { CoreEvent, RuleCouncilRecord, RuleCouncilVote, RulePosition, RuleVerdictOrigin, RuleVerdictStatus, SessionView, WorkUnit } from '../api/types.js';
-import { floorOverrideOf, type FloorOverrideView } from './floorOverride.js';
+import { floorOverrideOf, isToolCheckOverride, type FloorOverrideView } from './floorOverride.js';
 import { isCommandPath } from './responder.js';
 
 /**
@@ -856,6 +856,16 @@ function seatNames(list: string | null): string | null {
 }
 
 /** `passed`: the decision the receipt is for passed (`true`), did not (`false`), or is unknown (`null`). */
+/**
+ * (wicked-core#1318) Nothing but the operator's judgment ran on this receipt (a failed tool check counted at triage, a
+ * judge-unavailable judgment): no check is claimed. A repository-checks floor override is not this: it stays a floor.
+ */
+export function operatorOnly(r: AssuranceReceipt): boolean {
+  const judges = r.operatorJudges ?? [];
+  return r.ran.length > 0 && r.ran.every((i) => i === 'operator_judge') && judges.length > 0
+    && judges.every((j) => j.floorOverride === undefined || isToolCheckOverride(j.floorOverride));
+}
+
 export function receiptWords(r: AssuranceReceipt, passed: boolean | null = null): ReceiptWords {
   const kind = assuranceKind(r);
   const list = (xs: readonly string[]): string => (xs.length === 0 ? 'nothing' : xs.map(instrumentWord).join(', '));
@@ -876,9 +886,12 @@ export function receiptWords(r: AssuranceReceipt, passed: boolean | null = null)
   const ownJudges = (r.judge ?? '').split(', ').filter((j) => j !== '' && !fallbackSeats.includes(j) && !j.startsWith('operator:'));
   if (ownJudges.length > 0) seats.push(`judged by ${ownJudges.join(', ')}`);
   // (api-types 0.135.0) A floor the operator overrode is said as such — the engine's label — never as a judge.
-  const overriders = [...new Set((r.operatorJudges ?? []).filter((j) => j.floorOverride !== undefined).map((j) => actorWords(j.by)))];
+  const overriders = [...new Set((r.operatorJudges ?? []).filter((j) => j.floorOverride !== undefined && !isToolCheckOverride(j.floorOverride)).map((j) => actorWords(j.by)))];
+  // wicked-core#1318: a tool check the operator overrode is said in its own label.
+  const toolCheckers = [...new Set((r.operatorJudges ?? []).filter((j) => isToolCheckOverride(j.floorOverride)).map((j) => actorWords(j.by)))];
   const operators = [...new Set((r.operatorJudges ?? []).filter((j) => j.floorOverride === undefined).map((j) => actorWords(j.by)))];
   if (overriders.length > 0) seats.push(`floor overridden by operator (${overriders.join(', ')})`);
+  if (toolCheckers.length > 0) seats.push(`tool check overridden by operator (${toolCheckers.join(', ')})`);
   if (operators.length > 0) seats.push(`judged by operator (${operators.join(', ')})`);
   const sep = separationWords(r);
   const named = seats.length === 0 ? null : `${seats.join(' · ')}${sep !== null ? ` (${sep})` : ''}`;
@@ -891,7 +904,8 @@ export function receiptWords(r: AssuranceReceipt, passed: boolean | null = null)
   if (r.attempt > 0) where.push(`attempt ${r.attempt}`);
   return {
     kind,
-    label: (passed === true ? ACCEPTED_LABEL : CHECKED_LABEL)[kind],
+    label: kind === 'floor-only' && operatorOnly(r) ? (passed === true ? 'Accepted on the operator’s judgment' : 'Judged by the operator')
+      : (passed === true ? ACCEPTED_LABEL : CHECKED_LABEL)[kind],
     reduced: r.mode === 'reduced',
     required: `required: ${list(r.required)}`,
     ran: `ran: ${list(r.ran)}`,

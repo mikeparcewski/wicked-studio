@@ -49,7 +49,7 @@ import { engineNamesFloorOverride, FLOOR_OVERRIDE_ACTION, FLOOR_OVERRIDE_CONSEQU
 import { offersSkipQeHere, skipQeAtDelivery, SKIP_QE_ACTION, SKIP_QE_GATE_TITLE, SKIP_QE_KEY, SKIP_QE_LABEL } from './qeSkip.js';
 import { FACE_MAX, failingOnFace, failingSplit, standingFloor, type FailingOnFace, type FailingSplit } from './failingChecks.js';
 import { deliverLift } from '../components/deliverLiftModel.js';
-import { choiceTokens, contractChoices, type GateAction, type NotePolicy } from './gateContract.js';
+import { choiceTokens, contractChoices, type GateAction, type GateContext, type NotePolicy } from './gateContract.js';
 
 /**
  * SESSION GATE ROW MODEL (S15e): pure classification and choice set for the session thread's
@@ -82,6 +82,8 @@ export interface GateRowChoice {
   /** (DES-RULE-CHECK-001) The unchecked steering rules this choice skips: the note is each one's reason
    *  (`skipRules`), never an `amend`. */
   skipRuleIds?: string[];
+  /** A noted approve lands and records these rules as skipped; the wire stays approve + amend. */
+  landSkipsRules?: string[];
   /** (e2e-1105 CJ9) The note field's placeholder when this choice asks for a particular one. */
   notePlaceholder?: string;
   /** Hover text explaining the consequence of this choice. */
@@ -174,6 +176,8 @@ export function consentChoicesOf(gate: OpenGate, events: readonly CoreEvent[] | 
 
 export interface GateRowModel {
   reason: SessionGateReason;
+  /** Finding ids for the team dispute on this unit. */
+  disputeIds?: string[];
   question: string;
   /** First four inline choices. */
   choices: readonly GateRowChoice[];
@@ -492,7 +496,13 @@ export function sessionGateChoices(input: SessionGateInput): GateRowModel | null
   if (base === null) return null;
   const model = withDepth(base, input);
   if (input.actions === undefined) return model;
-  return CONTRACT_EXEMPT.has(model.reason) ? withListed(model, input.actions, input.roster ?? null) : withContract(model, input.actions, input.roster ?? null);
+  const ctx = gateContextOf(input.gate, input.events);
+  return CONTRACT_EXEMPT.has(model.reason) ? withListed(model, input.actions, input.roster ?? null, ctx) : withContract(model, input.actions, input.roster ?? null, ctx);
+}
+
+/** The gate's kind for its listed answers' words: the read's own, else its pause frame's. */
+function gateContextOf(gate: OpenGate, events: SessionGateInput['events']): GateContext {
+  return { gateKind: gate.gateKind ?? (events === null || events === undefined ? null : gateFrameFor(events, gate.ord)?.gateKind ?? null) };
 }
 
 /**
@@ -500,7 +510,7 @@ export function sessionGateChoices(input: SessionGateInput): GateRowModel | null
  * labels; free text's Send) keeps drawing them, but only the ones the engine lists now: a control whose answer is not
  * on the list (a consent card's Approve or Decline when only Reject is listed) is not drawn.
  */
-function withListed(model: GateRowModel, actions: readonly GateAction[], roster: readonly RosterSeat[] | null): GateRowModel {
+function withListed(model: GateRowModel, actions: readonly GateAction[], roster: readonly RosterSeat[] | null, ctx: GateContext = {}): GateRowModel {
   const listed = new Set(actions.map((a) => a.action));
   const keep = (c: GateRowChoice): boolean => listed.has(choiceTokens([c])[0]!);
   const listedNote = (c: GateRowChoice): GateRowChoice => {
@@ -513,7 +523,7 @@ function withListed(model: GateRowModel, actions: readonly GateAction[], roster:
   // gate's Reject) gets the contract's own control, so the list is drawn whole.
   const drawn = new Set(choiceTokens([...choices, ...overflow]));
   const label = (cli: string): string => roster?.find((r) => r.key === cli)?.display_name ?? cli;
-  const extra = contractChoices(actions.filter((a) => !drawn.has(a.action)), label);
+  const extra = contractChoices(actions.filter((a) => !drawn.has(a.action)), label, ctx);
   const added = [...extra.choices, ...extra.overflow];
   const rec = model.recommended !== null ? model.choices[model.recommended] : undefined;
   // The refusal stays last (the card's convention), the rest in the template's order.
@@ -532,7 +542,7 @@ export function listedOnlyChoices(gate: OpenGate, actions: readonly GateAction[]
   return withContract({
     reason: 'unknown', question: gate.prompt, choices: [], overflow: [], noteDefault: '', recommended: null,
     detailItems: [shownPrompt(gate.prompt)], consequence: null, source: null, failing: [], reviewedOrd: null,
-  }, actions, roster);
+  }, actions, roster, { gateKind: gate.gateKind ?? null });
 }
 
 /** Rows whose answers are the payload's own (a consent plan's choices, free text): drawn by their renderer, as before. */
@@ -545,9 +555,9 @@ const CONTRACT_EXEMPT: ReadonlySet<SessionGateReason> = new Set(['consent', 'fre
  * rewind ("Rerun from <step>") is a send-back, so it stays only where the list takes one; seats shown as withheld are
  * never ones the list offers; and the "isn't offered" lines are the template's inference, so they go with it.
  */
-function withContract(model: GateRowModel, actions: readonly GateAction[], roster: readonly RosterSeat[] | null): GateRowModel {
+function withContract(model: GateRowModel, actions: readonly GateAction[], roster: readonly RosterSeat[] | null, ctx: GateContext = {}): GateRowModel {
   const label = (cli: string): string => roster?.find((r) => r.key === cli)?.display_name ?? cli;
-  const listedChoices = contractChoices(actions, label);
+  const listedChoices = contractChoices(actions, label, ctx);
   // Where a note on an approve LANDS is the template's to know (studio#1170 review r1): a steer before a non-creator
   // step goes to the next creator (`amendScope: 'creator'`, `steerScopeTarget`). The listed steer keeps the template's
   // own wire body when both are a plain approve-with-note — never when the list says the note does something else.
@@ -863,6 +873,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     }
     return {
       reason, question, choices: all.slice(0, 4), overflow: all.slice(4),
+      ...(dispute ? { disputeIds: findingIds } : {}),
       noteDefault: dispute && raw.includes('request_changes') ? disputeNote(findingIds) : '',
       recommended: recommended !== null && recommended < all.length ? recommended : null,
       detailItems,

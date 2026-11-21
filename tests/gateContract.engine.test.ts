@@ -63,6 +63,12 @@ describe('every engine gate shape renders exactly its listed answers (studio#117
     expect(all.some((c) => /retry|redo/i.test(c.label))).toBe(false);
   });
 
+  it('adj-rules approve lands skipping R1 with a required reason', () => {
+    const adj = shapes.find(([n]) => n === 'adj-rules')![1];
+    const all = Object.values(contractChoices(adj.actions, seat)).flat();
+    expect(all.find((c) => c.key === 'steer')).toMatchObject({ label: 'Land, skipping R1', note: 'required', decision: { approve: true } });
+  });
+
   it('the distinct-evaluator retry card offers Reassign on the distinct seat', () => {
     const distinct = shapes.find(([n]) => n === 'distinct')![1];
     const all = Object.values(contractChoices(distinct.actions, (c) => (c === 'codex' ? 'Codex' : c))).flat();
