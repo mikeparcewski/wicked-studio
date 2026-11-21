@@ -110,7 +110,8 @@ export function ReassignControl({
     setPhase('reassigning');
     setError(null);
     try {
-      await api.reassignRun(runId, cli);
+      // studio#1121: the step this control moves; crew refuses (409 gate_changed) if the run is on another one now.
+      await api.reassignRun(runId, cli, undefined, ord);
       recordSteering({ runId, action: 'reassign', cli, ...(typeof ord === 'number' ? { ord } : {}) });
       setPhase('done');
       onDone(cli);

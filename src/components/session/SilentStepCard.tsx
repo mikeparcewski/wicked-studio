@@ -25,7 +25,8 @@ export function SilentStepCard({ view, silent, name }: { view: SessionView; sile
     setNote(null);
     try {
       if (kind === 'move') {
-        const r = await api.reassignRun(runId);
+        // studio#1121: the silent step this card names; crew refuses (409 gate_changed) if the run moved on.
+        const r = await api.reassignRun(runId, undefined, undefined, silent.ord ?? undefined);
         setNote({ tone: 'ok', text: `${step ?? `Step ${r.ord}`} is running again${r.cli !== undefined ? ` on ${name(r.cli)}` : ''}.` });
       } else {
         await api.injectMessage(runId, SILENT_NUDGE, 'all');

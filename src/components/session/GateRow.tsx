@@ -1,3 +1,5 @@
+import { councilLine, disputeFindingsOf, positionLines } from '../../board/gateFindings.js';
+import { useTeamFold } from '../../hooks/useTeamFold.js';
 import { noteAsk } from '../../board/gateContract.js';
 import { useGateActions } from '../../hooks/useGateActions.js';
 import { SKIP_QE_KEY, SKIP_QE_PLACEHOLDER } from '../../board/qeSkip.js';
@@ -45,7 +47,7 @@ import { builderResponder } from '../../board/responder.js';
 import { gateCause, gateQuestion, gateWithLogChoices, judgeSeats, runPoolOf, seatName } from '../../board/gateHeadline.js';
 
 export { gateWithLogChoices, judgeSeats };
-import { FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_PLACEHOLDER, FLOOR_OVERRIDE_SEND } from '../../board/floorOverride.js';
+import { FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_PLACEHOLDER, FLOOR_OVERRIDE_SEND, TOOL_CHECK_OVERRIDE_CONSEQUENCE, TOOL_CHECK_OVERRIDE_KEY, TOOL_CHECK_OVERRIDE_PLACEHOLDER, TOOL_CHECK_OVERRIDE_SEND } from '../../board/floorOverride.js';
 
 /** How often a judge-unavailable gate re-reads whether a judge seat can rule now (a seat signed in
  *  elsewhere, an image built): the offer follows without a reload. */
@@ -819,6 +821,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   /** Commit one choice (its words, when it asks for them) through the one gate wire and its 10 s undo window. */
   const commit = (choice: GateRowChoice, words?: string): void => {
     const key = gateKey;
+    const expect = gate === undefined ? {} : { expect: { ord: gate.ord, receivedAt: gate.receivedAt } };
     const label = choice.key === 'rerun' && rerunOffer !== null ? `Rerun from ${rerunOffer.phase}` : choice.label;
     setChosen({ key, label, sentAt: null });
     const done = (outcome: string): void => {
@@ -826,7 +829,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       else setChosen(null);
     };
     if (choice.reassignCli !== undefined) {
-      void commitGateReassign(runId, choice.reassignCli, choice.label, words).then(done, () => setChosen(null));
+      void commitGateReassign(runId, choice.reassignCli, choice.label, words, expect.expect).then(done, () => setChosen(null));
       return;
     }
     if (choice.decision === null) { setChosen(null); return; }
@@ -837,11 +840,11 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       const reason = (words ?? '').trim();
       if (reason === '') { setChosen(null); return; }
       const skip = { ...choice.decision, skipRules: choice.skipRuleIds.map((id) => ({ id, reason })) } as unknown as GateAnswer;
-      void commitGateDecision(runId, skip, { receipt: { kind: 'row', chosenLabel: label } }).then(done, () => setChosen(null));
+      void commitGateDecision(runId, skip, { ...expect, receipt: { kind: 'row', chosenLabel: label } }).then(done, () => setChosen(null));
       return;
     }
     const decision: GateAnswer = words !== undefined && words.trim() !== '' ? { ...choice.decision, amend: words.trim() } : choice.decision;
-    void commitGateDecision(runId, decision, { receipt: { kind: 'row', chosenLabel: label } }).then(done, () => setChosen(null));
+    void commitGateDecision(runId, decision, { ...expect, receipt: { kind: 'row', chosenLabel: label } }).then(done, () => setChosen(null));
   };
 
   // The reply box's send: the note choice with the typed words as its note, through the same path and undo window.
@@ -865,7 +868,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       : c.reassignCli !== undefined && builders.includes(c.reassignCli) ? { sub: `${builderName(c.reassignCli)} checks its own work (reduced assurance)` } : {}),
     // The suggested move says crew's consequence when crew wrote one for it.
     consequence: c.key === FLOOR_OVERRIDE_KEY && model.refusal !== undefined ? c.title
-      : c.key === recKey && model.consequence !== null ? model.consequence : c.key === FLOOR_OVERRIDE_KEY ? FLOOR_OVERRIDE_CONSEQUENCE : null,
+      : c.key === recKey && model.consequence !== null ? model.consequence : c.key === FLOOR_OVERRIDE_KEY ? FLOOR_OVERRIDE_CONSEQUENCE
+        : c.key === TOOL_CHECK_OVERRIDE_KEY ? TOOL_CHECK_OVERRIDE_CONSEQUENCE : null,
     recommended: c.key === recKey,
   }));
   const ask = askFromGate({ id: gateKey, prompt: question, from: 'The engine asks', options, recommended: recKey });
@@ -874,10 +878,14 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     // The floor override says what it does FIRST, then asks why (the rationale is required, never prefilled).
     if (o.id === FLOOR_OVERRIDE_KEY) return { label: 'Your rationale (required)', labelTestId: /* testid */ 'session-gate-floor-override-label', placeholder: FLOOR_OVERRIDE_PLACEHOLDER, send: FLOOR_OVERRIDE_SEND,
       consequenceTestId: /* testid */ 'session-gate-floor-override-consequence' };
+    // wicked-core#1318: the same judgment past a failed tool check at triage, in that check's words.
+    if (o.id === TOOL_CHECK_OVERRIDE_KEY) return { label: 'Your reason (required)', labelTestId: /* testid */ 'session-gate-tool-check-override-label', placeholder: TOOL_CHECK_OVERRIDE_PLACEHOLDER, send: TOOL_CHECK_OVERRIDE_SEND,
+      consequenceTestId: /* testid */ 'session-gate-tool-check-override-consequence' };
     if (o.id === SKIP_QE_KEY) return { label: 'Your reason (required, kept with the delivery)', placeholder: SKIP_QE_PLACEHOLDER, send: o.label };
     if (o.id === 'stop') return { label: 'Why stop? (kept with the record)', placeholder: 'One line is enough', send: 'Stop the run with this reason' };
     // studio#612: the floor fix's note is the fixing seat's whole task, not a steer.
     if (o.id === 'steer' && c?.label === FLOOR_FIX_LABEL) return { label: 'What the fixing helper should change', placeholder: 'What should the fixing helper change…', prefill: model.noteDefault, send: o.label };
+    if (c?.landSkipsRules !== undefined) return { label: 'Your reason (required, recorded as the reason each rule was skipped)', placeholder: 'Why the work can land without these rules…', send: o.label };
     if (o.id === 'steer') return { label: 'Your note', placeholder: 'Steer the next step…', prefill: model.noteDefault, send: o.label };
     // The derived move's note names what to fix (the new failure); still the person's to edit before it is sent.
     if (o.id === 'send-back') return { label: 'What to fix', placeholder: 'Explain what to fix…', prefill: leadChoice?.key === 'send-back' && lead?.prefill !== undefined ? lead.prefill : model.noteDefault, send: o.label };
@@ -914,6 +922,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       <h2 data-testid="session-gate-question" className="wk-session-gate-question wk-gate2-q">{question}</h2>
       {rulesLine}
       {sentence !== null && <p data-testid={refusalLines !== null && sentence === refusalLines.lead ? 'session-gate-refusal' : model.qe !== undefined && sentence === model.qe.why ? 'session-gate-qe-why' : 'session-gate-sentence'} {...(model.qe !== undefined && sentence === model.qe.why ? { 'data-qe-outcome': model.qe.outcome } : {})} className="wk-session-gate-detail-item wk-gate2-p">{sentence}</p>}
+      {model.reason === 'escalation' && model.failing.length > 0 && model.failingTests === undefined && <ReviewFindings key={gateKey} items={model.failing} />}
+      {model.disputeIds !== undefined && model.disputeIds.length > 0 && <DisputeFindings runId={runId} ord={gate?.ord ?? null} ids={model.disputeIds} />}
       {/* rig 0.15.8: what failed, on the face — never only under Technical details. The new failure is highlighted;
           the ones that fail on the base too are under More about this (mockup ui-v2-gate). */}
       {model.failingTests !== undefined && split !== undefined ? (
@@ -1122,6 +1132,52 @@ export function FailingGroups({ ids }: { ids: readonly string[] }): React.ReactE
       {all && ids.length > FAILING_SHOWN && (
         <button type="button" data-testid="session-gate-failing-less" onClick={() => setAll(false)} className="wk-gate2-link">Show fewer</button>
       )}
+    </div>
+  );
+}
+
+/** The review's open items belong beside the decision, as well as in Technical details. */
+function ReviewFindings({ items }: { items: readonly string[] }): React.ReactElement {
+  const [all, setAll] = useState(false);
+  const showText = useDisplayText();
+  return (
+    <div data-testid="session-gate-findings" className="wk-gate2-base wk-gate2-findings">
+      <p className="wk-gate2-label">What the review found ({items.length}):</p>
+      <ul className="wk-gate2-group-list wk-gate2-groups">
+        {(all ? items : items.slice(0, FAILING_SHOWN)).map((item, i) => <li key={i} data-testid="session-gate-finding">{showText(item)}</li>)}
+      </ul>
+      {items.length > FAILING_SHOWN && <button type="button" data-testid="session-gate-findings-toggle" aria-expanded={all} onClick={() => setAll((v) => !v)} className="wk-gate2-link">{all ? 'Show fewer' : `Show all ${items.length}`}</button>}
+    </div>
+  );
+}
+
+/** A team dispute's findings in the team's own words: what was found where, who stood where, and how the council voted. */
+function DisputeFindings({ runId, ord, ids }: { runId: string; ord: number | null; ids: readonly string[] }): React.ReactElement | null {
+  const { fold, error } = useTeamFold(runId);
+  const showText = useDisplayText();
+  if (ord === null) return null;
+  // Until the team's record has answered, nothing is said about it (never "not on the record" while it loads).
+  if ((fold?.snapshot ?? null) === null && error === null) {
+    return <p data-testid="session-gate-dispute-loading" className="wk-gate2-p wk-gate2-findings">Reading what the team found…</p>;
+  }
+  const findings = disputeFindingsOf(fold?.rows ?? [], ord, ids);
+  return (
+    <div data-testid="session-gate-dispute-findings" className="wk-gate2-groups wk-gate2-findings">
+      {findings.map((f) => {
+        const severity = f.severity === null ? '' : `${f.severity.charAt(0).toUpperCase()}${f.severity.slice(1)} `;
+        const place = f.path === null ? '' : ` at ${f.path}${f.line === null ? '' : `:${f.line}`}`;
+        const author = f.raisedBy === null ? '' : `, raised by ${f.raisedBy}`;
+        return (
+          <div key={f.id} data-testid="session-gate-dispute-finding" data-finding-id={f.id} className="wk-gate2-base">
+            {f.claim === null ? <p className="wk-gate2-p">This finding's words are not on this job's team record ({showText(f.id)}).</p> : <>
+              <p className="wk-gate2-label">{showText(`${severity}finding${place}${author}`)}</p>
+              <p className="wk-gate2-p">{showText(f.claim)}</p>
+              {f.council !== null && <p data-testid="session-gate-dispute-council" className="wk-gate2-p">{showText(councilLine(f.council))}</p>}
+              {positionLines(f.positions).map((line, i) => <p key={i} className="wk-gate2-p">{showText(line)}</p>)}
+            </>}
+          </div>
+        );
+      })}
     </div>
   );
 }

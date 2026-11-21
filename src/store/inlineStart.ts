@@ -11,6 +11,10 @@ import { createByChat } from '../editors/apps/appTurns.js';
 import { stashDraft } from '../components/apps/AppChat.js';
 import { openChat, openChatFlow, useChatFlow } from './chatFlow.js';
 import { addAboutChip } from './composerChips.js';
+import { defaultSelection } from '../board/chatOpen.js';
+import { userSeats } from '../board/seatNames.js';
+import { chosenSeats, NO_SEAT_PICKED, useComposerSeats } from './composerSeats.js';
+import { getCachedRoster, setCachedRoster } from './rosterCache.js';
 
 /**
  * A WORKFLOW STARTS IN THE CHAT (ux-tonight, operator 2026-11-04: "clicking on a workflow opens a modal rather than
@@ -78,6 +82,8 @@ export interface JobPost {
   /** For a seeded chat: where it opens (the project, the repository). */
   projectId: string | null;
   repoRef?: string | null;
+  /** A named helper leads the seeded chat, ahead of the other chosen seats. */
+  lead?: string;
   /** Kept per pick, so a retry of the same body is the same request (crew answers the same proposal). */
   pickKey: string;
   /** The job takes a repository: a seed with none takes the one its words clearly name (F41), filed in the project
@@ -142,6 +148,7 @@ export async function postJob(p: JobPost): Promise<{ chatId: string; proposal: C
     source: p.source,
   };
   let mine: SentJob;
+  let seedClis: string[] | null = null;
   let out: { chatId: string; proposal: ChatProposalView | null };
   if (p.chatId !== null) {
     const body = JSON.stringify(['chat', p.chatId, fields]);
@@ -170,9 +177,23 @@ export async function postJob(p: JobPost): Promise<{ chatId: string; proposal: C
       }
     }
     const scope = env !== undefined ? seedScope(env.projectId, env.repoRef) : seedScope(projectId, repoRef);
-    const body = JSON.stringify(['seed', fields, scope]);
+    let roster = getCachedRoster();
+    if (roster === null) {
+      const fetched = await api.getRoster();
+      setCachedRoster(fetched.roster);
+      roster = fetched.roster;
+    }
+    if (!wanted()) return null;
+    const addressable = new Set(userSeats(roster).map((s) => s.key));
+    const eligible = defaultSelection(roster, scope.projectId !== undefined || (scope.repoRefs?.length ?? 0) > 0).filter((k) => addressable.has(k));
+    const { dropped, picked } = useComposerSeats.getState();
+    const chosen = chosenSeats(eligible, dropped, picked);
+    if (chosen.length === 0) throw new Error(NO_SEAT_PICKED);
+    const clis = p.lead !== undefined && chosen.includes(p.lead) ? [p.lead, ...chosen.filter((k) => k !== p.lead)] : chosen;
+    seedClis = clis;
+    const body = JSON.stringify(['seed', fields, scope, clis]);
     mine = requestFor(p.pickKey, body);
-    const res = await api.openChat({ seed: fields, requestId: mine.requestId, ...scope });
+    const res = await api.openChat({ seed: fields, clis, requestId: mine.requestId, ...scope });
     // A refused seed opened its chat but made no proposal: say why where the person is. A retry of the same body is the
     // same request, so crew answers that chat and completes its proposal (§4.6).
     if (res.proposal === undefined && res.seedRefused !== undefined) throw new Error(res.seedRefused.error);
@@ -186,16 +207,26 @@ export async function postJob(p: JobPost): Promise<{ chatId: string; proposal: C
     sent.delete(p.pickKey);
     prepicked.delete(p.pickKey);
   }
-  if (env?.requirements != null && out.proposal !== null) {
-    const req = env.requirements;
-    // The requirements the person chose on the page are their answer to the job's "which requirements?".
+  const req = env?.requirements;
+  const removeSeats = seedClis === null ? [] : (out.proposal?.proposal.seats?.keys ?? []).filter((key) => !seedClis.includes(key));
+  if (out.proposal !== null && (req != null || removeSeats.length > 0)) {
+    // Keep the page's requirements and helper choices in one revision of the seed proposal.
     await api.reviseChatProposal(out.chatId, {
       revises: out.proposal.proposal.pid,
-      edits: { inputs: { [req.inputId]: { kind: 'requirements', refs: req.refs } } },
+      edits: {
+        ...(req != null ? { inputs: { [req.inputId]: { kind: 'requirements' as const, refs: req.refs } } } : {}),
+        ...(removeSeats.length > 0 ? { removeSeats } : {}),
+      },
       source: 'question',
-      requestId: `${p.pickKey}:requirements`,
+      requestId: `${p.pickKey}:choices`,
     }).catch((e: unknown) => {
-      addStartNote(out.chatId, `The requirements you chose were not added (${e instanceof Error ? e.message : String(e)}): pick them in the job.`);
+      const error = e instanceof Error ? e.message : String(e);
+      const note = req != null && removeSeats.length > 0
+        ? `Your requirements and helper choices were not applied (${error}): set them in the job.`
+        : removeSeats.length > 0
+          ? `The helpers you turned off were not taken off this job (${error}): change them in the job.`
+          : `The requirements you chose were not added (${error}): pick them in the job.`;
+      addStartNote(out.chatId, note);
     });
   }
   envelopes.delete(p.pickKey);

@@ -137,3 +137,24 @@ describe('per-id failure honesty (§9.2/§9.5)', () => {
     expect(confirmGate).not.toHaveBeenCalled();
   });
 });
+
+
+it('D: a batch response reports sent while preserving a newer open gate', async () => {
+  const { useGateStore } = await import('../src/store/gates.js');
+  const runId = 'batch-new-gate';
+  const gate = { runId, ord: 2, prompt: 'Proceed?', receivedAt: 100, lifecycle: 'open' };
+  useGateStore.getState().setGate(gate);
+  let release!: () => void;
+  confirmGate.mockImplementation(() => new Promise((resolve) => { release = () => resolve({ status: 'resumed' }); }));
+  toggleBatchSelect(runId);
+  const batch = runBatchDecision({ approve: true });
+  await vi.waitFor(() => expect(confirmGate).toHaveBeenCalledTimes(1));
+  const next = { ...gate, ord: 3, receivedAt: 200 };
+  useGateStore.getState().setGate(next);
+  release();
+  await batch;
+  expect(useGateStore.getState().gates[runId]).toEqual(next);
+  expect(useGateActionStore.getState().byGate[runId]?.answered ?? null).toBeNull();
+  expect(useBatchGateStore.getState()).toMatchObject({ done: 1, failures: [], selected: [] });
+  useGateStore.getState().clearGate(runId);
+});
