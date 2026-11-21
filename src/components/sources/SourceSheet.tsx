@@ -242,7 +242,10 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
     setError(null);
     try {
       const origin = preview.egress?.confirmRequired === true && originFor === preview.previewHash ? preview.egress.origin : undefined;
-      const s = await sourcesApi.save(preview.previewHash, origin).catch((e: unknown) => {
+      // (crew#1295) The tick is the person's acceptance of exactly this preview's reads: crew records those, and
+      // only those, as reads an app may make. No tick, no acceptance (Save is held until it is ticked).
+      const accepted = (form.kind === 'rest' || form.kind === 'mcp') && acceptedFor === preview.previewHash ? operationsByClass(preview).reads : [];
+      const s = await sourcesApi.save(preview.previewHash, origin, undefined, accepted).catch((e: unknown) => {
         // An expired or unknown preview can't be saved again: the person tests again first.
         if (codeOf(e) === 'preview_stale' || codeOf(e) === 'preview_required') setHeld(null);
         throw e;
