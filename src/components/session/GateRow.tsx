@@ -57,10 +57,12 @@ const REJUDGE_POLL_MS = 20_000;
 function RefusedCallLines({ call }: { call: RefusedCall }): React.ReactElement {
   const verb = call.command.startsWith('cd ') || call.reason.includes('`cd`') ? 'cd into'
     : call.access === 'write' ? 'write to' : 'read';
-  const path = call.path.length > 72 ? `${call.path.slice(0, 34)}…${call.path.slice(-37)}` : call.path;
+  // studio#444 rule (src/board/homePath.ts): a home directory never renders, in the text or the tooltip.
+  const full = useDisplayPath()(call.path);
+  const path = full.length > 72 ? `${full.slice(0, 34)}…${full.slice(-37)}` : full;
   return (
     <div className="wk-gate2-refused">
-      <p>Tried to {verb} <span title={call.path}>{path}</span>, outside this job’s folder</p>
+      <p>Tried to {verb} <span title={full}>{path}</span>, outside this job’s folder</p>
       <p>Rule: <code>{call.rule}</code></p>
     </div>
   );

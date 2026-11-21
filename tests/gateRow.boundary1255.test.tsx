@@ -54,6 +54,16 @@ describe('wicked-studio#1255: boundary denial card', () => {
     expect(shown).toMatch(/^\/work\/.*….*tiny-math$/);
     expect(screen.getAllByTestId('session-gate-choice').length).toBeGreaterThan(0);
   });
+  it.each([
+    '/home/alex.rivera/repos/tiny-math',
+    '/home/alex/repos/tiny-math',
+    'C:\\Users\\Alex\\repos\\tiny-math',
+  ])('shows a path under a home folder as ~/… in the text and the tooltip (%s)', (path) => {
+    show([evaluation({ ...BOUNDARY_DENIAL, refused: { ...BOUNDARY_REFUSED, path } }), ...BOUNDARY_EVENTS.slice(1)]);
+    const shown = screen.getByTitle(/^~[\\/]repos[\\/]tiny-math$/);
+    expect(shown.textContent).toMatch(/^~[\\/]repos[\\/]tiny-math$/);
+    expect(document.body.textContent).not.toMatch(/alex/i);
+  });
   it('does not show a stale refusal after a later evaluation clears the denial', () => {
     show([...BOUNDARY_EVENTS, evaluation(null)]);
     expect(screen.queryByText(/^Tried to /)).toBeNull();
