@@ -25,7 +25,8 @@ import { ProjectSwitcher } from './ProjectSwitcher.js';
 import { useNeedsSources } from '../store/needsSources.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import { PageAskButton, usePageChatFor } from './chat/PageChat.js';
-import { knowledgeOf, useRepoKnowledgeFor } from '../store/repoKnowledge.js';
+import { knowledgeOf, useRepoKnowledge, useRepoKnowledgeFor } from '../store/repoKnowledge.js';
+import { overlayLiveRuns } from '../board/liveRunOverlay.js';
 import { linksOf, useRepoLinksFor } from '../store/repoLinks.js';
 import { useHeldMarked } from '../hooks/useHeldMarked.js';
 import { isHeldRun } from '../board/heldRuns.js';
@@ -47,7 +48,15 @@ interface Props {
    * it and LOCKS (the slice-B contract) — never a silent reset to Unfiled.
    */
   ambientProject?: string | null;
+  /**
+   * studio#940: App's live run list (undefined until it has loaded). The page's own read is overlaid by it, so a run
+   * that starts or finishes while the list is open shows here without a reload.
+   */
+  liveRuns?: readonly SessionView[] | undefined;
 }
+
+/** A run in one of these is finished: it no longer makes its repository "indexing now" or "working". */
+const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 
 /**
  * The /repos landing (UI-CONTRACT S6): the fleet view of what the agents work ON, in the
@@ -79,15 +88,23 @@ function errorText(e: unknown): string {
 /** The Project field's "+ New project…" entry (never a project id: ids are `proj_…` or `default`). */
 const NEW_PROJECT = '\u0000new';
 
-export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, ambientProject = null }: Props): React.ReactElement {
+export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, ambientProject = null, liveRuns }: Props): React.ReactElement {
   // crew-0183: crew's repo watcher — each row says whether its code map is kept current, read while the list is open.
   const watch = useRepoWatch();
   usePageChatFor('repos', 'Knows Repositories: each registered repository, its code graph and its work.', 'repos-page');
   const [repos, setRepos] = useState<RepoEntry[]>([]);
-  const [rawRuns, setRuns] = useState<SessionView[]>([]);
+  const [fetchedRuns, setRuns] = useState<SessionView[]>([]);
+  // studio#940: the page's own read, overlaid by App's live list (one rule with a repository's page: overlayLiveRuns).
+  const seenLiveRef = useRef<Set<string>>(new Set());
+  const rawRuns = useMemo(
+    () => (liveRuns === undefined ? fetchedRuns : overlayLiveRuns(fetchedRuns, liveRuns, seenLiveRef.current)),
+    [fetchedRuns, liveRuns],
+  );
   // (crew#1042) The runs, marked from the shared held set (subscribed): the fleet folds a run a Needs-you row
   // holds as waiting, not working, and each row's words and next step follow it.
   const runs = useHeldMarked(rawRuns);
+  /** Only the newest repositories read lands (the page's own load, or a re-read after a run finished). */
+  const reposSeq = useRef(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [search, setSearch] = useState('');
@@ -158,11 +175,12 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
   function load(): void {
     setLoading(true);
     setError(null);
+    const seq = ++reposSeq.current;
     Promise.all([api.listRepos(), api.listRuns()])
       .then(([{ repos: rs }, { runs: rv }]) => {
         // The needs-you queue's repo-graph input rides this read (a deposit, zero requests).
         useNeedsSources.getState().depositRepos(rs);
-        setRepos(rs);
+        if (seq === reposSeq.current) setRepos(rs);
         setRuns(rv);
       })
       .catch((err: unknown) => setError(err))
@@ -170,6 +188,27 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
   }
   // One read on mount; Retry calls load().
   useEffect(load, []);
+
+  // studio#940: a repository's run going from in flight to finished (seen in the live list) reads the repositories
+  // again once (their findings and code-map state) and that repository's code-map size. The in-flight runs of the last
+  // list seen are the memory, kept while the first read is still out; a finish seen then is read once it lands.
+  const inFlightRef = useRef<{ runs: Map<string, string>; ended: Set<string> }>({ runs: new Map(), ended: new Set() });
+  useEffect(() => {
+    const inFlight = new Map<string, string>();
+    for (const v of rawRuns) if (v.session.repo_ref != null && !TERMINAL_STATUSES.has(v.session.status)) inFlight.set(v.session.id, v.session.repo_ref);
+    const prev = inFlightRef.current;
+    const ended = new Set(prev.ended);
+    for (const [id, repoId] of prev.runs) if (!inFlight.has(id)) ended.add(repoId);
+    if (loading) { inFlightRef.current = { runs: inFlight, ended }; return; }
+    inFlightRef.current = { runs: inFlight, ended: new Set() };
+    if (ended.size === 0) return;
+    useRepoKnowledge.getState().ensure([...ended], true);
+    const seq = ++reposSeq.current;
+    void api.listRepos().then(({ repos: rs }) => {
+      useNeedsSources.getState().depositRepos(rs);
+      if (seq === reposSeq.current) setRepos(rs);
+    }).catch(() => { /* a failed re-read keeps the list shown; the next finish or a reload reads it again */ });
+  }, [rawRuns, loading]);
 
   // The apps' own repositories (crew's apps store: `AppSummary.repoId`), marked App on the list with no Index nag. One
   // read, beside the list's; a crew without the apps route (or a failed read) marks none.
