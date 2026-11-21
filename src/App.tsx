@@ -70,10 +70,12 @@ import { markHeld } from './board/heldRuns.js';
 import { useHeldRuns } from './store/heldRuns.js';
 import { objectCommands, type ObjectCommands } from './components/sheets/objectCommands.js';
 import { cmdkObject, trackPointedObject } from './store/sheets.js';
+import { useNeedsCount } from './store/needsCount.js';
 import { useNeedsClock, useNeedsRows, useSettledNeeds } from './hooks/useNeedsRows.js';
 import { ambientProjectId } from './hooks/ambientProject.js';
 import { useEventStream } from './hooks/useEventStream.js';
 import { publishCoreEvent } from './hooks/eventTap.js';
+import { ingestEditorGrantsChanged } from './store/runPlugins.js';
 import { useVisitClock } from './hooks/useVisitClock.js';
 import { useProjectVisits } from './hooks/useProjectVisits.js';
 import { usePeekJump } from './hooks/usePeekJump.js';
@@ -189,6 +191,7 @@ export function App(): React.ReactElement {
     (event: CoreEvent) => {
       // Run-thread plugins (program DES-PLUGIN-EVENTS spike 1) hear the same frames through the tap.
       publishCoreEvent(event);
+      ingestEditorGrantsChanged(event);
       ingestGate(event);
       // Slice BD: terminal frames retire a run's pre-gate annotation draft.
       ingestAnnotation(event);
@@ -581,8 +584,9 @@ export function App(): React.ReactElement {
   // crew#1042: the same set for the surfaces that fetch their own runs (the run page, the repositories).
   useEffect(() => { useHeldRuns.getState().setHeld(heldByNeeds); }, [heldByNeeds]);
   // Ambient (operator 2026-11-01): the mood the work sets, from the runs and the settled needs-you count already held.
-  const ambientNeeds = useSettledNeeds(needRows, runsLoaded, runsError !== null).count ?? 0;
-  useAmbientMood(shownRuns, ambientNeeds);
+  const { phase: needsPhase, count: needsCount } = useSettledNeeds(needRows, runsLoaded, runsError !== null);
+  useEffect(() => { useNeedsCount.setState({ phase: needsPhase, count: needsCount }); }, [needsPhase, needsCount]);
+  useAmbientMood(shownRuns, needsCount ?? 0);
 
   // ── Studio wave 2a: peek (P), jump (G), back (B) — and the panels "back" reopens ──
   const peek = usePeekJump(runs, navigate, needRows);

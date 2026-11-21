@@ -20,7 +20,7 @@ vi.mock('../src/api/client.js', () => ({
 }));
 // The guard: the board model never finishes loading, yet the runs table must still paint.
 vi.mock('../src/hooks/useBoardModel.js', () => ({
-  useBoardModel: () => ({ items: [], unfiled: [], loading: true, error: null, failedAt: null }),
+  useBoardModel: (views: SessionView[]) => ({ items: [], unfiled: views, loading: true, error: null, failedAt: null }),
 }));
 
 const { EverythingPage } = await import('../src/components/everything/EverythingPage.js');
@@ -174,8 +174,7 @@ describe('S17b Every-run table', () => {
   });
 
   it('R16 grouped view renders the sessions panel, not the table', () => {
-    // The board model is mocked empty here, so the proof is the inverse: the grouped view shows the
-    // sessions container and never the runs table. desk_everything (e2e) proves the groups paint.
+    // The grouped view shows sessions even while the board model is still loading.
     render(<EverythingPage runs={runs} runsLoaded needRows={[]} navigate={() => {}} search="?tab=sessions" />);
     expect(screen.getByTestId('everything-sessions')).toBeInTheDocument();
     expect(screen.queryByTestId('everything-runs')).toBeNull();
@@ -219,4 +218,16 @@ describe('S17b Every-run table', () => {
     expect(row.querySelector('a')!.getAttribute('href')).toBe('/s/run%3Ar-arch-chat');
     useCapabilities.setState({ runChatId: false });
   });
+});
+
+it.each(['', '&view=runs'])('studio#932: Everything %s says snapshot silence and keeps held runs waiting', async (mode) => {
+  const { useSystemStore } = await import('../src/store/systemSnapshot.js');
+  const { normalizeSnapshot } = await import('../src/api/system.js');
+  useSystemStore.setState({ snapshot: normalizeSnapshot({ runs: ['r-work', 'r-wait'].map((runId) => ({ runId, liveness: 'stalled', quietForMs: 19 * 60_000 })) }) });
+  render(<EverythingPage runs={runs} runsLoaded needRows={[]} navigate={() => {}} search={`?tab=sessions${mode}`} />);
+  const rows = screen.getAllByTestId(mode === '' ? 'everything-session' : 'runs-row');
+  const row = (id: string) => rows.find((r) => r.getAttribute('data-run-id') === id)!;
+  expect(row('r-work')).toHaveAttribute('data-word', 'No output for 19 min');
+  expect(row('r-work')).toHaveTextContent('No output for 19 min');
+  expect(row('r-wait')).toHaveAttribute('data-word', 'Waiting on you');
 });

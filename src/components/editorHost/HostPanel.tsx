@@ -243,6 +243,7 @@ function OptionsInstance({ group, hostRef, visible, withRun, initialTab, onValue
       surface: 'options',
       ...(tab0 !== undefined ? { tab: tab0 } : {}),
       grants: group.grants,
+      ...(group.regrant === undefined ? {} : { regrant: group.regrant }),
       theme: readThemeTokens(),
       prefs: { reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false, techDetails: false, locale: navigator.language },
       firstParty: e.first_party,

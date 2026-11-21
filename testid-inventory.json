@@ -3754,12 +3754,14 @@
     {
       "testId": "composer-seat",
       "files": [
+        "src/components/session/ChatHelpers.tsx",
         "src/components/session/Composer.tsx"
       ]
     },
     {
       "testId": "composer-seats",
       "files": [
+        "src/components/session/ChatHelpers.tsx",
         "src/components/session/Composer.tsx"
       ]
     },
@@ -7543,6 +7545,12 @@
       ]
     },
     {
+      "testId": "gate-consent-asks",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "gate-diff-drift",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -8690,6 +8698,24 @@
     },
     {
       "testId": "job-passage-project",
+      "files": [
+        "src/components/session/JobProjectChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-project-create",
+      "files": [
+        "src/components/session/JobProjectChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-project-name",
+      "files": [
+        "src/components/session/JobProjectChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-project-new",
       "files": [
         "src/components/session/JobProjectChoices.tsx"
       ]
@@ -10525,6 +10551,30 @@
       ]
     },
     {
+      "testId": "mcp-add-env",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-env-error",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-env-name",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-env-names",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
       "testId": "mcp-add-error",
       "files": [
         "src/components/McpToolsPage.tsx"
@@ -12101,6 +12151,12 @@
       ]
     },
     {
+      "testId": "nc-infra-floor-cache",
+      "files": [
+        "src/components/nerve/NerveCenterPage.tsx"
+      ]
+    },
+    {
       "testId": "nc-infra-recheck",
       "files": [
         "src/components/nerve/NerveCenterPage.tsx"
@@ -12224,6 +12280,18 @@
     },
     {
       "testId": "nc-slow-fix",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-slow-floor-cache",
+      "files": [
+        "src/components/nerve/NerveOverview.tsx"
+      ]
+    },
+    {
+      "testId": "nc-slow-remedy",
       "files": [
         "src/components/nerve/NerveOverview.tsx"
       ]
@@ -18965,6 +19033,12 @@
       ]
     },
     {
+      "testId": "run-tab-glance-stop-reason",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
       "testId": "run-tab-goto-question",
       "files": [
         "src/components/session/RunTab.tsx"
@@ -18996,6 +19070,12 @@
     },
     {
       "testId": "run-tab-phases",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-pill",
       "files": [
         "src/components/session/RunTab.tsx"
       ]
@@ -19062,6 +19142,12 @@
     },
     {
       "testId": "run-tab-stop-keep",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-stop-reason",
       "files": [
         "src/components/session/RunTab.tsx"
       ]
@@ -19354,6 +19440,12 @@
       "testId": "seat-citations-toggle",
       "files": [
         "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "seat-image-rebuild",
+      "files": [
+        "src/components/nerve/SeatImageRebuildNote.tsx"
       ]
     },
     {
@@ -19825,6 +19917,12 @@
       ]
     },
     {
+      "testId": "session-gate-reading",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-reduced",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -20156,6 +20254,12 @@
     },
     {
       "testId": "session-proposal-acceptance-detail",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-after-delivery",
       "files": [
         "src/components/session/ProposalCard.tsx"
       ]
@@ -20578,6 +20682,12 @@
       ]
     },
     {
+      "testId": "session-sources-more",
+      "files": [
+        "src/components/session/SourceChips.tsx"
+      ]
+    },
+    {
       "testId": "session-status",
       "files": [
         "src/board/objectActions.ts",
@@ -20617,6 +20727,12 @@
     },
     {
       "testId": "session-stop-keep",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-stop-reason",
       "files": [
         "src/components/session/SessionView.tsx"
       ]

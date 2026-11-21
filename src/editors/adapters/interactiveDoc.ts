@@ -23,6 +23,19 @@ export class InteractiveDocSurfaceAdapter extends InteractiveDocAdapter implemen
   }
   /** The parts the head has (a deck's slides), counted at the last `parts()` read: no kind branch decides it. */
   private partsSeen = 0;
+  private titleSeen: string | undefined;
+  docTitle(): string | undefined { return this.titleSeen; }
+  override async read(version?: number): ReturnType<InteractiveDocAdapter['read']> {
+    const result = await super.read(version);
+    if (!('error' in result) && result.version === this.head) {
+      const title = new DOMParser().parseFromString(result.content.html, 'text/html').head.querySelector('title')?.textContent?.trim() || undefined;
+      if (title !== this.titleSeen) {
+        this.titleSeen = title;
+        for (const l of this.listeners) l();
+      }
+    }
+    return result;
+  }
   capabilities(): readonly AdapterCapability[] {
     const caps: AdapterCapability[] = ['read', 'write', 'versions', 'checks'];
     if (this.exports().length > 0) caps.push('export');

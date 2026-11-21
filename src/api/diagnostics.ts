@@ -1,3 +1,4 @@
+import type { DiagnosticsFloorCache } from 'wicked-crew-api-types';
 /**
  * The diagnostics wire — `GET /api/v1/diagnostics` (read-only, camelCase), the daemon's
  * self-description: component versions, daemon vitals, store sizes, a bounded tail of recent
@@ -47,6 +48,7 @@ export interface DiagnosticsError {
 }
 
 export interface Diagnostics {
+  floorCache?: DiagnosticsFloorCache | null;
   components: {
     crew: string;
     studioBundle: string | null;

@@ -2,7 +2,9 @@ import { judgeKey, judgeTyped } from './keys.js';
 import type { WriteVerb } from '../board/artifactMorph.js';
 import { changedBy, chipsFor, elementLabel, type Chip, type VersionKind } from './model.js';
 import { chapterInventoryOf, checkOps, inventoryOf, themeTokensOf, type Inventory, type WireItem } from './ops.js';
-import type { AppParamsSchema, AppSpec } from '../api/types.js';
+import type { AppParamsSchema, AppSpec, CoreEvent } from '../api/types.js';
+import type { EditorGrantsChangedFrame } from '../api/editorGrants-wire.js';
+import { subscribeCoreEvents } from '../hooks/eventTap.js';
 import type { AppHostPort, AppMode } from './apps/appAdapter.js';
 import { componentWords } from './apps/appOps.js';
 import {
@@ -214,6 +216,8 @@ export interface HostOptions {
   title: string;
   size: Size;
   grants: readonly PermissionId[];
+  /** Re-read this host's decided grant set after an editor grant change. Absent = a caller-fixed set. */
+  regrant?: () => Promise<readonly PermissionId[]>;
   theme: Record<string, string>;
   prefs: { reducedMotion: boolean; techDetails: boolean; locale: string };
   /** Third-party editors' thread lines are prefixed with their title. */
@@ -372,6 +376,8 @@ export class EditorHost {
   private focusPoll: ReturnType<typeof setInterval> | null = null;
   private writing = false;
   private grants: Set<PermissionId>;
+  private grantSeq = 0;
+  private unsubscribeGrants: (() => void) | undefined;
   private ownVersions = new Set<number>();
   private inventory: { version: number; inv: Inventory; tokens: Set<string> } | null = null;
   private rate = { second: 0, count: 0, overSince: null as number | null };
@@ -401,6 +407,7 @@ export class EditorHost {
   }
 
   mount(): void {
+    this.unsubscribeGrants = subscribeCoreEvents((e) => { void this.grantsChanged(e); });
     window.addEventListener('message', this.onWindow);
     window.addEventListener('blur', this.onHostBlur);
     this.frame.addEventListener('load', this.onLoad);
@@ -424,6 +431,25 @@ export class EditorHost {
 
   get alive(): boolean { return !this.torn; }
   get connected(): boolean { return this.handshaken && !this.torn; }
+
+  private async grantsChanged(e: CoreEvent | EditorGrantsChangedFrame): Promise<void> {
+    if (this.torn || e.type !== 'editorGrantsChanged' || e.id !== this.o.editor) return;
+    const seq = ++this.grantSeq;
+    if (e.reason === 'removed') {
+      this.setGrants([]);
+      this.log({ kind: 'in', type: e.type, ok: true, why: 'Editor removed; grants dropped' });
+    } else if (this.o.regrant !== undefined) {
+      let grants: readonly PermissionId[];
+      try {
+        grants = await this.o.regrant();
+      } catch {
+        grants = [];
+      }
+      if (this.torn || seq !== this.grantSeq) return;
+      this.setGrants(grants);
+      this.log({ kind: 'in', type: e.type, ok: true, why: 'Editor grants re-read' });
+    }
+  }
 
   // ── handshake ─────────────────────────────────────────────────────────────────────────────
 
@@ -1258,6 +1284,8 @@ export class EditorHost {
     if (this.torn) return;
     this.post(event('host.teardown', { reason }));
     this.torn = true;
+    this.unsubscribeGrants?.();
+    this.unsubscribeGrants = undefined;
     this.unsubscribeMcp?.();
     this.unsubscribeMcp = undefined;
     this.unsubscribeEvents?.();

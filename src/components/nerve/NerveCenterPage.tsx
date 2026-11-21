@@ -1,3 +1,6 @@
+import { SeatImageRebuildNote } from './SeatImageRebuildNote.js';
+import { useSeatImageRebuild } from '../../store/seatImageRebuild.js';
+import { useFloorCache } from '../../hooks/useFloorCache.js';
 import { healthText } from '../../board/rowHeadline.js';
 import { InsightsLine } from '../insights/InsightsLine.js';
 import { PageAskButton, pageTextLines, useAskableItems, usePageChatHostPage } from '../chat/PageChat.js';
@@ -77,6 +80,7 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
   search?: string;
 }): React.ReactElement {
   const registry = useHealthRegistry(true);
+  const floorCache = useFloorCache();
   const state = useNerveState(needCount);
   const mode = useSystemStore((s) => s.mode);
   const snapshot = useSystemStore((s) => s.snapshot);
@@ -139,6 +143,7 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
   });
   const askable = useAskableItems('nerve', pageRef);
   const act = (a: SystemAction): void => {
+    if (a.kind === 'rebuild-seat-images') { void useSeatImageRebuild.getState().start(); return; }
     if (a.kind === 'recheck') { recheck(); return; }
     if (a.kind === 'sign-in') {
       const seat = (registry.roster ?? []).find((s) => s.key === a.target);
@@ -168,7 +173,7 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
   if (tab === 'attention') {
     body = (
       <>
-        <AttentionList items={state.attention} read={state.read} answeredAt={answeredAt} onAct={act} onOpen={openTab} />
+        <AttentionList infra={snapshot?.infra ?? []} items={state.attention} read={state.read} answeredAt={answeredAt} onAct={act} onOpen={openTab} />
         {/* A ranked crew (api-types 0.140.0): the work nobody resolved, with its spend, below what is stuck. */}
         {system && snapshot.ranked === true && <div className="wk-nc-panel" data-testid="nc-to-resolve"><ToResolve snapshot={snapshot} runs={[]} navigate={navigate} /></div>}
       </>
@@ -218,7 +223,7 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
         {system && (
           <section className="wk-nc-sub" aria-label="Components">
             <h3 className="wk-nc-sub-title">Components</h3>
-            <InfraRows rows={snapshot.infra} onRecheck={recheck} />
+            <InfraRows floorCache={floorCache} rows={snapshot.infra} onRecheck={recheck} />
           </section>
         )}
       </section>
@@ -258,7 +263,7 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
     return (
       <div data-testid="nerve-center-page" data-view="overview" data-mode={mode} data-tone={state.tone} className="wk-calm wk-ncv" ref={pageRef} onClick={askable.onClick} onKeyDown={askable.onKeyDown}>
         <div className="wk-calm-col">
-          <NerveOverview state={state} snapshot={system ? snapshot : null} registry={registry} reading={reading} needCount={needCount} runs={runs}
+          <NerveOverview floorCache={floorCache} state={state} snapshot={system ? snapshot : null} registry={registry} reading={reading} needCount={needCount} runs={runs}
             search={search} navigate={navigate} onRecheck={recheck} onAct={act} notes={upgradeNotes} />
         </div>
         <SignInModal registry={registry} />
@@ -350,16 +355,19 @@ function SignInModal({ registry }: { registry: HealthRegistry }): React.ReactEle
   );
 }
 
-const ACTION_WORD: Record<SystemAction['kind'], string> = { 'sign-in': 'Sign in', recheck: 'Re-check', 'open-gate': 'Open gate', 'open-run': 'Open run' };
+const ACTION_WORD: Record<SystemAction['kind'], string> = { 'rebuild-seat-images': 'Rebuild seat images', 'sign-in': 'Sign in', recheck: 'Re-check', 'open-gate': 'Open gate', 'open-run': 'Open run' };
 
 const PANEL_TAB: Record<SystemAttention['panel'], NerveTab> = { clis: 'clis', runs: 'runs', infra: 'infra', governance: 'governance' };
 
 /** Needs attention: every item worst first, one roomy card each — what, why, what fixes it, the one
  *  existing action, and where its area lives. Empty: a calm "all clear" (or "checking"). */
-function AttentionList({ items, read, answeredAt, onAct, onOpen }: {
+function AttentionList({ infra, items, read, answeredAt, onAct, onOpen }: {
+  infra: SystemInfra[];
   items: SystemAttention[]; read: NerveState['read']; answeredAt: number | null;
   onAct: (a: SystemAction) => void; onOpen: (tab: NerveTab) => void;
 }): React.ReactElement {
+  const starting = useSeatImageRebuild((s) => s.phase === 'starting');
+  const running = infra.find((r) => r.key === 'seat_images')?.rebuild?.running === true;
   if (items.length === 0) {
     const checking = read === 'checking';
     return (
@@ -389,7 +397,7 @@ function AttentionList({ items, read, answeredAt, onAct, onOpen }: {
             </div>
             <div className="wk-nc-attention-acts">
               {a.action !== null && (
-                <button type="button" data-testid="nc-attention-action" data-kind={a.action.kind} className="wk-btn wk-btn--secondary wk-btn--sm" onClick={() => onAct(a.action!)}>
+                <button type="button" data-testid="nc-attention-action" data-kind={a.action.kind} className="wk-btn wk-btn--secondary wk-btn--sm" disabled={a.action.kind === 'rebuild-seat-images' && (starting || running)} onClick={() => onAct(a.action!)}>
                   {healthText(a.action.label ?? ACTION_WORD[a.action.kind])}
                 </button>
               )}
@@ -510,7 +518,7 @@ function RunRows({ runs, now, navigate }: { runs: SystemRun[]; now: number; navi
   );
 }
 
-function InfraRows({ rows, onRecheck }: { rows: SystemInfra[]; onRecheck: () => void }): React.ReactElement {
+function InfraRows({ rows, onRecheck, floorCache }: { rows: SystemInfra[]; onRecheck: () => void; floorCache: string | null }): React.ReactElement {
   if (rows.length === 0) return <p className="wk-health-absent">Crew reports no components.</p>;
   return (
     <ul className="wk-nc-infra">
@@ -523,7 +531,9 @@ function InfraRows({ rows, onRecheck }: { rows: SystemInfra[]; onRecheck: () => 
           </span>
           <div className="wk-nc-infra-body">
             {r.reason !== null && <span className="wk-nc-line">{healthText(r.reason)}</span>}
+            {r.key === 'disk' && floorCache !== null && <span className="wk-nc-line" data-testid="nc-infra-floor-cache">{floorCache}</span>}
             {r.remedy !== null && r.state !== 'ok' && <span data-testid="nc-infra-remedy" className="wk-nc-line wk-nc-remedy">{healthText(r.remedy)}</span>}
+            {r.key === 'seat_images' && <SeatImageRebuildNote rebuild={r.rebuild} />}
             {r.detail !== null && <TechDetails data-testid="nc-infra-detail" text={healthText(r.detail)} />}
           </div>
           <button type="button" data-testid="nc-infra-recheck" data-key={r.key} className="wk-btn wk-btn--secondary wk-btn--sm wk-nc-infra-recheck" onClick={onRecheck} aria-label={`Re-check ${healthText(r.name)}`}>

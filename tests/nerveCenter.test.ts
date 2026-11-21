@@ -158,7 +158,7 @@ describe('the snapshot wire, read defensively', () => {
   });
 
   it('runs sort worst first in crew\'s order: waiting on you, held, stalled, quiet, working', () => {
-    const r = (runId: string, liveness: SystemSnapshot['runs'][number]['liveness']) => ({ runId, title: runId, liveness, phase: null, seat: null, lastEventAt: null, reason: null, gateOrd: null, atGate: false });
+    const r = (runId: string, liveness: SystemSnapshot['runs'][number]['liveness']) => ({ runId, title: runId, liveness, quietForMs: null, phase: null, seat: null, lastEventAt: null, reason: null, gateOrd: null, atGate: false });
     expect(runsWorstFirst([r('w', 'working'), r('q', 'quiet'), r('y', 'waiting_on_you'), r('h', 'held'), r('s', 'stalled')]).map((x) => x.runId)).toEqual(['y', 'h', 's', 'q', 'w']);
   });
 });

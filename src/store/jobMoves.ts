@@ -18,6 +18,8 @@ export interface JobMove {
   /** Where it went, as the line says it: a project's name, or "a new chat on <repository>". */
   where: string;
   retired: 'pending' | 'done' | 'failed';
+  /** The transcript held only this job: end the source chat once Not now lands. */
+  endSourceChat?: boolean;
   error: string | null;
   at: number;
 }
@@ -36,7 +38,7 @@ function asMove(v: unknown): JobMove | null {
   const { chatId, where, at, retired, error } = m;
   if (typeof chatId !== 'string' || chatId === '' || typeof where !== 'string' || typeof at !== 'number' || !Number.isFinite(at)) return null;
   if (retired !== 'pending' && retired !== 'done' && retired !== 'failed') return null;
-  return { chatId, where, at, retired, error: typeof error === 'string' ? error : null };
+  return { chatId, where, at, retired, error: typeof error === 'string' ? error : null, ...(m.endSourceChat === true ? { endSourceChat: true } : {}) };
 }
 
 function parseMove(raw: string | null): JobMove | null {
@@ -137,10 +139,17 @@ export function resetJobMoves(): void {
 }
 
 /** Set the old proposal aside (Not now) once its job has moved; its outcome is kept with the move. */
-export function retireMoved(fromChatId: string, pid: string, to: { chatId: string; where: string }): void {
+export function retireMoved(fromChatId: string, pid: string, to: { chatId: string; where: string; endSourceChat?: boolean }): void {
+  const prior = moveOf(useJobMoves.getState().moves, pid);
+  if (prior?.retired === 'pending' || prior?.retired === 'done') return;
   putMove(pid, { ...to, retired: 'pending', error: null });
-  api.decideChatProposal(fromChatId, pid, { decision: 'not_now' }).then(
-    () => putMove(pid, { ...to, retired: 'done', error: null }),
+  // Ending a chat that held only this job is a tidy-up: when it fails, the move and Not now still stand and the chat
+  // keeps its "moved to" line, so the move reads done (a retry would re-send Not now on a proposal already set aside).
+  void api.decideChatProposal(fromChatId, pid, { decision: 'not_now' }).then(
+    async () => {
+      if (to.endSourceChat === true) await api.endChat(fromChatId).catch(() => undefined);
+      putMove(pid, { ...to, retired: 'done', error: null });
+    },
     (e: unknown) => putMove(pid, { ...to, retired: 'failed', error: `This one was not set aside (${e instanceof Error ? e.message : String(e)}).` }),
   );
 }
@@ -159,6 +168,7 @@ export function jobWords(p: Pick<ArtifactProposal, 'words' | 'details'>): string
  */
 export async function moveJob(m: {
   fromChatId: string;
+  endSourceChat?: boolean;
   proposal: ArtifactProposal;
   projectId: string | null;
   repoRef: string | null;
@@ -183,7 +193,7 @@ export async function moveJob(m: {
       chatId: null, projectId: m.projectId, repoRef: m.repoRef, pickKey: m.pickKey, stillWanted,
     });
     if (out === null) return false;
-    retireMoved(m.fromChatId, pid, { chatId: out.chatId, where: m.where });
+    retireMoved(m.fromChatId, pid, { chatId: out.chatId, where: m.where, ...(m.endSourceChat === true ? { endSourceChat: true } : {}) });
     return true;
   } finally {
     useJobMoves.setState((s) => {

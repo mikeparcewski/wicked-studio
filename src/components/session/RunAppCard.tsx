@@ -117,6 +117,7 @@ function PinnedPreview({ slug, detail }: { slug: string; detail: AppDetail }): R
       host = new EditorHost({
         container: box.current, src: bundleUrl(apiBase(), APPS_EDITOR, e.version, e.sha256), editor: APPS_EDITOR, version: e.version,
         name: 'App', title: `${detail.name} at version ${version}`, size: 'inline', surface: 'card', grants: decided.grants, theme: readThemeTokens(),
+        regrant: async () => (await fetchGrants(e.id, e.version, e.sha256, null)).grants,
         prefs: { reducedMotion: true, techDetails: false, locale: navigator.language }, firstParty: true,
         adapter: new AppAdapter(session, detail.name), app: tileHostPort(session, tile, live),
         ui: { chips: () => {}, draft: () => {}, typed: () => {}, key: () => {}, morph: () => {}, status: () => {}, notes: () => {}, thread: () => {}, fullscreen: async () => false, torn: () => setTorn(true), log: () => {} },

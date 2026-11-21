@@ -148,12 +148,12 @@ describe('deriveRunCost (wicked-crew#496, 2026-09-18 — the three AC shapes)', 
 
   it('shape 1: cost with usage_seats_reported and array usage_seats_unmetered', () => {
     const c = deriveRunCost({ cost_usd: 1.81, usage_seats_reported: ['claude'], usage_seats_unmetered: ['pi'] });
-    expect(c.text).toBe('$1.81 · claude (pi unmetered)');
+    expect(c.text).toBe('$1.81 partial (pi not metered)');
   });
 
   it('shape 1: cost with usage_seats_reported and boolean usage_seats_unmetered', () => {
     const c = deriveRunCost({ cost_usd: 1.81, usage_seats_reported: ['claude', 'pi'], usage_seats_unmetered: true });
-    expect(c.text).toBe('$1.81 · claude, pi (unmetered)');
+    expect(c.text).toBe('$1.81 partial (some seats not metered)');
   });
 
   it('shape 1: cost with usage_seats_reported only (not unmetered)', () => {
@@ -166,9 +166,9 @@ describe('deriveRunCost (wicked-crew#496, 2026-09-18 — the three AC shapes)', 
     expect(c.text).toBe('<$0.01');
   });
 
-  it('shape 2: null cost_usd → "unmetered", no title', () => {
+  it('shape 2: null cost_usd → "not metered", no title', () => {
     const c = deriveRunCost({ cost_usd: null });
-    expect(c.text).toBe('unmetered');
+    expect(c.text).toBe('not metered');
     expect(c.title).toBeUndefined();
   });
 

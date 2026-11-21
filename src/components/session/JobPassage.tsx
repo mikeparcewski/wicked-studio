@@ -81,9 +81,10 @@ const TOKEN_KIND: Readonly<Record<ProposalToken['kind'] | 'documents' | 'sources
   depth: 'how deep', checks: 'what checks it', detail: 'detail', documents: 'documents', sources: 'sources',
 };
 
-export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, navigate, say, onChanged }: {
+export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, endSourceChat = false, navigate, say, onChanged }: {
   chatId: string;
   lineage: JobLineage;
+  endSourceChat?: boolean;
   /** The chat's runs (the launched run is found here, by the lineage's result or `from_proposal`). */
   runs: readonly SessionView[];
   sessionId: string;
@@ -370,12 +371,32 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
     }
     setError(null);
     setHandOff(true);
-    api.proposeInChat(chatId, body).then((res) => {
+    api.proposeInChat(chatId, body).then(async (res) => {
       handOffBodies.current.delete(key);
       // The person asked for the next job: ITS passage (the proposal crew answered with) takes the focus and says so.
       const made = (res as { view?: { proposal?: { pid?: unknown; lineage?: unknown } } } | undefined)?.view?.proposal;
       const madeLineage = typeof made?.lineage === 'string' ? made.lineage : typeof made?.pid === 'string' ? made.pid : null;
       if (madeLineage !== null) useHandOff.setState({ intent: { chatId, lineage: madeLineage } });
+      const next = res.view?.proposal?.seats;
+      if (what === 'again' && p.seats !== undefined && next !== undefined) {
+        const oldKeys = new Set([...p.seats.keys, ...(p.seats.lead !== null ? [p.seats.lead] : [])]);
+        const newKeys = new Set([...next.keys, ...(next.lead !== null ? [next.lead] : [])]);
+        const addSeats = [...oldKeys].filter((seat) => !newKeys.has(seat));
+        const removeSeats = [...newKeys].filter((seat) => !oldKeys.has(seat));
+        if ((p.seats.lead !== null && p.seats.lead !== next.lead) || addSeats.length > 0 || removeSeats.length > 0) {
+          await api.reviseChatProposal(chatId, {
+            revises: res.view.proposal.pid,
+            edits: {
+              ...(p.seats.lead !== null && p.seats.lead !== next.lead ? { lead: p.seats.lead } : {}),
+              ...(addSeats.length > 0 ? { addSeats } : {}),
+              ...(removeSeats.length > 0 ? { removeSeats } : {}),
+            },
+            source: 'question',
+            // Per proposal made: a second Try again of the same run revises its own proposal, never reuses this id.
+            requestId: `${key}:${res.view.proposal.pid}:seats`,
+          }).catch((e: unknown) => setError(`Your helper choice was not kept (${proposalRefusal(e).words}): change it in the job.`));
+        }
+      }
       onChanged();
     }).catch((e: unknown) => setError(proposalRefusal(e).words))
       .finally(() => setHandOff(false));
@@ -568,9 +589,9 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
           <span className="wk-pass-ask-who">{question.kind === 'lost_check' ? 'wicked asks · only your press changes the checks' : 'wicked asks'}</span>
           <p>{question.text}</p>
           {/* F39: crew asks for the project with nothing to press; the passage offers the projects (a new chat there). */}
-          {asksForProject(head.proposal) && <JobProjectChoices chatId={chatId} proposal={head.proposal} onError={setError} />}
+          {asksForProject(head.proposal) && <JobProjectChoices chatId={chatId} proposal={head.proposal} endSourceChat={endSourceChat} onError={setError} />}
           {/* F41: crew asks for the repository with nothing to press (a new chat has none in scope): the registered ones. */}
-          {asksForRepo(head.proposal) && <JobRepoChoices chatId={chatId} proposal={head.proposal} onError={setError} />}
+          {asksForRepo(head.proposal) && <JobRepoChoices chatId={chatId} proposal={head.proposal} endSourceChat={endSourceChat} onError={setError} />}
           {requirementsNeed !== undefined && (
             <JobRequirementsChoices key={`${pid}:${requirementsNeed.id}`} proposal={head.proposal} navigate={navigate}
               disabled={v.tokensHeld || local.deciding[lineage.lineage] === true}

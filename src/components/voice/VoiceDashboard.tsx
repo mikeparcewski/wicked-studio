@@ -2,10 +2,10 @@ import { Plus, X } from 'lucide-react';
 import type { SystemSnapshot } from '../../api/system.js';
 import type { VoiceWidgetManifest } from '../../api/voice.js';
 import { useWindowSpend } from '../../hooks/useWindowSpend.js';
-import { useGateStore } from '../../store/gates.js';
+import { useNeedsCount } from '../../store/needsCount.js';
 import { useVoiceStore } from '../../store/voice.js';
 import { saveDashboard, useDashStore } from '../../voice/dashboardStore.js';
-import { formatMetric, isRunningJob, readMetric, removeWidget, stepWords, type DashboardWidget } from '../../voice/widgets.js';
+import { formatMetric, isRunningJob, loadWord, readMetric, removeWidget, stepWords, type DashboardWidget } from '../../voice/widgets.js';
 
 /**
  * The live system around the transcript (mockup state g): built-in widgets (machine load, health, helpers, running
@@ -56,7 +56,7 @@ function LoadWidget({ w, snap }: { w: DashboardWidget; snap: SystemSnapshot | nu
   const row = snap?.infra.find((i) => i.key === 'load');
   const hist = useDashStore((s) => s.history['load'] ?? NONE);
   const load = row?.load;
-  const word = row?.state === 'down' ? 'saturated' : row?.state === 'degraded' ? 'busy' : row?.state === 'ok' ? 'calm' : 'not read';
+  const word = loadWord(row);
   return (
     <WidgetTile w={w}>
       {load !== null && load !== undefined ? (
@@ -116,16 +116,15 @@ function JobsWidget({ w, snap }: { w: DashboardWidget; snap: SystemSnapshot | nu
   );
 }
 
-function GatesWidget({ w, snap }: { w: DashboardWidget; snap: SystemSnapshot | null }): React.ReactElement {
-  const gates = useGateStore((s) => s.gates);
+function GatesWidget({ w }: { w: DashboardWidget }): React.ReactElement {
+  const { phase, count } = useNeedsCount();
   const awaiting = useVoiceStore((s) => s.awaitingGate);
-  const open = Object.values(gates);
-  const first = open[0];
-  const title = first !== undefined ? snap?.runs.find((r) => r.runId === first.runId)?.title ?? null : null;
+  const shown = phase === 'loading' ? null : count;
+  const words = shown === 1 ? 'needs you' : 'need you';
   return (
-    <WidgetTile w={w} alert={awaiting !== null} summary={`${open.length} waiting`}>
-      <span className="wk-voice-big" data-testid="voice-gates-count">{open.length}</span>{' '}
-      <span className="wk-voice-small">{open.length === 1 ? `decision${title !== null ? ` · ${title}` : ''}` : 'decisions'}</span>
+    <WidgetTile w={w} alert={awaiting !== null} summary={`${shown ?? '…'} ${words}`}>
+      <span className="wk-voice-big" data-testid="voice-gates-count">{shown ?? '…'}</span>{' '}
+      <span className="wk-voice-small">{words}</span>
     </WidgetTile>
   );
 }
@@ -164,7 +163,7 @@ export function Widget({ w }: { w: DashboardWidget }): React.ReactElement {
     case 'builtin.health': return <HealthWidget w={w} snap={snap} />;
     case 'builtin.helpers': return <HelpersWidget w={w} snap={snap} />;
     case 'builtin.jobs': return <JobsWidget w={w} snap={snap} />;
-    case 'builtin.gates': return <GatesWidget w={w} snap={snap} />;
+    case 'builtin.gates': return <GatesWidget w={w} />;
     default: return <SpendWidget w={w} />;
   }
 }

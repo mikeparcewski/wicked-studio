@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_REFINE, type Refine } from '../src/board/deskInsights.js';
+import { DEFAULT_REFINE, leadAgentOf, type Refine } from '../src/board/deskInsights.js';
 import { durationWords, jobLine, jobsSentence, jobsStartOf, jobWord, needHolds, NO_PROJECT, projectChoices, projectWord, runsView, type JobGroup, type NeedHold, type RunStatusFilter } from '../src/board/deskRuns.js';
 import type { NeedRow } from '../src/board/needsYou.js';
 import { makeUnit } from './factories.js';
@@ -224,4 +224,13 @@ describe('jobsStartOf: an address\'s ?filter= (the Sessions words) to where Jobs
     // "Waiting on you" in Sessions holds both Jobs' "Waiting on you" and "Needs a decision" (codex review).
     for (const f of ['active', 'waiting', 'all', 'archived', 'nonsense', null]) expect(jobsStartOf(f)).toEqual({ group: 'active', status: 'all' });
   });
+});
+
+it('studio#988: the finished job names its maker despite more review steps', () => {
+  const r = deskRun('made');
+  r.units = [makeUnit({ assigned_cli: 'codex', role: 'creator' }), makeUnit({ assigned_cli: 'claude', role: 'evaluator', stage: 'review' }), makeUnit({ assigned_cli: 'claude', role: 'evaluator', stage: 'review' })];
+  expect(leadAgentOf(r)).toBe('codex');
+  const row = view([r]).rows[0]!;
+  expect(row.agent).toBe('codex');
+  expect(jobLine(row, { agentName: names.agent, projectName: names.project, showProject: false, ago: () => 'today' })).toContain('Codex');
 });
