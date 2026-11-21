@@ -6,7 +6,7 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeUnit, makeView } from './factories.js';
-import { buildEvents, state } from './powerFixtures.js';
+import { at, buildEvents, state } from './powerFixtures.js';
 
 vi.mock('../src/hooks/useEventStream.js', () => ({ useEventStream: () => undefined }));
 
@@ -19,7 +19,8 @@ const { setCachedRoster } = await import('../src/store/rosterCache.js');
 const RUN = 'r-pm';
 const units = [makeUnit({ id: `${RUN}:intake`, session_id: RUN, ord: 0, status: 'done', assigned_cli: 'pi', stage: 'test_plan' } as never),
   makeUnit({ id: `${RUN}:build`, session_id: RUN, ord: 1, status: 'executing', assigned_cli: 'claude', stage: 'build' } as never)];
-const pause = { at: 1, checkpoint: 3, reasons: ['grew'], recommended: 'split' as const };
+// Opened after the trail's newest frame (at 17): a pause the run has moved on from since ends (studio#945 review).
+const pause = { at: at(18), checkpoint: 3, reasons: ['grew'], recommended: 'split' as const };
 
 beforeEach(() => {
   useCapabilities.setState({ loaded: true, runChatId: true, powerMode: true });

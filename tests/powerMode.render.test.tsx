@@ -18,7 +18,7 @@ import { useRunEventStore } from '../src/store/events.js';
 import { useGateStore } from '../src/store/gates.js';
 import { useLaunchWizard, resetLaunchWizard } from '../src/store/launchWizard.js';
 import { makeUnit, makeView } from './factories.js';
-import { buildEvents, change, plan, state } from './powerFixtures.js';
+import { at, buildEvents, change, plan, state } from './powerFixtures.js';
 
 const RUN = 'r-pm';
 const unit = (key: string, ord: number, status: string, cli: string | null, stage = 'build'): WorkUnit =>
@@ -152,7 +152,8 @@ describe('the thread', () => {
 });
 
 describe('the "this grew" dock (a pause, not an engine gate: POST /runs/:id/power/pause)', () => {
-  const pause = { at: 0, checkpoint: 3, reasons: ['The diff now spans 3 packages', 'A new dependency in a sensitive area'], recommended: 'split' as const };
+  // Opened after the trail's newest frame (at 17): a pause the run has moved on from since ends (studio#945 review).
+  const pause = { at: at(18), checkpoint: 3, reasons: ['The diff now spans 3 packages', 'A new dependency in a sensitive area'], recommended: 'split' as const };
   beforeEach(() => { setUndoWindowForTest(0); });
   const card = (rec: 'split' | 'switch_phased' | 'continue_high' | 'stop' = 'split') => render(<PowerPauseCard view={view()} power={state({ pause: { ...pause, recommended: rec } })} />);
   const pausePosts = () => posts.filter((p) => p.path === `/runs/${RUN}/power/pause`).map((p) => p.body);
