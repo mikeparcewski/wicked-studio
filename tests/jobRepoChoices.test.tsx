@@ -311,6 +311,38 @@ describe('F41: a job seeded from a new chat opens on the repository its words na
     expect(seeds()[1]!.body['requestId']).toBe(seeds()[0]!.body['requestId']);
     expect(seeds()[2]!.body['requestId']).not.toBe(seeds()[1]!.body['requestId']);
   });
+  it('studio#1282 (codex r1): overlapping tries of the same request: a late 410 still spends the shared id', async () => {
+    let release: () => void = () => {};
+    seedGate = new Promise((r) => { release = r; });
+    seedStatuses = [410, 503];
+    const post = () => postJob({ card: 'analyze-codebase', option: 'domain', depth: null, words: 'Map the domain', source: 'command', chatId: null, projectId: null, repoRef: null, pickKey: 'k:overlap' });
+    const a = post();
+    const b = post();
+    await waitFor(() => expect(seeds()).toHaveLength(2));
+    expect(seeds()[1]!.body['requestId']).toBe(seeds()[0]!.body['requestId']);
+    release();
+    await expect(a).rejects.toThrow('has been deleted');
+    await expect(b).rejects.toThrow();
+    seedGate = Promise.resolve();
+    await post();
+    expect(seeds()[2]!.body['requestId']).not.toBe(seeds()[0]!.body['requestId']);
+  });
+  it('studio#1282 (codex r1): a late 410 keeps a newer, different request of the pick', async () => {
+    let release: () => void = () => {};
+    seedGate = new Promise((r) => { release = r; });
+    seedStatuses = [410, 503];
+    const post = (words: string) => postJob({ card: 'analyze-codebase', option: 'domain', depth: null, words, source: 'command', chatId: null, projectId: null, repoRef: null, pickKey: 'k:newer' });
+    const a = post('Map the domain');
+    const b = post('Map the domain of the billing code');
+    await waitFor(() => expect(seeds()).toHaveLength(2));
+    expect(seeds()[1]!.body['requestId']).not.toBe(seeds()[0]!.body['requestId']);
+    release();
+    await expect(a).rejects.toThrow('has been deleted');
+    await expect(b).rejects.toThrow();
+    seedGate = Promise.resolve();
+    await post('Map the domain of the billing code');
+    expect(seeds()[2]!.body['requestId']).toBe(seeds()[1]!.body['requestId']);
+  });
   it('a retry with edited words reads its own repository (the first read is kept only for the same words)', async () => {
     seedStatuses = [503];
     const post = (words: string) => postJob({ card: 'analyze-codebase', option: 'domain', depth: null, words, source: 'command', chatId: null, projectId: null, repoRef: null, pickKey: 'k:edit', repoFromWords: true });

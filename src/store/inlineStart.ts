@@ -208,7 +208,9 @@ export async function postJob(p: JobPost): Promise<{ chatId: string; proposal: C
       // studio#1282: crew answers 410 `chat_gone` when the chat this request opened was deleted since. That request id
       // is spent (every retry would get 410 again): it is dropped, so the next try is a new request and a new chat.
       if (isChatGone(e)) {
-        if (sent.get(p.pickKey) === seedReq) {
+        // By wire id, not by attempt: an overlapping retry of the same body shares this id and is spent with it; a
+        // newer, different request for the pick is kept (codex r1).
+        if (sent.get(p.pickKey)?.requestId === seedReq.requestId) {
           sent.delete(p.pickKey);
           prepicked.delete(p.pickKey);
         }
