@@ -769,14 +769,14 @@ it('a refused rebuild shows the 503 reason', async () => {
 });
 
 it('a running rebuild shows only its last three safe tail lines and disables its fixes', async () => {
-  systemAnswer = () => Promise.resolve(imagesSnapshot({ running: true, rc: null, error: null, tail: ['old output', 'Building /Users/alice/repo', 'Holding codex', 'Building claude'] }));
+  systemAnswer = () => Promise.resolve(imagesSnapshot({ running: true, rc: null, error: null, tail: ['old output', 'Building /home/alice/repo', 'Holding codex', 'Building claude'] }));
   renderBoth();
   expect(await screen.findByTestId('nc-slow-fix')).toBeDisabled();
   const note = screen.getByTestId('seat-image-rebuild');
   expect(note).toHaveTextContent('Rebuilding seat images…');
   expect(note).toHaveTextContent('Holding codex');
   expect(note).not.toHaveTextContent('old output');
-  expect(note).not.toHaveTextContent('/Users/alice');
+  expect(note).not.toHaveTextContent('/home/alice');
   openTab('attention');
   expect(screen.getByTestId('nc-attention-action')).toBeDisabled();
   openTab('infra');
