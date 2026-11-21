@@ -2,6 +2,8 @@ import { powerOf } from '../api/power.js';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client.js';
 import { IDLE_GATE_ACTION, ensureGate, useGateActionStore, useGateReadStore } from '../board/gateActions.js';
+import { gateReadState, type GateReadState } from '../board/gateReadState.js';
+import { isAskTurnRun } from '../board/askTurn.js';
 import { useCapabilities } from '../store/capabilities.js';
 import { create } from 'zustand';
 import type { SessionView } from '../api/types.js';
@@ -78,7 +80,7 @@ export function useJobView(lineage: JobLineage, runs: readonly SessionView[], no
   /** The run's own read by id failed (it is not in the runs index): reads it again. */
   runRetry: (() => void) | null;
   /** A waiting question has no gate yet: distinguish a pending read from a failed one. */
-  gateRead: 'reading' | 'failed' | null;
+  gateRead: GateReadState;
   gateRetry: () => void;
 } {
   const runId = jobRunId(lineage, runs);
@@ -170,7 +172,10 @@ export function useJobView(lineage: JobLineage, runs: readonly SessionView[], no
   const planUnread = waiting && ((gate === undefined && gateReadFailed) || teamError !== null || (plan.view === null && !plan.pending && !plan.reading && (gate?.gateKind === 'plan_approval' || !classified)));
   const planRetry = planUnread && runId !== null ? () => { teamRetry(); void loadPlanGate(runId); void ensureGate(runId); } : null;
   // Keep the answer's Undo / receipt mounted while the run status catches up with its cleared gate.
-  const gateRead = view.phase === 'gate' && gate === undefined && inputs.pending === null && !answering ? (gateReadFailed ? 'failed' : 'reading') : null;
+  const gateRead = gateReadState({
+    waiting: view.phase === 'gate', hasGate: gate !== undefined, pending: inputs.pending !== null,
+    answering, question, askTurn: run !== null && isAskTurnRun(run.session), failed: gateReadFailed,
+  });
   const gateRetry = (): void => { if (runId !== null) void ensureGate(runId); };
   return { view, run, inputs, planRetry, gateRead, gateRetry, runRetry: runReadFailed ? () => setReadTry((n) => n + 1) : null };
 }

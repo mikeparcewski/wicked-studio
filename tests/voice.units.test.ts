@@ -6,7 +6,7 @@ import { isLeave, matchJob, parseConfirm, parseEntry, parseGateAnswer, parseMode
 import { chunksToWav, encodeWav, resample, rms } from '../src/voice/wav.js';
 import { Vad } from '../src/voice/vad.js';
 import {
-  BUILTIN_WIDGETS, DEFAULT_LAYOUT, addWidgets, dashboardWidgets, makeMetricWidget, metricFields, moveWidget, readMetric,
+  BUILTIN_WIDGETS, DEFAULT_LAYOUT, loadWord, addWidgets, dashboardWidgets, makeMetricWidget, metricFields, moveWidget, readMetric,
   removeWidget, sides, userWidgetId, voicePanelOf,
 } from '../src/voice/widgets.js';
 
@@ -132,5 +132,22 @@ describe('voice: dashboard widgets are plugins in the voice-dashboard slot', () 
     expect(left.filter((w) => w.kind === 'builtin').map((w) => w.id)).toEqual(['builtin.load', 'builtin.health', 'builtin.helpers']);
     expect(right.map((w) => w.id)).toContain('builtin.gates');
     expect([...left, ...right].map((w) => w.id)).toContain(user.id);
+  });
+});
+
+describe('voice machine load words', () => {
+  it.each([
+    ['ok', 0.3, 'calm'],
+    ['ok', 0.75, 'nearly full'],
+    ['ok', 0.95, 'nearly full'],
+    ['degraded', 1.2, 'busy'],
+    ['down', 6, 'saturated'],
+    ['unknown', 0, 'not read'],
+  ] as const)('calls %s at %s per core %s', (state, ratio, word) => {
+    expect(loadWord({ state, load: { load1: ratio * 14, cores: 14 } })).toBe(word);
+  });
+
+  it('calls an absent load row not read', () => {
+    expect(loadWord(undefined)).toBe('not read');
   });
 });
