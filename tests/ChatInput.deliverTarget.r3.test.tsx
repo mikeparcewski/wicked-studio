@@ -22,6 +22,8 @@ const GH_SENTENCE =
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  // The background catalog read sees the same older daemon as the workflow picker.
+  vi.spyOn(client.api, 'getWorkflowCatalog').mockRejectedValue(new client.ApiError(404, 'Not found'));
   vi.spyOn(client.api, 'getRoster').mockResolvedValue({
     roster: [{ key: 'claude', display_name: 'claude', binary: 'claude', enabled_for_council: true }],
   });

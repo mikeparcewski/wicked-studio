@@ -15,9 +15,9 @@ const DEBOUNCE_MS = 300;
 export type PostureAnswer =
   | { status: 'loading' }
   | { status: 'ready'; posture: LaunchPreviewPosture }
-  /** The preview failed (network, 5xx, a malformed answer): the form says so and offers Retry; Send runs phased. */
+  /** The preview failed (network, 5xx, a malformed answer): power-capable forms offer Retry; Send runs phased. */
   | { status: 'failed' }
-  /** A daemon without `POST /runs/preview` (404), or no power mode: nothing is claimed; Send runs phased. */
+  /** A daemon without `POST /runs/preview` (404): nothing is claimed; Send runs phased. */
   | { status: 'none' };
 
 export interface PosturePreview {
@@ -31,7 +31,8 @@ export interface PosturePreview {
 
 /**
  * (studio#1150) crew's posture for the form's body (`POST /runs/preview`), debounced and keyed by
- * {@link postureKey}. `enabled` false (the daemon has no power mode, or is not known to) asks nothing.
+ * {@link postureKey}. `enabled` stays false until health settles, then every daemon is asked.
+ * `power` is included only when the person turned power off through the power-mode switch.
  *
  * The request carries no `humanConfirm`: the form reads only `power`, `deliver` and `autoDeliver`,
  * none of which crew decides from it. A phased run keeps the `humanConfirm` Send carries (crew's
@@ -40,7 +41,7 @@ export interface PosturePreview {
  * A request whose fields left the screen before it answered is dropped, never stored: a later
  * answer for the same fields is the only one that can stand.
  *
- * A failed preview (codex merge check r3) is its own state, never `none`: the form shows it with a Retry. It is
+ * A failed preview (codex merge check r3) is its own state, never `none`: power-capable forms show it with Retry. It is
  * kept only while its fields are on screen, so the next change of the form asks again, and so does coming back.
  */
 export function usePosturePreview(

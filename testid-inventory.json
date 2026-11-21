@@ -3758,6 +3758,12 @@
       ]
     },
     {
+      "testId": "composer-start-catalog-retry",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
       "testId": "composer-start-error",
       "files": [
         "src/components/session/InlineStart.tsx"
@@ -3789,6 +3795,18 @@
     },
     {
       "testId": "composer-start-projects",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-qe",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-qe-off",
       "files": [
         "src/components/session/InlineStart.tsx"
       ]
@@ -8755,6 +8773,12 @@
       ]
     },
     {
+      "testId": "job-passage-requirements-use",
+      "files": [
+        "src/components/session/JobRequirementsChoices.tsx"
+      ]
+    },
+    {
       "testId": "job-passage-retry",
       "files": [
         "src/components/session/JobPassage.tsx"
@@ -9158,6 +9182,12 @@
     },
     {
       "testId": "launch-catalog-clear-search",
+      "files": [
+        "src/components/launch/WorkflowCatalog.tsx"
+      ]
+    },
+    {
+      "testId": "launch-catalog-context-repo",
       "files": [
         "src/components/launch/WorkflowCatalog.tsx"
       ]
@@ -19604,6 +19634,12 @@
     },
     {
       "testId": "session-gate-failing-words",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-flaky",
       "files": [
         "src/components/session/GateRow.tsx"
       ]

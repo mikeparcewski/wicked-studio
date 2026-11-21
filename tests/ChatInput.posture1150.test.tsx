@@ -339,25 +339,30 @@ describe('New job form: the gates shown are crew\'s answer for the body sent (st
     expect((await send(user)).power).toBe(false);
   });
 
-  it('a daemon whose power mode is not known (its health read failed) is not asked, and Send carries power: false', async () => {
+  it('a failed health read still asks for a preview; a power answer keeps the step gate and Send carries power: false', async () => {
     vi.mocked(client.api.getHealth).mockRejectedValue(new Error('offline'));
     answer = crewSays();
     const user = userEvent.setup();
     render(<ChatInput onLaunched={() => {}} />);
     await bindRepo(user);
+    await waitFor(() => expect(client.api.previewLaunchPosture).toHaveBeenCalled());
     const body = await send(user);
-    expect(client.api.previewLaunchPosture).not.toHaveBeenCalled();
     expect(body.power).toBe(false);
+    expect(screen.getByTestId('gate-posture')).toBeInTheDocument();
+    expect(screen.queryByTestId('gate-posture-power')).toBeNull();
+    expect(body.humanConfirm).toMatch(/^before:/);
   });
 
-  it('a daemon that says it has no power mode is never asked and the body carries no power key', async () => {
+  it('a daemon without power mode is asked and the body carries no power key', async () => {
     vi.mocked(client.api.getHealth).mockResolvedValue(health(false));
     answer = crewSays();
     const user = userEvent.setup();
     render(<ChatInput onLaunched={() => {}} />);
     await bindRepo(user);
+    await waitFor(() => expect(client.api.previewLaunchPosture).toHaveBeenCalled());
     const body = await send(user);
-    expect(client.api.previewLaunchPosture).not.toHaveBeenCalled();
     expect(body).not.toHaveProperty('power');
+    expect(screen.getByTestId('gate-posture')).toBeInTheDocument();
+    expect(screen.queryByTestId('gate-posture-power')).toBeNull();
   });
 });

@@ -34,6 +34,8 @@ export interface FailingOnFace {
   /** (mockup ui-v2-gate) Where the engine told the failures apart per test: the ones new with this change, and the
    *  ones that fail on the base too. Absent when it did not. */
   split?: FailingSplit;
+  /** studio#930: passed on retry, apart from the failures. */
+  flaky?: string[];
 }
 
 /** A floor's failures told apart: new with this change (`fresh`) and failing on the base too (`onBase`). `baseCount`
@@ -51,6 +53,11 @@ export function baseCountOf(split: FailingSplit): number {
 
 const names = (xs: readonly string[] | null | undefined): string[] => [...new Set((xs ?? []).map(failureName).filter((x) => x !== ''))];
 
+/** studio#930: every check of the failed floor may name tests that passed on retry. */
+function flakyIdsOf(floor: GateFloorView | null | undefined): string[] {
+  return names((floor?.checks ?? []).flatMap((c) => c.flakyIds));
+}
+
 /**
  * The engine's per-test split of a floor's failures (J4 0.16.6: the face listed the base's failures and hid the one only
  * this change has). In order of what the engine said:
@@ -63,6 +70,7 @@ const names = (xs: readonly string[] | null | undefined): string[] => [...new Se
  * `null` when none of them tells the failures apart.
  */
 export function failingSplit(floor: GateFloorView | null | undefined, said?: string | null): FailingSplit | null {
+  const flaky = new Set(flakyIdsOf(floor));
   const fresh: string[] = [];
   const onBase: string[] = [];
   let told = false;
@@ -89,8 +97,8 @@ export function failingSplit(floor: GateFloorView | null | undefined, said?: str
     fresh.push(...(head.length > 0 ? head : [`the ${c.name} check`]));
   }
   if (told) {
-    const f = [...new Set(fresh)];
-    return { fresh: f, onBase: [...new Set(onBase)].filter((x) => !f.includes(x)) };
+    const f = [...new Set(fresh)].filter((x) => !flaky.has(x));
+    return { fresh: f, onBase: [...new Set(onBase)].filter((x) => !flaky.has(x) && !f.includes(x)) };
   }
   return failedChecks(floor).length === 0 && typeof said === 'string' ? splitFromWords(said) : null;
 }
@@ -175,9 +183,10 @@ export function failedChecks(floor: GateFloorView | null | undefined): GateFloor
 /** The face's failing list for a floor: each failed check's tests (`failureIds`), or the check's own name
  *  when the runner's output named none. `null` when nothing failed. */
 export function failingOnFace(floor: GateFloorView | null | undefined, max = FACE_MAX, said?: string | null): FailingOnFace | null {
+  const flaky = flakyIdsOf(floor);
   const all: string[] = [];
   for (const c of failedChecks(floor)) {
-    const ids = [...new Set((c.failureIds ?? []).map(failureName).filter((x) => x !== ''))];
+    const ids = names(c.failureIds).filter((x) => !flaky.includes(x));
     if (ids.length > 0) all.push(...ids);
     else all.push(`the ${c.name} check`);
   }
@@ -187,7 +196,7 @@ export function failingOnFace(floor: GateFloorView | null | undefined, max = FAC
     if (split === null) return null;
     return { names: split.fresh.slice(0, max), more: Math.max(0, split.fresh.length - max), split };
   }
-  return { names: all.slice(0, max), more: Math.max(0, all.length - max), ...(split !== null ? { split } : {}) };
+  return { names: all.slice(0, max), more: Math.max(0, all.length - max), ...(split !== null ? { split } : {}), ...(flaky.length > 0 ? { flaky } : {}) };
 }
 
 /** The face's line: "Failing: a, b, c +2 more". */

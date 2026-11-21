@@ -131,14 +131,15 @@ export function postureKey(fields: LaunchPostureFields, powerChoice: boolean | u
 }
 
 /**
- * What the launch sends as `power`: `true` only when crew's answer for exactly the body sent said power; `false`
- * otherwise (no answer for it, or phased), so the step gate shown is the one kept. `undefined` only on a daemon that
+ * What the launch sends as `power`: `true` only when the daemon advertises power mode and crew's answer for exactly
+ * the body sent said power; `false` otherwise (no capability, no answer for it, or phased), so the step gate shown
+ * is the one kept. `undefined` only on a daemon that
  * SAYS it has no power mode (`takesPower === false`), whose launch schema may not take the key; a daemon not known to
  * (`null`: its health read failed) gets `false`, a loud 400 at worst, never a silent power run.
  */
 export function powerToSend(takesPower: boolean | null, answer: LaunchPreviewPosture | null): boolean | undefined {
   if (takesPower === false) return undefined;
-  return answer?.power === true;
+  return takesPower === true && answer?.power === true;
 }
 
 /** The "gate:" words of a power run, from crew's answer: it asks at hand-off only when it delivers with a person. */
@@ -174,11 +175,11 @@ export function launchPosture(s: LaunchPostureInput): {
   const autoDeliver = s.mode === 'autonomous' || (s.mode !== 'ask' && s.confirmMode === 'none');
   const fields = launchPostureFields({ ...s, autoDeliver });
   const answer = s.previewAnswer.status === 'ready' ? s.previewAnswer.posture : null;
-  const powerShown = answer?.power === true;
+  const powerShown = s.powerCap && answer?.power === true;
   return {
     shown: {
       selector: powerShown ? 'power' : 'select',
-      gateWords: answer !== null && answer.power ? powerGateWords(answer) : describeGate(s.mode, s.confirmMode, s.beforeOrd),
+      gateWords: s.powerCap && answer !== null && answer.power ? powerGateWords(answer) : describeGate(s.mode, s.confirmMode, s.beforeOrd),
       delivers: answer !== null ? answer.deliver === 'pr' : s.deliverNoticeOn,
       // Keep main's notice-based words without a preview, including revision/toggle ordering.
       deliverGateWord: answer !== null ? (answer.autoDeliver ? 'auto' : 'human')

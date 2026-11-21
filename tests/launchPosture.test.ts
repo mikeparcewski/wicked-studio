@@ -142,6 +142,10 @@ describe('postureKey', () => {
 });
 
 describe('powerToSend', () => {
+  it('sends false when health is unknown even if crew answers power', () => {
+    expect(powerToSend(null, { power: true, deliver: 'pr', autoDeliver: false })).toBe(false);
+  });
+
   it('true only on crew\'s power answer; false with no answer or an unknown daemon; absent only on a daemon without power', () => {
     const power = { power: true, deliver: 'pr' as const, autoDeliver: false };
     expect(powerToSend(true, power)).toBe(true);
