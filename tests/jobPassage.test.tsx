@@ -1224,6 +1224,46 @@ describe('follow-up review folds (the passage)', () => {
     expect(screen.queryByTestId('job-passage-fix-bug')).toBeNull();
   });
 
+  it.each([
+    { next: { lead: 'codex', keys: ['claude', 'codex', 'copilot'], label: 'Three' }, edits: { removeSeats: ['copilot'] } },
+    { next: { lead: 'claude', keys: ['claude'], label: 'Claude' }, edits: { lead: 'codex', addSeats: ['codex'] } },
+  ])('F4: Try again restores the failed job helper choice ($next.label)', async ({ next, edits }) => {
+    messages = [USER, SEAT, P1, decided];
+    team = { teamed: true, units: [], rows: [] };
+    reviseAnswer = () => ok({ view: { proposal: jobProposal({ pid: `${CHAT}:retry1`, lineage: `${CHAT}:retry1`, seats: next }), state: 'open' } }, 201);
+    page([failedRun()]);
+    fireEvent.click(await screen.findByTestId('job-passage-try-again'));
+    await waitFor(() => expect(posts).toHaveLength(2));
+    expect(posts[1]).toEqual({ path: `/chats/${CHAT}/proposals`, body: {
+      revises: `${CHAT}:retry1`, edits, source: 'question', requestId: `again:${RUN}:${CHAT}:retry1:seats`,
+    } });
+  });
+
+  it.each(['again', 'bug'] as const)('F4: %s sends no seat revision when none is needed', async (what) => {
+    messages = [USER, SEAT, P1, decided];
+    team = { teamed: true, units: [], rows: [] };
+    // Reordered keys still describe the same set; Bug keeps crew's new choice.
+    const seats = what === 'again' ? { lead: 'codex', keys: ['claude', 'codex'], label: 'Both' }
+      : { lead: 'claude', keys: ['claude', 'codex', 'copilot'], label: 'Three' };
+    reviseAnswer = () => ok({ view: { proposal: jobProposal({ pid: `${CHAT}:retry1`, lineage: `${CHAT}:retry1`, seats }), state: 'open' } }, 201);
+    page([failedRun()]);
+    fireEvent.click(await screen.findByTestId(what === 'again' ? 'job-passage-try-again' : 'job-passage-fix-bug'));
+    await waitFor(() => expect(useHandOff.getState().intent?.lineage).toBe(`${CHAT}:retry1`));
+    expect(posts).toHaveLength(1);
+  });
+
+  it('F4: a failed helper revision is said under the passage', async () => {
+    messages = [USER, SEAT, P1, decided];
+    team = { teamed: true, units: [], rows: [] };
+    reviseAnswer = () => posts.length === 1
+      ? ok({ view: { proposal: jobProposal({ pid: `${CHAT}:retry1`, lineage: `${CHAT}:retry1`, seats: { lead: 'codex', keys: ['claude', 'codex', 'copilot'], label: 'Three' } }), state: 'open' } }, 201)
+      : ok({ error: 'seat edit refused' }, 400);
+    page([failedRun()]);
+    fireEvent.click(await screen.findByTestId('job-passage-try-again'));
+    expect(await screen.findByText('Your helper choice was not kept (seat edit refused): change it in the job.')).toBeInTheDocument();
+    expect(posts).toHaveLength(2);
+  });
+
   it('the job the person asked for takes the focus and is announced when it arrives', async () => {
     messages = [USER, SEAT, P1, decided];
     team = { teamed: true, units: [], rows: [] };
