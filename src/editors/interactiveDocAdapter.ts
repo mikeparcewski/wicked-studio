@@ -94,6 +94,7 @@ const POLL_FOR_MS = 20_000;
  */
 export class InteractiveDocAdapter implements HostAdapter {
   head = 0;
+  private hasRead = false;
   private entries: VersionEntry[] = [];
   /** The base each version this adapter wrote branched from: Undo's fork target. */
   readonly writes = new Map<number, number>();
@@ -145,11 +146,12 @@ export class InteractiveDocAdapter implements HostAdapter {
     return this.head;
   }
 
-  artifact(): ArtifactRef {
-    return { kind: this.kind, title: this.title, version: this.head, head: this.head, readonly: false, lockedParts: [] };
+  artifact(): ArtifactRef & { read: boolean } {
+    return { kind: this.kind, title: this.title, version: this.head, head: this.head, read: this.hasRead, readonly: false, lockedParts: [] };
   }
 
   private moveHead(head: number): void {
+    this.hasRead = true;
     if (head === this.head) return;
     this.head = head;
     this.onHead?.(head);
@@ -171,6 +173,7 @@ export class InteractiveDocAdapter implements HostAdapter {
   async refresh(): Promise<{ head: number; kind: VersionKind } | null> {
     const m = await getVersions(this.projectId, this.docId);
     this.entries = m.versions;
+    this.hasRead = true;
     if (m.head === this.head) return null;
     const was = this.head;
     this.moveHead(m.head);
@@ -178,9 +181,9 @@ export class InteractiveDocAdapter implements HostAdapter {
   }
 
   async read(version?: number): Promise<AdapterResult<{ version: number; content: { type: 'html'; html: string } }>> {
-    if (this.head === 0) await this.refresh().catch(() => null);
+    if (!this.hasRead) await this.refresh().catch(() => null);
     const v = version ?? this.head;
-    if (v === 0) return { error: 'unavailable', message: 'the page has no version yet' };
+    if (!this.hasRead) return { error: 'unavailable', message: 'the page has no version yet' };
     const res = await fetch(interactiveDocUrl(this.projectId, this.docId, v));
     if (!res.ok) return { error: res.status === 404 ? 'bad_request' : 'unavailable', message: `the page could not be read (${res.status})` };
     return { version: v, content: { type: 'html', html: await res.text() } };
@@ -294,6 +297,7 @@ export class InteractiveDocAdapter implements HostAdapter {
         const moved = this.movedTo(m.head);
         return { error: 'head_moved', message: `The page changed (version ${m.head}) before your edit was sent; nothing was changed.`, head: m.head, moved };
       }
+      this.moveHead(m.head);
       before = new Set(m.versions.map((v) => v.version));
     } catch {
       return { error: 'unavailable', message: 'The page could not be read before sending, so nothing was changed.' };

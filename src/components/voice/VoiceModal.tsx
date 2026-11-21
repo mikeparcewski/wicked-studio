@@ -6,7 +6,7 @@ import { ENTRY_ASK, answerEntry, closeVoice, hear } from '../../voice/controller
 import { useShallow } from 'zustand/react/shallow';
 import { useVoiceStore, withoutWave } from '../../store/voice.js';
 import { VoiceSetup } from './VoiceSetup.js';
-import { LiveWave } from './VoiceWave.js';
+import { VoiceWave } from './VoiceWave.js';
 
 
 /**
@@ -20,7 +20,6 @@ export function VoiceModal(): React.ReactElement {
   const v = useVoiceStore(useShallow(withoutWave));
   const asking = useVoiceStore((s) => s.speaking === 'it');
   useDialogFocus(true, ref, { modal: true, prefer: '[data-ask-option="yes"]' });
-  const listening = v.micOn && v.status?.ready === true;
   return (
     <div className="wk-voice-scrim" data-testid="voice-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) closeVoice(); }}>
       <div
@@ -33,11 +32,11 @@ export function VoiceModal(): React.ReactElement {
         onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeVoice(); } }}
       >
         <div className="wk-voice-modal-h">
-          <span className="wk-voice-micdot" data-on={listening ? 'true' : 'false'} aria-hidden />
-          <span data-testid="voice-mic-state">{listening ? 'Voice · listening only while this is open' : v.micOn ? 'Voice · mic on, not hearing yet' : 'Voice · mic off'}</span>
+          <span className="wk-voice-micdot" data-on="false" aria-hidden />
+          <span data-testid="voice-mic-state">Voice · not listening yet</span>
           <button type="button" className="wk-voice-x" aria-label="Close voice mode" data-testid="voice-close" onClick={closeVoice}><X size={16} aria-hidden /></button>
         </div>
-        <LiveWave />
+        <VoiceWave bars={[]} who="idle" />
         <p className="wk-voice-heard" data-testid="voice-heard" aria-live="polite">{v.heard ?? (asking ? 'Asking…' : '\u00a0')}</p>
         {v.modal.length > 0 && (
           <div className="wk-voice-modal-thread" data-testid="voice-modal-thread">
@@ -49,7 +48,7 @@ export function VoiceModal(): React.ReactElement {
         <VoiceSetup />
         <AskCard ask={ENTRY_ASK} onAnswer={(a) => answerEntry(a.option === 'yes')} testIds={{ root: 'voice-entry-ask' }} />
         <TypeInstead label="Or type it" testId="voice-modal-type" />
-        <p className="wk-voice-tip" data-testid="voice-tip">{listening ? 'Say “yes”, “no”, or ask about voice mode. Esc closes.' : 'Tap Yes or No, or type. Esc closes.'}</p>
+        <p className="wk-voice-tip" data-testid="voice-tip">Tap Yes or No, or type. Esc closes.</p>
       </div>
     </div>
   );

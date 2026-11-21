@@ -56,7 +56,7 @@ export interface PlacementSource {
   lens: () => number | null;
   /** The version the plugin last read (the group's), when it has read one. */
   groupShown: () => number | null;
-  adapter: { artifact(): { head: number }; flush?(): Promise<number>; made?: ReadonlySet<number> };
+  adapter: { artifact(): { head: number; read?: boolean }; flush?(): Promise<number>; made?: ReadonlySet<number> };
   /** The host: its write requests are waited for from the moment they are accepted. */
   host: () => { writesSettled?(): Promise<void> } | null;
 }
@@ -69,7 +69,10 @@ export function placementEntry(p: PlacementSource): InViewEntry {
     title: p.title,
     composerKey: p.composerKey,
     surface: p.surface,
-    shown: () => p.lens() ?? writtenVersion(p.ref) ?? p.groupShown() ?? (p.adapter.artifact().head > 0 ? p.adapter.artifact().head : null),
+    shown: () => {
+      const { head, read } = p.adapter.artifact();
+      return p.lens() ?? writtenVersion(p.ref) ?? p.groupShown() ?? (read !== false && head >= 0 ? head : null);
+    },
     flush: async () => {
       const before = p.adapter.artifact().head;
       await p.host()?.writesSettled?.();
@@ -150,7 +153,7 @@ export async function artifactContext(ref: string, anchors: readonly string[] = 
   const own = composerKey === undefined ? null : best(placed.filter((e) => e.composerKey === composerKey));
   const top = own ?? best(placed);
   const version = top?.shown() ?? fallbackVersion;
-  if (version === null || !Number.isInteger(version) || version < 1) return null;
+  if (version === null || !Number.isInteger(version) || version < 0) return null;
   const wids = [...new Set(anchors.filter(isAnchorWid))].slice(0, CONTEXT_ANCHORS_MAX);
   return { ref, version, ...(wids.length > 0 ? { anchors: wids } : {}) };
 }

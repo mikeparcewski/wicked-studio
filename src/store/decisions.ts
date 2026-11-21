@@ -33,7 +33,7 @@ interface DecisionsStore {
   /** The ledger's CURRENT views for a chat (`GET /decisions?chat=`), read once per chat and again
    *  on demand: a transcript's `decisions` records carry the state at recording time, so a reload
    *  must not restore a chip for a decision remembered or undone since. */
-  syncChat: (chatId: string) => Promise<void>;
+  syncChat: (chatId: string, opts?: { force: boolean }) => Promise<void>;
   /** The `/ws` frames; anything else is ignored. */
   ingest: (frame: { type: string } & Record<string, unknown>) => void;
   /** Re-read one decision after a change (ids only came over the wire). */
@@ -52,6 +52,13 @@ export const turnKey = (chatId: string, turnId: string): string => `${chatId}\u0
 let inflight: Promise<void> | null = null;
 /** Chats whose ledger views were read this session (`syncChat`). */
 const synced = new Set<string>();
+/** studio#670: the re-reads a settled turn still owes the recorder, by `turnKey`. Module-wide so a chat page opened
+ *  again never waits again on a turn it already waited on. */
+export const decisionChecks = new Map<string, { at: number | null; reads: number }>();
+/** After a turn settles: read the chat's decisions at these delays until its record shows. */
+export const DECISION_READ_DELAYS = [2000, 8000] as const;
+/** The chat read in flight, per chat (`syncChat`): callers at the same time share it. */
+const chatReads = new Map<string, Promise<void>>();
 /** A monotonic order over "a read started" and "a decision changed on good authority" (an action
  *  answered here, or a `decisionChanged` frame). Never wall-clock: two events in one millisecond
  *  must still order. A read applies a view only when the decision was not touched after the read
@@ -83,6 +90,20 @@ export const useDecisionsStore = create<DecisionsStore>((set, get) => {
       set((s) => ({ error: { ...s.error, [id]: msg(e) } }));
     } finally {
       set((s) => ({ busy: Object.fromEntries(Object.entries(s.busy).filter(([k]) => k !== id)) as Record<string, true> }));
+    }
+  };
+
+  const readChat = async (chatId: string): Promise<void> => {
+    const startedAt = tick();
+    try {
+      const r = await decisionsApi.list({ chat: chatId });
+      set((s) => ({ mode: r.mode, loaded: true, byId: { ...s.byId, ...freshOf(r.decisions, startedAt) } }));
+      for (const d of r.decisions) {
+        if (d.origin.chat_id === chatId && typeof d.origin.turn_id === 'string') get().ingestTurn(chatId, d.origin.turn_id, [d]);
+      }
+    } catch (e) {
+      synced.delete(chatId);
+      if (isDecisionsUnsupported(e)) set({ loaded: true, mode: 'off' });
     }
   };
 
@@ -119,17 +140,15 @@ export const useDecisionsStore = create<DecisionsStore>((set, get) => {
       });
     },
 
-    syncChat: async (chatId) => {
-      if (synced.has(chatId)) return;
+    syncChat: async (chatId, opts) => {
+      if (synced.has(chatId) && opts?.force !== true) return;
+      // One read per chat at a time: turns settling together share it.
+      const running = chatReads.get(chatId);
+      if (running !== undefined) return running;
       synced.add(chatId);
-      const startedAt = tick();
-      try {
-        const r = await decisionsApi.list({ chat: chatId });
-        set((s) => ({ mode: r.mode, loaded: true, byId: { ...s.byId, ...freshOf(r.decisions, startedAt) } }));
-      } catch (e) {
-        synced.delete(chatId);
-        if (isDecisionsUnsupported(e)) set({ loaded: true, mode: 'off' });
-      }
+      const read = readChat(chatId).finally(() => { chatReads.delete(chatId); });
+      chatReads.set(chatId, read);
+      return read;
     },
 
     ingest: (frame) => {
@@ -189,6 +208,8 @@ export const useDecisionsStore = create<DecisionsStore>((set, get) => {
 export function resetDecisionsStoreForTest(): void {
   inflight = null;
   synced.clear();
+  chatReads.clear();
+  decisionChecks.clear();
   touched.clear();
   clock = 0;
   useDecisionsStore.setState({ mode: null, loaded: false, byId: {}, byTurn: {}, busy: {}, error: {} });

@@ -68,6 +68,24 @@ describe('turns', () => {
     expect(String(apiFetch.mock.calls[0]![0])).toBe('/decisions?chat=chat-pay');
     expect(useDecisionsStore.getState().byId['dec_1']!.state).toBe('undone');
   });
+  it('a forced chat sync finds a late decision and maps its origin turn without a live frame', async () => {
+    const s = useDecisionsStore.getState();
+    apiFetch.mockResolvedValueOnce({ decisions: [], mode: 'on' });
+    await s.syncChat('chat-pay');
+    apiFetch.mockResolvedValueOnce({ decisions: [view()], mode: 'on' });
+    await s.syncChat('chat-pay', { force: true });
+    expect(apiFetch).toHaveBeenCalledTimes(2);
+    expect(useDecisionsStore.getState().byTurn[turnKey('chat-pay', 't9')]).toEqual(['dec_1']);
+  });
+
+  it('forced chat syncs at the same time share one read', async () => {
+    const s = useDecisionsStore.getState();
+    apiFetch.mockResolvedValue({ decisions: [view()], mode: 'on' });
+    await Promise.all(Array.from({ length: 10 }, () => s.syncChat('chat-pay', { force: true })));
+    expect(apiFetch).toHaveBeenCalledTimes(1);
+    expect(useDecisionsStore.getState().byTurn[turnKey('chat-pay', 't9')]).toEqual(['dec_1']);
+  });
+
   it('decisionChanged applies the state at once, then re-reads the view by its chat', async () => {
     useDecisionsStore.getState().ingestTurn('chat-pay', 't9', [view()]);
     apiFetch.mockResolvedValueOnce({ decisions: [view({ state: 'remembered', rule_id: 'proposal:pr-1', how: 'needs-you' })], mode: 'on' });

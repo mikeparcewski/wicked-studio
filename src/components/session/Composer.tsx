@@ -60,6 +60,16 @@ function renewCmdKey(composerKey: string): string {
   return k;
 }
 
+/** Draft ownership survives a composer remount, just as its command key does. */
+const drafts = new Map<string, { text: string; revision: number }>();
+function draftRevision(composerKey: string, text: string): number {
+  const prev = drafts.get(composerKey);
+  if (prev?.text === text) return prev.revision;
+  const revision = (prev?.revision ?? 0) + 1;
+  drafts.set(composerKey, { text, revision });
+  return revision;
+}
+
 /** Where a send goes besides the words: the project an `@project` chip named, and whether it opens a fresh session. */
 export interface ComposerSend {
   /** The `@project` chip's project: the chat is scoped to it. */
@@ -175,7 +185,7 @@ const NOTHING_STARTED = 'Nothing was started.';
 const SEAT_REFUSAL = /no seat in the roster|every seat is signed out|signed out or disabled/i;
 
 export function Composer({
-  composerKey, text, setText, onSend, runs = [], started = false, placeholder, ariaLabel, variant, className = '',
+  composerKey, text, setText: saveText, onSend, runs = [], started = false, placeholder, ariaLabel, variant, className = '',
   inputRef, hint = false, footer = null, suggestions = [], navigate, contextProjectId = null, answerOnly = false, answerOptional = false, jobChatId = null, chatHasPersonMessage,
 }: {
   /** DES-CATALOG-002 §4.6 (Lane E2): the chat this composer stands in, live on the daemon. A job picked here is posted
@@ -353,6 +363,11 @@ export function Composer({
     return found !== null && found.launchId === wfChip.workflowId && startsInline(found) ? found : null;
   }, [wfChip, catalogView]);
   const inline = useRef<InlineStartHandle | null>(null);
+  draftRevision(composerKey, text);
+  const setText = (next: string): void => {
+    draftRevision(composerKey, next);
+    saveText(next);
+  };
   const textNow = useRef(text);
   textNow.current = text;
   const [startBlocker, setStartBlocker] = useState<string | null>(null);
@@ -664,7 +679,7 @@ export function Composer({
     setJobBusy(true);
     setNote(null);
     setStartNote(composerKey, null);
-    const sentWords = text;
+    const sentRevision = draftRevision(composerKey, text);
     const helper = chips.find((c) => c.kind === 'about' && c.key.startsWith('h:'));
     try {
       const out = await postJob({
@@ -680,13 +695,14 @@ export function Composer({
       if (out === null) return;
       // The draft this post came from still owns the box only if its pick (or its command key) is still the one there
       // and its words are unchanged: a replacement pick with the same words is not cleared (codex r2).
-      const owned = j.chipKey !== null
+      const sameDraft = drafts.get(composerKey)?.revision === sentRevision;
+      const owned = sameDraft && (j.chipKey !== null
         ? chipsOf(useComposerChips.getState(), composerKey).some((c) => c.key === j.chipKey)
-        : cmdKeys.get(composerKey) === j.pickKey && !chipsOf(useComposerChips.getState(), composerKey).some((c) => c.kind === 'workflow');
+        : cmdKeys.get(composerKey) === j.pickKey && !chipsOf(useComposerChips.getState(), composerKey).some((c) => c.kind === 'workflow'));
       // A typed command posted is spent: the next one is its own request (codex r1).
-      if (j.renewCmd === true && cmdKeys.get(composerKey) === j.pickKey) renewCmdKey(composerKey);
+      if (owned && j.renewCmd === true) renewCmdKey(composerKey);
       if (j.chipKey !== null) removeAboutChip(composerKey, j.chipKey);
-      if (owned && textNow.current === sentWords) setText('');
+      if (owned) setText('');
     } catch (e) {
       setStartNote(composerKey, `Nothing was started: ${e instanceof Error ? e.message : String(e)}`);
     } finally {

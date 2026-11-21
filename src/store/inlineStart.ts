@@ -96,15 +96,18 @@ export interface JobPost {
 
 /** The request id a pick's body was sent under: a retry of the same body reuses it, another body gets its own. Spent
  *  once the post is answered (codex r1: the next identical job is a new request). */
-const sent = new Map<string, { body: string; requestId: string }>();
+interface SentJob { body: string; requestId: string }
+const sent = new Map<string, SentJob>();
 
-function requestIdFor(pickKey: string, body: string): string {
+function requestFor(pickKey: string, body: string): SentJob {
   const prev = sent.get(pickKey);
-  if (prev !== undefined && prev.body === body) return prev.requestId;
-  const requestId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-    ? crypto.randomUUID() : `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-  sent.set(pickKey, { body, requestId });
-  return requestId;
+  const requestId = prev?.body === body ? prev.requestId
+    : typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID() : `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  // Identical retries share the wire id; only the latest attempt may retire it.
+  const mine = { body, requestId };
+  sent.set(pickKey, mine);
+  return mine;
 }
 
 /** A named opener's own envelope, kept with its job chip until the job is posted: where it opens (the project, the
@@ -144,11 +147,13 @@ export async function postJob(p: JobPost): Promise<{ chatId: string; proposal: C
     ...(p.words.trim() !== '' ? { words: p.words.trim() } : {}),
     source: p.source,
   };
+  let mine: SentJob;
   let seedClis: string[] | null = null;
   let out: { chatId: string; proposal: ChatProposalView | null };
   if (p.chatId !== null) {
     const body = JSON.stringify(['chat', p.chatId, fields]);
-    const { view } = await api.proposeInChat(p.chatId, { ...fields, requestId: requestIdFor(p.pickKey, body) });
+    mine = requestFor(p.pickKey, body);
+    const { view } = await api.proposeInChat(p.chatId, { ...fields, requestId: mine.requestId });
     out = { chatId: p.chatId, proposal: view };
   } else {
     let projectId = p.projectId;
@@ -187,7 +192,8 @@ export async function postJob(p: JobPost): Promise<{ chatId: string; proposal: C
     const clis = p.lead !== undefined && chosen.includes(p.lead) ? [p.lead, ...chosen.filter((k) => k !== p.lead)] : chosen;
     seedClis = clis;
     const body = JSON.stringify(['seed', fields, scope, clis]);
-    const res = await api.openChat({ seed: fields, clis, requestId: requestIdFor(p.pickKey, body), ...scope });
+    mine = requestFor(p.pickKey, body);
+    const res = await api.openChat({ seed: fields, clis, requestId: mine.requestId, ...scope });
     // A refused seed opened its chat but made no proposal: say why where the person is. A retry of the same body is the
     // same request, so crew answers that chat and completes its proposal (§4.6).
     if (res.proposal === undefined && res.seedRefused !== undefined) throw new Error(res.seedRefused.error);
@@ -197,8 +203,10 @@ export async function postJob(p: JobPost): Promise<{ chatId: string; proposal: C
       addStartNote(res.chatId, `This chat was not filed in the project (${res.projectAttachError}). Its job is here; file the chat from its menu.`);
     }
   }
-  sent.delete(p.pickKey);
-  prepicked.delete(p.pickKey);
+  if (sent.get(p.pickKey) === mine) {
+    sent.delete(p.pickKey);
+    prepicked.delete(p.pickKey);
+  }
   const req = env?.requirements;
   const removeSeats = seedClis === null ? [] : (out.proposal?.proposal.seats?.keys ?? []).filter((key) => !seedClis.includes(key));
   if (out.proposal !== null && (req != null || removeSeats.length > 0)) {

@@ -1258,10 +1258,16 @@ def _dec(id_, turn, words, statement, route, state, **over):
 
 DECISIONS: dict = {}
 DECISION_TURNS: list = []
+# Crew records a decision in its ledger at the moment it broadcasts the turn's chatDecisions frame
+# (decisions/chat-recorder.ts), so a decision the journey pushes live is not in GET /decisions
+# until its frame goes out (studio#670: a ledger view the page reads is drawn under its turn).
+DECISIONS_UNRECORDED: set = set()
 
 
 def reset_decisions() -> None:
     DECISIONS.clear()
+    DECISIONS_UNRECORDED.clear()
+    DECISIONS_UNRECORDED.add("dec-live")
     items = [
         _dec("dec-auto", "d1", "from now on, always check the payment provider’s records, not just our database",
              "Always check the payment provider’s records, not just our database", "auto", "remembered", how="auto",
@@ -6308,6 +6314,10 @@ class W2Handler(SimpleHTTPRequestHandler):
                 # Slice V: raw one-shot CoreEvent frames, verbatim (e.g. a
                 # sessionFailed that mints a run_failed notification row).
                 for frame in frames_extra:
+                    if frame.get("type") == "chatDecisions":
+                        with decisions_lock:
+                            for item in frame.get("items", []):
+                                DECISIONS_UNRECORDED.discard(item.get("id"))
                     self.wfile.write(ws_frame(frame))
                 # A plain string keeps the historical shape (r-upload ord 0 —
                 # every standing rig); a dict targets {session, ord?, text} so
@@ -8652,7 +8662,8 @@ class W2Handler(SimpleHTTPRequestHandler):
             since = int((q.get("since") or ["0"])[0] or 0)
             with decisions_lock:
                 rows = [d for d in DECISIONS.values()
-                        if (want_state is None or d["state"] == want_state)
+                        if d["id"] not in DECISIONS_UNRECORDED
+                        and (want_state is None or d["state"] == want_state)
                         and (want_chat is None or d["origin"].get("chat_id") == want_chat)
                         and (want_project is None or d["project_id"] == want_project)
                         and (want_run is None or d["origin"].get("run_id") == want_run)
