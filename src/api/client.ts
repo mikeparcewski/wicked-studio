@@ -956,10 +956,12 @@ export const api = {
    * daemon accepts it only while the run is `executing` (409 otherwise — an awaiting-human run
    * must be approved first), and `cli` must be in the run's own pool (`session.clis`; 400).
    */
-  reassignRun: (id: string, cli?: string, note?: string) =>
+  reassignRun: (id: string, cli?: string, note?: string, ord?: number) =>
     apiFetch<{ status: string; ord: number; cli?: string }>(`/runs/${encodeURIComponent(id)}/reassign`, {
       method: 'POST',
-      body: JSON.stringify({ ...(cli === undefined ? {} : { cli }), ...(note?.trim() ? { note: note.trim() } : {}) }),
+      // studio#1121 (crew#1676, api-types 0.217.0 `ReassignRequest.ord`; local until studio pins it): the gate the card
+      // showed, or on an executing run the step it showed; crew answers 409 `gate_changed` when that is not the one now.
+      body: JSON.stringify({ ...(cli === undefined ? {} : { cli }), ...(note?.trim() ? { note: note.trim() } : {}), ...(ord === undefined ? {} : { ord }) }),
     }),
 
   /**

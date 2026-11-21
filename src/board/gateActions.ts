@@ -390,6 +390,7 @@ export function commitGateReassign(runId: string, cli: string, seatLabel: string
   patch(runId, { queued: true, ...NO_ERROR });
   const label = gateLabel(runId);
   const gateNow = useGateStore.getState().gates[runId];
+  const ord = expect?.ord ?? gateNow?.ord;
   return new Promise<DecisionOutcome>((resolve, reject) => {
     const id = queueDecision({
       verb: 'approve',
@@ -401,7 +402,7 @@ export function commitGateReassign(runId: string, cli: string, seatLabel: string
         watched.delete(runId);
         patch(runId, { queued: false, busy: true });
         try {
-          await api.reassignRun(runId, cli, note);
+          await api.reassignRun(runId, cli, note, ord);
           patch(runId, { busy: false });
           // studio#1121: a newer gate that opened while the move was on its way is not the one it answered.
           if (!differentOpenGate(runId, gateNow)) {
@@ -411,6 +412,12 @@ export function commitGateReassign(runId: string, cli: string, seatLabel: string
           reportDecision('sent', `Moved ${label} to ${seatLabel}; the retry runs there.`, { keys: [gateKeyOf(runId)] });
           resolve('sent');
         } catch (e) {
+          // studio#1121: crew refused the move because the gate it named is no longer the open one: nothing moved. The
+          // open gate is read again, so its card shows, with crew's words.
+          if (gateMovedCode(e) !== null) {
+            patch(runId, { busy: false });
+            await refreshGate(runId);
+          }
           const failed = failureOf(e);
           const why = failed.error;
           patch(runId, { busy: false, ...failed });

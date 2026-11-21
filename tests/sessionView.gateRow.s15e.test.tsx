@@ -702,7 +702,7 @@ describe('studio#1177: listed notes and missing evidence', () => {
     await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).endsWith(`/runs/${RUN}/reassign`))).toBe(true));
     const call = fetch.mock.calls.find(([url]) => String(url).endsWith(`/runs/${RUN}/reassign`))!;
     expect(call[1]?.method).toBe('POST');
-    expect(JSON.parse(String(call[1]?.body))).toEqual({ cli: 'codex', ...(words.trim() ? { note: words.trim() } : {}) });
+    expect(JSON.parse(String(call[1]?.body))).toEqual({ cli: 'codex', ...(words.trim() ? { note: words.trim() } : {}), ord: 1 });
   });
 
   it('listed answers survive a failed events read, and Retry restores evidence', async () => {

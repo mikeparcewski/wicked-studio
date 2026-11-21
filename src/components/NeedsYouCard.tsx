@@ -74,7 +74,8 @@ export function NeedsYouCard({ view, state }: { view: SessionView; state: NeedsY
     setNote(null);
     try {
       if (kind === 'reassign') {
-        const r = await api.reassignRun(runId);
+        // studio#1121: the step this card shows; crew refuses (409 gate_changed) if the run moved to another one.
+        const r = await api.reassignRun(runId, undefined, undefined, state.ord ?? undefined);
         // studio#734: plain words — the step runs again, on the seat it was moved to.
         setNote({ tone: 'ok', text: `Step ${r.ord} is running again${r.cli !== undefined ? ` on ${r.cli}` : ''}.` });
       } else {

@@ -40,7 +40,8 @@ describe('a running step silent past crew\'s quiet mark', () => {
     await waitFor(() => expect(inject).toHaveBeenCalledWith('r1', expect.stringContaining('silent'), 'all'));
     fireEvent.click(screen.getByTestId('silent-step-move'));
     await waitFor(() => expect(screen.getByTestId('silent-step-note').textContent).toBe('Reproduce is running again on Pi CLI.'));
-    expect(reassign).toHaveBeenCalledWith('r1');
+    // studio#1121: the move names the silent step the card shows.
+    expect(reassign).toHaveBeenCalledWith('r1', undefined, undefined, 2);
   });
 });
 
