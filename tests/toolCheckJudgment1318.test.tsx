@@ -20,7 +20,7 @@ import { describeDecision, setUndoWindowForTest, useUndoQueue } from '../src/boa
 import { AssuranceReceipt as ReceiptView } from '../src/components/session/AssuranceReceipt.js';
 import { GateRow } from '../src/components/session/GateRow.js';
 import { useRunEventStore } from '../src/store/events.js';
-import type { OpenGate } from '../src/store/gates.js';
+import { useGateStore, type OpenGate } from '../src/store/gates.js';
 import { chooseGate } from './askGateHelpers.js';
 import { makeUnit, makeView } from './factories.js';
 
@@ -66,7 +66,7 @@ describe('the triage card asks for the reason, in the tool check\'s words', () =
     useUndoQueue.setState({ pending: [], results: [], restoredNotes: {} });
     vi.spyOn(api, 'confirmGate').mockResolvedValue({ status: 'ok' });
   });
-  afterEach(() => { cleanup(); useUndoQueue.setState({ pending: [], results: [], restoredNotes: {} }); });
+  afterEach(() => { cleanup(); useUndoQueue.setState({ pending: [], results: [], restoredNotes: {} }); useGateStore.setState({ gates: {} }); });
 
   it('says what it does first, opens an empty box, and sends the operator judgment with the reason', async () => {
     const log = [{ type: 'awaitingHuman', session: RUN, ord: 4, gateKind: 'triage', prompt: PROMPT, seq: 9, ts: 1 }] as unknown as CoreEvent[];
@@ -74,6 +74,8 @@ describe('the triage card asks for the reason, in the tool check\'s words', () =
     vi.spyOn(api, 'getRunEvents').mockResolvedValue({ events: log } as never);
     const gate: OpenGate = { runId: RUN, ord: 4, prompt: PROMPT, gateKind: 'triage', receivedAt: 1, lifecycle: 'open', actions: triage.actions };
     const units = [makeUnit({ ord: 4, stage: 'test', status: 'distributed', session_id: RUN } as never)];
+    // The store holds the gate the card shows: a decision on a gate the store doesn't hold is refused (#1241).
+    useGateStore.getState().setGate(gate);
     render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human' } as never, units)} gate={gate} />);
     const choice = screen.getAllByTestId('session-gate-choice').find((c) => c.dataset['choiceKey'] === TOOL_CHECK_OVERRIDE_KEY)!;
     expect(choice.textContent).toContain('Approve as your own judgment');
