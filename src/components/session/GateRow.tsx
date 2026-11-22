@@ -367,7 +367,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
           ))}
         </ul>
       )}
-      {seatRefusal && <CreatorSeatRefusal view={view} {...(navigate !== undefined ? { navigate } : {})} />}
+      {seatRefusal && <CreatorSeatRefusal view={view} noneInJob={noneInJob} {...(navigate !== undefined ? { navigate } : {})} />}
     </>
   );
   const assurance = model === null ? null : (
@@ -409,11 +409,24 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
  * with this run's brief and the opt-in ticked (`reducedAssurance: true`), said before it is taken;
  * nothing starts until the operator launches, and this run stays at its gate (Stop ends it).
  */
-export function CreatorSeatRefusal({ view, navigate }: { view: RunView; navigate?: Navigate }): React.ReactElement {
+export function CreatorSeatRefusal({ view, navigate, noneInJob = false }: { view: RunView; navigate?: Navigate; noneInJob?: boolean }): React.ReactElement {
   const can = useCapabilities((s) => s.reducedAssurance);
   // (mockup ui-v2-gate) The headline already says it ("No second helper is free to review this"): no bold lead-in
   // here, and the reduced-assurance relaunch is one of the Other options ({@link ReducedRelaunchItem}).
   void view; void navigate;
+  // (studio#1329) The engine ruled out every helper of this job: signing one in or handing the review to one changes
+  // nothing, so neither is said; the way on is the job again with another helper (or reduced assurance).
+  if (noneInJob) {
+    return (
+      <div data-testid="session-gate-creator-seat" role="status" className="wk-gate-consequence">
+        <p className="wk-assurance-lead">
+          This job requires an independent check, and none of its helpers can give one: each built the work or calls
+          the same provider as a helper that did. Start the job again with a helper that calls another provider
+          {can ? ', or with reduced assurance' : ''}.
+        </p>
+      </div>
+    );
+  }
   return (
     <div data-testid="session-gate-creator-seat" role="status" className="wk-gate-consequence">
       <p className="wk-assurance-lead">

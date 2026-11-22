@@ -33,7 +33,10 @@ const deadEnd = (outside: string | null): string =>
   + (outside !== null
     ? `\`${outside}\` could review it, but it is not one of this run's helpers: start the job again with \`${outside}\` among its helpers, or relaunch with reduced assurance`
     : 'start the job again with a helper that calls another provider, or relaunch with reduced assurance');
-const prompt = (reason: string): string => `Unit 3 (pi) reviewed work built on its own seat: ${reason}.`;
+/** The gate prompt as core writes it for a same-seat denial (core src/actor.rs, the `dead_seat` arm): the reason's first
+ *  line cut at 240 characters (`reason_head`). The escalation's `verdictSummary` carries the whole reason. */
+const head = (reason: string): string => (reason.length <= 240 ? reason : `${reason.slice(0, 240)}…`);
+const prompt = (reason: string): string => `Unit 3 (pi) reviewed work built on its own seat: ${head(reason)}. Reassign the unit to a distinct seat (sign one in first if needed) and approve to retry, or reject to stop the run`;
 /** Without the dead end (core: another seat could review it): the reassign words. */
 const REASSIGN = 'unit 3 ran on `pi`, observed calling `api.anthropic.com:443`, the provider the work\'s author `claude` called; '
   + 'the run requires a distinct evaluator (distinct_evaluator) — reassign it to a distinct signed-in seat and approve to re-run, or relaunch with reduced assurance';
@@ -98,11 +101,40 @@ describe('studio#1329: the engine ruled out every helper of the job', () => {
     expect(screen.queryAllByTestId('session-gate-choice').some((b) => /Approve and retry with/.test(b.textContent ?? ''))).toBe(false);
   });
 
-  it('the card with no outside helper: no sign-in lead (signing a job helper in changes nothing)', async () => {
+  it('the card with no outside helper: no sign-in lead, and the explanation never says to sign one in or hand it over', async () => {
     const reason = deadEnd(null);
     useRunEventStore.setState({ byRun: { [RUN]: events(reason) } });
     render(<GateRow view={view()} gate={gate(reason)} navigate={vi.fn()} />);
     await waitFor(() => expect(screen.getByTestId('session-gate-question').textContent).toBe('None of this job’s helpers can review this independently'));
     expect(screen.queryByTestId('session-gate-lead-act')).toBeNull();
+    const why = screen.getByTestId('session-gate-creator-seat').textContent ?? '';
+    expect(why).toContain('none of its helpers can give one');
+    expect(why).not.toMatch(/second signed-in helper|sign a second helper in/);
+    expect(screen.queryByTestId('session-gate-creator-seat-nocap')).toBeNull();
+  });
+
+  it('review r1: an earlier attempt’s dead end never rules out the job’s helpers for the current attempt', () => {
+    // Attempt 1 ended in the dead end; the step was dispatched again and its gate now is the plain reassign denial.
+    const log = [
+      ...events(deadEnd('copilot')),
+      { type: 'unitDispatched', session: RUN, ord: 3, attempt: 2 },
+      { type: 'awaitingHuman', session: RUN, ord: 3, gateKind: 'escalation', prompt: prompt(REASSIGN), ts: 2 },
+    ] as unknown as CoreEvent[];
+    expect(noDistinctReviewer(log, 3, prompt(REASSIGN))).toBeNull();
+    const c = gateCause({ view: view(), gate: gate(REASSIGN), events: log, model: { choices: [], overflow: [], recommended: null } as never, roster: ROSTER as never });
+    expect(c.noneInJob).toBe(false);
+  });
+
+  it('review r1: the gate prompt (cut at 240 characters by the engine) is read only without an escalation of this attempt', () => {
+    // The cut keeps the dead end and loses the outside helper's name: the card names none rather than guess.
+    expect(noDistinctReviewer([], 3, prompt(deadEnd('copilot')))).toEqual({ outside: null });
+  });
+
+  it('review r1: the outside helper the engine named is offered only while the roster says it can work', () => {
+    const reason = deadEnd('copilot');
+    const inactive = ROSTER.map((r) => (r.key === 'copilot' ? { ...r, health: { status: 'inactive' } } : r));
+    const c = gateCause({ view: view(), gate: gate(reason), events: events(reason), model: { choices: [], overflow: [], recommended: null } as never, roster: inactive as never });
+    expect(c.judges?.outside).toBeUndefined();
+    expect(c.headline).toBe('None of this job’s helpers can review this independently');
   });
 });

@@ -50,9 +50,14 @@ export function judgeSeats(view: RunView, ord: number, prompt: string, pool: rea
     ...reassignRefusedOf(view.units, ord),
   ])];
   const inJob = reassignCandidates(pool, unitCli, roster, builders, benched).find((c) => c.state === 'ready' && !builders.includes(c.cli));
-  const outside = (roster ?? []).find((r) => r.signed_in === true && !pool.includes(r.key) && !builders.includes(r.key) && isHelperSeat(r.key)
-    && (r as { health?: { status?: string } }).health?.status !== 'inactive');
+  const outside = (roster ?? []).find((r) => !pool.includes(r.key) && !builders.includes(r.key) && outsideReady(r));
   return { builders, ...(inJob !== undefined ? { inJob } : {}), ...(outside !== undefined ? { outside } : {}) };
+}
+
+/** A helper outside the job that could take the work now, as the live roster says: signed in, a helper seat, not
+ *  inactive. One rule for the seat studio finds and the one the engine names (studio#1329). */
+function outsideReady(r: RosterSeat): boolean {
+  return r.signed_in === true && isHelperSeat(r.key) && (r as { health?: { status?: string } }).health?.status !== 'inactive';
 }
 
 /**
@@ -144,7 +149,7 @@ export function gateCause({ view, gate, events, model, roster, pool = runPoolOf(
   // job the engine named, when the live roster has it signed in.
   const deadEnd = seatRefusal && gate !== undefined ? noDistinctReviewer(events, gate.ord, gate.prompt) : null;
   const named = deadEnd?.outside ?? null;
-  const outsideSeat = named === null ? undefined : (roster ?? []).find((r) => r.key === named && r.signed_in === true);
+  const outsideSeat = named === null ? undefined : (roster ?? []).find((r) => r.key === named && outsideReady(r));
   const judges = seats === null || deadEnd === null ? seats : { builders: seats.builders, ...(outsideSeat !== undefined ? { outside: outsideSeat } : {}) };
   const broke = fresh !== null && fresh.length > 0
     ? (fresh.length === 1 ? 'One test this change broke needs fixing before the job can go on' : `${fresh.length} tests this change broke need fixing before the job can go on`)
