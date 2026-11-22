@@ -1,4 +1,5 @@
 import { steeringTypeOf, type SteeringRule } from '../api/steering.js';
+import { engineChecksOf } from './engineCheck.js';
 
 /**
  * "Hold work to it" (DES-WALKTHROUGH-PROOF-001 §3 scenes 29-30, §4.12 "held vs advisory"; slice WT-U2):
@@ -48,11 +49,22 @@ export function unknownObligations(tokens: readonly string[]): string[] {
 }
 
 /** The rule as HELD: the effect plus the obligations, everything else as it was. `null` when there is
- *  nothing to hold it to, or a token is not in the vocabulary. */
+ *  nothing to hold it to, or a token is not in the vocabulary. An engine check the rule carries
+ *  (studio#1002) is kept, never dropped by a hold; the engine refuses it at plan compose, which
+ *  {@link holdBlocked} says before the switch is offered. */
 export function heldRule(rule: SteeringRule, obligations: readonly string[]): SteeringRule | null {
   const list = [...new Set(obligations)];
   if (list.length === 0 || unknownObligations(list).length > 0) return null;
-  return { ...rule, effect: HELD_EFFECT, obligations: list };
+  return { ...rule, effect: HELD_EFFECT, obligations: [...list, ...engineChecksOf(rule)] };
+}
+
+/** Why a hold cannot be written, or `null`: a rule that applies at plan compose and carries an engine
+ *  check, since the engine holds work there only to plan steps (wicked-governance
+ *  `check_plan_compose_rule`). */
+export function holdBlocked(rule: SteeringRule): string | null {
+  const checks = engineChecksOf(rule);
+  if (checks.length === 0 || !(rule.applies_to ?? []).includes('plan.compose')) return null;
+  return `Hold is off: it carries an engine check (${checks.join(', ')}), and the engine holds a plan compose rule only to plan steps. Edit the rule to clear its engine check first.`;
 }
 
 /** The rule as ADVISORY: no effect; the trigger and obligations stay on it, inert. */
