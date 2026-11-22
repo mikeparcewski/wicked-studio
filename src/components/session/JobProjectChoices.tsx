@@ -110,21 +110,37 @@ export function JobProjectChoices({ chatId, proposal, onError, endSourceChat = f
   const moveTo = async (p: Project, here: string): Promise<void> => {
     // studio#1273: whether the project holds the job's repository is the daemon's answer, read at the press (never
     // component memory, which a remount loses): a project made here whose attach failed is attached on the next pick.
+    // The read and the attach run under the job's shared move guard (`moving`, which a remount keeps), so a second
+    // pick from a remounted passage waits; a person who went elsewhere meanwhile gets no attach (codex r1).
     if (repo !== null) {
-      let holds: boolean;
+      const pid = proposal.pid;
+      const st = useJobMoves.getState();
+      if (st.moving[pid] === true || moveOf(st.moves, pid) !== null) return;
+      useJobMoves.setState((s) => ({ moving: { ...s.moving, [pid]: true } }));
       try {
-        holds = await projectHoldsRepo(p.id, repo);
-      } catch (e: unknown) {
-        onError(`The members of ${p.name} could not be read: ${e instanceof Error ? e.message : String(e)}. Pick the project to try again.`);
-        return;
-      }
-      if (!holds) {
+        let holds: boolean;
         try {
-          await api.attachProjectMember(p.id, { kind: 'crew.repo', ref: repo, attachedBy: 'studio' });
+          holds = await projectHoldsRepo(p.id, repo);
         } catch (e: unknown) {
-          onError(`The repository was not attached to ${p.name}: ${e instanceof Error ? e.message : String(e)}. Pick the project to try again.`);
+          onError(`The members of ${p.name} could not be read: ${e instanceof Error ? e.message : String(e)}. Pick the project to try again.`);
           return;
         }
+        if (placeToken() !== here) return;
+        if (!holds) {
+          try {
+            await api.attachProjectMember(p.id, { kind: 'crew.repo', ref: repo, attachedBy: 'studio' });
+          } catch (e: unknown) {
+            onError(`The repository was not attached to ${p.name}: ${e instanceof Error ? e.message : String(e)}. Pick the project to try again.`);
+            return;
+          }
+        }
+      } finally {
+        // Released just before `moveJob` takes the same guard, in this same turn: no other pick can slip between.
+        useJobMoves.setState((s) => {
+          const moving = { ...s.moving };
+          delete moving[pid];
+          return { moving };
+        });
       }
     }
     try {

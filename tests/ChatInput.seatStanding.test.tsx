@@ -82,12 +82,14 @@ describe('ChatInput seat warning — one fold with the Health rail (F-A45-006)',
       roster: [
         seat({ key: 'claude', signed_in: true }),
         seat({ key: 'pi', signed_in: true, ...bag({ auth: 'signed_in', council_eligible: false, council_ineligible_reason: 'not enabled for council', work_eligible: true }) }),
+        // Both roles off: its sentence shows once the selected helpers are read, so the absence of pi is not vacuous.
+        seat({ key: 'agy', signed_in: true, ...bag({ auth: 'signed_in', council_eligible: false, work_eligible: false, work_ineligible_reason: 'over its usage limit' }) }),
       ],
     });
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
-    await waitFor(() => expect(client.api.getRoster).toHaveBeenCalled());
-    await screen.findByPlaceholderText(/./);
-    expect(screen.queryByTestId('ineligible-warning')).toBeNull();
+    const w = await screen.findByTestId('ineligible-warning');
+    expect(w).toHaveTextContent('agy: not given work or checks — over its usage limit');
+    expect(w.textContent).not.toMatch(/\bpi\b/);
   });
   it('a helper with both roles off is named as left out, with the daemon\'s work reason and no council words', async () => {
     vi.mocked(client.api.getRoster).mockResolvedValue({
