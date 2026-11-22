@@ -1040,6 +1040,8 @@
     "job-passage-undo": "inline-undo-button",
     "session-step-queued": "inline-undo",
     "session-step-undo": "inline-undo-button",
-    "session-gate-chosen-wait": "inline-undo-headline"
+    "session-gate-chosen-wait": "inline-undo-headline",
+    "job-passage-repo-picked": "job-passage-repos",
+    "job-passage-repos-back": "job-passage-repo"
   }
 }

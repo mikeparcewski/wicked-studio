@@ -590,8 +590,17 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
           <p>{question.text}</p>
           {/* F39: crew asks for the project with nothing to press; the passage offers the projects (a new chat there). */}
           {asksForProject(head.proposal) && <JobProjectChoices chatId={chatId} proposal={head.proposal} endSourceChat={endSourceChat} onError={setError} />}
-          {/* F41: crew asks for the repository with nothing to press (a new chat has none in scope): the registered ones. */}
-          {asksForRepo(head.proposal) && <JobRepoChoices chatId={chatId} proposal={head.proposal} endSourceChat={endSourceChat} onError={setError} />}
+          {/* F41: crew asks for the repository with nothing to press (a new chat has none in scope): the registered ones.
+              studio#1094: the pick answers in this chat (crew#1672 sets the chat's first repository from it). */}
+          {asksForRepo(head.proposal) && (
+            <JobRepoChoices key={pid} chatId={chatId} proposal={head.proposal}
+              disabled={v.tokensHeld || local.deciding[lineage.lineage] === true}
+              onPick={(repoRef) => {
+                const st = useJobLocal.getState();
+                if (v.phase !== 'asking' || st.swapPending[lineage.lineage] === pid || st.deciding[lineage.lineage] === true) return;
+                revise({ repoRef }, 'question', undefined, null, null);
+              }} />
+          )}
           {requirementsNeed !== undefined && (
             <JobRequirementsChoices key={`${pid}:${requirementsNeed.id}`} proposal={head.proposal} navigate={navigate}
               disabled={v.tokensHeld || local.deciding[lineage.lineage] === true}

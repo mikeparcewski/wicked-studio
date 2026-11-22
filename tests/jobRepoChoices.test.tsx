@@ -3,11 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * F41 (e2e-1105 on #1037): `/analyze domain Map the domain of rg1 …` from a NEW chat gets a passage asking "Which
- * repository? This chat has none in its scope" with nothing to press (crew's choices are the chat's scope, and a
- * revision's `repoRef` outside it is refused). The passage offers the registered repositories (those the words name
- * first), and a press moves the same job to a new chat on that repository, filed in the project that solely holds it
- * (else, for a job that needs a project, the project chips ask first). A job seeded from a new chat whose words name
- * one repository opens on it (the composer's pre-pick). After a move the old chat says where the job went.
+ * repository? This chat has none in its scope" with nothing to press. The passage offers the registered repositories
+ * (those the words name first). studio#1094: a press answers crew's question in this chat, as the revision
+ * `{repoRef}` (crew#1672 sets a repository-less chat's first repository from the person's pick), so no chat is left
+ * behind; it used to move the job to a new chat and leave this one. A job seeded from a new chat whose words name one
+ * repository opens on it (the composer's pre-pick). A job still moved to a new chat (F39, a project it lacks) leaves
+ * a line in the old chat saying where it went.
  */
 
 vi.mock('../src/hooks/useEventStream.js', () => ({ useEventStream: () => undefined }));
@@ -115,16 +116,25 @@ const page = (id = CHAT) => render(<SessionPage sessionId={id} runs={[]} runsLoa
 const repoChips = (): HTMLButtonElement[] => screen.queryAllByTestId('job-passage-repo') as HTMLButtonElement[];
 const projectChips = (): HTMLButtonElement[] => screen.queryAllByTestId('job-passage-project') as HTMLButtonElement[];
 const seeds = () => posts.filter((p) => p.path === '/chats');
+const revisions = () => posts.filter((p) => p.path === `/chats/${CHAT}/proposals`);
+/** A job whose repository is known and whose project crew asks for (F39): its chips move it to a new chat. */
+const askingProject = (over: Record<string, unknown> = {}) => asking({
+  repoRefs: ['rg2'],
+  needs: asking().needs!.map((n) => (n.id === 'repo' ? { ...n, status: 'met', value: 'rg2' } : n)),
+  question: { kind: 'missing', text: 'Which project? This job belongs to one.', choices: [] },
+  ...over,
+});
 const notNows = () => posts.filter((p) => p.path.startsWith(`/chats/${CHAT}/proposals/`));
 
-describe('T6: the chat a job leaves', () => {
+describe('T6: the chat a job leaves (a project move, F39)', () => {
+  beforeEach(() => { messages = [{ at: T0, turnId: 'person:1', kind: 'proposal', proposal: askingProject() }]; });
   it('ends a proposal-only chat once, after Not now lands', async () => {
     let release!: () => void;
     notNowGate = new Promise((r) => { release = r; });
     members = { p1: [{ member_kind: 'crew.repo', member_ref: 'rg2' }] };
     page();
-    await waitFor(() => expect(repoChips().length).toBeGreaterThan(0));
-    fireEvent.click(repoChips()[0]!);
+    await waitFor(() => expect(projectChips().length).toBeGreaterThan(0));
+    fireEvent.click(projectChips()[0]!);
     await waitFor(() => expect(notNows()).toHaveLength(1));
     expect(posts.filter((p) => p.path === `/chats/${CHAT}/close`)).toEqual([]);
     await act(async () => { release(); });
@@ -138,8 +148,8 @@ describe('T6: the chat a job leaves', () => {
     closeFails = true;
     members = { p1: [{ member_kind: 'crew.repo', member_ref: 'rg2' }] };
     page();
-    await waitFor(() => expect(repoChips().length).toBeGreaterThan(0));
-    fireEvent.click(repoChips()[0]!);
+    await waitFor(() => expect(projectChips().length).toBeGreaterThan(0));
+    fireEvent.click(projectChips()[0]!);
     await waitFor(() => expect(posts.filter((p) => p.path === `/chats/${CHAT}/close`)).toHaveLength(1));
     await waitFor(() => expect(useJobMoves.getState().moves[asking().pid]?.retired).toBe('done'));
     expect(useJobMoves.getState().moves[asking().pid]?.error).toBeNull();
@@ -152,85 +162,84 @@ describe('T6: the chat a job leaves', () => {
     messages.unshift({ at: T0 - 1, turnId: 'person:0', kind: 'user', text: 'Please keep this discussion.' });
     members = { p1: [{ member_kind: 'crew.repo', member_ref: 'rg2' }] };
     page();
-    await waitFor(() => expect(repoChips().length).toBeGreaterThan(0));
-    fireEvent.click(repoChips()[0]!);
+    await waitFor(() => expect(projectChips().length).toBeGreaterThan(0));
+    fireEvent.click(projectChips()[0]!);
     await waitFor(() => expect(useJobMoves.getState().moves[asking().pid]?.retired).toBe('done'));
     expect(posts.filter((p) => p.path === `/chats/${CHAT}/close`)).toEqual([]);
     expect(screen.getByTestId('job-passage-projects').textContent).toContain('This job moved to reqgraph.');
   });
   it('keeps a chat with another proposal lineage', async () => {
-    messages.unshift({ at: T0 - 1, turnId: 'person:0', kind: 'proposal', proposal: asking({ pid: 'earlier', lineage: 'earlier' }) });
+    messages.unshift({ at: T0 - 1, turnId: 'person:0', kind: 'proposal', proposal: askingProject({ pid: 'earlier', lineage: 'earlier' }) });
     members = { p1: [{ member_kind: 'crew.repo', member_ref: 'rg2' }] };
     page();
-    await waitFor(() => expect(repoChips().length).toBeGreaterThan(0));
-    fireEvent.click(repoChips()[0]!);
+    await waitFor(() => expect(projectChips().length).toBeGreaterThan(0));
+    fireEvent.click(projectChips()[0]!);
     await waitFor(() => expect(useJobMoves.getState().moves[asking().pid]?.retired).toBe('done'));
     expect(posts.filter((p) => p.path === `/chats/${CHAT}/close`)).toEqual([]);
   });
 });
 
-describe('F41: "Which repository?" on a job in a new chat is answerable in the passage', () => {
+describe('F41 / studio#1094: "Which repository?" on a job in a new chat is answered in this chat', () => {
   it('offers the registered repositories as chips, the one the words name first, under wicked’s question (no Start)', async () => {
     page();
     const q = await screen.findByTestId('job-passage-question');
     expect(within(q).getByText(QUESTION)).toBeTruthy();
     await waitFor(() => expect(repoChips().map((c) => c.dataset['repo'])).toEqual(['rg2', 'rg1', 'rg10', 'zeta']));
     expect(repoChips()[0]!.dataset['named']).toBe('true');
-    expect(screen.getByTestId('job-passage-repos').textContent).toMatch(/You named rg2/);
+    expect(screen.getByTestId('job-passage-repos').textContent).toMatch(/You named rg2\. The job runs on the one you pick, in this chat\./);
     expect(screen.queryAllByTestId('job-passage-reply').some((b) => b.dataset['reply'] === 'start')).toBe(false);
     expect(posts).toEqual([]);
   });
-  it('a press on a repository one project holds moves the job to a new chat on it, in that project, and sets this one aside', async () => {
+  it('a press answers crew’s question in this chat with the repository: no new chat, nothing set aside', async () => {
     page();
     await waitFor(() => expect(repoChips()).toHaveLength(4));
     fireEvent.click(repoChips().find((c) => c.dataset['repo'] === 'rg1')!);
-    await waitFor(() => expect(notNows()).toHaveLength(1));
-    expect(seeds()).toHaveLength(1);
-    expect(seeds()[0]!.body).toMatchObject({ seed: { card: 'analyze-codebase', option: 'domain', words: 'Map the domain of rg2: what it does', source: 'pick' }, projectId: 'p1', repoRefs: ['rg1'] });
-    expect(notNows()[0]!.body).toEqual({ decision: 'not_now' });
-    expect(useChatFlow.getState().request?.chatId).toBe('seeded-1');
-    await waitFor(() => expect(screen.getByTestId('job-passage-projects').dataset['state']).toBe('moved'));
-    expect(screen.getByTestId('job-passage-projects').textContent).toMatch(/This job moved to reqgraph\./);
-    expect(posts.some((p) => p.path === '/runs')).toBe(false);
+    await waitFor(() => expect(revisions()).toHaveLength(1));
+    expect(revisions()[0]!.body).toMatchObject({ revises: asking().pid, edits: { repoRef: 'rg1' }, source: 'question' });
+    expect(typeof revisions()[0]!.body['requestId']).toBe('string');
+    expect(seeds()).toEqual([]);
+    expect(notNows()).toEqual([]);
+    expect(posts.filter((p) => p.path === `/chats/${CHAT}/close`)).toEqual([]);
+    expect(useJobMoves.getState().moves[asking().pid]).toBeUndefined();
+    expect(useChatFlow.getState().request?.chatId).not.toBe('seeded-1');
+    expect(screen.queryByTestId('job-passage-projects')).toBeNull();
   });
-  it('a repository no project holds, for a job that needs a project: the project chips ask next, and their press moves it', async () => {
+  it('a job that also needs a project is not asked for it here: the pick alone is sent, and crew asks next', async () => {
     page();
     await waitFor(() => expect(repoChips()).toHaveLength(4));
     fireEvent.click(repoChips()[0]!); // rg2: in no project
-    await waitFor(() => expect(projectChips().map((c) => c.dataset['project'])).toEqual(['p1', 'p2']));
-    expect(screen.getByTestId('job-passage-projects').textContent).toMatch(/Which project for rg2\?/);
-    expect(seeds()).toEqual([]);
-    fireEvent.click(projectChips()[1]!);
-    await waitFor(() => expect(notNows()).toHaveLength(1));
-    expect(seeds()).toHaveLength(1);
-    expect(seeds()[0]!.body).toMatchObject({ projectId: 'p2', repoRefs: ['rg2'] });
+    await waitFor(() => expect(revisions()).toHaveLength(1));
+    expect(revisions()[0]!.body['edits']).toEqual({ repoRef: 'rg2' });
+    expect(projectChips()).toEqual([]);
+    expect(posts.some((p) => p.path.endsWith('/members'))).toBe(false);
   });
-  it('“Another repository” goes back to the repository chips, nothing sent', async () => {
-    page();
-    await waitFor(() => expect(repoChips()).toHaveLength(4));
-    fireEvent.click(repoChips()[0]!);
-    fireEvent.click(await screen.findByTestId('job-passage-repos-back'));
-    await waitFor(() => expect(repoChips()).toHaveLength(4));
-    expect(posts).toEqual([]);
-  });
-  it('a job that needs no project moves to a new chat on the repository alone', async () => {
-    messages = [{ at: T0, turnId: 'person:1', kind: 'proposal', proposal: asking({ needs: asking().needs!.filter((n) => n.id !== 'project') }) }];
-    page();
-    await waitFor(() => expect(repoChips()).toHaveLength(4));
-    fireEvent.click(repoChips()[0]!);
-    await waitFor(() => expect(notNows()).toHaveLength(1));
-    expect(seeds()[0]!.body['repoRefs']).toEqual(['rg2']);
-    expect(seeds()[0]!.body['projectId']).toBeUndefined();
-    await waitFor(() => expect(screen.getByTestId('job-passage-projects').textContent).toMatch(/This job moved to a new chat on rg2\./));
-  });
-  it('two presses in one batch seed once', async () => {
+  it('two presses in one batch send one answer', async () => {
     page();
     await waitFor(() => expect(repoChips()).toHaveLength(4));
     const [, b, , d] = repoChips();
     act(() => { b!.click(); d!.click(); });
-    await waitFor(() => expect(notNows()).toHaveLength(1));
-    expect(seeds()).toHaveLength(1);
-    expect(seeds()[0]!.body['repoRefs']).toEqual(['rg1']);
+    await waitFor(() => expect(revisions()).toHaveLength(1));
+    expect(revisions()[0]!.body['edits']).toEqual({ repoRef: 'rg1' });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(revisions()).toHaveLength(1);
+  });
+  it('crew’s refusal (an older crew keeps a new chat’s scope) is said, and nothing moves', async () => {
+    const base = globalThis.fetch as (u: string, i?: RequestInit) => Promise<Response>;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (init?.method === 'POST' && path === `/chats/${CHAT}/proposals`) {
+        posts.push({ path, body: JSON.parse(String(init.body ?? '{}')) as Record<string, unknown> });
+        return Promise.resolve(ok({ code: 'revision_refused', error: 'rg1 is outside this chat’s scope' }, 409));
+      }
+      return base(url, init);
+    }));
+    page();
+    await waitFor(() => expect(repoChips()).toHaveLength(4));
+    fireEvent.click(repoChips()[1]!);
+    await waitFor(() => expect(screen.getByText(/outside this chat’s scope/)).toBeTruthy());
+    expect(seeds()).toEqual([]);
+    expect(notNows()).toEqual([]);
+    await waitFor(() => expect(repoChips().every((c) => !c.disabled)).toBe(true));
   });
   it('a repositories read that fails offers Try again, which reads them again', async () => {
     failRepos = true;
@@ -247,7 +256,6 @@ describe('F41: "Which repository?" on a job in a new chat is answerable in the p
     expect(asksForRepo(asking({ question: null }))).toBe(false);
   });
 });
-
 describe('F41: the words name a repository as a whole token', () => {
   it('matches a name or id, whole, any case, with a sentence’s punctuation after it', () => {
     const names = (w: string) => reposNamedIn(w, REPOS).map((r) => r.id);
@@ -422,52 +430,15 @@ describe('F39/F41 minor: the old chat says where the job moved, not only "You ch
   });
 });
 
-describe('F41 review folds (r7, r8)', () => {
-  it('while the project chips’ move is out, nothing else can start one: Another repository and the chips are held', async () => {
-    let release!: () => void;
-    seedGate = new Promise((r) => { release = r; });
-    page();
-    await waitFor(() => expect(repoChips()).toHaveLength(4));
-    fireEvent.click(repoChips()[0]!); // rg2: no single project, so the project chips ask
-    await waitFor(() => expect(projectChips()).toHaveLength(2));
-    fireEvent.click(projectChips()[1]!);
-    await waitFor(() => expect((screen.getByTestId('job-passage-repos-back') as HTMLButtonElement).disabled).toBe(true));
-    fireEvent.click(screen.getByTestId('job-passage-repos-back'));
-    expect(repoChips()).toHaveLength(0);
-    release();
-    await waitFor(() => expect(notNows()).toHaveLength(1));
-    expect(seeds()).toHaveLength(1);
-  });
+describe('F41 review folds (r7, r8), on the project move that remains (F39)', () => {
   it('a hidden card moves under its own command (crew refuses a hidden card’s id)', async () => {
     catalog = { version: 2, categories: [], cards: [{ id: 'test-analysis', hidden: true, aliases: [{ command: '/workflow-test-analysis', option: null }] }] };
-    messages = [{ at: T0, turnId: 'person:1', kind: 'proposal', proposal: asking({ shape: { card: 'test-analysis', option: null, depth: null, by: 'person', source: 'command' },
-      needs: asking().needs!.filter((n) => n.id !== 'project') }) }];
+    messages = [{ at: T0, turnId: 'person:1', kind: 'proposal', proposal: askingProject({ shape: { card: 'test-analysis', option: null, depth: null, by: 'person', source: 'command' } }) }];
     page();
-    await waitFor(() => expect(repoChips()).toHaveLength(4));
-    fireEvent.click(repoChips()[0]!);
+    await waitFor(() => expect(projectChips()).toHaveLength(2));
+    fireEvent.click(projectChips()[0]!);
     await waitFor(() => expect(seeds()).toHaveLength(1));
     expect(seeds()[0]!.body).toMatchObject({ seed: { card: '/workflow-test-analysis' }, repoRefs: ['rg2'] });
-  });
-  it('the person went elsewhere while the repository’s projects were read: nothing is moved', async () => {
-    let release!: () => void;
-    membersGate = new Promise((r) => { release = r; });
-    page();
-    await waitFor(() => expect(repoChips()).toHaveLength(4));
-    fireEvent.click(repoChips()[1]!); // rg1
-    act(() => { useChatFlow.setState({ request: { chatId: 'elsewhere', nonce: 99 } as never }); });
-    release();
-    await new Promise((r) => setTimeout(r, 50));
-    expect(posts).toEqual([]);
-  });
-  it('focus follows the person’s press: into the project question, and back to the first repository', async () => {
-    page();
-    await waitFor(() => expect(repoChips()).toHaveLength(4));
-    repoChips()[0]!.focus();
-    fireEvent.click(repoChips()[0]!);
-    await waitFor(() => expect(projectChips()).toHaveLength(2));
-    expect(screen.getByTestId('job-passage-repo-picked').contains(document.activeElement)).toBe(true);
-    fireEvent.click(screen.getByTestId('job-passage-repos-back'));
-    await waitFor(() => expect(document.activeElement).toBe(repoChips()[0]));
   });
   it('the moved job, in its new chat on the repository and in its project, has Start and no chips', async () => {
     messages = [{ at: T0, turnId: 'person:1', kind: 'proposal', proposal: asking({ question: null, filedIn: { projectId: 'p1', label: 'reqgraph' }, repoRefs: ['rg1'],
@@ -528,15 +499,16 @@ describe('F41 review folds (r7, r8)', () => {
   it('a remount while a move is out finds the chips held: no second seed', async () => {
     let release!: () => void;
     seedGate = new Promise((r) => { release = r; });
+    messages = [{ at: T0, turnId: 'person:1', kind: 'proposal', proposal: askingProject() }];
     const v = page();
-    await waitFor(() => expect(repoChips()).toHaveLength(4));
-    fireEvent.click(repoChips()[1]!); // rg1: one project holds it, so the move starts
+    await waitFor(() => expect(projectChips()).toHaveLength(2));
+    fireEvent.click(projectChips()[0]!);
     await waitFor(() => expect(seeds()).toHaveLength(1));
     v.unmount();
     page();
-    await waitFor(() => expect(repoChips()).toHaveLength(4));
-    expect(repoChips().every((c) => c.disabled)).toBe(true);
-    fireEvent.click(repoChips()[2]!);
+    await waitFor(() => expect(projectChips()).toHaveLength(2));
+    expect(projectChips().every((c) => c.disabled)).toBe(true);
+    fireEvent.click(projectChips()[1]!);
     release();
     await waitFor(() => expect(notNows()).toHaveLength(1));
     expect(seeds()).toHaveLength(1);
@@ -549,9 +521,10 @@ describe('F41 review folds (r7, r8)', () => {
     vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => (new URL(url, 'http://x').pathname.endsWith('/workflows/catalog')
       ? held.then(() => (real as (u: string, i?: RequestInit) => Promise<Response>)(url, init))
       : (real as (u: string, i?: RequestInit) => Promise<Response>)(url, init))));
+    messages = [{ at: T0, turnId: 'person:1', kind: 'proposal', proposal: askingProject() }];
     page();
-    await waitFor(() => expect(repoChips()).toHaveLength(4));
-    fireEvent.click(repoChips()[1]!); // rg1
+    await waitFor(() => expect(projectChips()).toHaveLength(2));
+    fireEvent.click(projectChips()[0]!);
     // The move is out (its catalog read held) before the person goes elsewhere; asserted only once it has ended.
     await waitFor(() => expect(useJobMoves.getState().moving[`${CHAT}:t1`]).toBe(true));
     act(() => { useChatFlow.setState({ request: { chatId: 'elsewhere', nonce: 99 } as never }); });

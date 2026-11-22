@@ -56,16 +56,13 @@ type Choices = { repo: string | null; list: Project[]; holding: boolean } | { re
  * proposal is then set aside (Not now). Once moved, the chips give way to the moved job, so a second press never makes
  * a second one. Reads are GETs; the only writes are the press's.
  */
-export function JobProjectChoices({ chatId, proposal, onError, repo: repoPicked, repoName, endSourceChat = false }: {
+export function JobProjectChoices({ chatId, proposal, onError, endSourceChat = false }: {
   chatId: string;
   proposal: ArtifactProposal;
   endSourceChat?: boolean;
   onError: (words: string | null) => void;
-  /** The repository the person just picked for this job (F41), when its chat had none: the move takes it along. */
-  repo?: string;
-  repoName?: string;
 }): React.ReactElement | null {
-  const repo = repoPicked ?? jobRepo(proposal);
+  const repo = jobRepo(proposal);
   const [choices, setChoices] = useState<Choices>(null);
   const [tries, setTries] = useState(0);
   const [all, setAll] = useState(false);
@@ -75,14 +72,14 @@ export function JobProjectChoices({ chatId, proposal, onError, repo: repoPicked,
   const [name, setName] = useState('');
   const needsAttach = useRef(new Set<string>());
   useEffect(() => {
-    if (!creating || repoName !== undefined || repo === null) return;
+    if (!creating || repo === null) return;
     let live = true;
     void fetchReposCached().then((repos) => {
       const repository = repos.find((r) => r.id === repo);
       if (live && repository !== undefined) setName((current) => current === '' ? repository.name : current);
     }, () => { if (live) onError('The repository name could not be read. Enter a project name.'); });
     return () => { live = false; };
-  }, [creating, repo, repoName, onError]);
+  }, [creating, repo, onError]);
   /** The job, once moved: where it went, and whether this one was set aside (else a retry that never seeds again). */
   const moved = useJobMoves((s) => moveOf(s.moves, proposal.pid));
   /** A move of this job already out (from this control, or another one the person left): nothing more is pressable. */
@@ -165,8 +162,8 @@ export function JobProjectChoices({ chatId, proposal, onError, repo: repoPicked,
     <div data-testid="job-passage-projects" role="group" aria-label="Which project?" className="wk-pass-sub wk-composer-start-need">
       <span className="wk-composer-note">
         {choices.list.length === 0 ? 'This job belongs to a project. Make one here.'
-          : choices.holding ? `Which project? ${repoName !== undefined ? `These hold ${repoName}.` : 'These hold its repository.'} The job opens in a new chat there.`
-            : `Which project${repoName !== undefined ? ` for ${repoName}` : ''}? The job opens in a new chat there.`}
+          : choices.holding ? 'Which project? These hold its repository. The job opens in a new chat there.'
+            : 'Which project? The job opens in a new chat there.'}
       </span>
       {shown.map((p) => (
         <button key={p.id} type="button" data-testid="job-passage-project" data-project={p.id} disabled={busy !== null || moving}
@@ -175,7 +172,7 @@ export function JobProjectChoices({ chatId, proposal, onError, repo: repoPicked,
         </button>
       ))}
       <button type="button" data-testid="job-passage-project-new" className="wk-composer-chip wk-composer-suggestion" disabled={busy !== null || moving}
-        aria-pressed={creating} onClick={() => { setName(repoName ?? ''); setCreating(true); }}>New project</button>
+        aria-pressed={creating} onClick={() => { setName(''); setCreating(true); }}>New project</button>
       {creating && (
         <form data-testid="job-passage-project-create" className="wk-composer-start-create" onSubmit={(e) => { e.preventDefault(); create(); }}>
           <label className="wk-composer-note">Project name <input data-testid="job-passage-project-name" className="wk-composer-start-name" spellCheck={false} value={name} disabled={busy !== null || moving} onChange={(e) => setName(e.target.value)} autoFocus /></label>
