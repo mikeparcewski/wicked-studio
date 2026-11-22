@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   DEFAULT_STEERING_TYPE,
   nextRuleId,
@@ -328,6 +328,9 @@ export function ChipsCell({ testid, label, values, disabled, onCommit }: {
 
 // ── The draft (add) row ───────────────────────────────────────────────────────────────────────
 
+/** The draft (add) row's state; a host may hold it (`draftStore`) so it outlives the grid. */
+export type GridDraft = DraftState;
+
 interface DraftState {
   id: string;
   steering_type: SteeringType;
@@ -381,7 +384,7 @@ export function draftRule(d: Pick<DraftState, 'id' | 'steering_type' | 'severity
 const TYPE_OPTIONS = STEERING_TYPES.map((t) => ({ value: t, label: STEERING_TYPE_LABELS[t] }));
 const SEVERITY_OPTIONS = SEVERITIES.map((s) => ({ value: s, label: SEVERITY_WORD[s] }));
 
-export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect, onCommit, onCreate, onRetired, addRequestTick = 0, idFilter = null, unseeded = false }: {
+export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect, onCommit, onCreate, onRetired, addRequestTick = 0, idFilter = null, unseeded = false, draftStore }: {
   /** The FULL store — this grid applies the page scope itself, one predicate everywhere. */
   rules: SteeringRule[];
   /** The page scope: one of the seven types, or `all` (the Policies `All` filter — every rule). */
@@ -407,8 +410,12 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
    *  visual — suppress the grid's own "No steering rules in the store." paragraph to avoid
    *  two conflicting "nothing here" signals. The FilterStrip and draft row are unaffected. */
   unseeded?: boolean;
+  /** The draft row's state held by the host (its `useState` pair), so switching away and back keeps it. Absent: the
+   *  grid holds it. */
+  draftStore?: [DraftState | null, Dispatch<SetStateAction<DraftState | null>>];
 }): React.ReactElement {
-  const [draft, setDraft] = useState<DraftState | null>(null);
+  const ownDraft = useState<DraftState | null>(null);
+  const [draft, setDraft] = draftStore ?? ownDraft;
   const [retiring, setRetiring] = useState<SteeringRule | null>(null);
 
   const visible = useMemo(() => {
@@ -429,7 +436,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
       lastTick.current = addRequestTick;
       setDraft((cur) => cur ?? freshDraft(rules, type));
     }
-  }, [addRequestTick, rules, type]);
+  }, [addRequestTick, rules, type, setDraft]);
 
   const commitField = (rule: SteeringRule, patch: Partial<SteeringRule>): void => {
     onCommit({ ...rule, ...patch }, rule);

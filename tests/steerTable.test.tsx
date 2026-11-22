@@ -95,10 +95,17 @@ function wire(w: {
 function Host({ start }: { start: string }): React.ReactElement {
   const [at, setAt] = useState(start);
   const u = new URL(at, 'http://studio.local');
-  return <SteerSurface pathname={u.pathname} search={u.search} navigate={(p) => setAt(p)} runs={[]} />;
+  return <><SteerSurface pathname={u.pathname} search={u.search} navigate={(p) => setAt(p)} runs={[]} /><output data-testid="host-at">{at}</output></>;
 }
-function page(search = '?view=table'): ReturnType<typeof render> {
-  return render(<Host start={`/steering/policies${search}`} />);
+function page(search = '?view=table', path = '/steering/policies'): ReturnType<typeof render> {
+  return render(<Host start={`${path}${search}`} />);
+}
+const at = (): string => screen.getByTestId('host-at').textContent ?? '';
+/** A promise the test settles. */
+function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void; reject: (e: unknown) => void } {
+  let resolve!: (v: T) => void; let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
 }
 
 beforeEach(() => {
@@ -377,5 +384,102 @@ describe('plainSkip (studio#689 row 49, studio#934)', () => {
     const { plainSkip } = await import('../src/board/steerImport.js');
     expect(plainSkip(0, 'something odd')).toBe('Rule 1 skipped. Studio’s service said: something odd.');
     expect(plainSkip(0, '')).toBe('Rule 1 skipped. Studio’s service gave no reason.');
+  });
+});
+
+describe('Table layout — round-1 review (codex on #1340)', () => {
+  beforeEach(() => wire());
+
+  it('picking a type, or clearing the MCP filter, stays in Table', async () => {
+    const user = userEvent.setup();
+    listConformanceRules.mockResolvedValue({ rules: [rule(), rule({ id: 'POL-100', steering_type: 'security', rule_type: 'policy' })] });
+    page('?view=table&mcp=1');
+    await screen.findByTestId('steer-mcp-note');
+    await user.click(screen.getByTestId('steer-mcp-clear'));
+    expect(new URL(at(), 'http://x').searchParams.get('view')).toBe('table');
+    await user.selectOptions(screen.getByTestId('steer-type-pick'), 'security');
+    expect(new URL(at(), 'http://x').searchParams.get('type')).toBe('security');
+    expect(new URL(at(), 'http://x').searchParams.get('view')).toBe('table');
+    expect(await screen.findByTestId('steering-grid')).toBeInTheDocument();
+    expect(screen.getByTestId('steer-layout-table')).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('a rule opened from /rules?view=table keeps the layout and filters, and closing comes back to them', async () => {
+    const user = userEvent.setup();
+    listConformanceRules.mockResolvedValue({ rules: [rule()] });
+    page('?view=table&type=architecture', '/rules');
+    await user.click(await screen.findByTestId('steering-grid-id'));
+    expect(at()).toBe('/rules/PAT-001?view=table&type=architecture');
+    expect(await screen.findByTestId('steering-rule-drawer')).toBeInTheDocument();
+    expect(screen.getByTestId('steering-grid')).toBeInTheDocument();
+    await user.click(screen.getByTestId('steering-drawer-close'));
+    expect(at()).toBe('/rules?view=table&type=architecture');
+  });
+
+  it('a read in flight when a cell is edited never puts the old row back under the edit', async () => {
+    const user = userEvent.setup();
+    const r = rule();
+    const stale = deferred<{ rules: SteeringRule[] }>();
+    listConformanceRules
+      .mockResolvedValueOnce({ rules: [r] })
+      .mockReturnValueOnce(stale.promise)
+      .mockResolvedValue({ rules: [{ ...r, severity: 'critical' }] });
+    const save = deferred<{ status: string }>();
+    upsertConformanceRule.mockReturnValueOnce(save.promise).mockResolvedValue({ status: 'ok' });
+    page();
+    await screen.findByTestId('steering-grid-row');
+    await user.click(screen.getByTestId('steer-more-button'));
+    await user.click(screen.getByTestId('steer-refresh'));
+    await user.selectOptions(screen.getByTestId('steering-cell-severity'), 'critical');
+    // The refresh answers with its snapshot from before the edit.
+    stale.resolve({ rules: [r] });
+    await waitFor(() => expect(listConformanceRules).toHaveBeenCalledTimes(2));
+    await new Promise((res) => setTimeout(res, 0));
+    expect(screen.getByTestId('steering-cell-severity')).toHaveValue('critical');
+    save.resolve({ status: 'ok' });
+    await waitFor(() => expect(listConformanceRules).toHaveBeenCalledTimes(3));
+    expect(screen.getByTestId('steering-cell-severity')).toHaveValue('critical');
+  });
+
+  it('a late refusal reverts only its own edit, never a newer accepted one', async () => {
+    const user = userEvent.setup();
+    const r = rule();
+    listConformanceRules
+      .mockResolvedValueOnce({ rules: [r] })
+      .mockResolvedValue({ rules: [{ ...r, severity: 'warn', weight: 3 }] });
+    const first = deferred<{ status: string }>();
+    upsertConformanceRule.mockReturnValueOnce(first.promise).mockResolvedValueOnce({ status: 'ok' });
+    page();
+    await screen.findByTestId('steering-grid-row');
+    await user.selectOptions(screen.getByTestId('steering-cell-severity'), 'critical');
+    await user.selectOptions(screen.getByTestId('steering-cell-severity'), 'warn');
+    // The second save is accepted and the page reads the server's row.
+    await waitFor(() => expect(listConformanceRules).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByTestId('steering-cell-severity')).toHaveValue('warn'));
+    // Then the first one is refused: its note says so, and the row stays as the server has it.
+    first.reject(new ApiError(400, 'INV-S2: stale'));
+    expect(await screen.findByTestId('steering-saved-note')).toHaveTextContent(/INV-S2/);
+    expect(screen.getByTestId('steering-cell-severity')).toHaveValue('warn');
+  });
+
+  it('an unfinished new rule survives a List / Table round trip, with a refused save\'s reason', async () => {
+    const user = userEvent.setup();
+    listConformanceRules.mockResolvedValue({ rules: [rule()] });
+    upsertConformanceRule.mockRejectedValue(new ApiError(400, 'INV-C1: refused'));
+    page();
+    await screen.findByTestId('steering-grid-row');
+    await user.click(screen.getByTestId('steer-more-button'));
+    await user.click(screen.getByTestId('steer-add-rule'));
+    const id = screen.getByTestId('steering-draft-id') as HTMLInputElement;
+    await user.clear(id);
+    await user.type(id, 'SEC-KEEP-1');
+    await user.type(screen.getByTestId('steering-draft-statement'), 'Keep my words{Enter}');
+    expect(await screen.findByTestId('steering-draft-error')).toHaveTextContent('INV-C1: refused');
+    await user.click(screen.getByTestId('steer-layout-list'));
+    expect(screen.queryByTestId('steering-grid')).toBeNull();
+    await user.click(screen.getByTestId('steer-layout-table'));
+    expect(await screen.findByTestId('steering-draft-id')).toHaveValue('SEC-KEEP-1');
+    expect(screen.getByTestId('steering-draft-statement')).toHaveValue('Keep my words');
+    expect(screen.getByTestId('steering-draft-error')).toHaveTextContent('INV-C1: refused');
   });
 });
