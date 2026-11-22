@@ -56,8 +56,15 @@ describe('the jump-to-latest button never covers the reading column (studio#985)
     expect(layout).toMatch(/\.wk-measure--thread \{ --measure-max: var\(--thread-max\); --page-pad: var\(--space-12\); \}/u);
     expect(layout).toMatch(/padding-inline: max\(var\(--page-pad\), calc\(\(100% - var\(--measure-max\)\) \/ 2 \+ var\(--page-pad\)\)\)/u);
   });
-  it('a phone keeps the centred button (its gutter is 16 px)', () => {
-    expect(rule('.wk-jump-latest')).toMatch(/left:\s*50%/u);
-    expect(media('(max-width: 767px)')).not.toMatch(/\.wk-jump-latest\s*\{[^}]*left:\s*auto/u);
+  it('a phone (16 px gutter) takes the button out of the thread: in the body\'s flow under it, centred', () => {
+    const phone = media('(max-width: 767px)');
+    expect(rule('.wk-session-body', phone)).toMatch(/flex-direction:\s*column/u);
+    const btn = [...phone.matchAll(/(?:^|[}\s])\.wk-jump-latest\s*\{([^}]*)\}/gu)].map((m) => m[1]!).join(';');
+    expect(btn).toMatch(/position:\s*static/u);
+    expect(btn).toMatch(/align-self:\s*center/u);
+    expect(btn).toMatch(/transform:\s*none/u);
+    expect(btn).toMatch(/flex-shrink:\s*0/u);
+    // The base rule (the floating one) is what the phone overrides.
+    expect(rule('.wk-jump-latest')).toMatch(/position:\s*absolute/u);
   });
 });

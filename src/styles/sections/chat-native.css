@@ -215,7 +215,8 @@
 @media (prefers-reduced-motion: reduce) { .wk-jump-latest { transition: none; } }
 /* (studio#985) From 768 px up the button sits in the thread's right gutter, outside the reading column, so it never
    covers a message's words or its chips: the gutter is the thread's inline padding (.wk-measure--thread, at least 48 px)
-   and the button, 36 px wide, is centred in it. With a count it stacks (arrow over count) and keeps the width. */
+   and the button, 36 px wide, is centred in it. With a count it stacks (arrow over count) and keeps the width. A phone
+   takes it out of the thread's way below. */
 @media (min-width: 768px) {
   .wk-jump-latest {
     left: auto; transform: none; flex-direction: column; gap: 2px; width: 36px; min-width: 0; height: auto; min-height: 36px; padding: 8px 0;
@@ -229,6 +230,10 @@
   .wk-session-turn--you, .wk-chat-msg--you { max-width: 88%; }
   .wk-needs-trigger, .wk-hpanel-handle--overlay { min-height: var(--tap-min); }
   .wk-jump-latest { min-width: var(--tap-min); height: var(--tap-min); }
+  /* (studio#985) A phone's gutter (16 px) cannot hold the button, so it leaves the thread instead of floating over it:
+     in the body's flow under the thread, which gives up its height while the button shows. */
+  .wk-session-body { flex-direction: column; }
+  .wk-jump-latest { position: static; flex-shrink: 0; align-self: center; transform: none; margin: 6px 0; }
   .wk-chat-chip { min-height: var(--tap-min); }
 }
 
