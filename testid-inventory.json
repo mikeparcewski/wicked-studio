@@ -4168,6 +4168,12 @@
       ]
     },
     {
+      "testId": "decision-dock-surface",
+      "files": [
+        "src/components/session/DecisionDock.tsx"
+      ]
+    },
+    {
       "testId": "decision-error",
       "files": [
         "src/components/decisions/DecisionLine.tsx"

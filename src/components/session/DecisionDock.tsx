@@ -206,6 +206,24 @@ export function DecisionDockFrame({ items, children, composer, now = Date.now() 
 
   // The folded sheet's headline is the docked renderer's own (the cause in plain words), read off the slot as it
   // renders; the item's question stands in until it has.
+  // studio#1021: the surface scrolls inside itself (60vh) under a sticky go-row; while there is more below the row, the
+  // surface says so (`data-more`: a fade and "More below" over the row's top edge, decision-dock.css), so a choice the
+  // row hides is never taken for the last one. Measured on scroll and whenever the surface or its content resizes.
+  const [surface, setSurface] = useState<HTMLDivElement | null>(null);
+  const [moreBelow, setMoreBelow] = useState(false);
+  useEffect(() => {
+    if (surface === null) { setMoreBelow(false); return; }
+    let frame = 0;
+    const measure = (): void => { frame = 0; setMoreBelow(surface.scrollHeight - surface.scrollTop - surface.clientHeight > 2); };
+    const soon = (): void => { if (frame === 0) frame = requestAnimationFrame(measure); };
+    measure();
+    surface.addEventListener('scroll', soon, { passive: true });
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(soon);
+    ro?.observe(surface);
+    if (slot !== null) ro?.observe(slot);
+    return () => { surface.removeEventListener('scroll', soon); ro?.disconnect(); if (frame !== 0) cancelAnimationFrame(frame); };
+  }, [surface, slot]);
+
   const [drawn, setDrawn] = useState<string | null>(null);
   useEffect(() => {
     if (slot === null) return;
@@ -237,7 +255,7 @@ export function DecisionDockFrame({ items, children, composer, now = Date.now() 
       {active !== null && (
         <section ref={dockRef} tabIndex={-1} role="region" aria-label="Your decision" data-testid="decision-dock" data-tone={active.tone}
           data-key={active.key} data-collapsed={collapsed ? 'true' : 'false'} className="wk-dock wk-measure wk-measure--thread">
-          <div className="wk-dock-surface">
+          <div ref={setSurface} data-testid="decision-dock-surface" data-more={moreBelow ? 'below' : undefined} className="wk-dock-surface">
             {phone && (
               <button type="button" data-testid="decision-dock-handle" aria-expanded={!collapsed} aria-label={collapsed ? 'Show the decision' : 'Fold the decision away'}
                 onClick={() => setExpanded((v) => !v)} className="wk-dock-handle"><span aria-hidden className="wk-dock-grab" /></button>

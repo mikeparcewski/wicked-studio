@@ -194,6 +194,18 @@ button.wk-chip, a.wk-chip { min-height: var(--control-h-sm); cursor: pointer; fo
   flex-wrap: wrap;
   gap: var(--space-2);
   margin: 0 0 var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+}
+/* (studio#1112) A seat's reason can be long ("inactive: quota exceeded: the monthly usage limit ..."): its row wraps
+   inside the card instead of running off its edge (a .wk-btn keeps to one line everywhere else). */
+.wk-gate-withheld .wk-btn {
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: break-word;
+  text-align: start;
+  justify-content: flex-start;
 }
 .wk-gate-withheld [data-testid="session-gate-withheld-seat"]:disabled {
   opacity: 0.6;
