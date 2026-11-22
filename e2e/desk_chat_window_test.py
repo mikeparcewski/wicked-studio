@@ -94,10 +94,12 @@ with sync_playwright() as p:
         page.get_by_test_id("desk-rail-chat").click()
         box = page.get_by_test_id("assist-input")
         box.wait_for(timeout=15000)
-        if w < 600 and page.get_by_test_id("rail-drawer-scrim").is_visible():
-            drawer_left_open = True  # reported below: the drawer stays over the chat it opened
-            page.get_by_test_id("rail-drawer-scrim").click(position={"x": 380, "y": 400})
+        if w < 600:
+            # studio#974: Chat in the drawer closes the drawer and its scrim, and the chat's message box takes focus.
             page.wait_for_timeout(400)
+            drawer_left_open = page.get_by_test_id("rail-drawer-scrim").is_visible()
+            focused = page.evaluate("() => document.activeElement?.getAttribute('data-testid') || document.activeElement?.tagName || ''")
+            check("phone-drawer-closes-on-chat", not drawer_left_open and focused == "assist-input", scrim=drawer_left_open, focused=focused)
         box.fill(Q1)
         page.get_by_test_id("assist-send").click()
         try:

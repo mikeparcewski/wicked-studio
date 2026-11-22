@@ -55,6 +55,8 @@ export function railWidthPx(icons: boolean, phone: boolean): number {
  *  adds later takes the grid until it is given one. */
 const SECTION_ICON: Record<string, LucideIcon> = { work: BriefcaseBusiness, insight: ChartColumn, govern: ShieldCheck, recent: History };
 const ITEM_ICON: Partial<Record<NavItem['id'], LucideIcon>> = { learn: GraduationCap, build: Settings };
+/** The open chat window's message box (ChatWindow's `ask-panel` dialog): where Chat in the phone drawer sends focus. */
+const CHAT_BOX = '[data-testid="ask-panel"] [data-testid="assist-input"]';
 
 /**
  * THE SESSION RAIL (skin `desk`, DES-STUDIO-REBUILD-001 §4.2, slice S4; the sidebar regroup of ui-v2,
@@ -270,8 +272,9 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
         <button type="button" data-testid="desk-rail-new-project" className="wk-rail-action" aria-label="New project" title="New project" onClick={() => setNewProjectOpen(true)}>
           <FolderPlus size={17} aria-hidden />
         </button>
-        {/* data-drawer-closes: on a phone the chat window opens over the page, so the drawer gets out of its way (studio#974). */}
-        <button type="button" data-testid="desk-rail-chat" data-chat-mode={chatMode} data-drawer-closes className="wk-rail-action" aria-label={chatName} title={chatName}
+        {/* data-drawer-closes: on a phone the chat window opens over the page, so the drawer gets out of its way and the
+            chat's message box takes focus (studio#974). */}
+        <button type="button" data-testid="desk-rail-chat" data-chat-mode={chatMode} data-drawer-closes={CHAT_BOX} className="wk-rail-action" aria-label={chatName} title={chatName}
           onClick={() => openSystemChat(inProject?.id ?? null)}>
           {chatMode === 'closed' ? <MessageSquarePlus size={17} aria-hidden /> : <MessageSquare size={17} aria-hidden />}
         </button>

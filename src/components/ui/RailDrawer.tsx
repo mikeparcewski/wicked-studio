@@ -16,9 +16,23 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
  *  - Escape or the scrim closes it (focus back to the menu button); a route change or growing past
  *    767 px closes it (focus to #main); a modal opened from it closes it (focus stays in the modal);
  *  - a control in it that shows a surface outside it without a route change or a modal (the Chat icon: the
- *    chat window) carries `data-drawer-closes`, and a click on it closes the drawer the same way, leaving
- *    focus to what it opened (studio#974: the drawer and its scrim stayed over the chat window).
+ *    chat window) carries `data-drawer-closes="<selector>"`, and a click on it closes the drawer the same
+ *    way; focus then goes to the first element the selector finds once it is drawn (the chat's message box),
+ *    never left on the hidden drawer (studio#974: the drawer and its scrim stayed over the chat window).
  */
+/** Focus the first element `select` finds, trying for a few frames while it draws; if it never shows, the menu
+ *  button (focus is never left on the hidden drawer). */
+function focusWhenDrawn(select: string, fallback: HTMLElement | null): void {
+  let frames = 0;
+  const attempt = (): void => {
+    const el = select === '' ? null : document.querySelector<HTMLElement>(select);
+    if (el !== null) { el.focus(); if (document.activeElement === el) return; }
+    if (++frames < 10) requestAnimationFrame(attempt);
+    else fallback?.focus();
+  };
+  attempt();
+}
+
 export function RailDrawer({ pathname, search = '', badge, children, ambientProject = null }: {
   pathname: string; badge: React.ReactNode; children: React.ReactNode;
   /** The address's query: a destination that differs only in it (Settings' General tab after its
@@ -33,8 +47,9 @@ export function RailDrawer({ pathname, search = '', badge, children, ambientProj
   const toggle = useRef<HTMLButtonElement>(null);
   const shown = phone && open;
   /** Where focus goes once the drawer has closed and the page is no longer inert. */
-  const focusAfter = useRef<'toggle' | 'main' | null>(null);
-  const closeTo = (to: 'toggle' | 'main' | null): void => { focusAfter.current = to; setOpen(false); };
+  /** `{ select }`: the element a `data-drawer-closes` control named (it may draw a frame or two later). */
+  const focusAfter = useRef<'toggle' | 'main' | { select: string } | null>(null);
+  const closeTo = (to: 'toggle' | 'main' | { select: string } | null): void => { focusAfter.current = to; setOpen(false); };
 
   // Close on a route change and when the window leaves phone width.
   const address = pathname + search;
@@ -84,6 +99,7 @@ export function RailDrawer({ pathname, search = '', badge, children, ambientProj
       const to = focusAfter.current; focusAfter.current = null;
       if (to === 'main') main?.focus();
       else if (to === 'toggle') tg?.focus();
+      else if (to !== null) focusWhenDrawn(to.select, tg);
     };
   }, [shown]);
 
@@ -97,7 +113,10 @@ export function RailDrawer({ pathname, search = '', badge, children, ambientProj
         className={`wk-rail-drawer${open ? ' wk-rail-drawer--open' : ''}`}
         {...(open ? { role: 'dialog', 'aria-modal': true, 'aria-label': 'Navigation' } : { inert: '' as unknown as boolean, 'aria-hidden': true })}
         // After the control's own click (bubble phase), so what it opens is already asked for.
-        onClick={(e) => { if (open && e.target instanceof Element && e.target.closest('[data-drawer-closes]') !== null) closeTo(null); }}
+        onClick={(e) => {
+          const ctl = open && e.target instanceof Element ? e.target.closest('[data-drawer-closes]') : null;
+          if (ctl !== null) closeTo({ select: ctl.getAttribute('data-drawer-closes') ?? '' });
+        }}
       >
         {children}
       </div>
