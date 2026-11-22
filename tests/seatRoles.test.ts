@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { RosterSeat } from '../src/api/types.js';
 import { agentRows } from '../src/board/agentsModel.js';
-import { noCarryingSeatReason, seatCanCarry, seatJoinStanding, seatRoles, seatStanding } from '../src/components/gateVerdictModel.js';
+import { retryBlocker, retryLaunchOf } from '../src/board/repairMoves.js';
+import { makeView } from './factories.js';
+import { NO_WORKER_PICKED, noCarryingSeatReason, onlyReviewersChosen, seatCanCarry, seatJoinStanding, seatRoles, seatStanding } from '../src/components/gateVerdictModel.js';
 
 /**
  * studio#856 (crew#916, wicked-core#572, api-types 0.129.0): a seat's council ballot and its work are two roles.
@@ -61,6 +63,30 @@ describe('joining a job: a reviewer-only seat joins (it votes and judges)', () =
     expect(seatJoinStanding({ ...REVIEWER_ONLY, health: { status: 'inactive', since: 'x' } } as RosterSeat, NOW).state).toBe('inactive');
     expect(seatJoinStanding(WORK_ONLY, NOW).state).toBe('ready');
   });
+
+  it('a signed-out reviewer-only seat does not join by default (codex r1)', () => {
+    expect(seatJoinStanding({ ...REVIEWER_ONLY, auth: 'signed_out', signed_in: false } as RosterSeat, NOW).state).not.toBe('ready');
+    expect(seatJoinStanding({ ...REVIEWER_ONLY, signed_in: false } as RosterSeat, NOW).state).not.toBe('ready');
+  });
+
+  it('a job whose helpers all only review is refused before it is sent (codex r1)', () => {
+    expect(onlyReviewersChosen([REVIEWER_ONLY])).toBe(true);
+    expect(onlyReviewersChosen([REVIEWER_ONLY, BOTH])).toBe(false);
+    expect(onlyReviewersChosen([REVIEWER_ONLY, WORK_ONLY])).toBe(false);
+    expect(onlyReviewersChosen([])).toBe(false);
+    expect(onlyReviewersChosen([undefined])).toBe(false);
+    expect(NO_WORKER_PICKED).toMatch(/only reviews/);
+  });
+
+  it('Retry keeps a reviewer-only seat as the reviewer, and still refuses a pool with no one to take a step (codex r1)', () => {
+    const failed = makeView({ id: 'r-fail', status: 'failed', clis: ['claude', 'cursor'], problem: 'p' } as never, []);
+    const plan = retryLaunchOf(failed, [BOTH, REVIEWER_ONLY]);
+    expect(plan.via).toBe('runs');
+    if (plan.via === 'runs') expect((JSON.parse(plan.body.clisJson ?? '[]') as RosterSeat[]).map((x) => x.key)).toEqual(['claude', 'cursor']);
+    expect(retryBlocker(failed, [BOTH, REVIEWER_ONLY])).toBeNull();
+    const reviewersOnly = makeView({ id: 'r-fail2', status: 'failed', clis: ['cursor'], problem: 'p' } as never, []);
+    expect(retryBlocker(reviewersOnly, [REVIEWER_ONLY])).toBe('not relaunched: no seat in its pool can take it (cursor: not given work — seat not eligible for work)');
+  });
 });
 
 describe('the Agents page row (studio#856)', () => {
@@ -93,6 +119,12 @@ describe('the Agents page row (studio#856)', () => {
     expect(r!.usable).toBe(false);
     expect(r!.issues.map((i) => i.code)).toContain('not_admitted');
     expect(r!.roles.work).toEqual({ word: 'Takes no work', tone: 'gate', sub: 'no sign-in for container helper' });
+  });
+
+  it('a home path in the service’s reason shows as ~ on the inline facts (codex r1)', () => {
+    const [r] = rows([{ ...NEITHER, work_ineligible_reason: 'no credential at /home/alice/x', council_ineligible_reason: 'probe failed in C:\\Users\\bob\\cfg' } as RosterSeat]);
+    expect(r!.roles.work.sub).toBe('no credential at ~/x');
+    expect(r!.roles.reviews.sub).not.toMatch(/bob/);
   });
 
   it('an old daemon (no work_eligible) reads as before: council off is Not available', () => {

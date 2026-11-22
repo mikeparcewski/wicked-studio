@@ -357,6 +357,13 @@ describe('the Lead agent (DES-TEAMING-002 §8.1)', () => {
     expect([...pick.options].map((o) => o.value)).toEqual(['', 'claude', 'pi']);
   });
 
+  it('studio#856: a job whose only helper reviews is refused, by name (codex r1)', async () => {
+    useCapabilities.setState({ launchPrimary: true });
+    setCachedRoster([{ ...seat('codex'), auth: 'signed_in', council_eligible: true, work_eligible: false } as RosterSeat]);
+    await toOptions();
+    expect(screen.getByTestId('launch-wizard-blocker')).toHaveTextContent('only reviews');
+  });
+
   it('a lead whose helper is turned off reads as Random again', () => {
     expect(launchLead('codex', [seat('claude'), seat('pi')], true)).toBeNull();
     expect(launchLead('pi', [seat('claude'), seat('pi')], true)).toBe('pi');

@@ -1,5 +1,5 @@
 import type { GovernanceScopeKind, RosterSeat, SeatIssue, SeatRecentBench, SeatRecordResponse } from '../api/types.js';
-import { homeDirsIn } from './homePath.js';
+import { displayText, homeDirsIn } from './homePath.js';
 import { relTime } from './relTime.js';
 import { displaySeats, isReviewerOnly, seatLabel } from './seatNames.js';
 import { seatRoles } from '../components/gateVerdictModel.js';
@@ -402,7 +402,8 @@ function ago(iso: string | null | undefined, now: number): string | null {
 
 /** The daemon's reason in the page's words (studio#724: "checks" and "helper", never "council" and "seat"). */
 function plainReason(why: string | null): string | null {
-  return why === null ? null : maskIds(why.replace(/\bcouncils?\b/gi, 'checks').replace(/\bseats?\b/gi, 'helper'));
+  // A home path in the service's reason is shown as `~` (codex r1 on #1302: these facts render inline, not in TechDetails).
+  return why === null ? null : maskIds(displayText(why).replace(/\bcouncils?\b/gi, 'checks').replace(/\bseats?\b/gi, 'helper'));
 }
 
 function rowOf(seat: RosterSeat, alsoReviews: boolean, keys: string[], inp: AgentsInputs, folded: readonly RosterSeat[] = []): AgentRow {

@@ -10,7 +10,7 @@ import { QeOffNote } from '../QeOffNote.js';
 import { workflowItems } from '../../board/workflowCommand.js';
 import { sessionPath } from '../../board/sessionModel.js';
 import { seatLabel, userSeats } from '../../board/seatNames.js';
-import { seatCanCarry, seatJoinStanding } from '../gateVerdictModel.js';
+import { NO_WORKER_PICKED, onlyReviewersChosen, seatCanCarry, seatJoinStanding } from '../gateVerdictModel.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from '../composerDefaults.js';
 import type { ConfirmMode } from '../ContextPopover.js';
 import { useModalEscape } from '../Modal.js';
@@ -297,6 +297,7 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
         : step === 'where' ? (repoRequired && repoRef === null ? 'Choose the repository this works in.'
           : projectRequired && filedProject === null ? 'Choose the project this works in.' : null)
           : step === 'options' ? (eligible.length > 0 && seats.length === 0 ? 'Turn on at least one helper.'
+            : onlyReviewersChosen(seats) ? NO_WORKER_PICKED
             : offerQe && !qeOff && draft.skipQe && draft.skipQeReason.trim() === '' ? 'Say why QE acceptance is skipped.' : null)
             : null;
   // Review re-checks every rule (codex r1: another tab may have dropped the last helper meanwhile).
@@ -305,11 +306,12 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
     : scopePending ? holdLine
     : projectRequired && filedProject === null ? 'Choose the project this works in.'
     : drafting ? draftBlocker
-    : demoing ? (demoProblem ?? (eligible.length > 0 && seats.length === 0 ? 'Turn on at least one helper.' : null))
+    : demoing ? (demoProblem ?? (eligible.length > 0 && seats.length === 0 ? 'Turn on at least one helper.' : onlyReviewersChosen(seats) ? NO_WORKER_PICKED : null))
     : draft.workflowId === null ? 'Choose the kind of job.'
       : draft.intent.trim() === '' && !wordsOptional ? 'Say what you want done.'
         : repoRequired && repoRef === null ? 'Choose the repository this works in.'
           : eligible.length > 0 && seats.length === 0 ? 'Turn on at least one helper.'
+            : onlyReviewersChosen(seats) ? NO_WORKER_PICKED
             : offerQe && !qeOff && draft.skipQe && draft.skipQeReason.trim() === '' ? 'Say why QE acceptance is skipped.' : null;
   const order: Step[] = drafting ? ['workflow', 'requirements', 'review']
     : demoing ? ['workflow', 'demo', 'options', 'review']

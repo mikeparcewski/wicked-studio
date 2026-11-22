@@ -24,7 +24,7 @@ import {
 import { gateInstance } from '../../board/proposalCard.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { seatLabel, userSeats } from '../../board/seatNames.js';
-import { seatJoinStanding } from '../gateVerdictModel.js';
+import { NO_WORKER_PICKED, onlyReviewersChosen, seatJoinStanding } from '../gateVerdictModel.js';
 import { defaultSelection } from '../../board/chatOpen.js';
 import { chosenSeats, NO_SEAT_PICKED, seatOff, useComposerSeats, useLaunchSeats } from '../../store/composerSeats.js';
 import { loadCatalog, loadPresets, usePlanCatalog } from '../../store/planCatalog.js';
@@ -473,6 +473,8 @@ export function Composer({
   // for when a helper COULD be turned on but every one was dropped.
   const seatRefusal = !seatsApply || refusal !== null ? null
     : sendSeats.length === 0 ? NO_SEAT_PICKED
+      // A job needs a helper that takes steps; a reviewer-only seat joins one but cannot be its only helper (codex r1 on #1302).
+      : wfChip !== null && onlyReviewersChosen(sendSeats.map((k) => (roster ?? []).find((s) => s.key === k))) ? NO_WORKER_PICKED
       : namedDropped ? `${namedHelper?.label ?? 'The helper you named'} is named to answer but is left out of the helpers row — turn it on, or remove the chip.`
         : null;
   const [jobBusy, setJobBusy] = useState(false);

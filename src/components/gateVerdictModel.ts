@@ -974,9 +974,26 @@ export function seatRoles(seat: RosterSeat): SeatRoles {
  */
 export function seatJoinStanding(seat: RosterSeat | undefined, now: number = Date.now()): ReturnType<typeof seatStanding> {
   const st = seatStanding(seat, now);
+  // Only the work refusal is lifted: a signed-out reading still reads signed out (codex r1 on #1302).
   const bag = (seat ?? {}) as Record<string, unknown>;
-  if (st.state === 'ineligible' && bag['work_eligible'] === false && bag['council_eligible'] === true) return { state: 'ready', note: 'reviews only' };
+  if (st.state === 'ineligible' && reviewsOnly(seat) && bag['auth'] !== 'signed_out' && bag['signed_in'] !== false) {
+    return { state: 'ready', note: 'reviews only' };
+  }
   return st;
+}
+
+/** A reviewer-only seat as the daemon says it (`work_eligible: false`, `council_eligible: true`): it votes, takes no step. */
+export function reviewsOnly(seat: RosterSeat | undefined): boolean {
+  const bag = (seat ?? {}) as Record<string, unknown>;
+  return seat !== undefined && bag['work_eligible'] === false && bag['council_eligible'] === true;
+}
+
+/** A job whose helpers all only review has no one to do its steps (codex r1 on #1302): said before it is sent. */
+export const NO_WORKER_PICKED = 'Every helper turned on for this job only reviews — turn on one that takes work.';
+
+/** Whether a job's chosen seats are all reviewer-only (none can take a step); `false` for none chosen (its own refusal). */
+export function onlyReviewersChosen(seats: readonly (RosterSeat | undefined)[]): boolean {
+  return seats.length > 0 && seats.every(reviewsOnly);
 }
 
 /**
