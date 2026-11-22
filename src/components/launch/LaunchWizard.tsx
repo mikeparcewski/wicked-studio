@@ -4,7 +4,10 @@ import { api, apiWire } from '../../api/client.js';
 import { qeRefusalOf } from '../../board/qeRefusal.js';
 import { goToPath, QeRefusalWarning } from '../QeRefusalWarning.js';
 import type { RepoEntry } from '../../api/types.js';
-import { gatePostureWord, launchLead, workflowLaunchBody } from '../../board/launchModel.js';
+import { assuranceNoticeOf, gatePostureWord, launchLead, reducedRelaunchBody, workflowLaunchBody, type LaunchAssuranceNotice } from '../../board/launchModel.js';
+import type { LaunchBodyWithDeliver } from '../../api/types.js';
+import { postureFieldsOfBody, postureKey, powerToSend } from '../../board/launchPosture.js';
+import { usePosturePreview } from '../../hooks/usePosturePreview.js';
 import { qeAcceptanceSetting, workflowRequiresQe } from '../../board/assuranceModel.js';
 import { QeOffNote } from '../QeOffNote.js';
 import { workflowItems } from '../../board/workflowCommand.js';
@@ -15,6 +18,7 @@ import { COMPOSER_DEFAULT_GATE_POSTURE } from '../composerDefaults.js';
 import type { ConfirmMode } from '../ContextPopover.js';
 import { useModalEscape } from '../Modal.js';
 import { QeAcceptanceOptions, ReducedAssuranceOptIn } from '../session/AssuranceReceipt.js';
+import { REDUCED_RELAUNCH_WORDS } from '../session/GateRow.js';
 import { Switch } from '../ui/Switch.js';
 import { TechDetails } from '../ui/TechDetails.js';
 import { useRoster } from '../../hooks/useRoster.js';
@@ -82,7 +86,18 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   const dialogRef = useRef<HTMLDivElement | null>(null);
   // codex r1: a launch in flight holds the dialog open (no second POST from a reopened draft).
   const launchingRef = useRef(false);
-  const close = (): void => { if (!launchingRef.current) closeStore(); };
+  /** studio#1239: a launch crew answered with an `assuranceNotice` — the job started; the dialog says what crew said and
+   *  offers the explicit relaunch in reduced assurance before it goes to the job. */
+  const [launched, setLaunched] = useState<{ notice: LaunchAssuranceNotice; body: LaunchBodyWithDeliver; dest: string } | null>(null);
+  const [confirmReduced, setConfirmReduced] = useState(false);
+  // The draft the dialog shows (codex r2): another job opened over it starts without this one's notice, and a launch
+  // answered after its draft was replaced shows nothing here.
+  const draftSig = JSON.stringify([draft.workflowId, draft.composerKey, draft.catalogEntryId, draft.projectId]);
+  const draftSigNow = useRef(draftSig);
+  draftSigNow.current = draftSig;
+  useEffect(() => { setLaunched(null); setConfirmReduced(false); }, [draftSig]);
+  // A launched job's draft is done: closing ends it (never a second launch from a kept draft).
+  const close = (): void => { if (launchingRef.current) return; if (launched !== null) finish(); else closeStore(); };
   // "Don't show this again" (operator 2026-10-16): the saved choice, shown as it is. Ticking it saves
   // it and goes to the chat flow now (a new chat on its own page) with what was typed; unticking (seen
   // when a named job opened the picker) turns New job back on.
@@ -153,14 +168,6 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   const reducedCap = useCapabilities((s) => s.reducedAssurance);
   const leadCap = useCapabilities((s) => s.launchPrimary);
   const powerCap = useCapabilities((s) => s.powerMode);
-  // Power mode (DES-POWER-MODE §2): the switch is preset from Settings ("Power mode for new jobs", absent = on).
-  const [powerDefault, setPowerDefault] = useState(true);
-  useEffect(() => {
-    if (!powerCap) return undefined;
-    let live = true;
-    api.getSettings().then((r) => { if (live) setPowerDefault((r.settings as { powerModeDefault?: unknown }).powerModeDefault !== false); }, () => {});
-    return () => { live = false; };
-  }, [powerCap]);
   const chatIdOnLaunch = useCapabilities((s) => s.chatIdOnLaunch);
   const [repos, setRepos] = useState<RepoEntry[] | null>(getCachedRepos());
   const [qeCap, setQeCap] = useState(false);
@@ -260,13 +267,35 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   // Only a seat that can take work may lead: crew refuses a signed-out, benched or not-work-eligible lead by name.
   const leadable = seats.filter((s) => s.signed_in !== false && seatCanCarry(s));
   const offerLead = leadCap && leadable.length > 1;
-  // Power mode is a build posture: offered for a workflow launch on a daemon that runs it (not Draft epics, not a demo).
+  // Power mode is a build posture: asked of crew for a workflow launch on a daemon that runs it (not Draft epics, not a demo).
   const offerPower = powerCap && !drafting && !demoing;
-  const powerOn = draft.power ?? powerDefault;
   const lead = launchLead(offerLead ? draft.lead : null, leadable, leadCap);
   const beforeOrd = COMPOSER_DEFAULT_GATE_POSTURE.beforeOrd;
   const autoDeliver = draft.confirmMode === 'none';
   const deliver: 'pr' | 'none' | null = deliverVisible ? (draft.deliverOn ? 'pr' : 'none') : null;
+  // studio#1305: whether this job runs in power mode is crew's decision for the body Launch sends (`POST /runs/preview`,
+  // `board/launchPosture.ts`), read as the composer reads it: the fields are the launch body's own (the one builder), the
+  // switch reads crew's answer, and Launch sends `power` only as crew answered for exactly those fields. Crew runs a
+  // registered (non-preset) workflow or a launch with no repository phased, and says why (`powerNotice`). The person's
+  // switch is the `power` asked about (unset: crew applies Settings' "Power mode for new jobs").
+  const powerChoice: boolean | undefined = draft.power ?? undefined;
+  const postureFields = postureFieldsOfBody(workflowLaunchBody({
+    workflowId: draft.workflowId ?? '', intent: '', seats: [], repoRef, projectId: draft.projectId, humanConfirm: undefined,
+    deliver, autoDeliverGate: autoDeliver && deliverGateCap === true, reducedAssurance: false, skipQeReason: null, chatId: null,
+  }));
+  const posture = usePosturePreview(postureFields, powerChoice, offerPower && draft.workflowId !== null);
+  const crewPosture = posture.answer.status === 'ready' ? posture.answer.posture : null;
+  const powerOn = offerPower && crewPosture?.power === true;
+  // While crew is asked about a change, the switch keeps the person's choice and says it is being checked (nothing
+  // about the run is promised until crew answers); the launch waits for crew's word (below). No answer (a failed
+  // preview, an older daemon): Off, as Launch then runs it (codex r1, r2).
+  const powerPending = offerPower && posture.answer.status === 'loading';
+  const switchOn = crewPosture !== null ? powerOn : powerPending && powerChoice === true;
+  /** A power run asks once, at hand-off, only when it delivers with a person (crew's `deliver` and `autoDeliver`). */
+  const powerAsksAtHandOff = crewPosture !== null && crewPosture.deliver === 'pr' && !crewPosture.autoDeliver;
+  const powerUnchecked: 'failed' | 'unsupported' | null = !offerPower ? null : posture.answer.status === 'failed' ? 'failed'
+    : powerChoice !== false && posture.answer.status === 'none' ? 'unsupported' : null;
+  const powerNotice = offerPower && crewPosture !== null && !crewPosture.power ? (crewPosture.powerNotice ?? null) : null;
   const preview = useLaunchPreview({
     plan: null, workflow: drafting || demoing ? '' : draft.workflowId ?? '', projectId: draft.projectId, repoRef, deliver, mode: undefined,
     confirm: draft.confirmMode, beforeOrd,
@@ -312,7 +341,9 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
         : repoRequired && repoRef === null ? 'Choose the repository this works in.'
           : eligible.length > 0 && seats.length === 0 ? 'Turn on at least one helper.'
             : onlyReviewersChosen(seats) ? NO_WORKER_PICKED
-            : offerQe && !qeOff && draft.skipQe && draft.skipQeReason.trim() === '' ? 'Say why QE acceptance is skipped.' : null;
+            : offerQe && !qeOff && draft.skipQe && draft.skipQeReason.trim() === '' ? 'Say why QE acceptance is skipped.'
+              // studio#1305: Launch sends `power` as crew answered; while it is asked, nothing is sent on a guess.
+              : offerPower && posture.answer.status === 'loading' ? 'Checking how this job will run…' : null;
   const order: Step[] = drafting ? ['workflow', 'requirements', 'review']
     : demoing ? ['workflow', 'demo', 'options', 'review']
       : ['workflow', 'what', 'where', 'options', 'review'];
@@ -466,9 +497,15 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
       }
       return;
     }
+    // What the form shows as Launch is pressed (studio#1305): crew's answer for these fields, captured now.
+    const sigAtLaunch = draftSigNow.current;
+    const postureKeyAtLaunch = posture.key;
+    const postureAtLaunch = posture.answer;
     launchingRef.current = true;
     setLaunching(true);
     setError(null);
+    // A QE refusal speaks for the attempt that drew it; this one is new (codex r1).
+    setQeRefused(null);
     try {
       const key = draft.composerKey;
       const chatId = launchChatId(key, chatIdOnLaunch);
@@ -485,15 +522,27 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
         skipQeReason: offerQe && !qeOff && draft.skipQe ? draft.skipQeReason : null,
         chatId,
         primary: lead,
-        power: offerPower ? powerOn : null,
+        power: null,
       });
+      // `power` as crew previewed it for exactly the fields this body carries; no answer for them runs phased.
+      if (offerPower) {
+        const shown = postureKey(postureFieldsOfBody(body), powerChoice) === postureKeyAtLaunch && postureAtLaunch.status === 'ready' ? postureAtLaunch.posture : null;
+        (body as typeof body & { power?: boolean }).power = powerToSend(true, shown) === true;
+      }
       if (offerQe && force && (qeOff || !draft.skipQe)) body.forceQeAcceptance = true;
       forcedRef.current = body.forceQeAcceptance === true;
-      const { runId } = await api.launchRun(body);
+      const out = await api.launchRun(body);
+      const { runId } = out;
       useProvenanceStore.getState().markLaunchedHere(runId);
       if (key !== null) clearAboutChips(key);
+      const dest = chatId !== null ? sessionPath(chatId) : sessionPath(`run:${runId}`);
+      const notice = assuranceNoticeOf(out);
+      if (notice !== null) {
+        if (draftSigNow.current === sigAtLaunch) { setConfirmReduced(false); setLaunched({ notice, body, dest }); }
+        return;
+      }
       finish();
-      navigate?.(chatId !== null ? sessionPath(chatId) : sessionPath(`run:${runId}`));
+      navigate?.(dest);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       attemptRef.current += 1;
@@ -503,6 +552,27 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
       setLaunching(false);
     }
   };
+
+  // studio#1239: the notice's relaunch, confirmed: the same job in a run of its own, in reduced assurance (`retryWith`).
+  const relaunchReduced = async (): Promise<void> => {
+    if (launched === null || launchingRef.current) return;
+    launchingRef.current = true;
+    setLaunching(true);
+    setError(null);
+    setQeRefused(null);
+    try {
+      const { runId } = await api.launchRun(reducedRelaunchBody(launched.body, launched.notice));
+      useProvenanceStore.getState().markLaunchedHere(runId);
+      finish();
+      navigate?.(sessionPath(`run:${runId}`));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      launchingRef.current = false;
+      setLaunching(false);
+    }
+  };
+  const openLaunched = (): void => { if (launched === null || launchingRef.current) return; finish(); navigate?.(launched.dest); };
 
   const title = drafting ? 'New job: Draft epics' : demoing ? 'New job: Demo video' : draft.workflowId !== null ? `New job: ${jobName}` : 'New job';
   return (
@@ -522,7 +592,8 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
             <p className="wk-launch-wizard-progress" data-testid="launch-wizard-progress">
               {/* first-run C6: a pick here usually continues in a chat (or a form), so the first screen promises no
                   step count it can't keep; the steps a workflow does walk here are counted from its own first one. */}
-              {step === 'workflow' && cardsStartInChat
+              {launched !== null ? 'Started'
+                : step === 'workflow' && cardsStartInChat
                 ? 'Pick what to do. Most jobs continue in a chat, where you say what you want and approve the plan before anything runs.'
                 : <>Step {order.indexOf(step) + (draft.workflowId === null || step === 'workflow' ? 1 : 0)} of {draft.workflowId === null || step === 'workflow' ? order.length : order.length - 1}: {STEP_TITLE[step]}</>}
             </p>
@@ -530,7 +601,27 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
           <button type="button" className="wk-btn wk-btn--icon wk-btn--quiet" aria-label="Close (your choices are kept)" title="Close (your choices are kept)" data-testid="launch-wizard-close" disabled={launching} onClick={close}>×</button>
         </header>
 
-        <div className="wk-launch-wizard-body" data-testid="launch-wizard-step" data-step={step}>
+        <div className="wk-launch-wizard-body" data-testid="launch-wizard-step" data-step={launched !== null ? 'launched' : step}>
+          {launched !== null && (
+            <div role="status" data-testid="launch-wizard-assurance" data-code={launched.notice.code} className="wk-launch-wizard-field">
+              <p className="wk-field-label">The job started, and it will wait for a second helper</p>
+              <p className="wk-field-note" data-testid="launch-wizard-assurance-message">{launched.notice.message}</p>
+              {reducedCap && (confirmReduced ? (
+                <div role="group" aria-label="Start it again with reduced assurance?" data-testid="launch-wizard-assurance-confirm">
+                  <p className="wk-field-note">{REDUCED_RELAUNCH_WORDS}</p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+                    <button type="button" className="wk-btn wk-btn--secondary" data-testid="launch-wizard-assurance-cancel" disabled={launching} onClick={() => setConfirmReduced(false)}>Keep only this job</button>
+                    <button type="button" className="wk-btn wk-btn--primary" data-testid="launch-wizard-assurance-relaunch" disabled={launching} onClick={() => { void relaunchReduced(); }}>
+                      {launching ? 'Starting…' : 'Start it again with reduced assurance'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="launch-wizard-assurance-reduced" onClick={() => setConfirmReduced(true)}>Start it again with reduced assurance…</button>
+              ))}
+            </div>
+          )}
+          {launched === null && <>
           {step === 'workflow' && (
             <WorkflowCatalog
               view={catalog}
@@ -678,17 +769,32 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
                 </label>
               )}
               {offerPower && (
-                <div className="wk-launch-wizard-field pm-launch-power" data-testid="launch-wizard-power">
-                  <Switch label={`Power mode: ${powerOn ? 'On' : 'Off'}`} checked={powerOn} onChange={(v) => update({ power: v })} data-testid="launch-wizard-power-toggle" />
-                  <span className="wk-field-note">{powerOn
-                    ? 'One orchestrator builds it with you in this conversation, re-checked at every commit. Rigor is sized at intake and applied once, at hand-off.'
-                    : 'Phased: one helper per step, with a gate after each step the plan declares.'}{draft.power === null ? ' Preset from Settings.' : ''}</span>
+                <div className="wk-launch-wizard-field pm-launch-power" data-testid="launch-wizard-power" aria-busy={posture.answer.status === 'loading'}>
+                  <Switch label={`Power mode: ${powerPending ? 'checking…' : switchOn ? 'On' : 'Off'}`} checked={switchOn} onChange={(v) => update({ power: v })} data-testid="launch-wizard-power-toggle" />
+                  <span className="wk-field-note" data-testid="launch-wizard-power-note">{powerPending
+                    ? 'Checking with Studio’s service how this job will run…'
+                    : powerOn
+                    ? `One orchestrator builds it with you in this conversation, re-checked at every commit. Rigor is sized at intake${powerAsksAtHandOff ? ' and applied once, at hand-off' : ''}.`
+                    : 'Phased: one helper per step, with a gate after each step the plan declares.'}{draft.power === null && crewPosture !== null && powerNotice === null ? ' Preset from Settings.' : ''}</span>
                 </div>
+              )}
+              {powerNotice !== null && (
+                <p className="wk-field-note" role="status" data-testid="launch-wizard-power-notice">Studio’s service says: {powerNotice}.</p>
+              )}
+              {powerUnchecked !== null && (
+                <p className="wk-field-note" role="status" data-testid="launch-wizard-power-unchecked" data-reason={powerUnchecked}>
+                  {powerUnchecked === 'failed'
+                    ? 'Couldn’t check how this will launch, so it runs phased, with the gate chosen here.'
+                    : 'Studio’s service can’t say whether it would use power mode, so it runs phased, with the gate chosen here.'}
+                  {powerUnchecked === 'failed' && <>{' '}<button type="button" data-testid="launch-wizard-power-retry" className="wk-btn wk-btn--secondary wk-btn--sm" onClick={posture.retry}>Retry</button></>}
+                </p>
               )}
               {demoing ? (
                 <p className="wk-field-note" data-testid="launch-wizard-demo-gates">It stops for your yes twice: after the plan (the script and chapters, before anything records) and after the review.</p>
-              ) : offerPower && powerOn ? (
-                <p className="wk-field-note" data-testid="launch-wizard-power-gates">Power mode asks you once, at hand-off, plus anything policy or the QE plan requires.</p>
+              ) : powerOn ? (
+                <p className="wk-field-note" data-testid="launch-wizard-power-gates">{powerAsksAtHandOff
+                  ? 'Power mode asks you once, at hand-off, plus anything policy or the QE plan requires.'
+                  : 'Power mode has no step gates: it stops only where policy or the QE plan requires.'}</p>
               ) : (
               <label className="wk-launch-wizard-field">
                 <span className="wk-field-label">Ask me</span>
@@ -854,8 +960,8 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
               <div><dt>Where</dt><dd>{repoName ?? 'No repository'}{projectName !== null ? ` · in ${projectName}` : ''}</dd></div>
               {seats.length > 0 && <div><dt>Helpers</dt><dd>{seats.map(seatLabel).join(', ')}</dd></div>}
               {offerLead && <div data-testid="launch-wizard-review-lead"><dt>Lead helper</dt><dd>{lead === null ? 'Random (picked when it starts)' : seatLabel(leadable.find((s) => s.key === lead)!)}</dd></div>}
-              {offerPower && <div data-testid="launch-wizard-review-power"><dt>Power mode</dt><dd>{powerOn ? 'On: one orchestrator, rigor at hand-off' : 'Off: phased'}</dd></div>}
-              <div><dt>Ask me</dt><dd>{offerPower && powerOn ? 'At hand-off' : gatePostureWord(draft.confirmMode, beforeOrd, deliver === 'pr' && deliverGateCap === true)}</dd></div>
+              {offerPower && <div data-testid="launch-wizard-review-power"><dt>Power mode</dt><dd>{powerOn ? `On: one orchestrator${powerAsksAtHandOff ? ', rigor at hand-off' : ''}` : powerNotice !== null ? `Off: phased (${powerNotice})` : 'Off: phased'}</dd></div>}
+              <div><dt>Ask me</dt><dd>{powerOn ? (powerAsksAtHandOff ? 'At hand-off' : 'Only where policy requires') : gatePostureWord(draft.confirmMode, beforeOrd, deliver === 'pr' && deliverGateCap === true)}</dd></div>
               {deliverVisible && <div><dt>Delivery</dt><dd>{draft.deliverOn ? 'A pull request when done' : 'Stays on its branch'}</dd></div>}
               {offerReduced && draft.reduced && <div><dt>Checks</dt><dd>Reduced assurance (one helper builds and reviews)</dd></div>}
               {offerQe && !qeOff && draft.skipQe && <div><dt>QE acceptance</dt><dd>Skipped: {draft.skipQeReason.trim()}</dd></div>}
@@ -869,9 +975,10 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
             <QeRefusalWarning kind="launch" refusalKey={qeRefused.key} detail={qeRefused.detail} forced={qeRefused.forced} testId="launch-wizard-qe-refused"
               navigate={(p) => { closeStore(); (navigate ?? goToPath)(p); }} />
           )}
+          </>}
           {error !== null && qeRefused === null && (
             <div role="alert" data-testid="launch-wizard-error" className="wk-composer-note wk-composer-note--bad">
-              Couldn’t launch this. Your choices are kept, so you can try again.
+              {launched !== null ? 'Couldn’t start it again. The first job is still running.' : 'Couldn’t launch this. Your choices are kept, so you can try again.'}
               <TechDetails text={error} data-testid="launch-wizard-error-detail" />
             </div>
           )}
@@ -889,7 +996,12 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
               <p id="launch-wizard-skip-note" className="wk-field-note">You can turn New job back on in Settings → View.</p>
             </div>
           )}
-          {(step === 'review' ? launchBlocker : blocker) !== null && step !== 'workflow' && <p className="wk-field-note" data-testid="launch-wizard-blocker" role="status">{step === 'review' ? launchBlocker : blocker}</p>}
+          {launched === null && (step === 'review' ? launchBlocker : blocker) !== null && step !== 'workflow' && <p className="wk-field-note" data-testid="launch-wizard-blocker" role="status">{step === 'review' ? launchBlocker : blocker}</p>}
+          {launched !== null ? (
+          <div className="wk-launch-wizard-actions">
+            <button type="button" className="wk-btn wk-btn--primary" data-testid="launch-wizard-assurance-open" disabled={launching} onClick={openLaunched}>Open the job</button>
+          </div>
+          ) : (
           <div className="wk-launch-wizard-actions">
             {step !== 'workflow' && step !== 'what' && step !== 'requirements' && step !== 'demo' && (
               <button type="button" className="wk-btn wk-btn--secondary" data-testid="launch-wizard-back" disabled={launching} onClick={goBack}>Back</button>
@@ -905,6 +1017,7 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
               <button type="button" className="wk-btn wk-btn--primary" data-testid="launch-wizard-next" disabled={blocker !== null} onClick={goNext}>Next</button>
             )}
           </div>
+          )}
         </footer>
       </div>
     </div>

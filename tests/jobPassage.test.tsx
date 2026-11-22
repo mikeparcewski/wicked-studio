@@ -1689,3 +1689,78 @@ describe('F43: helperRefusalWords', () => {
     expect(helperRefusalWords('something else happened', nameOf)).toBe('something else happened.');
   });
 });
+
+// studio#1239 (crew#1679, crew#1453): a chat job's Start passes a launch's typed refusal through — e.g. 409
+// `no_independent_reviewer`, every helper wrote the change — with `excluded`, `retryWith: { reducedAssurance: true }` and
+// the reopened `view` (crew `api/chat-proposals.ts` LaunchRefusal pass-through; the refusal body is crew
+// `api/routes.ts`' review-change check). The card offers Start with reduced assurance, which sends Go with the opt-in.
+describe('studio#1239: a Start refused for want of an independent reviewer offers reduced assurance', () => {
+  const REFUSAL = {
+    code: 'no_independent_reviewer',
+    error: 'Every available seat (claude) wrote part of this change, so none can review it independently. Sign in another seat, or start it again in reduced assurance (the authors review their own change, labelled on the run and every gate).',
+    excluded: ['claude'],
+    retryWith: { reducedAssurance: true },
+  };
+  const answerGo = (refuse: (body: Record<string, unknown>) => boolean): void => {
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        posts.push({ path, body });
+        if (refuse(body)) return Promise.resolve(ok({ ...REFUSAL, view: { proposal: jobProposal(), state: 'open' } }, 409));
+        return Promise.resolve(ok({ view: {} }));
+      }
+      if (path.startsWith('/chats/') && !path.includes('/considered')) { reads += 1; return Promise.resolve(ok({ chatId: CHAT, seats: ['claude'], scope: { kind: 'none' }, messages })); }
+      if (path.endsWith('/team')) return Promise.resolve(ok(team));
+      if (path.endsWith('/events')) return Promise.resolve(ok({ events: [] }));
+      return Promise.resolve(new Response('{}', { status: 404 }));
+    }));
+  };
+  const goPath = `/chats/${CHAT}/proposals/${CHAT}%3At1`;
+
+  it('says crew’s refusal and offers Start with reduced assurance, which sends Go with reducedAssurance: true', async () => {
+    answerGo((b) => b['reducedAssurance'] !== true);
+    page();
+    await screen.findByTestId('job-passage');
+    fireEvent.click(reply('start'));
+    expect((await screen.findByTestId('job-passage-error')).textContent).toContain('none can review it independently');
+    const offer = await screen.findByTestId('job-passage-reduced');
+    expect(offer.textContent).toMatch(/review it themselves, labelled “Reduced assurance”/);
+    fireEvent.click(within(offer).getByRole('button', { name: 'Start with reduced assurance' }));
+    await waitFor(() => expect(posts).toHaveLength(2));
+    expect(posts.map((p) => [p.path, p.body])).toEqual([
+      [goPath, { decision: 'go' }],
+      [goPath, { decision: 'go', reducedAssurance: true }],
+    ]);
+    await waitFor(() => expect(screen.queryByTestId('job-passage-reduced')).toBeNull());
+  });
+
+  it('a same-pid re-resolution after the refusal offers no reduced-assurance Start for the changed job', async () => {
+    answerGo((b) => b['reducedAssurance'] !== true);
+    page();
+    await screen.findByTestId('job-passage');
+    fireEvent.click(reply('start'));
+    await screen.findByTestId('job-passage-reduced');
+    // crew re-resolves the proposal under the same pid (its suggestions changed): the refusal spoke for the old one.
+    await frame({ at: T0 + 3, turnId: 't1', kind: 'proposal', proposal: jobProposal({ suggestions: [] }) });
+    await waitFor(() => expect(screen.queryByTestId('job-passage-reduced')).toBeNull());
+    expect(posts.filter((p) => p.body['reducedAssurance'] === true)).toEqual([]);
+  });
+
+  it('a refusal that names no reduced-assurance way on offers none', async () => {
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (init?.method === 'POST') {
+        posts.push({ path, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+        return Promise.resolve(ok({ code: 'power_unavailable', error: 'this daemon cannot run it as a power run', view: { proposal: jobProposal(), state: 'open' } }, 409));
+      }
+      if (path.startsWith('/chats/') && !path.includes('/considered')) return Promise.resolve(ok({ chatId: CHAT, seats: ['claude'], scope: { kind: 'none' }, messages }));
+      return Promise.resolve(new Response('{}', { status: 404 }));
+    }));
+    page();
+    await screen.findByTestId('job-passage');
+    fireEvent.click(reply('start'));
+    await screen.findByTestId('job-passage-error');
+    expect(screen.queryByTestId('job-passage-reduced')).toBeNull();
+  });
+});
