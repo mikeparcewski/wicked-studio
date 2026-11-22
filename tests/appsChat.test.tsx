@@ -71,6 +71,9 @@ describe('the app chat: crew\'s turn log, in words', () => {
     const refused = turn({ runId: 'r5', state: 'refused', version: null, change: null, summary: null, code: 'review_refused', reason: "the evaluator's verdict is FAIL The chart has no text alternative. It breaks steering rule learn-accessible. Nothing landed.", rules: [{ id: 'learn-accessible', reason: 'charts/kpi.json:4 has no alt text' }, { id: 'team:learn-tests', reason: '' }, { id: 7 }, null, { id: 'learn-accessible', reason: 'dup' }] });
     const [t] = turnsOf(detail({ turns: [refused] }));
     expect(t!.rules).toStrictEqual([{ id: 'learn-accessible', reason: 'charts/kpi.json:4 has no alt text' }, { id: 'team:learn-tests', reason: '' }]);
+    // xreview r1: an id that cannot be a link (a lone surrogate, valid in JSON) is dropped, the others kept.
+    const lone = JSON.parse('{"id":"\\ud800bad","reason":"x"}') as unknown;
+    expect(turnsOf(detail({ turns: [turn({ runId: 'r7', state: 'refused', version: null, code: 'review_refused', reason: 'x', rules: [lone, { id: 'learn-accessible', reason: '' }] })] }))[0]!.rules).toStrictEqual([{ id: 'learn-accessible', reason: '' }]);
     // No rules: no field (a plain refusal, an older crew); a landed turn never shows any.
     expect(turnsOf(detail({ turns: [turn({ runId: 'r6', state: 'refused', code: 'check_failed', reason: 'x', version: null })] }))[0]).not.toHaveProperty('rules');
     expect(turnsOf(detail({ turns: [turn({ rules: [{ id: 'x', reason: '' }] })] }))[0]).not.toHaveProperty('rules');
@@ -84,6 +87,9 @@ describe('the app chat: crew\'s turn log, in words', () => {
     expect(links.map((a) => a.getAttribute('href'))).toStrictEqual(['/rules/learn-accessible', '/rules/team%3Alearn-tests']);
     expect(screen.getAllByTestId('app-turn-rule').map((li) => li.textContent)).toStrictEqual(['learn-accessible · charts/kpi.json:4 has no alt text', 'team:learn-tests']);
     expect(screen.getByText('The steering rules it broke:')).toBeTruthy();
+    // xreview r1: a modified click (Alt included) is the browser's, never the app's navigation.
+    for (const mod of ['metaKey', 'ctrlKey', 'shiftKey', 'altKey'] as const) expect(fireEvent.click(links[0]!, { [mod]: true })).toBe(true);
+    expect(navigate).not.toHaveBeenCalled();
     fireEvent.click(links[1]!);
     expect(navigate).toHaveBeenCalledWith('/rules/team%3Alearn-tests');
   });

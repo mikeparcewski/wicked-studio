@@ -29,6 +29,11 @@ export type AppTurnRecord = WireTurnRecord & { rules?: AppTurnRule[] };
 /** At most this many rules are shown on a turn (crew names every one in the reason). */
 const RULES_MAX = 20;
 
+/** Whether an id can be a Steering link: a lone surrogate (valid JSON, not valid UTF-16) cannot be URI-encoded (xreview r1). */
+function linkable(id: string): boolean {
+  try { encodeURIComponent(id); return true; } catch { return false; }
+}
+
 /** The broken rules on a record, read defensively: a malformed entry is dropped, an id is kept exactly as written. */
 function rulesOf(v: unknown): AppTurnRule[] {
   if (!Array.isArray(v)) return [];
@@ -36,7 +41,7 @@ function rulesOf(v: unknown): AppTurnRule[] {
   for (const r of v) {
     if (typeof r !== 'object' || r === null) continue;
     const id = (r as { id?: unknown }).id;
-    if (typeof id !== 'string' || id === '' || id.length > 256 || out.some((x) => x.id === id)) continue;
+    if (typeof id !== 'string' || id === '' || id.length > 256 || out.some((x) => x.id === id) || !linkable(id)) continue;
     out.push({ id, reason: str((r as { reason?: unknown }).reason, 300) ?? '' });
     if (out.length === RULES_MAX) break;
   }

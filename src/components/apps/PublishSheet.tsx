@@ -9,8 +9,20 @@ type Concern = 'site' | 'identity' | 'audience' | 'embed' | 'publish';
 /** `allow`: the ranges crew's identity finding names as the ones that would let it reach the issuer (studio#1296). */
 interface Finding { concern: Concern; message: string; allow?: string[] }
 
-/** A CIDR range as the field takes it (`10.1.2.3/32`, `fd00::/8`); crew checks that it is loopback or private. */
-const CIDR = /^[0-9A-Fa-f.:]{2,45}\/\d{1,3}$/u;
+/**
+ * A CIDR range as the field takes it (`10.1.2.3/32`, `fd00::/8`): an IPv4 address with a prefix of 0-32, or an IPv6
+ * address (as a URL host reads it) with 0-128. Crew checks that it is loopback or private (`validateAllowRanges`).
+ */
+export function isCidr(range: string): boolean {
+  const m = /^([^/\s]{2,45})\/(\d{1,3})$/u.exec(range);
+  if (m === null) return false;
+  const [, addr, bits] = m as unknown as [string, string, string];
+  const prefix = Number(bits);
+  if (/^\d{1,3}(\.\d{1,3}){3}$/u.test(addr)) return prefix <= 32 && addr.split('.').every((o) => Number(o) <= 255 && (o === '0' || !o.startsWith('0')));
+  if (!addr.includes(':') || !/^[0-9A-Fa-f:.]+$/u.test(addr)) return false;
+  try { new URL(`http://[${addr}]/`); } catch { return false; }
+  return prefix <= 128;
+}
 
 /**
  * (studio#1296, crew#1457) The ranges crew's identity finding suggests for an issuer on a private network: it ends
@@ -21,7 +33,7 @@ export function suggestedRanges(message: string): string[] {
   const m = /identity\.allowRanges, e\.g\. ([^)]{1,400})\)/u.exec(message);
   if (m === null) return [];
   const ranges = m[1]!.split(/,\s*/u).map((r) => r.trim());
-  return ranges.length > 0 && ranges.every((r) => CIDR.test(r)) ? ranges.slice(0, 100) : [];
+  return ranges.length > 0 && ranges.every(isCidr) ? ranges.slice(0, 100) : [];
 }
 
 /** The site's origin grammar is also crew's: HTTPS, or HTTP on the two loopback hosts. */
@@ -110,7 +122,7 @@ export function PublishSheet({ detail, onClose, onStarted }: {
       if (client.trim() === '') invalid.push({ concern: 'identity', message: 'Enter the client id for this site.' });
       if (rule.startsWith('entra-') && tenant.trim() === '') invalid.push({ concern: 'identity', message: 'Enter the Entra tenant id.' });
       if (values.length === 0) invalid.push({ concern: 'audience', message: 'Enter at least one group, email domain or role that may open the site.' });
-      if (allowPrivate && (allowed.length === 0 || allowed.length > 100 || allowed.some((r) => !CIDR.test(r)))) invalid.push({ concern: 'identity', message: 'Enter the private-network ranges as CIDR, such as 10.1.2.3/32 (at most 100), or turn off the private-network issuer.' });
+      if (allowPrivate && (allowed.length === 0 || allowed.length > 100 || allowed.some((r) => !isCidr(r)))) invalid.push({ concern: 'identity', message: 'Enter the private-network ranges as CIDR, such as 10.1.2.3/32 (at most 100), or turn off the private-network issuer.' });
     }
     if (audience === 'public' && embed && (framedBy.length === 0 || framedBy.some((o) => o === null))) invalid.push({ concern: 'embed', message: 'Enter an HTTPS origin for every page that may embed this app, with no path.' });
     setFindings(invalid);

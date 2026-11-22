@@ -15,7 +15,7 @@ export function TurnRules({ rules, navigate }: { rules: readonly AppTurnRule[] |
           const href = rulePath(r.id);
           return (
             <li key={r.id} data-testid="app-turn-rule">
-              <a href={href} data-testid="app-turn-rule-link" onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate(href); }}>{r.id}</a>
+              <a href={href} data-testid="app-turn-rule-link" onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return; e.preventDefault(); navigate(href); }}>{r.id}</a>
               {r.reason !== '' && <span data-testid="app-turn-rule-why"> · {r.reason}</span>}
             </li>
           );

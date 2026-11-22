@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppDetail, AppPublishBody, AppPublished, SessionView } from '../src/api/types.js';
-import { PublishSheet, publishOrigin, suggestedRanges } from '../src/components/apps/PublishSheet.js';
+import { PublishSheet, isCidr, publishOrigin, suggestedRanges } from '../src/components/apps/PublishSheet.js';
 import { ShareSheet, dockerRun } from '../src/components/apps/ShareSheet.js';
 import { AppChat } from '../src/components/apps/AppChat.js';
 import { publishedOf } from '../src/editors/apps/appsDirectory.js';
@@ -156,6 +156,8 @@ describe('Publish settings and crew refusals', () => {
     expect(screen.getByRole('alert').textContent).toContain('Enter the private-network ranges as CIDR');
     fireEvent.change(screen.getByLabelText(/Private-network ranges/u), { target: { value: 'dex.corp.test' } }); start();
     expect(screen.getByRole('alert').textContent).toContain('Enter the private-network ranges as CIDR');
+    fireEvent.change(screen.getByLabelText(/Private-network ranges/u), { target: { value: '10.1.2.3/32, 10.1.2.999/32' } }); start();
+    expect(screen.getByRole('alert').textContent).toContain('Enter the private-network ranges as CIDR');
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -179,6 +181,12 @@ describe('Publish settings and crew refusals', () => {
     expect(suggestedRanges('x resolves to a loopback address on this machine (127.0.0.1, ::1), which crew reaches only when the sign-in allows its range (identity.allowRanges, e.g. 127.0.0.1/32, ::1/128)')).toStrictEqual(['127.0.0.1/32', '::1/128']);
     expect(suggestedRanges('The sign-in issuer did not answer.')).toStrictEqual([]);
     expect(suggestedRanges('(identity.allowRanges, e.g. not a range)')).toStrictEqual([]);
+    expect(suggestedRanges('(identity.allowRanges, e.g. 10.1.2.999/32)')).toStrictEqual([]);
+  });
+
+  it('xreview r1: a range is CIDR only with a real address and a prefix its family allows', () => {
+    for (const ok of ['10.1.2.3/32', '0.0.0.0/0', '192.168.0.0/16', 'fd00::/8', '::1/128', '::ffff:10.1.2.3/128', 'fc00:0:0:0:0:0:0:1/64']) expect(isCidr(ok), ok).toBe(true);
+    for (const bad of ['10.1.2.999/32', '10.1.2.3/33', '10.1.2.3/999', '010.1.2.3/32', 'dead/8', 'fd00::/129', 'fd00:::1/64', '10.1.2.3', 'dex.corp.test/32', '10.1.2/24']) expect(isCidr(bad), bad).toBe(false);
   });
 
   it('allows HTTPS origins and the two local HTTP origins', () => {
