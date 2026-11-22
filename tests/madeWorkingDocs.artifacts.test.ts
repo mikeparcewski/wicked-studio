@@ -50,13 +50,17 @@ describe('Made never lists a run working document', () => {
     // crew keeps 40 characters of the slug: the uuid's 36, then at most `-` and three more.
     expect(isRunWorkingDoc('working-4406c5b6-c61b-4b7c-91f1-4622e1cf0c47-r')).toBe(true);
     expect(isRunWorkingDoc('working-4406c5b6-c61b-4b7c-91f1-4622e1cf0c47-abc')).toBe(true);
+    expect(isRunWorkingDoc('working-4406c5b6-c61b-4b7c-91f1-4622e1cf0c47-a-b')).toBe(true);
     expect(isRunWorkingDoc('working-4406c5b6-c61b-4b7c-91f1-4622e1cf0c47-notes')).toBe(false);
+    // crew collapses every run of non-alphanumerics to one dash (codex r2).
+    for (const tail of ['--a', '--ab', '---a', '-a--']) expect(isRunWorkingDoc(`working-4406c5b6-c61b-4b7c-91f1-4622e1cf0c47${tail}`)).toBe(false);
     expect(isRunWorkingDoc('working-4406c5b6')).toBe(false);
     expect(isRunWorkingDoc('my-working-4406c5b6-c61b-4b7c-91f1-4622e1cf0c47')).toBe(false);
   });
-  it('a person’s working-<uuid>-notes document stays in Made', () => {
-    const doc = { name: 'working-4406c5b6-c61b-4b7c-91f1-4622e1cf0c47-notes', kind: 'doc', updated_at: '2026-11-01T00:00:00Z' };
-    expect(madeRows({ p1: [doc] as never }, [], {}).map((r) => r.title)).toEqual([doc.name]);
+  it('a person’s working-<uuid>-notes or working-<uuid>--a document stays in Made', () => {
+    const docs = ['working-4406c5b6-c61b-4b7c-91f1-4622e1cf0c47-notes', 'working-4406c5b6-c61b-4b7c-91f1-4622e1cf0c47--a']
+      .map((name) => ({ name, kind: 'doc', updated_at: '2026-11-01T00:00:00Z' }));
+    expect(madeRows({ p1: docs as never }, [], {}).map((r) => r.title).sort()).toEqual(docs.map((d) => d.name).sort());
   });
   it('a listed caller-chosen-id run whose project studio does not know: its working doc is left out everywhere (codex r1)', () => {
     const runs = [{ session: { id: 'Release_42', status: 'completed', problem: 'x' }, units: [] }];

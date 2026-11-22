@@ -206,11 +206,11 @@ export function workingDocNameOf(runId: string): string {
  * while it works. It is shown in that run's own thread, never as something made (artifact-runs-fix: the Made list
  * showed twelve `working-<uuid>` rows). Known by a run this list holds, or by the engine's run-id shape (a run not in
  * the list: archived, another page's). The shape includes the short tail crew can leave after the uuid (studio#1055):
- * crew keeps 40 characters of the run id's slug, so at most `-` and three more after the uuid's 36 (codex r1: no more,
- * so a person's `working-<uuid>-notes` is never taken for one).
+ * crew keeps 40 characters of the run id's slug, so at most `-` and three more after the uuid's 36, never two dashes in
+ * a row (crew collapses them). No more (codex r1/r2: a person's `working-<uuid>-notes` or `…--a` is never taken for one).
  */
 export function isRunWorkingDoc(name: string, runNames: ReadonlySet<string> = new Set()): boolean {
-  return runNames.has(name) || /^working-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:-[a-z0-9-]{0,2}[a-z0-9])?$/i.test(name);
+  return runNames.has(name) || /^working-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:-(?:[a-z0-9]{1,3}|[a-z0-9]-[a-z0-9]))?$/i.test(name);
 }
 
 export function madeRows(
