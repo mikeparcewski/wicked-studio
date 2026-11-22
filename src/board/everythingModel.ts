@@ -205,10 +205,11 @@ export function workingDocNameOf(runId: string): string {
  * A run's WORKING DOCUMENT (crew `working-doc/service.ts` `workingDocName`: `working-<run id>`), the notes a run keeps
  * while it works. It is shown in that run's own thread, never as something made (artifact-runs-fix: the Made list
  * showed twelve `working-<uuid>` rows). Known by a run this list holds, or by the engine's run-id shape (a run not in
- * the list: archived, another page's).
+ * the list: archived, another page's). The shape is a prefix (studio#1055): crew keeps 40 characters of the run id's
+ * slug, so an id longer than a uuid leaves a tail after it.
  */
 export function isRunWorkingDoc(name: string, runNames: ReadonlySet<string> = new Set()): boolean {
-  return runNames.has(name) || /^working-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name);
+  return runNames.has(name) || /^working-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(name);
 }
 
 export function madeRows(
@@ -221,8 +222,10 @@ export function madeRows(
 ): MadeRow[] {
   const out: MadeRow[] = [];
   // A run's working doc lives in its own project (review r2: never hide another project's document of that name).
-  // A known run decides by its project; the run-id shape decides only a name no known run owns (review r3).
-  // Two caller-chosen run ids can normalise to one name (review r4): every owning project is kept.
+  // The run-id shape is left out in every project (studio#1055): a listed run whose project studio places elsewhere
+  // (membership not read yet, or no claim) showed its raw `working-<uuid>` name. A known run's other name (a
+  // caller-chosen id) is left out only in that run's project. Two caller-chosen run ids can normalise to one name
+  // (review r4): every owning project is kept.
   const owners = new Map<string, Set<string>>();
   for (const v of runs) {
     const name = workingDocNameOf(v.session.id);
@@ -233,7 +236,7 @@ export function madeRows(
   for (const [pid, docs] of Object.entries(byProject)) {
     for (const d of docs) {
       const known = owners.get(d.name);
-      if (known !== undefined ? known.has(pid) : isRunWorkingDoc(d.name)) continue;
+      if (isRunWorkingDoc(d.name) || known?.has(pid) === true) continue;
       out.push({ key: `doc:${pid}:${d.name}`, kind: madeKindOf(d), title: d.name, projectId: pid, updatedAt: isoMs(d.updated_at), doc: { name: d.name, kind: d.kind, ...(d.style !== undefined ? { style: d.style } : {}), ...(d.grounding !== undefined ? { grounding: d.grounding } : {}), ...(typeof d.head === 'number' && (d as { head_unknown?: boolean }).head_unknown !== true ? { head: d.head } : {}) } });
     }
   }
