@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EditorHost, threadLine, type HostLogEntry, type HostUi } from '../src/editors/host.js';
+import { EditorHost, NOT_APPLIED_CHARS, notAppliedLine, threadLine, type HostLogEntry, type HostUi } from '../src/editors/host.js';
 import { FakeDocAdapter, SAMPLE_PAGE } from '../src/editors/fakeAdapter.js';
 import { CHORD_TABLE, isForwardable, isOneGrapheme, judgeKey, judgeTyped } from '../src/editors/keys.js';
 import { builtinDefaults, changedBy, chipsFor, elementLabel, resolveKind } from '../src/editors/model.js';
@@ -190,6 +190,51 @@ function makeHost(grants: PermissionId[] = ['artifact.read', 'selection.chip']) 
 }
 
 afterEach(() => { document.body.innerHTML = ''; vi.useRealTimers(); });
+
+describe('studio#1252: a write that landed only in part says what was not applied', () => {
+  it('names the parts by their text, counts the ones with none, and gives the engine\'s reasons', () => {
+    const inv = inventoryOf(SAMPLE_PAGE);
+    const words = 'it would remove 2 parts nested inside what you edited';
+    expect(notAppliedLine({ items: [{ selector: 'cta', reason: 'inv2-would-drop-wids:a,b' }], words }, inv)).toBe(`Part of this edit was not applied (“Book a room”): ${words}.`);
+    expect(notAppliedLine({ items: [{ selector: 'cta', reason: 'x' }, { selector: 'gone', reason: 'selector-not-found' }, { selector: 'gone2', reason: 'stale' }], words: 'w' }, inv)).toBe('Part of this edit was not applied (“Book a room”, 2 more parts): w.');
+    expect(notAppliedLine({ items: [{ selector: 'gone', reason: 'stale' }], words: 'w' }, inv)).toBe('Part of this edit was not applied (one part): w.');
+  });
+
+  it('xreview r1: many long parts never push the reasons out; the parts that do not fit are counted', () => {
+    const html = Array.from({ length: 8 }, (_, i) => `<p data-wid="p${i}">Paragraph ${i} holds a long sentence about the quarterly numbers</p>`).join('');
+    const inv = inventoryOf(html);
+    const words = 'it would remove 2 parts nested inside what you edited; the part you edited changed since you opened it';
+    const items = Array.from({ length: 8 }, (_, i) => ({ selector: `p${i}`, reason: i % 2 === 0 ? 'inv2-would-drop-wids:a,b' : 'stale' }));
+    const line = notAppliedLine({ items, words }, inv);
+    expect(line.length).toBeLessThanOrEqual(NOT_APPLIED_CHARS);
+    expect(line.endsWith(`: ${words}.`)).toBe(true);
+    expect(line).toMatch(/^Part of this edit was not applied \(“Paragraph 0 holds a long sent…”, .*, \d more parts\)/u);
+    // Even the reasons alone are bounded, and the count of parts stays.
+    const huge = notAppliedLine({ items, words: 'x'.repeat(500) }, inv);
+    expect(huge.length).toBeLessThanOrEqual(NOT_APPLIED_CHARS);
+    expect(huge).toMatch(/more parts\): x+…\.$/u);
+  });
+
+  it('the host keeps the written line (its Undo) and says beside it which parts were not applied; the plugin hears them', async () => {
+    const { host, fromFrame, adapter, ui } = makeHost(['artifact.read', 'artifact.write']);
+    const order: string[] = [];
+    (ui.status as ReturnType<typeof vi.fn>).mockImplementation((line: string) => { order.push(`status:${line}`); });
+    ui.written = vi.fn((w: { version: number }) => { order.push(`written:${w.version}`); });
+    let port: MessagePort | null = null;
+    vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { port = (tr?.[0] as MessagePort) ?? null; }) as never);
+    fromFrame(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }));
+    const toPlugin: { re?: string; ok?: boolean; payload?: Record<string, unknown> }[] = [];
+    port!.onmessage = (m) => toPlugin.push(m.data as (typeof toPlugin)[number]);
+    const ref = adapter.artifact();
+    vi.spyOn(adapter, 'artifact').mockReturnValue({ ...ref, version: 1, head: 1 });
+    const notApplied = { items: [{ selector: 'cta', reason: 'inv2-would-drop-wids:a,b' }], words: 'it would remove 2 parts nested inside what you edited' };
+    vi.spyOn(adapter, 'write').mockResolvedValue({ version: 2, notApplied } as never); // the fake page never refuses part of a write
+    port!.postMessage(env('version.write', { base: 1, ops: [{ op: 'text', anchor: 'hero-title', value: 'Hi', before: 'Book a study room in under a minute' }, { op: 'text', anchor: 'cta', value: 'Reserve', before: 'Book a room' }], summary: 'two parts' }, 'w1'));
+    await vi.waitFor(() => expect(toPlugin.find((m) => m.re === 'w1')).toMatchObject({ ok: true, payload: { version: 2, notApplied } }));
+    expect(order).toEqual(['written:2', 'status:Part of this edit was not applied (“Book a room”): it would remove 2 parts nested inside what you edited.']);
+    host.teardown('done');
+  });
+});
 
 describe('EP-P3: the written line says what the write did', () => {
   it('a text edit is "changed", a remove "removed", a colour "restyled"; a mix is "changed"', () => {

@@ -243,6 +243,81 @@ describe('InteractiveDocAdapter: the engine refused the edit (e2e-1105 P10)', ()
     expect(await writing).toMatchObject({ error: 'refused' });
   });
 
+  // studio#1252: a batch that lands part of an edit. The frame is the engine's own (interactive
+  // src/service/handlers.js:79-90 materializeFeedback emit: version = the landed version, landed true, the refused
+  // items in `rejected`), as crew relays it with the bound document's project stamped on.
+  const partial = { document_id: 'plan', project_id: 'notes', version: 2, applied: ['headline'], rejected: [{ selector: 'slide-1-list-item-1', reason: 'inv2-would-drop-wids:slide-1-paragraph-2,slide-1-paragraph-3' }], stale: ['footer'], awaiting_structural: 0, structural_items: [], landed: true, unchanged: false, base_version: 1, feedback_file: '_v2.md' };
+  const items = [
+    { selector: 'headline', type: 'content-edit' as const, value: 'New', before: 'Old' },
+    { selector: 'slide-1-list-item-1', type: 'content-edit' as const, value: 'Done', before: 'Todo' },
+    { selector: 'footer', type: 'content-edit' as const, value: 'Bye', before: 'Hi' },
+  ];
+
+  it('studio#1252: a partly refused batch answers its version AND what was not applied, with the reasons', async () => {
+    const { publishCoreEvent } = await import('../src/hooks/eventTap.js');
+    const a = new InteractiveDocAdapter('notes', 'plan', 'The plan', 'page', undefined, { pollForMs: 20_000 });
+    api.manifests = [{ head: 1, versions: [entry(1, null)] }, { head: 1, versions: [entry(1, null)] }, { head: 2, versions: [entry(1, null), entry(2, 1, true)] }];
+    await a.refresh();
+    const writing = a.write(1, items);
+    await vi.waitFor(() => expect(api.events).toHaveLength(1));
+    publishCoreEvent(processed(partial) as never);
+    expect(await writing).toEqual({
+      version: 2,
+      notApplied: {
+        items: [{ selector: 'slide-1-list-item-1', reason: 'inv2-would-drop-wids:slide-1-paragraph-2,slide-1-paragraph-3' }, { selector: 'footer', reason: 'stale' }],
+        words: 'it would remove 2 parts nested inside what you edited; the part you edited changed since you opened it',
+      },
+    });
+    expect(a.writes.get(2)).toBe(1);
+    expect(a.head).toBe(2);
+  });
+
+  it('studio#1252: the frame may come after the manifest shows the version; it is waited for', async () => {
+    const { publishCoreEvent } = await import('../src/hooks/eventTap.js');
+    const a = new InteractiveDocAdapter('notes', 'plan', 'The plan', 'page', undefined, { pollForMs: 20_000 });
+    api.manifests = [{ head: 1, versions: [entry(1, null)] }, { head: 1, versions: [entry(1, null)] }, { head: 2, versions: [entry(1, null), entry(2, 1, true)] }];
+    await a.refresh();
+    const writing = a.write(1, items);
+    await vi.waitFor(() => expect(api.manifests).toHaveLength(1));
+    await new Promise((r) => setTimeout(r, 300));
+    publishCoreEvent(processed(partial) as never);
+    expect(await writing).toMatchObject({ version: 2, notApplied: { items: [{ selector: 'slide-1-list-item-1' }, { selector: 'footer' }] } });
+  });
+
+  it('xreview r2: a refresh that moves the head on during the settle wait is kept; the reply says the head moved', async () => {
+    const { publishCoreEvent } = await import('../src/hooks/eventTap.js');
+    const heads: number[] = [];
+    const a = new InteractiveDocAdapter('notes', 'plan', 'The plan', 'page', (h) => heads.push(h), { pollForMs: 20_000 });
+    api.manifests = [{ head: 1, versions: [entry(1, null)] }, { head: 1, versions: [entry(1, null)] }, { head: 2, versions: [entry(1, null), entry(2, 1, true)] }, { head: 3, versions: [entry(1, null), entry(2, 1, true), entry(3, 2)] }];
+    await a.refresh();
+    const writing = a.write(1, items);
+    // The poll has seen v2 (head 2); the card's own refresh then reads a helper's v3 while the write waits for its frame.
+    await vi.waitFor(() => expect(api.manifests).toHaveLength(1));
+    await new Promise((r) => setTimeout(r, 100));
+    await a.refresh();
+    expect(a.head).toBe(3);
+    publishCoreEvent(processed(partial) as never);
+    expect(await writing).toMatchObject({ version: 2, moved: { head: 3, kind: 'generated' } });
+    expect(a.head).toBe(3);
+    expect(heads.at(-1)).toBe(3);
+  });
+
+  it('studio#1252: a batch that applied every item answers its version alone, without waiting out the settle window', async () => {
+    const { publishCoreEvent } = await import('../src/hooks/eventTap.js');
+    const a = new InteractiveDocAdapter('notes', 'plan', 'The plan', 'page', undefined, { pollForMs: 20_000, settleMs: 10_000 });
+    api.manifests = [{ head: 1, versions: [entry(1, null)] }, { head: 1, versions: [entry(1, null)] }, { head: 2, versions: [entry(1, null), entry(2, 1, true)] }];
+    await a.refresh();
+    const t0 = Date.now();
+    const writing = a.write(1, items.slice(0, 1));
+    await vi.waitFor(() => expect(api.events).toHaveLength(1));
+    // Another document's partial frame, and one for another version, are not this edit's.
+    publishCoreEvent(processed({ ...partial, document_id: 'other' }) as never);
+    publishCoreEvent(processed({ ...partial, version: 7 }) as never);
+    publishCoreEvent(processed({ ...partial, applied: ['headline'], rejected: [], stale: [] }) as never);
+    expect(await writing).toEqual({ version: 2 });
+    expect(Date.now() - t0).toBeLessThan(5_000);
+  });
+
   it('the reasons read in plain words', async () => {
     const { editRefusalWords } = await import('../src/editors/interactiveDocAdapter.js');
     expect(editRefusalWords({ rejected: [{ selector: 'a', reason: 'inv2-would-drop-wids:x' }], stale: [], unchanged: true })).toBe('the page refused this edit: it would remove a part nested inside what you edited');

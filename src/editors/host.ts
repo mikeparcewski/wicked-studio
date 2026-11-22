@@ -95,13 +95,18 @@ let mcpCallSeq = 0;
 
 export type AdapterResult<T> = (T & { moved?: MovedOn }) | { error: ErrorCode; message: string; head?: number; moved?: MovedOn };
 
+/** (studio#1252) The items of a write the artifact's engine did not apply while the rest landed as the version: each
+ *  item's anchor and the engine's reason code, and the reasons in plain words. */
+export interface NotApplied { items: { selector: string; reason: string }[]; words: string }
+
 /** What the host can do with the artifact. A method an artifact does not support answers `unsupported`. */
 export interface HostAdapter {
   artifact(): ArtifactRef;
   media?(ref: MediaRef): Promise<AdapterResult<{ type: string; blob: Blob }>>;
   read(version?: number): Promise<AdapterResult<{ version: number; content: { type: 'html'; html: string } | Record<string, unknown> }>>;
   versions(): Promise<AdapterResult<{ versions: { version: number; parent: number | null; createdAt: string }[]; head: number }>>;
-  write(base: number, items: WireItem[], summary: string): Promise<AdapterResult<{ version: number }>>;
+  /** `notApplied`: part of the write landed as `version`, and these items did not (studio#1252). */
+  write(base: number, items: WireItem[], summary: string): Promise<AdapterResult<{ version: number; notApplied?: NotApplied }>>;
   undo(version: number): Promise<AdapterResult<{ undone: true }>>;
   fork(from: number): Promise<AdapterResult<{ version: number }>>;
   checks?(): Promise<AdapterResult<{ checks: { id: string; text: string }[]; total: number }>>;
@@ -299,6 +304,38 @@ export function deckWords(items: readonly WireItem[], inv: Inventory): string | 
 
 export function threadLine(firstParty: boolean, name: string, items: readonly WireItem[], summary: string, version: number): string {
   return `${firstParty ? 'You' : name} ${writeVerb(items)} ${summary} · Version ${version}`;
+}
+
+/** (studio#1252) The longest not-applied line the host draws: its own words, so not held to a plugin's status limit. */
+export const NOT_APPLIED_CHARS = 280;
+
+/**
+ * (studio#1252) The host's line for a write that landed only in part: which parts were not applied (by their text in
+ * the version the edit was made on, as many as fit, the rest counted), and the engine's reasons. Said beside the
+ * written line (its Undo stays): the version is the part that landed. Bounded by {@link NOT_APPLIED_CHARS}; the reasons
+ * keep their room, so a long list never pushes them out.
+ */
+export function notAppliedLine(n: NotApplied, inv: Inventory, max = NOT_APPLIED_CHARS): string {
+  const parts = [...new Set(n.items.map((i) => i.selector))];
+  const labels = parts.flatMap((sel) => {
+    const text = (inv.wids.get(sel)?.text ?? '').replace(/\s+/gu, ' ').trim();
+    return text === '' ? [] : [`“${text.length > 30 ? `${text.slice(0, 29)}…` : text}”`];
+  });
+  const head = 'Part of this edit was not applied (';
+  const words = n.words.length > max / 2 ? `${n.words.slice(0, Math.floor(max / 2) - 1)}…` : n.words;
+  const end = `): ${words}.`;
+  const what = (shown: readonly string[]): string => {
+    const rest = parts.length - shown.length;
+    if (shown.length === 0) return rest === 1 ? 'one part' : `${rest} parts`;
+    return rest === 0 ? shown.join(', ') : `${shown.join(', ')}, ${rest === 1 ? 'one more part' : `${rest} more parts`}`;
+  };
+  let shown: string[] = [];
+  for (const l of labels) {
+    const next = [...shown, l];
+    if (head.length + what(next).length + end.length > max) break;
+    shown = next;
+  }
+  return `${head}${what(shown)}${end}`;
 }
 
 /** How long after focus leaves an app's frame a spec op from it is still the person's (see `justInFrame`). */
@@ -709,6 +746,11 @@ export class EditorHost {
             this.o.ui.thread(threadLine(this.o.firstParty, this.o.name, checked.items, summary, r.version));
             const words = deckWords(checked.items, inv.inv);
             this.o.ui.written?.({ version: r.version, base: p['base'] as number, summary, anchors: [...new Set(checked.items.map((it) => it.selector))], verb: writeVerb(checked.items), ...(words === null ? {} : { words }) });
+            // (studio#1252) A partly refused batch is never "done" for the whole edit: what was left out, and why.
+            if (r.notApplied !== undefined && r.notApplied.items.length > 0) {
+              this.log({ kind: 'refused', type: 'version.write', code: 'refused', why: `not applied: ${r.notApplied.items.map((i) => `${i.selector} (${i.reason})`).join(', ')}` });
+              this.o.ui.status(notAppliedLine(r.notApplied, inv.inv));
+            }
           }
           return r;
         } finally {
