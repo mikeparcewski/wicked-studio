@@ -356,6 +356,17 @@ with sync_playwright() as p:
         row.locator('[data-testid="need-act"]').first.click()
         page.wait_for_timeout(500)
         back_home()
+        # The panel mounts after the Desk's first paint, and clears itself (handoverSettled) only once every section
+        # has been read: wait for that read, give its effects two frames, then count (studio#1078: counted at once
+        # after desk-work showed, it lost the race to the panel's mount on CI).
+        try:
+            page.wait_for_function(
+                """() => { const c = [...document.querySelectorAll('[data-testid="handover-panel"] [data-testid="handover-chip"]')];
+                           return c.length > 0 && c.every(x => x.dataset.state === 'ready'); }""",
+                timeout=10000)
+            page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(null))))")
+        except Exception:  # noqa: BLE001 — reported by the check below
+            pass
         check(f"still-open-after-{key}", page.locator('[data-testid="handover-panel"]').count() == 1)
     page.locator('[data-testid="handover-chip"][data-section="finished"]').click()
     page.locator('[data-testid="handover-item"][data-run-id="d1"] [data-testid="handover-item-draft"]').click()

@@ -23,11 +23,14 @@ export const NERVE_CENTER_PATH = '/watch';
  * `compact` (the rail folded to icons, operator 2026-11-04: "nerve center should have colored icon too"): the
  * same tile at icon size, filled the same way by the same state, the words only in its name and tooltip.
  */
-export function NerveCenterTile({ navigate, pathname, waitingOnYou, compact = false }: {
+export function NerveCenterTile({ navigate, pathname, waitingOnYou, needs, compact = false }: {
   navigate: Navigate;
   pathname: string;
   /** The Desk's settled needs-you count (an older crew's "run waiting on you"). */
   waitingOnYou: number;
+  /** Whether that count has settled (`useSettledNeeds`'s phase). It never changes the verdict; it is written as
+   *  `data-needs`, so a check compares tones only once the count they fold has settled (studio#949). */
+  needs?: 'loading' | 'complete' | 'partial';
   compact?: boolean;
 }): React.ReactElement {
   const state = useNerveState(waitingOnYou);
@@ -50,6 +53,7 @@ export function NerveCenterTile({ navigate, pathname, waitingOnYou, compact = fa
       data-nav-dest="watch"
       data-tone={state.tone}
       data-read={state.read}
+      data-needs={needs}
       data-info={note !== null ? healthText(note) : undefined}
       aria-current={here ? 'page' : undefined}
       aria-label={healthText(label)}

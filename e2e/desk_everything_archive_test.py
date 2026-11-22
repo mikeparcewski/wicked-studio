@@ -22,6 +22,7 @@ report; exit 0/1.
 import json
 import os
 import sys
+from urllib.parse import urlparse
 
 from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server, OPEN_RUN_DETAILS
 
@@ -55,7 +56,7 @@ SHOTS.mkdir(parents=True, exist_ok=True)
 errors: list[str] = []
 
 ARCHIVED_ID = "r-onb-c"
-state = {"archived": True, "runs_gets": 0, "archive_posts": []}
+state = {"archived": True, "archive_posts": []}
 
 
 def onboarding(rid: str, status: str, repo: str, archived_at: int | None) -> dict:
@@ -86,7 +87,6 @@ def route_runs(route):
     if req.method != "GET":
         route.fallback()
         return
-    state["runs_gets"] += 1
     include = "include=archived" in req.url
     res = route.fetch()
     body = res.json()
@@ -168,17 +168,15 @@ with sync_playwright() as p:
     row.wait_for(state="visible", timeout=10000)
 
     # ── 4. Unarchive re-reads the list; the Stopped lens shows the run in place ──────────────
-    gets_before = state["runs_gets"]
-    row.get_by_test_id("everything-unarchive").click()
+    # The re-read is waited for as a request (studio#1078): the old poll loop sat inside a `try` behind a 10 ms
+    # `wait_for_function` yield, and when that yield timed out the loop never ran, so a re-read that came a moment
+    # later counted as none (`reread_gets: 0` with the row back in place).
     try:
-        page.wait_for_function("() => true", timeout=10)  # yield once
-        for _ in range(30):
-            if state["runs_gets"] > gets_before:
-                break
-            page.wait_for_timeout(100)
-    except Exception:  # noqa: BLE001
-        pass
-    reread = state["runs_gets"] - gets_before
+        with page.expect_request(lambda r: r.method == "GET" and urlparse(r.url).path.endswith("/api/v1/runs"), timeout=3000):
+            row.get_by_test_id("everything-unarchive").click()
+        reread = 1
+    except Exception:  # noqa: BLE001 — no GET /runs within 3 s: reported by the check below
+        reread = 0
     row.wait_for(state="hidden", timeout=5000)
     page.get_by_test_id("everything-filter").filter(has_text="Stopped").click()
     stopped = page.locator(f'[data-testid="everything-session"][data-run-id="{ARCHIVED_ID}"]')

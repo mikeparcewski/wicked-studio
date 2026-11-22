@@ -151,6 +151,13 @@ def address(page) -> str:
     return u.path + (f"?{u.query}" if u.query else "")
 
 
+# Nerve Center's tile folds the Desk's needs-you count (an older crew's "waiting on you", which this fixture is), and
+# that count settles on its own clock (useSettledNeeds: every source answered, then NEEDS_QUIET_MS still). Until then
+# the tile is handed 0, so a fresh read can be green for a moment and turn yellow once the count lands. Its tone is
+# read only once the read is fresh AND the count has settled (`data-needs`, studio#949).
+NERVE_SETTLED = ("() => { const t = document.querySelector('[data-testid=\"desk-rail-nerve\"]');"
+                 " return t?.dataset.read === 'fresh' && t.dataset.needs === 'complete'; }")
+
 ROWS = """() => [...document.querySelectorAll('[data-testid="agents-row"]')].map(r => ({
   key: r.dataset.agent, ready: r.dataset.ready,
   fix: r.querySelector('[data-testid="agents-fix"]')?.innerText ?? null,
@@ -170,8 +177,8 @@ with sync_playwright() as p:
     # ── 2a. no rail link (operator 2026-10-13: Agents is a Desk tab, hosted by studio-desk-v2) ──
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
-    # Nerve Center's tile settles on its first fresh read before its state is compared (it reads on a poll).
-    page.wait_for_function("() => document.querySelector('[data-testid=\"desk-rail-nerve\"]')?.dataset.read === 'fresh'", timeout=15000)
+    # Nerve Center's tile settles (a fresh read over a settled needs count) before its state is compared.
+    page.wait_for_function(NERVE_SETTLED, timeout=15000)
     rail = page.evaluate("""() => ({ link: !!document.querySelector('[data-testid="desk-rail-agents"]'), health: document.querySelector('[data-testid="desk-rail-nerve"]').dataset.tone })""")
     page.goto(f"{origin}/agents", wait_until="networkidle")
     page.get_by_test_id("agents-list").wait_for(state="visible", timeout=10000)
@@ -318,12 +325,16 @@ with sync_playwright() as p:
 
     # ── 4. states: a failed roster read; an empty roster ──────────────────────────
     mode["roster"] = "error"
+    # The runs list answers late here, so the needs count settles well after Nerve Center's first fresh read: the
+    # race studio#949 lost now and then is forced every time, and the tone is still read only once both settled.
+    set_fixture(origin, runs_delay_ms=2500)
     page2 = ctx.new_page()
     page2.on("pageerror", lambda e: errors.append(str(e)))
     wire(page2)
     page2.goto(f"{origin}/agents", wait_until="networkidle")
     page2.get_by_test_id("agents-banner").wait_for(state="visible", timeout=10000)
-    page2.wait_for_function("() => document.querySelector('[data-testid=\"desk-rail-nerve\"]')?.dataset.read === 'fresh'", timeout=15000)
+    page2.wait_for_function(NERVE_SETTLED, timeout=20000)
+    set_fixture(origin, runs_delay_ms=0)
     st = page2.evaluate("""() => ({ banner: document.querySelector('[data-testid="agents-banner"]').innerText,
       count: !!document.querySelector('[data-testid="agents-tiles"]'), action: !!document.querySelector('[data-testid="agents-check-all"]'),
       health: document.querySelector('[data-testid="desk-rail-nerve"]').dataset.tone })""")
