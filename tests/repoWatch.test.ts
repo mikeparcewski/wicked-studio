@@ -74,7 +74,7 @@ describe('a re-index against its budget (studio#1099)', () => {
   });
 
   it('says the time so far against the budget, and the files it was sized from', () => {
-    const at = (indexing: RepoWatchStatus['repos'][number]['indexing']) => watchLine(status({ state: 'indexing', indexing }), 'r1', NOW)?.words;
+    const at = (indexing: RepoWatchStatus['repos'][number]['indexing']) => watchLine(status({ state: 'indexing', ...(indexing !== undefined ? { indexing } : {}) }), 'r1', NOW)?.words;
     expect(at({ startedAt: NOW - 240_000, budget: { budgetMs: 760_000, trackedFiles: 2203 } })).toBe('Re-indexing · 4 min 0 s of 12 min 40 s · 2,203 files');
     expect(at({ startedAt: NOW - 240_000, budget: { budgetMs: 760_000, trackedFiles: null } })).toBe('Re-indexing · 4 min 0 s of 12 min 40 s');
     expect(at({ startedAt: NOW - 45_000, budget: null })).toBe('Re-indexing · 45 s so far');
