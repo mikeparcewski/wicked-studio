@@ -60,6 +60,13 @@ describe('ruleSentence — scope and effect in one sentence', () => {
     expect(s).not.toMatch(/never blocks|cannot block|can't block|can\u2019t block/i);
     expect(s).toMatch(/review checks work against it: a breach can hold a gate\.$/);
   });
+  it('says a shipped process rule (RVWL-1001..1004) is reported and, as shipped, never holds a gate', () => {
+    // wicked-core src/steering_packs.rs kind_of + src/rule_check.rs: a process rule's row is blocking: false.
+    for (const id of ['RVWL-1001', 'RVWL-1002', 'RVWL-1003', 'RVWL-1004']) {
+      expect(ruleSentence(rule({ id }), null)).toMatch(/a process rule review reports on; as shipped, it never holds a gate\.$/);
+    }
+    expect(ruleSentence(rule({ id: 'RVWL-1005' }), null)).toMatch(/a breach can hold a gate\.$/);
+  });
   it('leads a retired rule with Retired', () => {
     expect(ruleSentence(rule({ retired: true }), 'K')).toMatch(/^Retired\. A Development rule/);
   });

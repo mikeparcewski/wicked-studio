@@ -16,6 +16,14 @@ import { sessionPath } from './sessionModel.js';
  *    (the `rule.considered` fact carries counts, never ids), so the list is what has been read.
  */
 
+/**
+ * The shipped process rules (wicked-core `src/steering_packs.rs` `kind_of`: RVWL-1001..1004, about the review loop's
+ * own conduct). As shipped, their rows are `blocking: false` (`src/rule_check.rs`): reported, never a deny or a hold.
+ * The engine matches the shipped text too (`pack_overlay`), so an edited copy is an ordinary rule again; the sentence
+ * says "as shipped" for that reason.
+ */
+const PROCESS_RULE_IDS: ReadonlySet<string> = new Set(['RVWL-1001', 'RVWL-1002', 'RVWL-1003', 'RVWL-1004']);
+
 export function ruleSentence(rule: SteeringRule, projectName: string | null): string {
   const type = STEERING_TYPE_LABELS[steeringTypeOf(rule)] ?? steeringTypeOf(rule);
   const project = rule.targets.project;
@@ -33,7 +41,9 @@ export function ruleSentence(rule: SteeringRule, projectName: string | null): st
     // studio#1314: no effect is not "never blocks". wicked-core's consider_rules
     // (crates/wicked-governance/src/conformance.rs) puts every live, in-scope rule in force, recall-only and
     // decide-lane alike; review checks work against it, and a breach can hold a gate.
-    case undefined: effect = 'helpers are told about it when it applies, and review checks work against it: a breach can hold a gate'; break;
+    case undefined: effect = PROCESS_RULE_IDS.has(rule.id)
+      ? 'a process rule review reports on; as shipped, it never holds a gate'
+      : 'helpers are told about it when it applies, and review checks work against it: a breach can hold a gate'; break;
     default: effect = `${String(rule.effect)} when it fires`; break;
   }
   const body = `${lead} — ${effect}.`;
