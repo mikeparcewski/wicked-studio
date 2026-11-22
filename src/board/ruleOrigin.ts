@@ -30,7 +30,10 @@ export function ruleSentence(rule: SteeringRule, projectName: string | null): st
       break;
     }
     case 'allow': effect = 'allows outright when it fires'; break;
-    case undefined: effect = 'helpers are told about it when it applies; it never blocks'; break;
+    // studio#1314: no effect is not "never blocks". wicked-core's consider_rules
+    // (crates/wicked-governance/src/conformance.rs) puts every live, in-scope rule in force, recall-only and
+    // decide-lane alike; review checks work against it, and a breach can hold a gate.
+    case undefined: effect = 'helpers are told about it when it applies, and review checks work against it: a breach can hold a gate'; break;
     default: effect = `${String(rule.effect)} when it fires`; break;
   }
   const body = `${lead} — ${effect}.`;
