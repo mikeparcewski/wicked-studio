@@ -23,7 +23,6 @@ import { RepositoriesPanel } from './components/RepositoriesPanel.js';
 import { LearnHub } from './components/learn/LearnHub.js';
 import { RepoDetailPage } from './components/RepoDetailPage.js';
 import { RepoGraphModal } from './components/RepoGraphModal.js';
-import { RightPanel } from './components/RightPanel.js';
 import { RunRawView } from './components/RunRawView.js';
 import { SkillsPage } from './components/SkillsPage.js';
 import { ProjectRequirementsPage } from './components/product/ProjectRequirementsPage.js';
@@ -145,8 +144,6 @@ const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
   'powerToggled',
 ]);
 
-/** The expanded RightPanel's width (`w-72`) — the Ask launcher stays clear of it. */
-const RIGHT_PANEL_PX = 288;
 /** The Desk's Start row + composer band (skin `desk`): the Ask panel opens above it. */
 const DESK_COMPOSER_PX = 96;
 
@@ -845,11 +842,6 @@ export function App(): React.ReactElement {
         </div>
       </div>
 
-      {/* Right panel only when a run is selected */}
-      {selected !== null && (
-        <RightPanel view={selected} runs={shownRuns} onSelectRun={selectRun} navigate={navigate} />
-      )}
-
       {/* ASK — the floating chat bubble bottom-right (studio#323 R1) and, while open,
           the app-wide assist dock as a panel anchored to it — an overlay, never a
           layout column. The dock renders only while open; NOTHING launches until the
@@ -857,7 +849,6 @@ export function App(): React.ReactElement {
       <AskLauncher
         open={chatMode === 'floating' || chatMode === 'full'}
         onToggle={toggleSystemChat}
-        rightOffsetPx={selected !== null ? RIGHT_PANEL_PX : 0}
         bottomOffsetPx={panel === 'session' ? DESK_COMPOSER_PX : 0}
         // Chat is in the rail on every page; the bubble is the phone's way in (the rail is a drawer
         // there), and stands down on a session, whose composer holds this corner.
