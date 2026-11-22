@@ -303,6 +303,18 @@
       ]
     },
     {
+      "testId": "agents-role-reviews",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
+      "testId": "agents-role-work",
+      "files": [
+        "src/components/agents/AgentsPage.tsx"
+      ]
+    },
+    {
       "testId": "agents-row",
       "files": [
         "src/components/agents/AgentsPage.tsx"
