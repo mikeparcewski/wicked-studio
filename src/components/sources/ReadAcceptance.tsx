@@ -15,13 +15,25 @@ const REFUSALS: Readonly<Record<string, string>> = {
   not_registered: 'This operation changed since the source was saved: test and save the source again, then accept it.',
 };
 
-/** The tools a saved REST or MCP source's box lists: crew sends their acceptance, and each is a read or is accepted. */
+/**
+ * The tools the box lists: crew sends their acceptance, and each is a registered read (it can be accepted) or is
+ * accepted now, whatever its status (review r1: a tool that changed or went away keeps its acceptance at crew, so it
+ * stays here to be withdrawn).
+ */
 export function acceptableReads(server: Pick<McpServer, 'tools'>): AcceptableTool[] {
-  return (server.tools as AcceptableTool[]).filter((t) => t.status === 'registered' && typeof t.readAccepted === 'boolean' && (t.class === 'read' || t.readAccepted));
+  return (server.tools as AcceptableTool[]).filter((t) => typeof t.readAccepted === 'boolean' && (t.readAccepted || (t.class === 'read' && t.status === 'registered')));
+}
+
+/** Why an accepted tool can only be withdrawn: crew accepts only a registered schema. */
+function statusWords(t: AcceptableTool): string | null {
+  if (t.status === 'gone') return 'no longer offered by the source';
+  if (t.status !== 'registered') return 'changed since the source was saved';
+  return null;
 }
 
 /**
- * "APP READS" on a saved REST or MCP source: each read operation, accepted (or not) as a read an app may make. An app's
+ * "APP READS" on a saved REST or MCP source (the source sheet), and on every MCP server (the MCP tools page, which
+ * also manages local stdio servers the Sources page doesn't list): each read operation, accepted (or not) as a read an app may make. An app's
  * query on an operation that isn't accepted is refused by crew, so this is where a source saved without the tick, or a
  * read added since, is accepted; a withdraw takes one away. Each toggle is one `PATCH /mcp/tools/:subject
  * {readAccepted}` (a person only), and the row shows crew's answer.
@@ -46,15 +58,17 @@ export function ReadAcceptance({ server, onChanged }: { server: McpServer; onCha
     setError(null);
     try {
       const tool = (await mcpApi.setTool(t.subject, { readAccepted: on })) as AcceptableTool;
-      if (!alive.current) return;
-      setAnswered((m) => ({ ...m, [t.subject]: tool.readAccepted === true }));
-      onChanged?.();
+      if (alive.current) setAnswered((m) => ({ ...m, [t.subject]: tool.readAccepted === true }));
     } catch (e) {
-      if (!alive.current) return;
-      const code = e instanceof ApiError ? (e.body as { code?: unknown } | undefined)?.code : undefined;
-      setError({ subject: t.subject, words: typeof code === 'string' && Object.hasOwn(REFUSALS, code) ? REFUSALS[code]! : e instanceof Error ? e.message : String(e) });
+      if (alive.current) {
+        const code = e instanceof ApiError ? (e.body as { code?: unknown } | undefined)?.code : undefined;
+        setError({ subject: t.subject, words: typeof code === 'string' && Object.hasOwn(REFUSALS, code) ? REFUSALS[code]! : e instanceof Error ? e.message : String(e) });
+      }
     } finally {
       if (alive.current) setBusy(null);
+      // Whatever came back (a lost answer may still have changed it), the page reads crew again, even after this
+      // sheet closed (review r1): a reopened sheet shows crew's record, not the one from before the write.
+      onChanged?.();
     }
   };
 
@@ -69,12 +83,13 @@ export function ReadAcceptance({ server, onChanged }: { server: McpServer; onCha
       <ul className="wk-src-plain">
         {tools.map((t) => {
           const on = accepted(t);
+          const away = statusWords(t);
           return (
             <li key={t.subject}>
               <label className="wk-src-check-row" data-testid="source-read-accept" data-tool={t.name} data-accepted={on ? 'true' : 'false'}>
-                <input type="checkbox" checked={on} disabled={busy !== null} data-testid="source-read-accept-tick"
+                <input type="checkbox" checked={on} disabled={busy !== null || (away !== null && !on)} data-testid="source-read-accept-tick"
                   onChange={(e) => void toggle(t, e.target.checked)} />
-                <span className="wk-src-note"><code className="wk-src-mono">{t.name}</code>{busy === t.subject ? (on ? ' · withdrawing…' : ' · accepting…') : on ? ' · accepted as a read' : ' · not accepted: apps can’t query it'}</span>
+                <span className="wk-src-note"><code className="wk-src-mono">{t.name}</code>{busy === t.subject ? (on ? ' · withdrawing…' : ' · accepting…') : on ? ' · accepted as a read' : away !== null ? ' · withdrawn' : ' · not accepted: apps can’t query it'}{away !== null && <span data-testid="source-read-accept-away">{` (${away}${on ? ': you can withdraw it' : ''})`}</span>}</span>
               </label>
               {error !== null && error.subject === t.subject && <p role="alert" className="wk-src-note wk-src-tone-warn" data-testid="source-read-accept-error">{error.words}</p>}
             </li>

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 const apiFetch = vi.fn();
 vi.mock('../src/api/client.js', () => ({ apiFetch: (...a: unknown[]) => apiFetch(...a) }));
@@ -469,5 +469,56 @@ describe('crew#1295: a saved REST source\'s reads are accepted, or withdrawn, on
   it('an older crew that sends no readAccepted gets no box', () => {
     savedRest(restServer(null));
     expect(screen.queryByTestId('source-read-acceptance')).toBeNull();
+  });
+});
+
+describe('crew#1295 review r1 folds', () => {
+  const withTools = (patch: (tools: Array<Record<string, unknown>>) => void) => {
+    const s = restServer(true);
+    const tools = s.tools as unknown as Array<Record<string, unknown>>;
+    patch(tools);
+    return s;
+  };
+
+  it('an accepted read that changed or went away stays listed, says so, and can only be withdrawn', async () => {
+    const s = withTools((tools) => {
+      tools[0] = { ...tools[0], status: 'gone' };
+      tools.push({ ...tools[0], name: 'get_ticket', subject: 'mcp:tickets-api/get_ticket', status: 'changed', readAccepted: false });
+    });
+    apiFetch.mockImplementation((path: string, init?: RequestInit) => {
+      const raw = typeof init?.body === 'string' ? init.body : undefined;
+      calls.push({ path, method: init?.method ?? 'GET', body: raw !== undefined ? JSON.parse(raw) : undefined, raw });
+      return Promise.resolve({ ...s.tools[0], readAccepted: false });
+    });
+    render(<SourceSheet target={{ mode: 'saved', server: s }} existing={['tickets-api']} onSaved={vi.fn()} onAllowWrites={vi.fn()} onClose={vi.fn()} />);
+    // The changed, unaccepted read isn't offered (crew accepts only a registered schema); the gone, accepted one is.
+    const rows = screen.getAllByTestId('source-read-accept');
+    expect(rows.map((r) => r.getAttribute('data-tool'))).toEqual(['list_tickets']);
+    expect(within(rows[0]!).getByTestId('source-read-accept-away').textContent).toBe(' (no longer offered by the source: you can withdraw it)');
+    fireEvent.click(within(rows[0]!).getByTestId('source-read-accept-tick'));
+    await waitFor(() => expect(screen.getByTestId('source-read-accept').getAttribute('data-accepted')).toBe('false'));
+    expect(calls.filter((c) => c.method === 'PATCH').map((c) => c.body)).toEqual([{ readAccepted: false }]);
+    // Withdrawn, it can't be accepted again from here.
+    expect(within(screen.getByTestId('source-read-accept')).getByTestId('source-read-accept-tick')).toBeDisabled();
+  });
+
+  it('the sheet closed while the write ran: the page still reads crew again when it settles', async () => {
+    let answer: (v: unknown) => void = () => undefined;
+    apiFetch.mockImplementation(() => new Promise((r) => { answer = r; }));
+    const onReread = vi.fn();
+    const { unmount } = render(<SourceSheet target={{ mode: 'saved', server: restServer(false) }} existing={['tickets-api']} onSaved={vi.fn()} onAllowWrites={vi.fn()} onReread={onReread} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByTestId('source-read-accept-tick'));
+    unmount();
+    await act(async () => { answer({ ...restServer(true).tools[0], readAccepted: true }); });
+    expect(onReread).toHaveBeenCalledTimes(1);
+  });
+
+  it('a write whose answer is lost still reads crew again (it may have changed)', async () => {
+    apiFetch.mockImplementation(() => Promise.reject(new TypeError('Failed to fetch')));
+    const onReread = vi.fn();
+    render(<SourceSheet target={{ mode: 'saved', server: restServer(false) }} existing={['tickets-api']} onSaved={vi.fn()} onAllowWrites={vi.fn()} onReread={onReread} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByTestId('source-read-accept-tick'));
+    await screen.findByTestId('source-read-accept-error');
+    expect(onReread).toHaveBeenCalledTimes(1);
   });
 });

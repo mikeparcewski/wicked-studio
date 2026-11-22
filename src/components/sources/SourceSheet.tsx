@@ -791,7 +791,7 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
                 />
               )}
               {/* (crew#1295) Each read of a saved REST or MCP source, accepted (or not) as a read an app may make. */}
-              {!isNew && saved !== null && (saved.kind === 'rest' || saved.kind === 'mcp-http' || saved.kind === 'mcp-stdio') && (
+              {!isNew && saved !== null && (saved.kind === 'rest' || saved.kind === 'mcp-http') && (
                 <ReadAcceptance server={saved} onChanged={onReread} />
               )}
               {kind !== 'upload' || upload !== null ? (

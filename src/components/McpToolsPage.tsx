@@ -46,6 +46,7 @@ import { seatLabel } from '../board/seatNames.js';
 import { OverflowMenu } from './ui/OverflowMenu.js';
 import { Tabs } from './ui/Tabs.js';
 import { unconfirmedAddresses, type UnconfirmedAddress } from './sources/sourceModel.js';
+import { ReadAcceptance } from './sources/ReadAcceptance.js';
 
 /**
  * MCP tools (DES-MCP-TOOLS-001 §7, slice S6): the operator's registry of upstream MCP servers and
@@ -231,8 +232,10 @@ function ToolRow({ server, tool, policy, roles, seats, mode, busy, onAct, naviga
   );
 }
 
-function ServerRow({ server, policies, usage, open, onToggle, mode, busy, onAct, navigate, inspectable }: {
+function ServerRow({ server, policies, usage, open, onToggle, mode, busy, onAct, onReread, navigate, inspectable }: {
   server: McpServer;
+  /** Read the servers again (after a read acceptance settles). */
+  onReread: () => void;
   policies: McpPolicyPreviewResponse | null;
   /** The 7-day usage fold; `null` = this daemon does not report usage. */
   usage: McpUsageResponse | null;
@@ -325,6 +328,8 @@ function ServerRow({ server, policies, usage, open, onToggle, mode, busy, onAct,
               />
             ))}
           </ul>
+          {/* (crew#1295) Each read accepted, or not, as one an app may make: a local stdio server is managed only here. */}
+          <div className="px-3 pb-2"><ReadAcceptance server={server} onChanged={onReread} /></div>
         </div>
       )}
     </li>
@@ -873,6 +878,7 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
                     mode={mode}
                     busy={busy}
                     onAct={onAct}
+                    onReread={() => { void load(); }}
                     navigate={navigate}
                     inspectable={inspectorInstalled !== false}
                   />
