@@ -1,6 +1,7 @@
 import { PAGE_NAMES } from '../board/pageNames.js';
 import { readSettingsTab, settingsPath, type SettingsTab } from '../board/settingsTabs.js';
 import type { Navigate } from '../hooks/useRoute.js';
+import { MaintenanceSettings } from './MaintenanceSettings.js';
 import { SystemSettings } from './SystemSettings.js';
 import { ThemeSettings } from './ThemePage.js';
 import { PageFrame } from './ui/PageFrame.js';
@@ -33,7 +34,10 @@ export function SettingsPage({ navigate, search }: { navigate: Navigate; search:
         onChange={(id) => { if (id !== tab) navigate(settingsPath(id as SettingsTab)); }}
       />
       <div id="settings-panel" role="tabpanel" aria-labelledby={`settings-tab-${tab}`} data-testid="settings-panel" data-tab={tab}>
-        {tab === 'general' ? <SystemSettings navigate={navigate} /> : <ThemeSettings navigate={navigate} />}
+        {tab === 'general' ? (
+          // (crew#1475) Maintenance follows the General settings, one gap apart.
+          <div className="wk-pg-set-content"><SystemSettings navigate={navigate} /><MaintenanceSettings navigate={navigate} /></div>
+        ) : <ThemeSettings navigate={navigate} />}
       </div>
     </PageFrame>
   );

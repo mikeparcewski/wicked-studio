@@ -10503,6 +10503,84 @@
       ]
     },
     {
+      "testId": "maintenance-active",
+      "files": [
+        "src/components/MaintenanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "maintenance-active-run",
+      "files": [
+        "src/components/MaintenanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "maintenance-busy",
+      "files": [
+        "src/components/MaintenanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "maintenance-drain-toggle",
+      "files": [
+        "src/components/MaintenanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "maintenance-idle",
+      "files": [
+        "src/components/MaintenanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "maintenance-read-error",
+      "files": [
+        "src/components/MaintenanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "maintenance-reread",
+      "files": [
+        "src/components/MaintenanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "maintenance-retry",
+      "files": [
+        "src/components/MaintenanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "maintenance-settings",
+      "files": [
+        "src/components/MaintenanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "maintenance-since",
+      "files": [
+        "src/components/MaintenanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "maintenance-status",
+      "files": [
+        "src/components/MaintenanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "maintenance-unsupported",
+      "files": [
+        "src/components/MaintenanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "maintenance-write-error",
+      "files": [
+        "src/components/MaintenanceSettings.tsx"
+      ]
+    },
+    {
       "testId": "mapper-adjustments",
       "files": [
         "src/components/BrandLearn.tsx"
@@ -16964,6 +17042,54 @@
       ]
     },
     {
+      "testId": "repo-remove-cancel",
+      "files": [
+        "src/components/RemoveRepoDialog.tsx"
+      ]
+    },
+    {
+      "testId": "repo-remove-confirm",
+      "files": [
+        "src/components/RemoveRepoDialog.tsx"
+      ]
+    },
+    {
+      "testId": "repo-remove-crew-words",
+      "files": [
+        "src/components/RemoveRepoDialog.tsx"
+      ]
+    },
+    {
+      "testId": "repo-remove-dialog",
+      "files": [
+        "src/components/RemoveRepoDialog.tsx"
+      ]
+    },
+    {
+      "testId": "repo-remove-refused",
+      "files": [
+        "src/components/RemoveRepoDialog.tsx"
+      ]
+    },
+    {
+      "testId": "repo-remove-run",
+      "files": [
+        "src/components/RemoveRepoDialog.tsx"
+      ]
+    },
+    {
+      "testId": "repo-remove-runs",
+      "files": [
+        "src/components/RemoveRepoDialog.tsx"
+      ]
+    },
+    {
+      "testId": "repo-remove-what",
+      "files": [
+        "src/components/RemoveRepoDialog.tsx"
+      ]
+    },
+    {
       "testId": "repo-requirements",
       "files": [
         "src/components/RepoDetailPage.tsx"
@@ -17031,6 +17157,12 @@
     },
     {
       "testId": "repo-row-reindex",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-row-remove",
       "files": [
         "src/components/RepositoriesPanel.tsx"
       ]

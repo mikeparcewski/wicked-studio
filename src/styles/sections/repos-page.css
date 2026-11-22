@@ -52,7 +52,7 @@
 .wk-rp-watch-toggle { display: flex; align-items: flex-start; gap: 8px; font-size: var(--text-sm); color: var(--ink-body); }
 .wk-rp-watch-toggle input { margin-top: 3px; }
 /* The right-hand word or step: its own control, over the row's last column. */
-.wk-rl-act { position: absolute; right: 16px; top: 32px; transform: translateY(-50%); display: flex; align-items: center; }
+.wk-rl-act { position: absolute; right: 16px; top: 32px; transform: translateY(-50%); display: flex; align-items: center; gap: 8px; }
 .wk-rl-act .wk-jr-word, .wk-rl-act .wk-jr-link { font-size: var(--text-sm); }
 .wk-rl-error { padding: 0 16px 12px 38px; }
 .wk-rl-phone { display: none; }

@@ -22,6 +22,10 @@ beforeEach(() => {
   useViewPrefsStore.setState({ prefs: DEFAULT_VIEW_PREFS, loaded: true, persist: 'unknown' });
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     calls.push({ method: init?.method ?? 'GET', url: String(url) });
+    // crew's 503 while draining (crew `api/routes.ts` maintenanceDrainBody, from `MaintenanceDrainError`).
+    if (String(url).endsWith('/resume') && resumeStatus === 503) {
+      return Promise.resolve(new Response(JSON.stringify({ code: 'maintenance_drain', error: 'This daemon is draining for maintenance and is refusing new work.', hint: 'Wait for maintenance to finish, or POST /api/v1/maintenance with {"drain":false} to admit work again.' }), { status: 503, headers: { 'content-type': 'application/json' } }));
+    }
     if (String(url).endsWith('/resume') && resumeStatus !== 200) {
       return Promise.resolve(new Response(JSON.stringify({ error: 'run r-failed is not resumable: no unit at the cursor' }), { status: resumeStatus, headers: { 'content-type': 'application/json' } }));
     }
@@ -57,6 +61,15 @@ describe('studio#615 — Resume a failed run in place', () => {
     await userEvent.click(screen.getByTestId('session-failed-resume-button'));
     await waitFor(() => expect(screen.getByTestId('session-failed-resume-error').textContent).toBe('Resume was refused.'));
     expect(screen.getByTestId('session-failed-resume-error-detail').textContent).toMatch(/not resumable/);
+    expect(screen.getByTestId('session-failed-resume-button')).toBeTruthy();
+  });
+
+  it('studio#1253: refused because the daemon drains, the line says so and how to go on, not "Resume was refused."', async () => {
+    resumeStatus = 503;
+    render(<RunBlock view={run('failed')} badge={1} sessionId={`run:${RUN}`} navigate={() => {}} />);
+    await userEvent.click(screen.getByTestId('session-failed-resume-button'));
+    await waitFor(() => expect(screen.getByTestId('session-failed-resume-error').textContent)
+      .toBe('This daemon is draining for maintenance and is refusing new work. Wait for maintenance to finish, or turn off “Drain for maintenance” in Settings to admit work again.'));
     expect(screen.getByTestId('session-failed-resume-button')).toBeTruthy();
   });
 

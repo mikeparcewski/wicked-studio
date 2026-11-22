@@ -531,6 +531,20 @@ export const api = {
       body: JSON.stringify({ name, gitUrl, ...(checkoutPath ? { rootPath: checkoutPath } : {}), ...(projectId !== undefined ? { projectId } : {}) }),
     }),
 
+  /** (crew#1230) Remove a repository's registration. Its checkout and code map stay on disk. */
+  unregisterRepo: (repoId: string) =>
+    apiFetch<import('./maintenance-wire.js').UnregisterRepoResponse>(`/repos/${encodeURIComponent(repoId)}`, { method: 'DELETE' }),
+
+  /** (crew#1475) Whether crew admits new work, and the runs working now. */
+  getMaintenance: () => apiFetch<import('./maintenance-wire.js').MaintenanceState>('/maintenance'),
+
+  /** (crew#1475) Drain (refuse new launches, resumes and gate answers that start work) or admit work again. */
+  setMaintenance: (drain: boolean) =>
+    apiFetch<import('./maintenance-wire.js').MaintenanceState>('/maintenance', {
+      method: 'POST',
+      body: JSON.stringify({ drain } satisfies import('./maintenance-wire.js').MaintenanceRequest),
+    }),
+
   /** Get the onboarding run id for a repo (null if not launched this daemon session). */
   getOnboardRun: (repoId: string) =>
     apiFetch<OnboardRef>(`/repos/${encodeURIComponent(repoId)}/onboard`),

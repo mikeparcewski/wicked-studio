@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { SlidersHorizontal } from 'lucide-react';
+import { SlidersHorizontal, Trash2 } from 'lucide-react';
 import { api } from '../api/client.js';
 import type { Project, RepoEntry, SessionView } from '../api/types.js';
 import { everythingPath } from '../board/everythingModel.js';
@@ -21,6 +21,7 @@ import { repoDetailPath } from '../board/repoTabs.js';
 import { withApps, lastWords, mapCell, phoneLine, projectsByJobs, projectsWords, trackersWords } from '../board/repoListRow.js';
 import { useRepoLanguages } from '../hooks/useRepoLanguages.js';
 import { NewProjectModal } from './NewProjectModal.js';
+import { RemoveRepoDialog } from './RemoveRepoDialog.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
 import { useNeedsSources } from '../store/needsSources.js';
 import type { Navigate } from '../hooks/useRoute.js';
@@ -80,6 +81,9 @@ const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 /** Crew's register refusals that are already written for a person (crew api/repo-input.ts): shown as the line. */
 const PLAIN_REGISTER_CODES = ['repo_path_missing', 'repo_path_relative', 'repo_clone_denied'] as const;
 
+/** crew's finding on a repository whose folder is gone (crew `core/repoPaths.ts` REPO_FOLDER_MISSING). */
+const REPO_FOLDER_MISSING = 'repo_folder_missing';
+
 /** A failure's raw text, for Technical details only. */
 function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -115,6 +119,8 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
   const attachedAt = useMembershipStore((s) => s.attachedAtByRun);
   const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
 
+  /** (crew#1230) The repository whose Remove confirm is open. */
+  const [removing, setRemoving] = useState<RepoEntry | null>(null);
   const [rerunning, setRerunning] = useState<Record<string, boolean>>({});
   const [rerunError, setRerunError] = useState<Record<string, string>>({});
   const [showRegister, setShowRegister] = useState(autoShowRegister ?? false);
@@ -261,6 +267,15 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     } finally {
       setRerunning((prev) => ({ ...prev, [repoId]: false }));
     }
+  }
+
+  /** crew removed the registration (or it was already gone): the list, and the needs-you queue's register, drop it. */
+  function removed(repoId: string): void {
+    setRemoving(null);
+    reposSeq.current++; // a list read that was out before the removal never brings it back
+    setRepos((prev) => prev.filter((r) => r.id !== repoId));
+    const known = useNeedsSources.getState().repos;
+    if (known !== null) useNeedsSources.getState().depositRepos(known.filter((r) => r.id !== repoId));
   }
 
   /** Re-index as a prefill (components/repoActions.ts): nothing starts until the person sends it. */
@@ -636,6 +651,11 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
             <NewProjectModal navigate={navigate} onClose={() => setShowNewProject(false)} />
           )}
 
+          {removing !== null && (
+            <RemoveRepoDialog repo={removing} onClose={() => setRemoving(null)} onRemoved={removed}
+              {...(onSelectRun !== undefined ? { onOpenRun: (runId: string) => { setRemoving(null); onSelectRun(runId); } } : {})} />
+          )}
+
           {loading ? (
             <QuietLoading rows={4} label="Reading your repositories" data-testid="repos-loading" />
           ) : error !== null ? null : repos.length === 0 ? (
@@ -746,7 +766,10 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                       const cell = mapCell(ready, m, knowledgeOf(knowledge, repo.id).kinds, now);
                       // crew-0183 (coord): a map the watcher cannot keep current never shows a healthy dot.
                       const dotOverride = watchDotTone(watchLine(watch, repo.id, now));
-                      const map = appQuiet ? { tone: 'none' as const, words: 'Not indexed (app)', size: null } : dotOverride !== null ? { ...cell, tone: dotOverride } : cell;
+                      // crew's repo_folder_missing finding: the folder is gone, so the row says so and its step is Remove (beside re-linking).
+                      const folderGone = (repo.findings ?? []).some((f) => f.code === REPO_FOLDER_MISSING);
+                      const map = folderGone ? { tone: 'fail' as const, words: 'Folder missing', size: null }
+                        : appQuiet ? { tone: 'none' as const, words: 'Not indexed (app)', size: null } : dotOverride !== null ? { ...cell, tone: dotOverride } : cell;
                       const link = linksSupported ? linksOf(links, repo.id) : null;
                       const jobsIn = usedBy.get(repo.id) ?? [];
                       // Attached (crew's membership, with tracker links) and used by a project's jobs (the run list, always).
@@ -757,7 +780,8 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                       const redo = (): void => { if (m.onboard.run !== null) reindex(m); else void rerunOnboarding(repo.id); };
                       // The last-activity word is its own column: the right side keeps only what asks for a move or says work is under way.
                       const showWord = side.kind === 'word' && side.tone !== 'quiet';
-                      const nag = !appQuiet && (side.kind === 'index' || side.kind === 'reindex');
+                      // Indexing a folder that is gone can't run: Remove is that row's step instead.
+                      const nag = !appQuiet && !folderGone && (side.kind === 'index' || side.kind === 'reindex');
                       return (
                         <li
                           key={repo.id}
@@ -819,6 +843,19 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                                 disabled={isRerunning} title="Starts indexing this repository, as a job you can watch"
                                 onClick={() => void rerunOnboarding(repo.id)}>
                                 {isRerunning ? 'Starting…' : side.label}
+                              </button>
+                            )}
+                            {folderGone ? (
+                              <button type="button" data-testid="repo-row-remove" data-repo-id={repo.id} data-folder-missing="true" className="wk-jr-link wk-jr-link--step"
+                                title="Its folder is missing. Remove the registration, or re-link it: add it again under the same name at the folder’s new place"
+                                onClick={() => setRemoving(repo)}>
+                                Remove
+                              </button>
+                            ) : (
+                              <button type="button" data-testid="repo-row-remove" data-repo-id={repo.id} className="wk-btn wk-btn--quiet wk-btn--icon wk-rl-remove"
+                                aria-label={`Remove ${repo.name}`} title="Remove this repository (its folder and code map stay on disk)"
+                                onClick={() => setRemoving(repo)}>
+                                <Trash2 size={15} aria-hidden />
                               </button>
                             )}
                           </span>
