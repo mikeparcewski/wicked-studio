@@ -544,7 +544,8 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   const textQuestion = headQuestion?.choices.length === 0 && headQuestion.input?.edit.startsWith('inputs.') === true
     && !asksForProject(head.proposal) && !asksForRepo(head.proposal) && !requirementsQuestion ? headQuestion : null;
   // Keep this form visible but disabled until crew answers the revision.
-  const question = v.question ?? (v.tokensHeld ? textQuestion ?? (requirementsQuestion ? headQuestion : null) : null);
+  // The repository chips stay too (held, the pressed one busy): a refusal brings them back as they were (codex r1).
+  const question = v.question ?? (v.tokensHeld ? textQuestion ?? (requirementsQuestion || asksForRepo(head.proposal) ? headQuestion : null) : null);
 
   return (
     <section

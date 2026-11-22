@@ -61,6 +61,8 @@ let closeFails = false;
 let catalog: unknown = null;
 let repos = REPOS;
 const posts: Array<{ path: string; body: Record<string, unknown> }> = [];
+/** Every GET path, in order (a pick must read no projects). */
+const reads: string[] = [];
 
 function ok(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -68,6 +70,7 @@ function ok(body: unknown, status = 200): Response {
 
 beforeEach(() => {
   posts.length = 0;
+  reads.length = 0;
   messages = [{ at: T0, turnId: 'person:1', kind: 'proposal', proposal: asking() }];
   members = { p1: [{ member_kind: 'crew.repo', member_ref: 'rg1' }], p2: [] };
   failRepos = false;
@@ -98,6 +101,7 @@ beforeEach(() => {
       }
       return Promise.resolve(ok({ view: {} }));
     }
+    reads.push(path);
     if (path === '/repos') return Promise.resolve(failRepos ? ok({ error: 'down' }, 503) : ok({ repos }));
     if (path === '/workflows/catalog') return Promise.resolve(catalog === null ? ok({ error: 'none' }, 404) : ok(catalog));
     if (path === '/projects') return Promise.resolve(ok({ projects: [{ id: 'default', name: 'Unfiled' }, { id: 'p1', name: 'reqgraph' }, { id: 'p2', name: 'other' }] }));
@@ -204,14 +208,44 @@ describe('F41 / studio#1094: "Which repository?" on a job in a new chat is answe
     expect(useChatFlow.getState().request?.chatId).not.toBe('seeded-1');
     expect(screen.queryByTestId('job-passage-projects')).toBeNull();
   });
-  it('a job that also needs a project is not asked for it here: the pick alone is sent, and crew asks next', async () => {
+  it('a job that also needs a project is not asked for it here: the pick alone is sent, and crew asks next in this chat', async () => {
     page();
     await waitFor(() => expect(repoChips()).toHaveLength(4));
+    reads.length = 0;
+    // Crew's answer (crew#1672): the next version, in this chat, on the picked repository, asking for the project.
+    const v2 = { at: T0 + 2000, turnId: 'person:2', kind: 'proposal', proposal: askingProject({ pid: `${CHAT}:t2`, turnId: 't2', revises: asking().pid, answers: 't2' }) };
+    let release!: () => void;
+    notNowGate = Promise.resolve();
+    const answered = new Promise<void>((r) => { release = r; });
+    const base = globalThis.fetch as (u: string, i?: RequestInit) => Promise<Response>;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => (init?.method === 'POST' && new URL(url, 'http://x').pathname.endsWith(`/chats/${CHAT}/proposals`)
+      ? base(url, init).then((r) => answered.then(() => r)) : base(url, init))));
     fireEvent.click(repoChips()[0]!); // rg2: in no project
     await waitFor(() => expect(revisions()).toHaveLength(1));
     expect(revisions()[0]!.body['edits']).toEqual({ repoRef: 'rg2' });
     expect(projectChips()).toEqual([]);
-    expect(posts.some((p) => p.path.endsWith('/members'))).toBe(false);
+    fireEvent.click(repoChips()[1]!); // a press while crew answers sends nothing more
+    expect(reads.filter((r) => r === '/projects' || r.endsWith('/members'))).toEqual([]); // the pick reads no projects
+    messages = [...messages, v2];
+    await act(async () => { release(); });
+    // The hold ends on crew's next version: the F39 chips ask for the project, here, for the job on rg2.
+    await waitFor(() => expect(projectChips().map((c) => c.dataset['project'])).toEqual(['p1', 'p2']), { timeout: 4000 });
+    expect(repoChips()).toEqual([]);
+    expect(revisions()).toHaveLength(1);
+    expect(seeds()).toEqual([]);
+    fireEvent.click(projectChips()[0]!);
+    await waitFor(() => expect(seeds()).toHaveLength(1));
+    expect(seeds()[0]!.body).toMatchObject({ projectId: 'p1', repoRefs: ['rg2'] });
+  });
+  it('while crew answers, the chips stay, held, the pressed one busy', async () => {
+    page();
+    await waitFor(() => expect(repoChips()).toHaveLength(4));
+    fireEvent.click(repoChips()[1]!);
+    await waitFor(() => expect(revisions()).toHaveLength(1));
+    expect(repoChips()).toHaveLength(4);
+    expect(repoChips().every((c) => c.disabled)).toBe(true);
+    expect(repoChips()[1]!.getAttribute('aria-busy')).toBe('true');
+    expect(repoChips()[1]!.textContent).toBe('rg1…');
   });
   it('two presses in one batch send one answer', async () => {
     page();
@@ -239,7 +273,11 @@ describe('F41 / studio#1094: "Which repository?" on a job in a new chat is answe
     await waitFor(() => expect(screen.getByText(/outside this chat’s scope/)).toBeTruthy());
     expect(seeds()).toEqual([]);
     expect(notNows()).toEqual([]);
-    await waitFor(() => expect(repoChips().every((c) => !c.disabled)).toBe(true));
+    await waitFor(() => { expect(repoChips()).toHaveLength(4); expect(repoChips().every((c) => !c.disabled)).toBe(true); });
+    fireEvent.click(repoChips()[2]!); // the person picks again: a fresh answer
+    await waitFor(() => expect(revisions()).toHaveLength(2));
+    expect(revisions()[1]!.body['edits']).toEqual({ repoRef: 'rg10' });
+    expect(revisions()[1]!.body['requestId']).not.toBe(revisions()[0]!.body['requestId']);
   });
   it('a repositories read that fails offers Try again, which reads them again', async () => {
     failRepos = true;
