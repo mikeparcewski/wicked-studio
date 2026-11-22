@@ -17,7 +17,8 @@ import type { CoreEvent, WorkUnit } from '../src/api/types.js';
 import { failedChecks, failingSplit, failureName } from '../src/board/failingChecks.js';
 import { useGateActionStore } from '../src/board/gateActions.js';
 import { floorOf } from '../src/components/gateVerdictModel.js';
-import { GateRow, unplacedWords } from '../src/components/session/GateRow.js';
+import { allOnBaseWords, GateRow, unplacedWords } from '../src/components/session/GateRow.js';
+import { namedSendBackNote } from '../src/board/gateRowModel.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useGateStore, type OpenGate } from '../src/store/gates.js';
 import { makeUnit, makeView } from './factories.js';
@@ -63,9 +64,25 @@ describe('a check whose base cleared on its re-run (studio#1276)', () => {
     expect(failingSplit(floorOf(only as unknown as CoreEvent))!.unplaced).toBeUndefined();
   });
 
-  it('says them in plain words', () => {
-    expect(unplacedWords(1, true)).toBe('One more can’t be told apart from this change: the base failed it too, then passed when run again.');
-    expect(unplacedWords(3, false)).toBe('3 failures can’t be told apart from this change: the base failed them too, then passed when run again.');
+  it('a floor whose every failed check is base-cleared is a split too: nothing fresh, nothing on the base, all unplaced (xreview r1)', () => {
+    const split = failingSplit(floorOf({ ...cleared, session: RUN } as unknown as CoreEvent))!;
+    expect(split).not.toBeNull();
+    expect(split.fresh).toEqual([]);
+    expect(split.onBase).toEqual([]);
+    expect(new Set(split.unplaced)).toEqual(new Set(headOf(cleared, 'test')));
+  });
+
+  it('says them in plain words, of the check (the record says the check failed on the base, not each test)', () => {
+    expect(unplacedWords(1, true)).toBe('One more can’t be told apart from this change: the check failed on the base too, then passed there when run again.');
+    expect(unplacedWords(3, false)).toBe('3 failures can’t be told apart from this change: the check failed on the base too, then passed there when run again.');
+  });
+
+  it('beside them, the base’s failures are never "all", and the send-back note never calls the rest the base’s', () => {
+    expect(allOnBaseWords(2)).toBe('All 2 failures also fail on the base, so they aren’t caused by this change.');
+    expect(allOnBaseWords(2, true)).toBe('2 failures also fail on the base, so they aren’t caused by this change.');
+    expect(allOnBaseWords(1, true)).toBe('One failure also fails on the base, so it isn’t caused by this change.');
+    expect(namedSendBackNote(['a'])).toBe('Fix only the test this change broke (the others fail on the base too): a');
+    expect(namedSendBackNote(['a', 'b'], true)).toBe('Fix only the tests this change broke (the others fail on the base too, or can’t be told apart from this change): a, b');
   });
 });
 
@@ -73,13 +90,14 @@ describe('on the gate’s face', () => {
   const UNITS: WorkUnit[] = [makeUnit({ id: `${RUN}:fix`, session_id: RUN, ord: 2, role: 'creator', status: 'rejected', stage: 'build', assigned_cli: 'claude' })];
   const PROMPT = 'Unit 2 failed its deterministic floor (repo_checks): test: exit 1 — confirm to retry the phase, or reject to cancel the run';
   const gate: OpenGate = { runId: RUN, ord: 2, prompt: PROMPT, lifecycle: 'open', receivedAt: 1_700_000_000_000, gateKind: 'escalation' };
-  const events = [
+  const eventsWith = (floor: Frame): CoreEvent[] => [
     { type: 'unitDispatched', session: RUN, ord: 2, attempt: 1 },
-    mixed,
+    floor,
     { type: 'gateEvaluated', session: RUN, ord: 2, combined: false, denial: { source: 'repo_checks', reason: 'test: exit 1', claimId: null, ruleIds: [], deniedTool: null, phase: 'fix' }, denialReason: 'test: exit 1', hasDeterministicFloor: true, deterministicPass: false, agentVerdict: 'pass', judgeCli: 'codex', judgeDistinct: true, evaluatorPolicies: [] },
     { type: 'gateEscalated', session: RUN, ord: 2, attempt: 1, condition: 'floor_failed', denialSource: 'repo_checks', verdictSummary: 'test: exit 1' },
     { type: 'awaitingHuman', session: RUN, ord: 2, prompt: PROMPT, gateKind: 'escalation' },
   ] as unknown as CoreEvent[];
+  const events = eventsWith(mixed);
   beforeEach(() => {
     vi.restoreAllMocks();
     useGateStore.setState({ gates: { [RUN]: gate } });
@@ -100,5 +118,16 @@ describe('on the gate’s face', () => {
     expect(block.querySelector('ul')).toBeNull();
     fireEvent.click(screen.getByTestId('session-gate-failing-unplaced-toggle'));
     expect(block.querySelectorAll('li')).toHaveLength(n);
+  });
+
+  it('a floor of base-cleared checks only: no "every failure on the base" headline, no "all" words, the group said', async () => {
+    const alone = { ...cleared, session: RUN } as Frame;
+    useRunEventStore.setState({ byRun: { [RUN]: eventsWith(alone) } });
+    const n = failingSplit(floorOf(alone as unknown as CoreEvent))!.unplaced!.length;
+    render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human', clis: ['claude'] } as never, UNITS)} gate={gate} navigate={vi.fn()} />);
+    expect((await screen.findByTestId('session-gate-question')).textContent).toBe('No failing test is known to be this change’s alone');
+    expect(screen.getByTestId('session-gate-failing-unplaced-words').textContent).toBe(unplacedWords(n, false));
+    expect(screen.queryByTestId('session-gate-failing-words')).toBeNull();
+    expect(screen.getByTestId('session-gate-failing-split').textContent).not.toMatch(/fail on the base|fails on the base/u);
   });
 });

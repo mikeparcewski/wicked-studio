@@ -315,7 +315,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
     if (fresh !== null && fresh.length > 0 && back !== undefined) {
       const who = builder?.name ?? 'the builder';
       return { choice: { ...back, label: SEND_BACK_NAMED_LABEL, title: `Send ${fresh.length === 1 ? 'the test' : `the ${fresh.length} tests`} only this change fails back to ${who}, named, so it fixes just ${fresh.length === 1 ? 'that' : 'those'}.` },
-        prefill: namedSendBackNote(fresh) };
+        prefill: namedSendBackNote(fresh, (model.failingTests?.split?.unplaced?.length ?? 0) > 0) };
     }
     // Never lead with a choice that seats a builder as the judge (it stays under Other options, said as such).
     const promote = all.find((c) => c.key === 'rejudge') ?? all.find((c) => c.reassignCli !== undefined && !(judges?.builders ?? []).includes(c.reassignCli));
@@ -661,16 +661,18 @@ export function refusalWords(r: DeliverRefusal, at: { branch: string | null; rep
 /** (review of the dock) The move a gate's own words name when crew marked no suggestion: one of its choices (a reassign
  *  to a free seat, a re-judge), or an act that is not a gate answer (open sign-in). */
 /** (J4 0.16.6) Every failure of the floor also fails on the base: said in plain words on the face. */
-export function allOnBaseWords(n: number): string {
+export function allOnBaseWords(n: number, others = false): string {
+  // studio#1276: beside failures the base's re-run could not separate, the base's are some of them, never "all".
+  if (others) return n === 1 ? 'One failure also fails on the base, so it isn’t caused by this change.' : `${n} failures also fail on the base, so they aren’t caused by this change.`;
   return n === 1 ? 'The one failure also fails on the base, so it isn’t caused by this change.'
     : `All ${n} failures also fail on the base, so they aren’t caused by this change.`;
 }
 
-/** studio#1276: the failures of a check whose base failed too and then passed on its own re-run. `more` when the
- *  card already named others. */
+/** studio#1276: the failures of a check that failed on the base too and then passed there on its own re-run: the
+ *  record says so of the check, not of each test. `more` when the card already named others. */
 export function unplacedWords(n: number, more: boolean): string {
   const lead = n === 1 ? `${more ? 'One more' : 'One failure'} can’t be told apart from this change` : `${n} ${more ? 'more' : 'failures'} can’t be told apart from this change`;
-  return `${lead}: the base failed ${n === 1 ? 'it' : 'them'} too, then passed when run again.`;
+  return `${lead}: the check failed on the base too, then passed there when run again.`;
 }
 
 type DerivedLead = { choice: GateRowChoice; act?: undefined; prefill?: string } | { act: { key: string; label: string; title: string; onClick: () => void }; choice?: undefined; prefill?: undefined };
@@ -985,7 +987,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsReading = fal
               <FailingGroups ids={split.fresh} />
             </>
           ) : baseCountOf(split) > 0 && (
-            <p data-testid="session-gate-failing-words" className="wk-gate2-p">{allOnBaseWords(baseCountOf(split))}</p>
+            <p data-testid="session-gate-failing-words" className="wk-gate2-p">{allOnBaseWords(baseCountOf(split), (split.unplaced?.length ?? 0) > 0)}</p>
           )}
           {baseCountOf(split) > 0 && (
             <div data-testid="session-gate-failing-base" className="wk-gate2-base">

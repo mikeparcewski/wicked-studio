@@ -109,6 +109,8 @@ export function failingSplit(floor: GateFloorView | null | undefined, said?: str
     if (c.baseFailed === false) told = true;
     fresh.push(...(head.length > 0 ? head : [`the ${c.name} check`]));
   }
+  // Every failed check base-cleared: nothing is the change's or the base's, and all of it is said apart (xreview r1).
+  if (!told && unplaced.length > 0 && failedChecks(floor).every((c) => c.baseCleared === true)) told = true;
   if (told) {
     const f = [...new Set(fresh)].filter((x) => !flaky.has(x));
     const b = [...new Set(onBase)].filter((x) => !flaky.has(x) && !f.includes(x));
