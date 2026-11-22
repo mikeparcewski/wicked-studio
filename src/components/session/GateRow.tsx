@@ -420,9 +420,8 @@ export function CreatorSeatRefusal({ view, navigate, noneInJob = false }: { view
     return (
       <div data-testid="session-gate-creator-seat" role="status" className="wk-gate-consequence">
         <p className="wk-assurance-lead">
-          This job requires an independent check, and none of its helpers can give one: each built the work or calls
-          the same provider as a helper that did. Start the job again with a helper that calls another provider
-          {can ? ', or with reduced assurance' : ''}.
+          This job requires an independent check, and the engine ruled out every one of its helpers for this step.
+          Start the job again with another helper{can ? ', or with reduced assurance' : ''}.
         </p>
       </div>
     );

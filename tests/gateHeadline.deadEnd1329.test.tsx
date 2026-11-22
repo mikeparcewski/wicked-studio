@@ -108,7 +108,7 @@ describe('studio#1329: the engine ruled out every helper of the job', () => {
     await waitFor(() => expect(screen.getByTestId('session-gate-question').textContent).toBe('None of this job’s helpers can review this independently'));
     expect(screen.queryByTestId('session-gate-lead-act')).toBeNull();
     const why = screen.getByTestId('session-gate-creator-seat').textContent ?? '';
-    expect(why).toContain('none of its helpers can give one');
+    expect(why).toContain('the engine ruled out every one of its helpers for this step');
     expect(why).not.toMatch(/second signed-in helper|sign a second helper in/);
     expect(screen.queryByTestId('session-gate-creator-seat-nocap')).toBeNull();
   });
@@ -132,9 +132,13 @@ describe('studio#1329: the engine ruled out every helper of the job', () => {
 
   it('review r1: the outside helper the engine named is offered only while the roster says it can work', () => {
     const reason = deadEnd('copilot');
-    const inactive = ROSTER.map((r) => (r.key === 'copilot' ? { ...r, health: { status: 'inactive' } } : r));
-    const c = gateCause({ view: view(), gate: gate(reason), events: events(reason), model: { choices: [], overflow: [], recommended: null } as never, roster: inactive as never });
-    expect(c.judges?.outside).toBeUndefined();
-    expect(c.headline).toBe('None of this job’s helpers can review this independently');
+    const cause = (roster: unknown[]) => gateCause({ view: view(), gate: gate(reason), events: events(reason), model: { choices: [], overflow: [], recommended: null } as never, roster: roster as never });
+    for (const off of [{ health: { status: 'inactive' } }, { work_eligible: false }, { signed_in: false, auth: 'signed_out' }]) {
+      const c = cause(ROSTER.map((r) => (r.key === 'copilot' ? { ...r, ...off } : r)));
+      expect(c.judges?.outside).toBeUndefined();
+      expect(c.headline).toBe('None of this job’s helpers can review this independently');
+    }
+    // A helper that needs no sign-in can work (crew's `auth: 'not_required'`).
+    expect(cause(ROSTER.map((r) => (r.key === 'copilot' ? { ...r, signed_in: false, auth: 'not_required' } : r))).judges?.outside?.key).toBe('copilot');
   });
 });

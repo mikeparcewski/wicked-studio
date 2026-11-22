@@ -1,5 +1,5 @@
 import type { CoreEvent, RosterSeat, RunAcceptanceSummary, SessionView as RunView } from '../api/types.js';
-import { reassignCandidates, reassignRefusedOf, runBenchesOf, type ReassignCandidate } from '../components/gateVerdictModel.js';
+import { reassignCandidates, reassignRefusedOf, runBenchesOf, seatStanding, type ReassignCandidate } from '../components/gateVerdictModel.js';
 import { isDeliverGate } from '../components/gateMoveModel.js';
 import { deliverAcceptance } from './checkState.js';
 import { choicesOf, type OpenGate } from '../store/gates.js';
@@ -54,10 +54,11 @@ export function judgeSeats(view: RunView, ord: number, prompt: string, pool: rea
   return { builders, ...(inJob !== undefined ? { inJob } : {}), ...(outside !== undefined ? { outside } : {}) };
 }
 
-/** A helper outside the job that could take the work now, as the live roster says: signed in, a helper seat, not
- *  inactive. One rule for the seat studio finds and the one the engine names (studio#1329). */
+/** A helper outside the job that could take the work now, as the live roster says ({@link seatStanding}: signed in or
+ *  needing no sign-in, not inactive or benched, not refused work). One rule for the seat studio finds and the one the
+ *  engine names (studio#1329). */
 function outsideReady(r: RosterSeat): boolean {
-  return r.signed_in === true && isHelperSeat(r.key) && (r as { health?: { status?: string } }).health?.status !== 'inactive';
+  return isHelperSeat(r.key) && seatStanding(r).state === 'ready';
 }
 
 /**
