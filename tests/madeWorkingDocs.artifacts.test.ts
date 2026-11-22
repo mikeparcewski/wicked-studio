@@ -46,10 +46,24 @@ describe('Made never lists a run working document', () => {
     expect(rows.filter((r) => r.doc !== undefined).map((r) => r.title)).toEqual(['release-plan']);
     expect(rows.some((r) => r.title.startsWith('working-'))).toBe(false);
   });
-  it('the run-id shape is a prefix: a longer id keeps a tail after the uuid (#1055)', () => {
+  it('the run-id shape takes the short tail crew can leave after the uuid, and no more (#1055, codex r1)', () => {
+    // crew keeps 40 characters of the slug: the uuid's 36, then at most `-` and three more.
     expect(isRunWorkingDoc('working-4406c5b6-c61b-4b7c-91f1-4622e1cf0c47-r')).toBe(true);
+    expect(isRunWorkingDoc('working-4406c5b6-c61b-4b7c-91f1-4622e1cf0c47-abc')).toBe(true);
+    expect(isRunWorkingDoc('working-4406c5b6-c61b-4b7c-91f1-4622e1cf0c47-notes')).toBe(false);
     expect(isRunWorkingDoc('working-4406c5b6')).toBe(false);
     expect(isRunWorkingDoc('my-working-4406c5b6-c61b-4b7c-91f1-4622e1cf0c47')).toBe(false);
+  });
+  it('a person’s working-<uuid>-notes document stays in Made', () => {
+    const doc = { name: 'working-4406c5b6-c61b-4b7c-91f1-4622e1cf0c47-notes', kind: 'doc', updated_at: '2026-11-01T00:00:00Z' };
+    expect(madeRows({ p1: [doc] as never }, [], {}).map((r) => r.title)).toEqual([doc.name]);
+  });
+  it('a listed caller-chosen-id run whose project studio does not know: its working doc is left out everywhere (codex r1)', () => {
+    const runs = [{ session: { id: 'Release_42', status: 'completed', problem: 'x' }, units: [] }];
+    const doc = { name: 'working-release-42', kind: 'doc', updated_at: '2026-11-01T00:00:00Z' };
+    const notes = { name: 'working-notes', kind: 'doc', updated_at: '2026-11-01T00:00:00Z' };
+    const rows = madeRows({ 'proj-a': [doc, notes] as never, 'proj-b': [doc] as never }, runs as never, {});
+    expect(rows.filter((r) => r.doc !== undefined).map((r) => `${r.projectId}:${r.title}`)).toEqual(['proj-a:working-notes']);
   });
   it('two runs whose ids normalise to one name each keep their own project (review r4)', () => {
     const runs = [
