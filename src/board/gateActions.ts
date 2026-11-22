@@ -9,7 +9,7 @@ import { jobTitle, plainGateQuestion } from './deskWords.js';
 import type { LaunchPlan } from '../api/teamPlan.js';
 import { sessionPath } from './sessionModel.js';
 import { PLAN_UNSEEN_TEXT, seenPlanRev } from './planRevBinding.js';
-import { beginGateRead, doneRecheck, gateFromInfo, gateGen, hasNoGate, useGateStore, type GateReadTicket } from '../store/gates.js';
+import { beginGateRead, doneRecheck, gateFromInfo, gateGen, hasNoGate, needsRecheck, useGateStore, type GateReadTicket } from '../store/gates.js';
 import { recordShown } from '../store/gateDiffSeen.js';
 import { useMembershipStore } from '../store/membership.js';
 import {
@@ -668,6 +668,18 @@ export function ensureGate(runId: string): Promise<void> {
   const on = gateReads.get(runId);
   if (on !== undefined && on.ticket.gen === gateGen(runId)) return on.promise;
   return startGateRead(runId).promise;
+}
+
+/**
+ * The late-join pass's read of one waiting run (crew#1775): its gate when none is cached, a re-read when a reconnect
+ * made the cached one doubtful (studio#1023). A run whose read is on its way, or failed and waits on its retry, is
+ * left to that read: with one background slot, a run whose read keeps hanging would otherwise hold the slot again on
+ * every pass and the runs after it would never be read.
+ */
+export function hydrateGate(runId: string): Promise<void> {
+  if (useGateStore.getState().gates[runId] !== undefined) return needsRecheck(runId) ? refreshGate(runId) : Promise.resolve();
+  if (gateReads.has(runId) || retryTimers.has(runId)) return Promise.resolve();
+  return ensureGate(runId);
 }
 
 /** A gate's one honest affordance: the session thread at the gate anchor. */

@@ -7,8 +7,8 @@ import { describe, expect, it } from 'vitest';
 import type { AgentRow } from '../src/board/agentsModel.js';
 import { newWorkHelpers } from '../src/board/firstUse.js';
 
-const row = (key: string, name: string, f: Partial<AgentRow>): AgentRow =>
-  ({ key, name, picked: true, usable: true, jobWork: true, optIn: false, ...f }) as AgentRow;
+const row = (key: string, name: string, f: Partial<AgentRow>, auth = 'signed_in'): AgentRow =>
+  ({ key, name, picked: true, usable: true, jobWork: true, optIn: false, seat: { key, auth }, ...f }) as unknown as AgentRow;
 
 describe('Helpers step 5 names the helpers new work will use (crew#1568 D05)', () => {
   it('a picked helper that is not installed or not signed in is not named; a ready one left out is offered', () => {
@@ -27,14 +27,23 @@ describe('Helpers step 5 names the helpers new work will use (crew#1568 D05)', (
 
   it('the default rule uses an opt-in helper when it is the only ready one; a saved pick, even an empty one, stands', () => {
     const rows = [
-      row('claude', 'Claude Code', { usable: false }),
-      row('codex', 'Codex', { usable: false }),
-      row('opencode', 'OpenCode', { picked: false, optIn: true }),
+      row('claude', 'Claude Code', { usable: false }, 'signed_out'),
+      row('codex', 'Codex', { usable: false }, 'signed_out'),
+      row('opencode', 'OpenCode', { picked: false, optIn: true }, 'not_required'),
     ];
     expect(newWorkHelpers(rows, true).using.map((r) => r.name)).toStrictEqual(['OpenCode']);
     expect(newWorkHelpers(rows, true).off).toStrictEqual([]);
     const none = rows.map((r) => ({ ...r, picked: false }));
     expect(newWorkHelpers(none, false).using).toStrictEqual([]);
     expect(newWorkHelpers(none, false).off.map((r) => r.name)).toStrictEqual(['OpenCode']);
+  });
+
+  it('crew counts a helper whose sign-in cannot be read: then the default rule leaves the opt-in helper out', () => {
+    const rows = [
+      row('claude', 'Claude Code', { usable: false }, 'unknown'),
+      row('opencode', 'OpenCode', { picked: false, optIn: true }, 'not_required'),
+    ];
+    expect(newWorkHelpers(rows, true).using).toStrictEqual([]);
+    expect(newWorkHelpers(rows, true).off.map((r) => r.name)).toStrictEqual(['OpenCode']);
   });
 });

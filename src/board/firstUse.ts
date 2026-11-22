@@ -1,6 +1,6 @@
 import type { SystemSnapshot } from '../api/system.js';
 import { helperNotInstalled, helperRuntimeDown } from './agentsCopy.js';
-import { boundaryHolds, type AgentRow } from './agentsModel.js';
+import { authOf, boundaryHolds, type AgentRow } from './agentsModel.js';
 
 /** First use stays open until the live helper, skills, code map and runtime checks pass,
  * and there is somewhere to work. Only an explicit skip hides incomplete setup. */
@@ -115,9 +115,11 @@ export function setupAgents(rows: readonly AgentRow[]): AgentRow[] {
  */
 export function newWorkHelpers(rows: readonly AgentRow[], defaultPick: boolean): { using: AgentRow[]; off: AgentRow[] } {
   const ready = rows.filter((r) => r.usable && r.jobWork);
-  const using = ready.filter((r) => r.picked);
-  if (defaultPick && using.length === 0) return { using: ready.filter((r) => r.optIn), off: ready.filter((r) => !r.optIn) };
-  return { using, off: ready.filter((r) => !r.picked) };
+  // crew's fallback looks at its own eligible list (`proposalRoster`: job work, not signed out), where a helper whose
+  // sign-in cannot be read still counts: an opt-in helper stands in only when no ordinary helper is on that list.
+  const crewHasOrdinary = rows.some((r) => !r.optIn && r.jobWork && authOf(r.seat) !== 'signed_out');
+  if (defaultPick && !crewHasOrdinary) return { using: ready.filter((r) => r.optIn), off: ready.filter((r) => !r.optIn) };
+  return { using: ready.filter((r) => r.picked), off: ready.filter((r) => !r.picked) };
 }
 
 /** Projects that count: the synthesized "Unfiled" default (`id: 'default'`) never does. */
