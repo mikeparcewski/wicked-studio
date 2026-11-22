@@ -68,9 +68,12 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
   // The review sits full width under the sources and the pipeline (mockup c), rendered into this slot.
   const [resultsEl, setResultsEl] = useState<HTMLDivElement | null>(null);
 
+  // studio#1330: the saved record is read once, at mount. A launch (or Start over) the person made before that read
+  // answered is newer than it: the late read never replaces it (a slow daemon wiped the jobs, and Style stopped polling).
+  const decidedHere = useRef(false);
   useEffect(() => {
     api.listRepos().then((r) => setRepos(r.repos), () => setRepos([]));
-    api.getAppearanceSettings().then((s) => setRecord(readRecord(s.settings)), () => undefined);
+    api.getAppearanceSettings().then((s) => { if (!decidedHere.current) setRecord(readRecord(s.settings)); }, () => undefined);
   }, []);
 
   const add = (): void => {
@@ -138,6 +141,7 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
       if (failed.length > 0) setLaunchError(`Not started: ${failed.join('; ')}`);
       if (jobs.length > 0) {
         const r: StyleRecord = { jobs, startedAt: Date.now() };
+        decidedHere.current = true;
         setRecord(r);
         void saveRecord(r).catch(() => undefined);
       }
@@ -147,6 +151,7 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
   };
 
   const startOver = (): void => {
+    decidedHere.current = true;
     setRecord(null);
     void saveRecord(null).catch(() => undefined);
   };

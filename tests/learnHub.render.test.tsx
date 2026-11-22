@@ -231,6 +231,26 @@ describe('Learn: Style review', () => {
     await waitFor(() => expect(screen.getByTestId('style-runline').textContent).toContain('Running as 2 jobs'));
     expect((settings['studio.learn.style'] as { jobs: unknown[] }).jobs).toHaveLength(2);
   });
+
+  it('studio#1330: a launch made before the saved record was read is never wiped by that late read', async () => {
+    let answer: (v: unknown) => void = () => {};
+    d.on('GET /settings', () => new Promise((r) => { answer = r; }));
+    d.on('GET /governance/rules', { rules: [] });
+    d.on('POST /governance/steering/author', { runId: 'rd' });
+    d.on('GET /runs/rd', { run: { session: { id: 'rd', status: 'executing', unit_ix: 0 }, units: [{}, {}] } });
+    d.on('GET /proposals', { proposals: [] });
+    d.on('GET /governance/steering/author/rd/draft', { runId: 'rd', ready: false, rules: [] });
+    render(<LearnHub navigate={nav} search="" />);
+    fireEvent.change(await screen.findByTestId('style-input'), { target: { value: 'https://wiki.example.com/handbook' } });
+    fireEvent.click(screen.getByTestId('style-add'));
+    fireEvent.click(screen.getByTestId('style-go'));
+    await waitFor(() => expect(screen.getByTestId('style-runline').textContent).toContain('Running as'));
+    // The mount's settings read answers only now, from before the launch was saved: no record.
+    answer({ settings: {} });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.getByTestId('style-runline').textContent).toContain('Running as');
+    expect(screen.getAllByTestId('style-station').map((x) => x.getAttribute('data-s'))[0]).toBe('run');
+  });
 });
 
 describe('First run (§4)', () => {
