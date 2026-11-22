@@ -435,3 +435,82 @@ describe('DES-PM-001: trackers and projects on the map', () => {
     expect(screen.getAllByTestId('knowledge-connection').map((c) => c.textContent)).not.toContain('BILL · Jira tracked in Billing');
   });
 });
+
+describe('crew#1697 (studio#1248): Forget a piece of document knowledge', () => {
+  // A document node as crew's map draws it (crew `knowledge/shapes/map.ts`: `nodeKey(store, id)` = `knowledge:<id>`,
+  // kind `knowledge` for a non-table node reached through an approved shape's neighbourhood).
+  const DOC_ID = 'kdoc synthetic ingest:runbooks/escalation.md:';
+  const DOC = `knowledge:${DOC_ID}`;
+  const DOC_MAP = { ...MAP, nodes: [...MAP.nodes, { key: DOC, kind: 'knowledge', label: 'Escalation runbook' }], edges: [...MAP.edges, { rel: 'describes', from: DOC, to: T, confidence: 0.8, evidence: null, owner: 'kconcept synthetic proposal:p-ok:' }] };
+  const forgets: unknown[] = [];
+  let answer: () => Promise<unknown> = () => Promise.resolve({ forgotten: 1, skipped_live_source: 0 });
+  afterEach(() => useCapabilities.setState({ knowledgeForget: false }));
+  const renderWith = async (on: boolean): Promise<void> => {
+    forgets.length = 0;
+    useCapabilities.setState({ loaded: true, knowledgeForget: on });
+    apiFetch.mockImplementation((path: unknown, init?: { method?: string; body?: string }) => {
+      const s = String(path);
+      calls.push(`${init?.method ?? 'GET'} ${s}`);
+      if (s === '/knowledge/map') return Promise.resolve(structuredClone(DOC_MAP));
+      if (s === '/knowledge/forget') { forgets.push(JSON.parse(init?.body ?? '{}')); return answer(); }
+      if (s.startsWith('/proposals')) return Promise.resolve({ proposals: [] });
+      return Promise.reject(new Error(`unexpected ${s}`));
+    });
+    render(<KnowledgeView />);
+    await screen.findByTestId('knowledge-graph-stub');
+  };
+  const pick = async (user: ReturnType<typeof userEvent.setup>, key: string): Promise<void> => {
+    await user.click((await screen.findAllByTestId('graph-stub-node')).find((b) => b.getAttribute('data-key') === key)!);
+  };
+
+  it('forgets a document by its estate id after a confirm, says so and reads the map again', async () => {
+    answer = () => Promise.resolve({ forgotten: 1, skipped_live_source: 0 });
+    await renderWith(true);
+    const user = userEvent.setup();
+    await pick(user, DOC);
+    await user.click(within(screen.getByTestId('knowledge-selected')).getByTestId('knowledge-forget'));
+    expect(forgets).toEqual([]);
+    expect(screen.getByTestId('knowledge-forget-confirm')).toHaveTextContent('This can’t be undone.');
+    const reads = calls.filter((c) => c === 'GET /knowledge/map').length;
+    await user.click(screen.getByTestId('knowledge-forget-go'));
+    expect(await screen.findByTestId('knowledge-forget-note')).toHaveTextContent('Forgot “Escalation runbook”. Agents no longer recall it.');
+    expect(forgets).toEqual([{ id: DOC_ID }]);
+    expect(calls.filter((c) => c === 'POST /knowledge/forget')).toHaveLength(1);
+    await waitFor(() => expect(calls.filter((c) => c === 'GET /knowledge/map').length).toBe(reads + 1));
+    expect(screen.queryByTestId('knowledge-selected')).toBeNull();
+  });
+
+  it('a live data source\'s table is never offered Forget: it is refreshed through its source; a shape has no Forget', async () => {
+    await renderWith(true);
+    const user = userEvent.setup();
+    await pick(user, T);
+    expect(within(screen.getByTestId('knowledge-selected')).getByTestId('knowledge-forget-live')).toHaveTextContent('refreshed through the source, not forgotten');
+    expect(screen.queryByTestId('knowledge-forget')).toBeNull();
+    await pick(user, SHAPE_OK);
+    expect(screen.queryByTestId('knowledge-forget')).toBeNull();
+    expect(screen.queryByTestId('knowledge-forget-live')).toBeNull();
+  });
+
+  it('a refusal (409 live source structure) or an old estate (501) says nothing was deleted, and the selection stays', async () => {
+    answer = () => Promise.reject(new ApiError(409, 'refused'));
+    await renderWith(true);
+    const user = userEvent.setup();
+    await pick(user, DOC);
+    await user.click(screen.getByTestId('knowledge-forget'));
+    await user.click(screen.getByTestId('knowledge-forget-go'));
+    expect(await screen.findByTestId('knowledge-forget-note')).toHaveTextContent('refreshed through its source, not forgotten. Nothing was deleted.');
+    expect(screen.getByTestId('knowledge-selected')).toHaveTextContent('Escalation runbook');
+    answer = () => Promise.reject(new ApiError(501, 'estate_upgrade_required'));
+    await user.click(screen.getByTestId('knowledge-forget'));
+    await user.click(screen.getByTestId('knowledge-forget-go'));
+    await waitFor(() => expect(screen.getByTestId('knowledge-forget-note')).toHaveTextContent('can’t forget yet, so nothing was deleted'));
+  });
+
+  it('a crew without knowledgeForget offers no Forget', async () => {
+    await renderWith(false);
+    const user = userEvent.setup();
+    await pick(user, DOC);
+    expect(screen.queryByTestId('knowledge-forget')).toBeNull();
+    expect(screen.queryByTestId('knowledge-forget-live')).toBeNull();
+  });
+});

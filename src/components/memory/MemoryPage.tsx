@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { askPage, PageAskButton, pageTextLines, usePageChatHostPage } from '../chat/PageChat.js';
 import {
   addMemory, AddMemoryApproveError, editMemory, isEraseByIdUnsupported, isMemoryEditUnsupported, isMemoryUnsupported,
-  listMemories, memoryCoverage, memoryPath, readMemoryView, retireMemory, retireMemoryItem,
+  eraseMemoryItem, listMemories, memoryCoverage, memoryPath, readMemoryView, retireMemory, retireMemoryItem,
   type MemoryCoverage, type MemoryItem, type MemoryView,
 } from '../../api/memory.js';
 import { isProposalsUnsupported, listProposals, proposalKind } from '../../api/proposals.js';
@@ -11,6 +11,7 @@ import { relTime } from '../../board/relTime.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useNeedsSources } from '../../store/needsSources.js';
 import { useProjectsStore } from '../../store/projects.js';
+import { useCapabilities } from '../../store/capabilities.js';
 import { FacetAutocomplete } from '../FacetAutocomplete.js';
 import { useModalEscape } from '../Modal.js';
 import { shortContent } from '../ProposalChips.js';
@@ -171,7 +172,12 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
   const opened = useRef(0);
   const [adding, setAdding] = useState<number | null>(null);
   const [editing, setEditing] = useState<{ memory: MemoryItem; token: number } | null>(null);
-  const [retiring, setRetiring] = useState<{ memory: MemoryItem; width: 'item' | 'scope'; token: number } | null>(null);
+  const [retiring, setRetiring] = useState<{ memory: MemoryItem; width: 'item' | 'scope' | 'erase'; token: number } | null>(null);
+  // crew#1697: a retire is soft (kept, restorable) on a crew that serves restore; an older crew erases.
+  const soft = useCapabilities((s) => s.memoryRestore);
+  useEffect(() => { void useCapabilities.getState().load(); }, []);
+  /** Bumped by a delete from Show retired, so its list reads again. */
+  const [retiredRev, setRetiredRev] = useState(0);
   // DES-LEARN §6.3: Steering's ways in, opened from the Add menu, shown above the list.
   const [panel, setPanel] = useState<'import' | 'table' | 'retired' | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -218,7 +224,8 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
         menu={[
           { id: 'edit', label: 'Edit…', testId: 'memory-edit', onSelect: () => setEditing({ memory: m, token: ++opened.current }) },
           { id: 'retire', label: 'Retire', danger: true, testId: 'memory-retire', onSelect: () => setRetiring({ memory: m, width: 'item', token: ++opened.current }) },
-          ...(m.scope !== '' ? [{ id: 'retire-scope', label: 'Retire everything in this scope…', onSelect: () => setRetiring({ memory: m, width: 'scope', token: ++opened.current }) }] : []),
+          ...(soft ? [{ id: 'erase', label: 'Delete for good…', danger: true, testId: 'memory-erase', onSelect: () => setRetiring({ memory: m, width: 'erase', token: ++opened.current }) }] : []),
+          ...(m.scope !== '' ? [{ id: 'retire-scope', label: soft ? 'Delete everything in this scope for good…' : 'Retire everything in this scope…', onSelect: () => setRetiring({ memory: m, width: 'scope', token: ++opened.current }) }] : []),
         ]}
         details={(
           <>
@@ -326,7 +333,14 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
           ) : panel === 'table' ? (
             <MemoryTable memories={memories} onSaved={reread} onClose={() => setPanel(null)} />
           ) : panel === 'retired' ? (
-            <MemoryRetired onClose={() => setPanel(null)} onBrought={reread} />
+            <>
+            {note !== null && (
+              <CalmNote tone={note.tone} data-testid="memories-note" role="status">
+                {note.text} <button type="button" className="wk-link wk-se-x" onClick={() => setNote(null)} aria-label="Dismiss">Dismiss</button>
+              </CalmNote>
+            )}
+            <MemoryRetired soft={soft} revision={retiredRev} onClose={() => setPanel(null)} onBrought={reread} onErase={(m) => setRetiring({ memory: m, width: 'erase', token: ++opened.current })} />
+            </>
           ) : null}
           {panel === 'table' || panel === 'retired' ? null : list}
         </div>
@@ -340,8 +354,8 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
           onDone={(text, tone) => { const mine = editing.token; setEditing((cur) => (cur?.token === mine ? null : cur)); setNote({ tone, text }); if (tone === 'ok') reread(); }} />
       )}
       {retiring !== null && (
-        <RetireMemoryDialog key={retiring.token} memory={retiring.memory} width={retiring.width} background={scrollRef} onClose={() => setRetiring(null)}
-          onDone={(text, tone) => { const mine = retiring.token; setRetiring((cur) => (cur?.token === mine ? null : cur)); setNote({ tone, text }); if (tone === 'ok') reread(); }} />
+        <RetireMemoryDialog key={retiring.token} memory={retiring.memory} width={retiring.width} soft={soft} background={scrollRef} onClose={() => setRetiring(null)}
+          onDone={(text, tone) => { const mine = retiring.token; setRetiring((cur) => (cur?.token === mine ? null : cur)); setNote({ tone, text }); if (tone === 'ok') { reread(); setRetiredRev((r) => r + 1); } }} />
       )}
     </div>
   );
@@ -447,9 +461,15 @@ function EditMemoryDialog({ memory, background, onClose, onDone }: {
   );
 }
 
-/** Retire one memory, or every memory at or under its scope (the count read first). */
-function RetireMemoryDialog({ memory, width, background, onClose, onDone }: {
-  memory: MemoryItem; width: 'item' | 'scope'; background: React.RefObject<HTMLElement | null>; onClose: () => void; onDone: Done;
+/**
+ * Retire one memory, delete one for good, or delete every memory at or under its scope (the count read first).
+ *
+ * `soft` (crew#1697, `capabilities.memoryRestore`): a one-memory retire hides the memory and keeps it, so Show retired
+ * can restore it; `erase` deletes one for good. Without it (an older crew) a retire ERASES, and the words say so. The
+ * scope-wide move is a delete for good on either crew (`POST /memory/retire` erases a subtree).
+ */
+export function RetireMemoryDialog({ memory, width, soft, background, onClose, onDone }: {
+  memory: MemoryItem; width: 'item' | 'scope' | 'erase'; soft: boolean; background: React.RefObject<HTMLElement | null>; onClose: () => void; onDone: Done;
 }): React.ReactElement {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
@@ -470,28 +490,41 @@ function RetireMemoryDialog({ memory, width, background, onClose, onDone }: {
     try {
       if (width === 'item') {
         await retireMemoryItem({ memory_id: memory.id });
-        onDone(`Retired: ${shortContent(memory.content)}`, 'ok');
+        onDone(soft ? `Retired: ${shortContent(memory.content)}. Restore it from Show retired.` : `Retired: ${shortContent(memory.content)}`, 'ok');
+      } else if (width === 'erase') {
+        await eraseMemoryItem({ memory_id: memory.id });
+        onDone(`Deleted for good: ${shortContent(memory.content)}`, 'ok');
       } else {
         const { erased } = await retireMemory({ scope_prefix: memory.scope });
-        onDone(`Retired everything in ${memory.scope}: ${erased} ${erased === 1 ? 'memory' : 'memories'} erased.`, 'ok');
+        onDone(soft
+          ? `Deleted everything in ${memory.scope} for good: ${erased} ${erased === 1 ? 'memory' : 'memories'}.`
+          : `Retired everything in ${memory.scope}: ${erased} ${erased === 1 ? 'memory' : 'memories'} erased.`, 'ok');
       }
     } catch (e) {
-      if (width === 'item' && isEraseByIdUnsupported(e)) onDone('This crew can’t retire a single memory yet, so nothing was deleted. Retire its whole scope instead.', 'fail');
-      else { setError(failure(e)); setBusy(false); }
+      if (width !== 'scope' && isEraseByIdUnsupported(e)) {
+        onDone(width === 'erase' ? 'This crew can’t delete a single memory yet, so nothing was deleted.'
+          : soft ? 'This daemon’s memory store can’t retire a memory yet, so nothing changed.'
+          : 'This crew can’t retire a single memory yet, so nothing was deleted. Retire its whole scope instead.', 'fail');
+      } else { setError(failure(e)); setBusy(false); }
     }
   };
+  const scopeCount = count === null ? '' : typeof count === 'number' ? `: ${count} ${count === 1 ? 'memory' : 'memories'}` : ' (couldn’t count them)';
+  const title = width === 'item' ? 'Retire this memory?' : width === 'erase' ? 'Delete this memory for good?' : soft ? 'Delete everything in this scope for good?' : 'Retire everything in this scope?';
+  const sub = width === 'item'
+    ? (soft ? 'Helpers stop recalling it. It is kept: you can restore it from Show retired, or delete it for good there.'
+      : 'Helpers stop recalling it. Only this memory is erased; others in its scope stay. This can’t be undone.')
+    : width === 'erase' ? 'Helpers stop recalling it and the store deletes it. This can’t be undone.'
+    : <>Every memory filed at or under <code>{memory.scope}</code> is {soft ? 'deleted for good' : 'erased'}{scopeCount}. This can’t be undone.</>;
+  const go = width === 'item' ? 'Retire this memory' : width === 'erase' ? 'Delete for good' : soft ? 'Delete everything in this scope' : 'Retire everything in this scope';
   return (
-    <Dialog title={width === 'item' ? 'Retire this memory?' : 'Retire everything in this scope?'} testId="memory-retire-dialog" background={background} onClose={onClose}
-      sub={width === 'item'
-        ? 'Helpers stop recalling it. Only this memory is erased; others in its scope stay. This can’t be undone.'
-        : <>Every memory filed at or under <code>{memory.scope}</code> is erased{count === null ? '' : typeof count === 'number' ? `: ${count} ${count === 1 ? 'memory' : 'memories'}` : ' (couldn’t count them)'}. This can’t be undone.</>}>
-      <blockquote className="wk-mem-quote" data-testid="memory-retire-content">{memory.content}</blockquote>
+    <Dialog title={title} testId={width === 'erase' ? 'memory-erase-dialog' : 'memory-retire-dialog'} background={background} onClose={onClose} sub={sub}>
+      <blockquote className="wk-mem-quote" data-testid={width === 'erase' ? 'memory-erase-content' : 'memory-retire-content'}>{memory.content}</blockquote>
       {width === 'scope' && count === 'failed' && <button type="button" className="wk-link wk-se-linkbtn" onClick={() => setCountTick((t) => t + 1)}>Count again</button>}
-      {error !== null && <StateBanner kind={error.kind} what="the retirement" error={error.message} onRetry={() => void confirm()} />}
+      {error !== null && <StateBanner kind={error.kind} what={width === 'item' ? 'the retirement' : 'the deletion'} error={error.message} onRetry={() => void confirm()} />}
       <div className="wk-se-dialog-actions">
-        <button type="button" className="wk-btn wk-btn--secondary" data-testid="memory-retire-cancel" onClick={onClose}>Cancel</button>
-        <button type="button" className="wk-btn wk-btn--danger" data-testid="memory-retire-confirm" disabled={busy} onClick={() => void confirm()}>
-          {busy ? 'Retiring…' : width === 'item' ? 'Retire this memory' : 'Retire everything in this scope'}
+        <button type="button" className="wk-btn wk-btn--secondary" data-testid={width === 'erase' ? 'memory-erase-cancel' : 'memory-retire-cancel'} onClick={onClose}>Cancel</button>
+        <button type="button" className="wk-btn wk-btn--danger" data-testid={width === 'erase' ? 'memory-erase-confirm' : 'memory-retire-confirm'} disabled={busy} onClick={() => void confirm()}>
+          {busy ? (width === 'item' ? 'Retiring…' : 'Deleting…') : go}
         </button>
       </div>
     </Dialog>

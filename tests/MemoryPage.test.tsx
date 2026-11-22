@@ -29,6 +29,7 @@ vi.mock('../src/api/client.js', () => ({
 const { MemoryPage } = await import('../src/components/memory/MemoryPage.js');
 const { ApiError } = await import('../src/api/errors.js');
 const { useProjectsStore } = await import('../src/store/projects.js');
+const { useCapabilities } = await import('../src/store/capabilities.js');
 type MemoryItem = import('../src/api/memory.js').MemoryItem;
 type Proposal = import('../src/api/proposals.js').Proposal;
 
@@ -135,6 +136,8 @@ beforeEach(() => {
   apiFetch.mockReset();
   navigate.mockReset();
   useProjectsStore.setState({ projects: [{ id: 'p-wicked', name: 'Wicked' }] } as never);
+  // An older crew unless a test says otherwise: `retire-item` erases (no `capabilities.memoryRestore`).
+  useCapabilities.setState({ loaded: true, memoryRestore: false });
 });
 
 describe('MemoryPage — the store, read honestly', () => {
@@ -633,4 +636,152 @@ it('slice C: a missing memory service appears in one error banner', async () => 
   await screen.findByTestId('memories-error');
   await waitFor(() => expect(view.container.querySelectorAll('.wk-state-banner')).toHaveLength(1));
   expect(screen.getByRole('alert')).toHaveTextContent('Memory needs the code map service (wicked-estate), which isn’t installed or running.');
+});
+
+/**
+ * crew#1697 (studio#1248): on a crew that advertises `capabilities.memoryRestore`, `retire-item` is a SOFT retire. The
+ * wire below is that crew's: `GET /memory?retired=1` answers `{ memories: [{ id, content, tier, scope, facets,
+ * created_at, retired_at }] }` (crew `api/routes.ts` shapeMemoryItem + the `GET /memory` route, pinned in crew
+ * `tests/memory-route.test.ts` "lists retired memories via memory.list {retired: true}"), `retire-item` answers
+ * `{ retired: 1 }`, `unretire` `{ restored: 1 }` (404 for an id with no retired memory), `erase-item` `{ erased: 1 }`.
+ */
+function softWire(initial: MemoryItem[]): { calls: string[]; bodies: Record<string, unknown[]> } {
+  const out = wire(initial);
+  const base = apiFetch.getMockImplementation()!;
+  let live = [...initial];
+  let retired: (MemoryItem & { retired_at: number })[] = [];
+  apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) => {
+    const s = String(path);
+    const body = init?.body !== undefined ? JSON.parse(init.body) as { memory_id?: string } : undefined;
+    const record = (): void => { out.calls.push(s); if (body !== undefined) (out.bodies[s] ??= []).push(body); };
+    if (s === '/memory/retire-item') {
+      record();
+      const m = live.find((x) => x.id === body?.memory_id);
+      if (m === undefined) return Promise.reject(new ApiError(404, 'no live memory'));
+      live = live.filter((x) => x !== m);
+      retired = [...retired, { ...m, retired_at: 1_700_100_000 }];
+      return Promise.resolve({ retired: 1 });
+    }
+    if (s === '/memory/unretire') {
+      record();
+      const m = retired.find((x) => x.id === body?.memory_id);
+      if (m === undefined) return Promise.reject(new ApiError(404, `no retired memory ${String(body?.memory_id)}`));
+      retired = retired.filter((x) => x !== m);
+      const back: MemoryItem & { retired_at?: number } = { ...m };
+      delete back.retired_at;
+      live = [...live, back];
+      return Promise.resolve({ restored: 1 });
+    }
+    if (s === '/memory/erase-item') {
+      record();
+      const before = live.length + retired.length;
+      live = live.filter((x) => x.id !== body?.memory_id);
+      retired = retired.filter((x) => x.id !== body?.memory_id);
+      return before === live.length + retired.length ? Promise.reject(new ApiError(404, 'no memory')) : Promise.resolve({ erased: 1 });
+    }
+    if (s.startsWith('/memory?') && new URLSearchParams(s.split('?')[1]).get('retired') === '1') {
+      record();
+      return Promise.resolve({ memories: retired, store: { path: 'x' } });
+    }
+    if (s === '/memory' || (s.startsWith('/memory?') && !s.startsWith('/memory/'))) {
+      record();
+      return Promise.resolve({ memories: live });
+    }
+    return base(path, init);
+  });
+  return out;
+}
+
+async function openRetired(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(screen.getByTestId('memory-more-button'));
+  await user.click(screen.getByTestId('memory-add-retired'));
+}
+
+describe('MemoryPage — soft retire, Show retired, Restore and Delete for good (crew#1697, studio#1248)', () => {
+  beforeEach(() => { useCapabilities.setState({ loaded: true, memoryRestore: true }); });
+
+  it('Retire keeps the memory: Show retired lists it with when it was retired, and Restore brings it back by id', async () => {
+    const { bodies } = softWire([M1, M2]);
+    page();
+    const user = userEvent.setup();
+    await openRowMenu((await screen.findAllByTestId('memory-row'))[0]!, 'Retire');
+    const dialog = await screen.findByTestId('memory-retire-dialog');
+    expect(dialog).toHaveTextContent('It is kept: you can restore it from Show retired');
+    expect(dialog).not.toHaveTextContent('erased');
+    await user.click(within(dialog).getByTestId('memory-retire-confirm'));
+    expect(await screen.findByTestId('memories-note')).toHaveTextContent('Retired: gh account flips to a secondary → push 403. Restore it from Show retired.');
+    expect(bodies['/memory/retire-item']).toEqual([{ memory_id: 'm1' }]);
+    await waitFor(() => expect(screen.getAllByTestId('memory-row').map((r) => r.getAttribute('data-memory-id'))).toEqual(['m2']));
+
+    await openRetired(user);
+    const panel = await screen.findByTestId('memory-retired');
+    expect(within(panel).queryByTestId('memory-retired-erased')).toBeNull();
+    expect(within(panel).getByTestId('memory-retired-kept')).toHaveTextContent('hidden from helpers and kept');
+    const row = await within(panel).findByTestId('memory-retired-memory');
+    expect(row).toHaveAttribute('data-memory-id', 'm1');
+    expect(row).toHaveTextContent(`retired ${new Date(1_700_100_000 * 1000).toLocaleDateString()}`);
+    await user.click(within(row).getByTestId('memory-retired-restore'));
+    expect(await within(panel).findByTestId('memory-retired-restored')).toHaveTextContent('Restored');
+    expect(bodies['/memory/unretire']).toEqual([{ memory_id: 'm1' }]);
+    await user.click(screen.getByTestId('memory-retired-close'));
+    await waitFor(() => expect(screen.getAllByTestId('memory-row').map((r) => r.getAttribute('data-memory-id')).sort()).toEqual(['m1', 'm2']));
+  });
+
+  it('Delete for good from Show retired erases it by id after a confirm, and the retired list reads again', async () => {
+    const { bodies } = softWire([M1]);
+    page();
+    const user = userEvent.setup();
+    await openRowMenu((await screen.findAllByTestId('memory-row'))[0]!, 'Retire');
+    await user.click(await screen.findByTestId('memory-retire-confirm'));
+    await screen.findByTestId('memories-note');
+    await openRetired(user);
+    const row = await screen.findByTestId('memory-retired-memory');
+    await user.click(within(row).getByTestId('memory-retired-erase'));
+    const dialog = await screen.findByTestId('memory-erase-dialog');
+    expect(dialog).toHaveTextContent('This can’t be undone.');
+    expect(bodies['/memory/erase-item']).toBeUndefined();
+    await user.click(within(dialog).getByTestId('memory-erase-confirm'));
+    expect(await screen.findByTestId('memories-note')).toHaveTextContent('Deleted for good: gh account flips to a secondary → push 403');
+    expect(bodies['/memory/erase-item']).toEqual([{ memory_id: 'm1' }]);
+    expect(await screen.findByTestId('memory-retired-none')).toHaveTextContent('No memory is retired.');
+  });
+
+  it('the row menu offers Delete for good beside Retire, and names the scope-wide move a delete for good', async () => {
+    const { bodies } = softWire([M1, M2]);
+    page();
+    const user = userEvent.setup();
+    const row = (await screen.findAllByTestId('memory-row'))[0]!;
+    await user.click(within(row).getByTestId('memory-actions-button'));
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Edit…', 'Retire', 'Delete for good…', 'Delete everything in this scope for good…']);
+    await user.click(screen.getByRole('menuitem', { name: 'Delete for good…' }));
+    await user.click(within(await screen.findByTestId('memory-erase-dialog')).getByTestId('memory-erase-confirm'));
+    expect(await screen.findByTestId('memories-note')).toHaveTextContent('Deleted for good:');
+    expect(bodies['/memory/erase-item']).toEqual([{ memory_id: 'm1' }]);
+    expect(bodies['/memory/retire-item']).toBeUndefined();
+  });
+
+  it('an estate that cannot list retired memories (501) says so; a restore of an id no longer retired says nothing changed', async () => {
+    softWire([M1]);
+    const base = apiFetch.getMockImplementation()!;
+    let listOk = false;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) => {
+      const s = String(path);
+      if (s.includes('retired=1') && !listOk) return Promise.reject(new ApiError(501, 'estate_upgrade_required'));
+      if (s.includes('retired=1')) return Promise.resolve({ memories: [{ ...M1, retired_at: 1_700_100_000 }] });
+      if (s === '/memory/unretire') return Promise.reject(new ApiError(404, 'no retired memory m1'));
+      return base(path, init);
+    });
+    const view = page();
+    const user = userEvent.setup();
+    await screen.findAllByTestId('memory-row');
+    await openRetired(user);
+    expect(await screen.findByTestId('memory-retired-unsupported')).toHaveTextContent('can’t list retired memories yet');
+    listOk = true;
+    view.unmount();
+    page();
+    await screen.findAllByTestId('memory-row');
+    await openRetired(user);
+    await user.click(await screen.findByTestId('memory-retired-restore'));
+    expect(await screen.findByTestId('memory-retired-restore-fail')).toHaveTextContent('no longer retired');
+  });
 });
