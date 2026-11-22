@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { ArtifactProposalCard } = await import('../src/components/chat/ArtifactProposalCard.js');
 const { useCapabilities } = await import('../src/store/capabilities.js');
-const { goWords, protectedGroups, refineGoEdits, refineOutcome, refineOutcomeLine, isArtifactProposal, resetSettledProposals } = await import('../src/board/artifactProposal.js');
+const { goWords, protectedGroups, refineAllowPreset, refineGoEdits, refineOutcome, refineOutcomeLine, isArtifactProposal, resetSettledProposals } = await import('../src/board/artifactProposal.js');
 type Proposal = import('../src/api/chatArtifacts-wire.js').ArtifactProposal;
 type Entry = import('../src/board/artifactProposal.js').ProposalEntry;
 
@@ -151,6 +151,44 @@ describe('the refine card', () => {
     fireEvent.click(screen.getByTestId('artifact-proposal-go-again'));
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(posts[0]!.body).toEqual({ decision: 'go' });
+  });
+
+  it('studio#1278: a retry card starts with crew’s allow on "Let this change it"; Go sends it, unchanged or changed', async () => {
+    // crew `chat-proposals.ts` retry: `allow` = the failed Go's `edits.allow` filtered to ids still on the new head.
+    const retry = proposal({ pid: `chat-r:retry:${RUN}`, turnId: null, sourceRunId: RUN, artifactRef: 'mikes/coverage-deck', allow: [TITLE.id, ORDER.id] });
+    expect([...refineAllowPreset(retry)]).toEqual([TITLE.id, ORDER.id]);
+    // Only ids the card shows; none without allow; never on another kind.
+    expect([...refineAllowPreset(proposal({ allow: ['text:x#00000000', GONE.id] }))]).toEqual([GONE.id]);
+    expect(refineAllowPreset(proposal()).size).toBe(0);
+    expect(isArtifactProposal({ ...retry, allow: [1] })).toBe(false);
+    decideAnswer = () => ok({ view: { proposal: retry, state: 'decided', decision: 'go', result: { runId: RUN, artifactRef: 'mikes/coverage-deck', adopted: false, stub: false } } });
+    render(<ArtifactProposalCard chatId="chat-r" entry={entry(retry)} seatName="Claude Code" stub={false} onChanged={() => {}} />);
+    const row = screen.getByTestId('artifact-proposal-protected-edit');
+    expect(row.getAttribute('data-change')).toBe('true');
+    expect((row.querySelector('[data-testid="artifact-proposal-let-change"]') as HTMLInputElement).checked).toBe(true);
+    expect(text('artifact-proposal-protected-more')).toBe('Keeping 2 more of your edits · 1 let change');
+    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]!.body).toEqual({ decision: 'go', edits: { allow: [TITLE.id, ORDER.id] } });
+    cleanup();
+    posts.length = 0;
+    // The person can keep one crew preselected: Go then leaves it out.
+    render(<ArtifactProposalCard chatId="chat-r" entry={entry(retry)} seatName="Claude Code" stub={false} onChanged={() => {}} />);
+    fireEvent.click(screen.getByTestId('artifact-proposal-keep'));
+    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]!.body).toEqual({ decision: 'go', edits: { allow: [ORDER.id] } });
+  });
+
+  it('studio#1278: a re-resolved retry starts again from its new allow, never from the last card’s choices', async () => {
+    const retry = proposal({ pid: `chat-r:retry:${RUN}`, turnId: null, sourceRunId: RUN, allow: [TITLE.id] });
+    const moved = { ...retry, target: { ref: 'mikes/coverage-deck', title: 'Coverage deck', base: 4 }, allow: [ORDER.id] };
+    decideAnswer = () => new Response(JSON.stringify({ code: 'proposal_reresolved', error: 'changed (now v4)', view: { proposal: moved, state: 'open' } }), { status: 409, headers: { 'content-type': 'application/json' } });
+    render(<ArtifactProposalCard chatId="chat-r" entry={entry(retry)} seatName="Claude Code" stub={false} onChanged={() => {}} />);
+    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
+    await waitFor(() => expect(text('artifact-proposal-target')).toBe('ChangesCoverage deck · v4'));
+    expect(screen.getByTestId('artifact-proposal-protected-edit').getAttribute('data-change')).toBe('false');
+    expect(text('artifact-proposal-protected-more')).toBe('Keeping 2 more of your edits · 1 let change');
   });
 
   it('a refused refine says crew’s reason; the retry card reads Try again', () => {

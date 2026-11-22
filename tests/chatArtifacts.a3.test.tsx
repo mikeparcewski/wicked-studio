@@ -61,6 +61,11 @@ let chatBody: Record<string, unknown> = {};
 const posts: Array<{ path: string; body: unknown }> = [];
 let decideAnswer: () => Response | Promise<Response> = () => new Response('{}', { status: 500 });
 const ok = (body: unknown): Response => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+/** crew's 502 launch_failed as crew writes it (crew#1695, crew `chat-proposals.ts` goLocked): its words, the record it
+ *  refused (`acceptingAt`) and the folded view. */
+function launchFailed(acceptingAt: number): Response {
+  return new Response(JSON.stringify({ code: 'launch_failed', error: 'could not start it: the engine is restarting. Go again resumes the same job.', acceptingAt, view: { proposal: proposal(), state: 'accepting' } }), { status: 502, headers: { 'content-type': 'application/json' } });
+}
 
 function setup(p: Proposal = proposal()): void {
   chatBody = { chatId: 'chat-ask', seats: ['claude'], scope: { kind: 'none' }, messages: [...TURN, { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: p }], path: { runId: RUN, pa: 'claude', selection: 'random', reviewer: null, helpers: [], stepId: 'answer-1' } };
@@ -378,11 +383,13 @@ describe('Change something on a create card (A3)', () => {
   });
 
   it('a Go crew refused (launch_failed) offers Go again at once, even when its accepting record is moments old', async () => {
-    decideAnswer = () => new Response(JSON.stringify({ code: 'launch_failed', error: 'could not start it: the engine is restarting. Go again resumes the same job.', view: { proposal: proposal(), state: 'accepting' } }), { status: 502, headers: { 'content-type': 'application/json' } });
+    // crew#1695 (crew chat-proposals.ts goLocked): the 502 names the accepting record it refused by its `at`.
+    const at = Date.now();
+    decideAnswer = () => launchFailed(at);
     page();
     await screen.findByTestId('artifact-proposal');
     // The reread after the refusal carries the fresh accepting record.
-    chatBody = { ...chatBody, messages: [...(chatBody['messages'] as unknown[]), { at: Date.now(), turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } }] };
+    chatBody = { ...chatBody, messages: [...(chatBody['messages'] as unknown[]), { at, turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } }] };
     fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
     await screen.findByTestId('artifact-proposal-go-again');
     expect(text('artifact-proposal-record')).toBe('Interrupted before it was recorded as started.');
@@ -475,10 +482,11 @@ describe('Change something on a create card (A3)', () => {
   });
 
   it('Go again after a launch_failed says Starting while its answer is on the way', async () => {
-    decideAnswer = () => new Response(JSON.stringify({ code: 'launch_failed', error: 'could not start it: the engine is restarting. Go again resumes the same job.', view: { proposal: proposal(), state: 'accepting' } }), { status: 502, headers: { 'content-type': 'application/json' } });
+    const at = Date.now();
+    decideAnswer = () => launchFailed(at);
     page();
     await screen.findByTestId('artifact-proposal');
-    chatBody = { ...chatBody, messages: [...(chatBody['messages'] as unknown[]), { at: Date.now(), turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } }] };
+    chatBody = { ...chatBody, messages: [...(chatBody['messages'] as unknown[]), { at, turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } }] };
     fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
     const again = await screen.findByTestId('artifact-proposal-go-again');
     decideAnswer = () => new Promise<Response>(() => {});
@@ -538,6 +546,36 @@ describe('Change something on a create card (A3)', () => {
     expect(screen.queryByTestId('artifact-proposal-go-again')).toBeNull();
   });
 
+  it('studio#951: a delayed launch_failed for this tab’s Go never marks another tab’s newer Go as interrupted', async () => {
+    let release: (r: Response) => void = () => {};
+    decideAnswer = () => new Promise<Response>((r) => { release = r; });
+    page();
+    await screen.findByTestId('artifact-proposal');
+    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    // This tab's Go was recorded (A), its launch failed; tab B's Go again (a newer record, B) reaches this tab first.
+    const a = Date.now() - 50;
+    const b = a + 20;
+    chatBody = { ...chatBody, messages: [...(chatBody['messages'] as unknown[]),
+      { at: a, turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } },
+      { at: b, turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } }] };
+    release(launchFailed(a));
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal-error').textContent).toContain('could not start it'));
+    await waitFor(() => expect(text('artifact-proposal-record')).toBe('Starting it…'));
+    expect(screen.queryByTestId('artifact-proposal-go-again')).toBeNull();
+  });
+
+  it('studio#951: a launch_failed that names no record (an older crew) marks nothing stopped: the starting window decides', async () => {
+    const at = Date.now();
+    decideAnswer = () => new Response(JSON.stringify({ code: 'launch_failed', error: 'could not start it: the engine is restarting. Go again resumes the same job.', view: { proposal: proposal(), state: 'accepting' } }), { status: 502, headers: { 'content-type': 'application/json' } });
+    page();
+    await screen.findByTestId('artifact-proposal');
+    chatBody = { ...chatBody, messages: [...(chatBody['messages'] as unknown[]), { at, turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } }] };
+    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
+    await waitFor(() => expect(text('artifact-proposal-record')).toBe('Starting it…'));
+    expect(screen.queryByTestId('artifact-proposal-go-again')).toBeNull();
+  });
+
   it('Go again on an expired accepting record reads Starting while its answer is on the way, from the card and the helpers-only form', async () => {
     chatBody = { ...chatBody, messages: [...(chatBody['messages'] as unknown[]), { at: T0 + 1600, turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } }] };
     let release: (r: Response) => void = () => {};
@@ -545,7 +583,8 @@ describe('Change something on a create card (A3)', () => {
     page();
     fireEvent.click(await screen.findByTestId('artifact-proposal-go-again'));
     await waitFor(() => expect(text('artifact-proposal-record')).toBe('Starting it…'));
-    release(new Response(JSON.stringify({ code: 'launch_failed', error: 'could not start it: the engine is restarting. Go again resumes the same job.', view: { proposal: proposal(), state: 'accepting' } }), { status: 502, headers: { 'content-type': 'application/json' } }));
+    // Go again wrote a new accepting record; crew's refusal names it (crew#1695).
+    release(launchFailed(Date.now()));
     await waitFor(() => expect(text('artifact-proposal-record')).toBe('Interrupted before it was recorded as started.'));
     // The helpers-only form's answer on its way reads Starting too.
     fireEvent.click(screen.getByTestId('artifact-proposal-change-helpers'));

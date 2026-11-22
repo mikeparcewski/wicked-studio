@@ -104,6 +104,9 @@ export interface ProposalOnboard {
   projectId: string | null;
   projectName: string | null;
   existing: { id: string; name: string } | null;
+  /** (crew#1694) The project Go creates first, when the name given matches no project: its trimmed name. `projectId`
+   *  and `projectName` are then `null`. Absent (or `null`) when the card joins an existing project or none. */
+  createProject?: { name: string } | null;
 }
 
 /** One "From" chip, as crew resolved and authorized it. */
@@ -152,6 +155,9 @@ export interface ArtifactProposal {
   /** (api-types 0.197.0, A5) refine: the person's own edits this revision keeps, recomputed by crew from the document's
    *  versions on `target.base`. Each is kept unless the person lets it change (`ProposalEdits.allow`). */
   protected?: ProtectedEdit[];
+  /** (api-types 0.223.0, crew#1406) A refine retry: the protected-edit ids the person let the failed attempt change,
+   *  still on the new head. Their rows start on "Let this change it"; crew never applies it on its own (only Go's edits). */
+  allow?: string[];
   theme?: { name: string; patch: Record<string, string | number | boolean>; changes: string[] };
   demo?: { url: string; audience: string | null; show: string | null };
   /** (api-types 0.200.0) onboard: the repository, where it goes and the project it joins. */

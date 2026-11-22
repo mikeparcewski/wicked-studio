@@ -19,7 +19,9 @@ import {
   proposalResultWords,
   proposalTimeWords,
   keptByAccepted,
+  onboardProjectWords,
   protectedGroups,
+  refineAllowPreset,
   refineGoEdits,
   refineOutcome,
   refineOutcomeLine,
@@ -151,14 +153,18 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
     el?.focus();
   }, [previewingThis]);
   // A5: the protected edits the person lets this refine change (Keep it is the default). Only ids the card shows count:
-  // a re-resolved card (the document moved) draws new ids, all kept again.
-  const [letChange, setLetChange] = useState<ReadonlySet<string>>(new Set());
-  // Any re-resolution (a new head, a new list) starts over with every edit kept, ids that survived included (review r1:
-  // a choice is made on one card, never carried to the next).
-  const resolutionKey = `${p.pid}\u0000${p.target?.base ?? ''}\u0000${(p.protected ?? []).map((e) => e.id).join('\u0000')}`;
+  // a re-resolved card (the document moved) draws new ids, all kept again. (crew#1406) A retry card starts with the
+  // edits crew says the person let the failed attempt change (`allow`) on Let this change it.
+  const [letChange, setLetChange] = useState<ReadonlySet<string>>(() => refineAllowPreset(p));
+  // Any re-resolution (a new head, a new list, a new preselection) starts over from crew's preselection, ids that
+  // survived included (review r1: a choice is made on one card, never carried to the next).
+  const resolutionKey = `${p.pid}\u0000${p.target?.base ?? ''}\u0000${(p.protected ?? []).map((e) => e.id).join('\u0000')}\u0001${(p.allow ?? []).join('\u0000')}`;
+  const firstKey = useRef(resolutionKey);
   useEffect(() => {
-    setLetChange((was) => (was.size === 0 ? was : new Set()));
-  }, [resolutionKey]);
+    if (firstKey.current === resolutionKey) return;
+    firstKey.current = resolutionKey;
+    setLetChange(refineAllowPreset(p));
+  }, [resolutionKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const toggle = (id: string, change: boolean): void => setLetChange((was) => {
     const next = new Set(was);
     if (change) next.add(id);
@@ -188,12 +194,14 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
     setRefusedAt(null);
     setError(null);
     setNote(null);
-    const keep = (v: ChatProposalView): void => {
+    const keep = (v: ChatProposalView, acceptingAt: number | null = null): void => {
       // Crew's view replaces the proposal (with what was accepted, as crew answers it), never the card's place. It
       // stands against the record this answer was sent from: a newer record (another tab's Go, told apart by its time)
-      // wins over it. The wire view carries no record time, so an accepting one keeps that record's.
+      // wins over it. The wire view carries no record time: a refusal names its record's (crew#1695), else an accepting
+      // one keeps the shown record's.
+      const at = acceptingAt ?? (entry.state === 'accepting' ? entry.acceptingAt : undefined);
       const next: ProposalEntry = { pid: entry.pid, turnId: entry.turnId, at: entry.at, ...v,
-        ...(v.state === 'accepting' && entry.state === 'accepting' && entry.acceptingAt !== undefined ? { acceptingAt: entry.acceptingAt } : {}) };
+        ...(v.state === 'accepting' && at !== undefined ? { acceptingAt: at } : {}) };
       if (terminal(v.state)) noteSettled(chatId, next);
       setAnswered({ view: next, against: entry });
     };
@@ -203,14 +211,15 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
       return null;
     } catch (err: unknown) {
       const refusal = proposalRefusal(err);
-      if (refusal.view !== null) keep(refusal.view);
+      if (refusal.view !== null) keep(refusal.view, refusal.acceptingAt);
       // The card keeps every refusal; where it shows depends on what is on screen when it renders (the form while it is
       // open, else under the card), never on the response alone: a live record may already have closed the form.
       setError({ words: refusal.words, settles: refusal.view !== null && terminal(refusal.view.state) });
-      // Only crew's launch_failed says THIS Go's accepting record stopped. A refusal before accepting recorded nothing
-      // of this Go's, and a transport failure proves nothing: an accepting record on screen then is someone else's Go
-      // (another tab), or this one still starting.
-      if (refusal.code === 'launch_failed') setRefusedAt(Date.now());
+      // (crew#1695) Only a refusal that names THIS Go's accepting record (`acceptingAt`: launch_failed, a typed launch
+      // refusal, a chat_gone after the write) says that record stopped, and only that one. A refusal before accepting
+      // recorded nothing of this Go's, and a transport failure proves nothing: an accepting record on screen then is
+      // someone else's Go (another tab, a newer record), or this one still starting.
+      if (refusal.acceptingAt !== null) setRefusedAt(refusal.acceptingAt);
       return refusal.words;
     } finally {
       sending.current = false;
@@ -253,10 +262,10 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
   // card says so instead of "Interrupted · Go again".
   // Judged against the clock at every render; the timer only makes a render happen when the window closes.
   const [, setTick] = useState(0);
-  // A Go whose launch crew said failed (launch_failed) is not starting, whatever its age: the
-  // card offers Go again at once. A newer accepting record (another Go) starts the window again.
+  // A Go whose launch crew refused after recording it is not starting, whatever its age: the card offers Go again at
+  // once. Only the accepting record crew named (its `at`, crew#1695): any other one (another tab's Go) keeps its window.
   const [refusedAt, setRefusedAt] = useState<number | null>(null);
-  const refused = refusedAt !== null && view.state === 'accepting' && (view.acceptingAt ?? 0) <= refusedAt;
+  const refused = refusedAt !== null && view.state === 'accepting' && view.acceptingAt === refusedAt;
   // This tab's Go on its way is starting whatever came before it (from the card or the helpers-only form alike).
   const starting = going || (!refused && proposalStarting(view, Date.now(), false));
   useEffect(() => {
@@ -424,7 +433,7 @@ function ProposalLines({ p, id, theme }: { p: ArtifactProposal; id?: string; the
       {has(p.stops) && <Row k="Stops" testId="artifact-proposal-stops">{p.stops}</Row>}
       {/* An onboard card names its project from the very facts Go uses (one destination, said once). */}
       <Row k={p.kind === 'onboard' ? 'Project' : 'Filed in'} testId="artifact-proposal-filed">
-        {p.kind === 'onboard' && p.onboard !== undefined ? (p.onboard.projectName ?? 'Not in a project') : p.filedIn.label}
+        {p.kind === 'onboard' && p.onboard !== undefined ? onboardProjectWords(p.onboard) : p.filedIn.label}
       </Row>
       {has(p.reason) && <Row k="Why" testId="artifact-proposal-reason">{p.reason}</Row>}
     </dl>

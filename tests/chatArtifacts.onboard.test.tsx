@@ -167,6 +167,64 @@ describe('the onboard card model', () => {
   });
 });
 
+/**
+ * studio#1070 (crew#1694): a card that creates the project the person named, as crew resolves it
+ * (crew `packages/crew/src/api/proposal-onboard.ts` resolveOnboard, the `onboard` / `what` / `filedIn` it returns):
+ * `createProject: { name }`, the project fields null, `filedIn.label` "Creates the project <name>".
+ */
+function createsProject(over: { existing?: { id: string; name: string } } = {}): Proposal {
+  const existing = over.existing ?? null;
+  return onboardProposal({
+    what: existing !== null
+      ? { entry: null, title: existing.name, label: `Add to a project · ${existing.name}`, outcome: `Adds the registered ${existing.name} to the new project Foo Bar. Nothing is cloned and no onboarding starts.` }
+      : { entry: null, title: 'wicked-studio', label: 'Add a repository · wicked-studio', outcome: 'Cloned to this computer, registered, added to the new project Foo Bar, and onboarded: its code map is built so jobs and chats can read it.' },
+    filedIn: { projectId: null, label: 'Creates the project Foo Bar' },
+    onboard: { url: 'https://github.com/mikeparcewski/wicked-studio.git', name: existing?.name ?? 'wicked-studio', checkout: existing === null ? '~/.wicked/repos/wicked-studio' : null, projectId: null, projectName: null, existing, createProject: { name: 'Foo Bar' } },
+  });
+}
+
+describe('studio#1070: an onboard card that creates the named project', () => {
+  it('is drawn and says, before Go, that Go creates the project and adds the repository there', () => {
+    expect(isArtifactProposal(createsProject())).toBe(true);
+    const existing = createsProject({ existing: { id: 'wicked-studio', name: 'wicked-studio' } });
+    // An already-registered repository joining a project Go creates is answerable (it has a destination).
+    expect(isArtifactProposal(existing)).toBe(true);
+    // A create beside an existing project is two destinations: never drawn.
+    expect(isArtifactProposal(onboardProposal({ onboard: { ...onboardProposal().onboard!, createProject: { name: 'Foo Bar' } } }))).toBe(false);
+    expect(isArtifactProposal(onboardProposal({ onboard: { ...createsProject().onboard!, createProject: { name: ' ' } } }))).toBe(false);
+    const [e] = foldChatProposals([{ at: 1, turnId: 't1', kind: 'proposal', proposal: createsProject() }]);
+    expect(proposalAsk(e!, { stub: false }).options?.[0]?.consequence).toBe('Studio clones the repository to this computer, registers it, creates the project Foo Bar, adds it there and starts onboarding (it builds the code map). Nothing happens until you choose.');
+    const [x] = foldChatProposals([{ at: 1, turnId: 't1', kind: 'proposal', proposal: existing }]);
+    expect(proposalAsk(x!, { stub: false }).options?.[0]).toMatchObject({ sub: 'Creates the project and adds it; nothing is cloned', consequence: 'Studio creates the project Foo Bar and adds wicked-studio to it. Nothing is cloned and no onboarding starts.' });
+    const [done] = foldChatProposals([
+      { at: 1, turnId: 't1', kind: 'proposal', proposal: createsProject() },
+      { at: 2, turnId: 't1', kind: 'proposal_decided', pid: PID, actor: 'local', decision: 'go', result: { runId: 'aaaaaaaa-1111', artifactRef: null, adopted: false, stub: false } },
+    ]);
+    expect(proposalResultWords(done!)).toBe('Added to the new project Foo Bar · onboarding run aaaaaaaa');
+  });
+
+  it('the card names the new project; Add it posts go once, Not now posts not_now', async () => {
+    chatBody = { ...chatBody, messages: [...TURN, { at: T0 + 1500, turnId: 't1', kind: 'proposal', proposal: createsProject() }] };
+    decideAnswer = () => ok({ view: { proposal: createsProject(), state: 'decided', decision: 'go', result: { runId: 'aaaaaaaa-1111-5222-8333-444444444444', artifactRef: null, adopted: false, stub: false }, decidedAt: T0 + 3000 } });
+    page();
+    await screen.findByTestId('artifact-proposal');
+    expect(text('artifact-proposal-filed')).toBe('ProjectNew project Foo Bar · created when you add it');
+    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('decided'));
+    expect(posts).toStrictEqual([{ path: decidePath, body: { decision: 'go' } }]);
+    expect(screen.getByTestId('ask-record-row').textContent).toContain('Added to the new project Foo Bar · onboarding run aaaaaaaa');
+    cleanup();
+    posts.length = 0;
+    resetSettledProposals();
+    decideAnswer = () => ok({ view: { proposal: createsProject(), state: 'decided', decision: 'not_now', result: null, decidedAt: T0 + 3000 } });
+    page();
+    const card = await screen.findByTestId('artifact-proposal');
+    fireEvent.click(card.querySelector('[data-ask-option="not_now"]')!);
+    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
+    await waitFor(() => expect(posts).toStrictEqual([{ path: decidePath, body: { decision: 'not_now' } }]));
+  });
+});
+
 describe('the onboard card', () => {
   it('draws crew\'s facts: the address, the name, where it is cloned and the project', async () => {
     page();
