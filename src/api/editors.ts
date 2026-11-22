@@ -99,6 +99,12 @@ export function editorSaves(e: EditorView): boolean {
 /** The kind an MCP inspector plugin claims (DES-MCP-INSPECTOR-001 §5). */
 export const MCP_SERVER_KIND = 'mcp-server';
 
+/** The enabled MCP inspector, including plugins that declare only the shared card surface; `null` = none installed.
+ *  The inspector page opens this one, and an MCP server row offers Inspect only while there is one (studio#1014). */
+export function inspectorEditor(editors: readonly EditorView[]): EditorView | null {
+  return editorFor(editors, MCP_SERVER_KIND, 'inline') ?? editorFor(editors, MCP_SERVER_KIND, 'pane') ?? editorFor(editors, MCP_SERVER_KIND, 'full');
+}
+
 /** `POST /editors/:id/enabled` (human-only): switch an editor on or off. Answers the editor as it is now. */
 export async function setEditorEnabled(id: string, enabled: boolean): Promise<EditorView> {
   mutations += 1;

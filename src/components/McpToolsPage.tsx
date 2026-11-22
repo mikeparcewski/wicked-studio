@@ -1,5 +1,6 @@
 import { PAGE_NAMES } from '../board/pageNames.js';
 import { mcpInspectPath } from '../api/mcpInspect.js';
+import { useInspectorInstalled } from '../store/editors.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ageOf,
@@ -228,7 +229,7 @@ function ToolRow({ server, tool, policy, roles, seats, mode, busy, onAct, naviga
   );
 }
 
-function ServerRow({ server, policies, usage, open, onToggle, mode, busy, onAct, navigate }: {
+function ServerRow({ server, policies, usage, open, onToggle, mode, busy, onAct, navigate, inspectable }: {
   server: McpServer;
   policies: McpPolicyPreviewResponse | null;
   /** The 7-day usage fold; `null` = this daemon does not report usage. */
@@ -239,6 +240,9 @@ function ServerRow({ server, policies, usage, open, onToggle, mode, busy, onAct,
   busy: boolean;
   onAct: (label: string, fn: () => Promise<unknown>) => void;
   navigate: (p: string) => void;
+  /** studio#1014: `false` when the editor registry lists no MCP inspector plugin, so Inspect would open only its
+   *  empty state. The page's own Inspector action stays, and says how to add one. */
+  inspectable: boolean;
 }): React.ReactElement {
   const mine = policies?.tools.filter((t) => t.server === server.name) ?? [];
   const summary = postureSummary(mine, mode);
@@ -272,7 +276,7 @@ function ServerRow({ server, policies, usage, open, onToggle, mode, busy, onAct,
           {policies === null ? 'posture unavailable' : summary.text}
         </span>
         <span className="ml-auto flex flex-wrap items-center gap-2">
-          {(server.kind === 'mcp-stdio' || server.kind === 'mcp-http') && (
+          {inspectable && (server.kind === 'mcp-stdio' || server.kind === 'mcp-http') && (
             <a href={mcpInspectPath(server.name)} data-testid="mcp-server-inspect" className="wk-btn wk-btn--secondary wk-btn--sm" aria-label={`Inspect ${server.name}`} onClick={(ev) => { ev.preventDefault(); navigate(mcpInspectPath(server.name)); }}>
               Inspect
             </a>
@@ -733,6 +737,7 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
   const [usageFilter, setUsageFilter] = useState<McpUsageFilter>(DEFAULT_USAGE_FILTER);
   const [usageRefresh, setUsageRefresh] = useState(0);
   const [openServers, setOpenServers] = useState<Set<string>>(() => new Set(deepLinked !== null ? [deepLinked] : []));
+  const inspectorInstalled = useInspectorInstalled();
 
   // Only the latest load may land: an older, slower answer never overwrites a newer one.
   const loadSeq = useRef(0);
@@ -861,6 +866,7 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
                     busy={busy}
                     onAct={onAct}
                     navigate={navigate}
+                    inspectable={inspectorInstalled !== false}
                   />
                 ))}
               </ul>

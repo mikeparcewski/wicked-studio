@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { editorFor, listEditors, MCP_SERVER_KIND, type EditorView } from '../../api/editors.js';
+import { inspectorEditor, listEditors, MCP_SERVER_KIND, type EditorView } from '../../api/editors.js';
 import { mcpApi, mcpPath, type McpServer } from '../../api/mcp.js';
 import {
   closeSession, hasInspector, parsePairs, pollLog, rpcErrorCode, sendRpc, splitCommandLine, startSession, bridgeCode,
@@ -87,11 +87,6 @@ function statePayload(live: Live | null): Record<string, unknown> {
  *  The host keeps the full entries for Copy log. */
 export function pluginEntries(entries: readonly McpInspectLogEntry[]): McpInspectLogEntry[] {
   return entries.map((e) => (e.dir === 'host' ? { ...e, text: e.kind === 'state' ? 'the connection changed state (studio shows the detail)' : '(a line of studio’s, shown in studio)' } : e));
-}
-
-/** The enabled inspector, including plugins that declare only the shared card surface. */
-function inspectorEditor(editors: readonly EditorView[]): EditorView | null {
-  return editorFor(editors, MCP_SERVER_KIND, 'inline') ?? editorFor(editors, MCP_SERVER_KIND, 'pane') ?? editorFor(editors, MCP_SERVER_KIND, 'full');
 }
 
 type Boot =

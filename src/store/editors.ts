@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { create } from 'zustand';
-import { editorsFor, listEditors, subscribeEditorRegistry, type EditorView } from '../api/editors.js';
+import { editorsFor, inspectorEditor, listEditors, subscribeEditorRegistry, type EditorView } from '../api/editors.js';
 
 /**
  * Crew's editor registry, read once per tab (EP-P2): which plugin opens which artifact kind. `none`
@@ -102,6 +102,19 @@ export function useEditorFor(kind: string): EditorView | null | undefined {
   useEffect(() => { if (state === 'idle') void useEditors.getState().load(); }, [state]);
   if (state === 'idle' || state === 'loading') return undefined;
   return openingEditor(editors, kind, preferred);
+}
+
+/**
+ * Whether an MCP inspector plugin is installed and on (studio#1014): `false` only once the registry was read and lists
+ * none, so a server row stops offering an Inspect that opens "No MCP inspector plugin is installed". `null` while the
+ * registry is unread, or when it could not be read (no registry route, a failed read): the row keeps Inspect, and the
+ * inspector page says what it found. Follows the registry live (a plugin switched on or off elsewhere).
+ */
+export function useInspectorInstalled(): boolean | null {
+  const state = useEditors((s) => s.state);
+  const editors = useEditors((s) => s.editors);
+  useEffect(() => { if (state === 'idle') void useEditors.getState().load(); }, [state]);
+  return state === 'ready' ? inspectorEditor(editors) !== null : null;
 }
 
 /** Every editor that can open `kind` (the "Open with" choices: {@link openableEditors}), once the registry is read;
