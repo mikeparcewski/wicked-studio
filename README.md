@@ -92,7 +92,7 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
   bind a repo with optional PR delivery. On a crew with **power mode**, a job runs in power mode by
   default unless Settings says otherwise, and you can turn it off where you start it: a **Review
   plan** switch beside a chat's Start, or New job's **Power mode** switch (not offered for Draft epics
-  or Demo video); the same switch sits beside the job's name. Crew runs power mode only for a preset
+  or Demo video), and a Power mode switch sits beside the job's name. Crew runs power mode only for a preset
   or a composed plan on a repository: any other workflow runs phased even with power on. In power
   mode, the code-writing build step runs as one orchestrator's checkpointed turns (other required
   steps can run separately): the job page shows its rigor (with ↑ when it rose since intake), its
