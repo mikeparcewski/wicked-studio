@@ -37,13 +37,14 @@ export function JobRepoChoices({ chatId, proposal, disabled, onPick }: {
   proposal: ArtifactProposal;
   /** A change or a Start/Not now of this job is in flight: nothing is pressable. */
   disabled: boolean;
-  /** Answer crew's question with this repository (the passage sends the revision and owns its hold). */
-  onPick: (repoRef: string) => void;
+  /** Answer crew's question with this repository (the passage sends the revision and owns its hold); false when the
+   *  passage refused the press (an answer already out). */
+  onPick: (repoRef: string) => boolean;
 }): React.ReactElement | null {
   const [repos, setRepos] = useState<RepoEntry[] | 'failed' | null>(null);
   const [tries, setTries] = useState(0);
   const [all, setAll] = useState(false);
-  /** The chip pressed last: it reads busy while its revision is out. */
+  /** The chip whose answer the passage sent: it reads busy while that revision is out. */
   const [pressed, setPressed] = useState<string | null>(null);
   /** A job an earlier studio moved to a new chat (kept in this browser): the old chat still says where it went. */
   const moved = useJobMoves((s) => moveOf(s.moves, proposal.pid));
@@ -76,7 +77,7 @@ export function JobRepoChoices({ chatId, proposal, disabled, onPick }: {
       {shown.map((r) => (
         <button key={r.id} type="button" data-testid="job-passage-repo" data-repo={r.id} data-named={named.includes(r) ? 'true' : undefined}
           disabled={disabled} aria-busy={disabled && pressed === r.id}
-          onClick={() => { if (disabled) return; setPressed(r.id); onPick(r.id); }} className="wk-composer-chip wk-composer-suggestion">
+          onClick={() => { if (!disabled && onPick(r.id)) setPressed(r.id); }} className="wk-composer-chip wk-composer-suggestion">
           {disabled && pressed === r.id ? `${r.name}…` : r.name}
         </button>
       ))}

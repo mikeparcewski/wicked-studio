@@ -254,6 +254,8 @@ describe('F41 / studio#1094: "Which repository?" on a job in a new chat is answe
     act(() => { b!.click(); d!.click(); });
     await waitFor(() => expect(revisions()).toHaveLength(1));
     expect(revisions()[0]!.body['edits']).toEqual({ repoRef: 'rg1' });
+    // The busy chip is the one whose answer went out, never the refused second press (codex r2).
+    expect(repoChips().filter((c) => c.getAttribute('aria-busy') === 'true').map((c) => c.dataset['repo'])).toEqual(['rg1']);
     await new Promise((r) => setTimeout(r, 30));
     expect(revisions()).toHaveLength(1);
   });

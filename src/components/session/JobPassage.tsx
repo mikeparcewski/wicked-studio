@@ -598,8 +598,9 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
               disabled={v.tokensHeld || local.deciding[lineage.lineage] === true}
               onPick={(repoRef) => {
                 const st = useJobLocal.getState();
-                if (v.phase !== 'asking' || st.swapPending[lineage.lineage] === pid || st.deciding[lineage.lineage] === true) return;
+                if (v.phase !== 'asking' || st.swapPending[lineage.lineage] === pid || st.deciding[lineage.lineage] === true) return false;
                 revise({ repoRef }, 'question', undefined, null, null);
+                return true;
               }} />
           )}
           {requirementsNeed !== undefined && (
