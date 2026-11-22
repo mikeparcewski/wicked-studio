@@ -10,7 +10,7 @@ import * as client from '../src/api/client.js';
 import { ApiError } from '../src/api/errors.js';
 import type { GateInfo } from '../src/api/types.js';
 import {
-  GATE_READ_DEADLINE_MS, GATE_READS_IN_FLIGHT, GATE_RETRY_BASE_MS, ensureGate, inGateSlot, resetGateSlotsForTest, reconcileGateRetries, refreshGate, useGateReadStore,
+  GATE_READ_DEADLINE_MS, GATE_READS_IN_FLIGHT, GATE_RETRY_BASE_MS, GATE_RETRY_READS_IN_FLIGHT, ensureGate, inGateSlot, resetGateSlotsForTest, reconcileGateRetries, refreshGate, useGateReadStore,
 } from '../src/board/gateActions.js';
 import { invalidateGateReads, useGateStore } from '../src/store/gates.js';
 
@@ -84,7 +84,7 @@ describe('a gate read that misses its deadline', () => {
     expect(useGateStore.getState().gates[id]).toBeUndefined();
   });
 
-  it('retries share the runs list’s read slots: many failed runs never retry all at once', async () => {
+  it('retries share the retry read slots: many failed runs never retry all at once', async () => {
     const ids = Array.from({ length: 12 }, () => fresh());
     let open = 0;
     let peak = 0;
@@ -99,7 +99,7 @@ describe('a gate read that misses its deadline', () => {
     peak = 0;
     await vi.advanceTimersByTimeAsync(GATE_RETRY_BASE_MS + 1);
     expect(peak).toBeGreaterThan(0);
-    expect(peak).toBeLessThanOrEqual(GATE_READS_IN_FLIGHT);
+    expect(peak).toBeLessThanOrEqual(GATE_RETRY_READS_IN_FLIGHT);
   });
 
   it('a failed forced refresh of a gate already in hand schedules no retry', async () => {
