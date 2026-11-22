@@ -117,6 +117,8 @@ describe('studio#940 item 2: a hidden chat follows its answer once it is shown a
     thread.scrollTop = 40;
     thread.dispatchEvent(new Event('scroll'));
     g.hidden = true;
+    // A browser may report a scroll on hide; with no layout every offset reads 'at the tail': it must not pin the reader.
+    thread.dispatchEvent(new Event('scroll'));
     g.content = 1000;
     act(() => emit?.({ type: 'chatReply', chat: 'chat-1', cliKey: 'claude', text: 'An answer.', ok: true } as unknown as CoreEvent));
     await waitFor(() => expect(screen.getByTestId('assist-chat-msg')).toHaveTextContent('An answer.'));
