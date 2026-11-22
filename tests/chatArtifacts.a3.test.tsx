@@ -587,6 +587,26 @@ describe('Change something on a create card (A3)', () => {
     expect(text('artifact-proposal-record')).toBe('Interrupted before it was recorded as started.');
   });
 
+  it('studio#951 (review r2): a typed launch refusal re-opens the card even after a read showed its accepting record', async () => {
+    // crew goLocked: a LaunchRefusal re-opens the proposal and answers with the record it refused and an open view.
+    const a = Date.now() - 50;
+    let release: (r: Response) => void = () => {};
+    decideAnswer = () => new Promise<Response>((r) => { release = r; });
+    page();
+    await screen.findByTestId('artifact-proposal');
+    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    chatBody = { ...chatBody, messages: [...(chatBody['messages'] as unknown[]),
+      { at: a, turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } }] };
+    act(() => useAskThreadStore.getState().ingest({ type: 'chatProposal', chat: 'chat-ask', turn_id: 't1', record: {} } as never));
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('accepting'));
+    // The read after the refusal is still the stale one (it shows only A).
+    release(new Response(JSON.stringify({ code: 'source_gone', error: 'run 29bbbfb1 is gone; change the sources and try again', acceptingAt: a, view: { proposal: proposal(), state: 'open' } }), { status: 409, headers: { 'content-type': 'application/json' } }));
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('open'));
+    expect(screen.queryByTestId('artifact-proposal-go-again')).toBeNull();
+    expect(screen.getByTestId('artifact-proposal-error').textContent).toContain('is gone');
+  });
+
   it('studio#951: a launch_failed that names no record (an older crew) marks nothing stopped: the starting window decides', async () => {
     const at = Date.now();
     decideAnswer = () => new Response(JSON.stringify({ code: 'launch_failed', error: 'could not start it: the engine is restarting. Go again resumes the same job.', view: { proposal: proposal(), state: 'accepting' } }), { status: 502, headers: { 'content-type': 'application/json' } });

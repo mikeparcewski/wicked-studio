@@ -103,17 +103,20 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
   // The daemon's answer to THIS card's request, shown at once while the re-read catches up: a settled one stays (a
   // stale read never reopens it); an open one (a refusal's fresh facts: the document moved) stands until the next read
   // of the chat arrives, which carries the same or newer facts.
-  const [answered, setAnswered] = useState<{ view: ProposalEntry; against: ProposalEntry } | null>(null);
+  // `at` (crew#1695): the accepting record a refusal named; the answer is newer than any read showing that record or an
+  // older one.
+  const [answered, setAnswered] = useState<{ view: ProposalEntry; against: ProposalEntry; at?: number } | null>(null);
   // Compared by content, not identity: a re-read that brings the same (older) facts keeps the refusal's newer ones.
   // Two accepting records of one proposal are told apart by when each was recorded (another tab's Go is a new one).
   const same = (a: ProposalEntry, b: ProposalEntry): boolean =>
     a.state === b.state && a.acceptingAt === b.acceptingAt && JSON.stringify(shownProposal(a)) === JSON.stringify(shownProposal(b));
-  // (crew#1695) An answer that names a newer accepting record than the one a read shows is the newer fact: a read
-  // captured before this Go's record (another tab's older Go) never hides it. A record newer than the answer's wins.
-  const newer = (a: ProposalEntry, b: ProposalEntry): boolean =>
-    a.state === 'accepting' && b.state === 'accepting' && a.acceptingAt !== undefined && b.acceptingAt !== undefined && a.acceptingAt > b.acceptingAt;
+  // (crew#1695) A refusal that names an accepting record is newer than a read showing that record or an older one (a
+  // read captured before this Go's record, or before crew re-opened the card after a typed launch refusal): the read
+  // never hides it. A record newer than the one named wins.
+  const behind = (e: ProposalEntry, at: number | undefined): boolean =>
+    at !== undefined && e.state === 'accepting' && e.acceptingAt !== undefined && e.acceptingAt <= at;
   const view: ProposalEntry = answered !== null && !terminal(entry.state)
-    && (terminal(answered.view.state) || same(answered.against, entry) || newer(answered.view, entry)) ? answered.view : entry;
+    && (terminal(answered.view.state) || same(answered.against, entry) || behind(entry, answered.at)) ? answered.view : entry;
   const p = shownProposal(view);
   const open = view.state === 'open';
   // A7: a theme proposal is previewed on this tab, measured on the exact merged result, and applied from the preview.
@@ -208,7 +211,7 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
       const next: ProposalEntry = { pid: entry.pid, turnId: entry.turnId, at: entry.at, ...v,
         ...(v.state === 'accepting' && at !== undefined ? { acceptingAt: at } : {}) };
       if (terminal(v.state)) noteSettled(chatId, next);
-      setAnswered({ view: next, against: entry });
+      setAnswered({ view: next, against: entry, ...(acceptingAt !== null ? { at: acceptingAt } : {}) });
     };
     try {
       const r = await api.decideChatProposal(chatId, entry.pid, { decision, ...(edits !== undefined ? { edits } : {}) });
