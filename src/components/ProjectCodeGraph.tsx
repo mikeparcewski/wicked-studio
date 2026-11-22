@@ -145,7 +145,12 @@ export function ProjectCodeGraph({ projectId, repoCount }: Props): React.ReactEl
         setReadError(null);
         setRefresh(r);
         setNow(Date.now());
-        if (building.has(forProject)) return; // the build's answer owns the standing; the read gives its progress
+        if (building.has(forProject)) {
+          // The build's answer owns the standing; the read gives its progress, and the standing only when none is shown
+          // yet (a page come back to a running build: its member names come from here).
+          setStatus((shown) => shown ?? s);
+          return;
+        }
         const key = refreshKey(r);
         if (outcomeOf.current === undefined) outcomeOf.current = key;
         else if (outcomeOf.current !== null && outcomeOf.current !== key) {
