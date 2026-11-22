@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { SteeringRule } from '../src/api/steering.js';
 import { engineCheckConflict, engineChecksOf, otherObligations, withEngineChecks } from '../src/board/engineCheck.js';
 import { SteeringRuleFormModal } from '../src/components/SteeringRuleForm.js';
 import { SteeringRuleDrawer } from '../src/components/SteeringRuleDrawer.js';
+import { SteerSurface } from '../src/components/steer/SteerSurface.js';
+import { heldRule, holdBlocked } from '../src/board/holdRule.js';
 
 /**
  * studio#1002: a rule's ENGINE CHECK is set from Steering's add / edit form (the one form behind
@@ -13,9 +16,14 @@ import { SteeringRuleDrawer } from '../src/components/SteeringRuleDrawer.js';
  */
 
 const upsertConformanceRule = vi.fn();
+const listConformanceRules = vi.fn();
 const apiFetch = vi.fn();
 vi.mock('../src/api/client.js', () => ({
-  api: { upsertConformanceRule: (...a: unknown[]) => upsertConformanceRule(...a) },
+  api: {
+    upsertConformanceRule: (...a: unknown[]) => upsertConformanceRule(...a),
+    listConformanceRules: (...a: unknown[]) => listConformanceRules(...a),
+    listClaims: () => Promise.reject(new Error('not in this fixture')),
+  },
   apiFetch: (...a: unknown[]) => apiFetch(...a),
 }));
 
@@ -32,6 +40,8 @@ beforeEach(() => {
   upsertConformanceRule.mockResolvedValue({ status: 'ok' });
   apiFetch.mockReset();
   apiFetch.mockRejectedValue(new Error('not in this fixture'));
+  listConformanceRules.mockReset();
+  listConformanceRules.mockResolvedValue({ rules: [] });
 });
 afterEach(cleanup);
 
@@ -53,6 +63,9 @@ describe('the engine check vocabulary (pure)', () => {
     expect(engineCheckConflict({ effect: 'allow_with_conditions', applies_to: ['plan.compose'] }, [])).toBeNull();
     expect(engineCheckConflict({ applies_to: ['plan.compose'] }, ['check:test-fails-on-base'])).toBeNull();
     expect(engineCheckConflict({ effect: 'deny', applies_to: ['review'] }, ['evidence:delivery'])).toBeNull();
+  });
+  it('both checks at once is a conflict: a delivery rule is deferred past review, where the machine check runs (codex r1)', () => {
+    expect(engineCheckConflict({}, ['check:test-fails-on-base', 'evidence:delivery'])).toContain('Pick one');
   });
 });
 
@@ -87,6 +100,30 @@ describe('the add / edit form sets a rule’s engine check', () => {
     expect(upsertConformanceRule.mock.calls[0]?.[0]).toMatchObject({ id: 'PAT-500', obligations: ['evidence:delivery'] });
   });
 
+  it('Add a rule on the Steer page (its ⋯ menu) offers the engine check and writes it (codex r1)', async () => {
+    listConformanceRules.mockResolvedValue({ rules: [rule({ id: 'PAT-100', rule_type: 'pattern' })] });
+    const user = userEvent.setup();
+    render(<SteerSurface pathname="/rules" search="" runs={[]} navigate={vi.fn()} />);
+    await screen.findAllByTestId('rules-row');
+    await user.click(await screen.findByTestId('steer-more-button'));
+    await user.click(await screen.findByTestId('steer-add-rule'));
+    await user.type(await screen.findByTestId('steering-form-statement'), 'A pull request that resolves an issue closes it.');
+    await user.click(tokenBox('evidence:delivery'));
+    await user.click(screen.getByTestId('steering-form-save'));
+    await waitFor(() => expect(upsertConformanceRule).toHaveBeenCalledTimes(1));
+    expect(upsertConformanceRule.mock.calls[0]?.[0]).toMatchObject({ statement: 'A pull request that resolves an issue closes it.', obligations: ['evidence:delivery'] });
+  });
+
+  it('both checks ticked: the form says pick one and does not save (codex r1)', () => {
+    render(<SteeringRuleFormModal type="testing" initial={rule({ obligations: ['check:test-fails-on-base'] })} onClose={vi.fn()} onSaved={vi.fn()} />);
+    fireEvent.click(tokenBox('evidence:delivery'));
+    expect(screen.getByTestId('steering-form-engine-check-issue').textContent).toContain('Pick one');
+    expect((screen.getByTestId('steering-form-save') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(tokenBox('evidence:delivery'));
+    expect(screen.queryByTestId('steering-form-engine-check-issue')).toBeNull();
+    expect((screen.getByTestId('steering-form-save') as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('a rule held at plan compose cannot take an engine check: the form says why and does not save', () => {
     render(<SteeringRuleFormModal type="testing" initial={rule({ id: 'TST-1002', applies_to: ['plan.compose'], effect: 'allow_with_conditions', obligations: ['step:test'] })} onClose={vi.fn()} onSaved={vi.fn()} />);
     fireEvent.click(tokenBox('check:test-fails-on-base'));
@@ -104,6 +141,16 @@ describe('Hold never drops an engine check', () => {
     fireEvent.click(screen.getByTestId('steering-rule-hold-switch'));
     await waitFor(() => expect(upsertConformanceRule).toHaveBeenCalledTimes(1));
     expect(upsertConformanceRule.mock.calls[0]?.[0]).toMatchObject({ effect: 'allow_with_conditions', obligations: ['step:test', 'check:test-fails-on-base'] });
+  });
+
+  it('Hold keeps every obligation outside its vocabulary, on the immediate and the picker path (codex r1)', () => {
+    const carried = rule({ id: 'TST-3001', applies_to: ['review'], obligations: ['step:test', 'check:test-fails-on-base', 'legacy:x'] });
+    expect(heldRule(carried, ['step:test'])?.obligations).toEqual(['step:test', 'check:test-fails-on-base', 'legacy:x']);
+    const bare = rule({ id: 'TST-3002', applies_to: ['review'], obligations: ['legacy:x'] });
+    expect(heldRule(bare, ['step:walkthrough'])?.obligations).toEqual(['step:walkthrough', 'legacy:x']);
+    expect(holdBlocked(carried)).toBeNull();
+    expect(holdBlocked(rule({ applies_to: ['plan.compose'], obligations: ['step:test', 'legacy:x'] }))).toContain('legacy:x');
+    expect(holdBlocked(rule({ applies_to: ['plan.compose'], obligations: ['step:test'] }))).toBeNull();
   });
 
   it('a plan compose rule carrying an engine check offers no hold the engine would refuse, and says why', () => {

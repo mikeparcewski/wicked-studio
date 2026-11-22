@@ -48,23 +48,31 @@ export function unknownObligations(tokens: readonly string[]): string[] {
   return tokens.filter((t) => !TOKENS.has(t));
 }
 
+/** The obligations the rule carries outside the Hold vocabulary (an engine check, anything else). */
+function nonStepObligations(rule: SteeringRule): string[] {
+  return (rule.obligations ?? []).filter((t) => !TOKENS.has(t));
+}
+
 /** The rule as HELD: the effect plus the obligations, everything else as it was. `null` when there is
- *  nothing to hold it to, or a token is not in the vocabulary. An engine check the rule carries
- *  (studio#1002) is kept, never dropped by a hold; the engine refuses it at plan compose, which
- *  {@link holdBlocked} says before the switch is offered. */
+ *  nothing to hold it to, or a token is not in the vocabulary. Every obligation the rule carries
+ *  outside the Hold vocabulary (an engine check, studio#1002, or anything else) is kept, never dropped
+ *  by a hold; the engine refuses them at plan compose, which {@link holdBlocked} says before the
+ *  switch is offered. */
 export function heldRule(rule: SteeringRule, obligations: readonly string[]): SteeringRule | null {
   const list = [...new Set(obligations)];
   if (list.length === 0 || unknownObligations(list).length > 0) return null;
-  return { ...rule, effect: HELD_EFFECT, obligations: [...list, ...engineChecksOf(rule)] };
+  return { ...rule, effect: HELD_EFFECT, obligations: [...list, ...nonStepObligations(rule).filter((t) => !list.includes(t))] };
 }
 
-/** Why a hold cannot be written, or `null`: a rule that applies at plan compose and carries an engine
- *  check, since the engine holds work there only to plan steps (wicked-governance
- *  `check_plan_compose_rule`). */
+/** Why a hold cannot be written, or `null`: a rule that applies at plan compose and carries an
+ *  obligation outside the Hold vocabulary, since the engine holds work there only to plan steps
+ *  (wicked-governance `check_plan_compose_rule`). */
 export function holdBlocked(rule: SteeringRule): string | null {
+  const others = nonStepObligations(rule);
+  if (others.length === 0 || !(rule.applies_to ?? []).includes('plan.compose')) return null;
   const checks = engineChecksOf(rule);
-  if (checks.length === 0 || !(rule.applies_to ?? []).includes('plan.compose')) return null;
-  return `Hold is off: it carries an engine check (${checks.join(', ')}), and the engine holds a plan compose rule only to plan steps. Edit the rule to clear its engine check first.`;
+  const fix = checks.length === others.length ? ' Edit the rule to clear its engine check first.' : '';
+  return `Hold is off: it carries ${others.join(', ')}, and the engine holds a plan compose rule only to plan steps.${fix}`;
 }
 
 /** The rule as ADVISORY: no effect; the trigger and obligations stay on it, inert. */

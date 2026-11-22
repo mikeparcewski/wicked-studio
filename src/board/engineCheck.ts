@@ -47,12 +47,18 @@ export function withEngineChecks(rule: Pick<SteeringRule, 'obligations'>, checks
 }
 
 /**
- * Why the engine would refuse these engine checks on this rule, or `null`. A rule HELD at plan compose
+ * Why these engine checks cannot be saved on this rule, or `null`. Both at once never work (the machine
+ * check runs at review, and a delivery rule is deferred past it). A rule HELD at plan compose
  * (`allow_with_conditions` and `applies_to` naming `plan.compose`) may carry only `step:*` obligations
  * (wicked-governance `check_plan_compose_rule`), so an engine check there is refused when it is written.
  */
 export function engineCheckConflict(rule: { effect?: string | undefined; applies_to?: readonly string[] | undefined }, checks: readonly string[]): string | null {
   if (checks.length === 0) return null;
+  // The engine defers a delivery rule at review and runs the machine check only at review
+  // (rule_check.rs: `delivery_only` before `is_machine`), so with both the machine check never runs.
+  if (checks.includes('check:test-fails-on-base') && checks.includes('evidence:delivery')) {
+    return 'Pick one: a rule checked on the pull request is deferred past review, so its tests-on-base check would never run.';
+  }
   if (rule.effect !== 'allow_with_conditions' || !(rule.applies_to ?? []).includes(PLAN_COMPOSE)) return null;
   return 'A rule held at plan compose can carry only plan steps, so the engine would refuse an engine check on it. Clear the effect, or the engine check.';
 }
