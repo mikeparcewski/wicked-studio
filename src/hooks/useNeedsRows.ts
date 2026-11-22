@@ -158,8 +158,6 @@ export function useNeedsClock(): number {
 
 /** How long the Desk waits for a slow needs source before it counts without it (UI-CONTRACT §5). */
 export const NEEDS_SETTLE_MS = 15_000;
-/** The needs sources a project's count waits on (studio#1073): the one that can change a run's row. */
-const PROJECT_NEEDS_SOURCES: readonly NeedsSource[] = ['repos'];
 const NEEDS_SOURCE_NAMES: Readonly<Record<NeedsSource, string>> = {
   chats: 'conversations', proposals: 'proposals', repos: 'repositories', campaigns: 'test campaigns',
 };
@@ -203,10 +201,10 @@ export function resetSettledNeedsForTest(): void { settledScopes.clear(); }
  * After the first `complete`, a refresh keeps that number until the next `complete`, and a FAILED
  * runs read (`runsFailed`, studio#684) keeps it too: a read that failed never changes a count.
  * `scope` names WHAT is counted (studio#833): every caller counting the same rows passes the same
- * scope; a project's Desk passes its project id. A project's count waits on the repos read alone (studio#1073): a
- * project counts only its runs' rows, and of the REST sources only the repo register changes one.
+ * scope; a project's Desk passes its project id and `scopeRuns`, how many runs it holds: a project with none waits on
+ * no needs source (studio#1073), since a project counts only its runs' rows.
  */
-export function useSettledNeeds(needRows: readonly NeedRow[], runsKnown: boolean, runsFailed = false, scope: string = ALL_NEEDS_SCOPE): { phase: 'loading' | 'complete' | 'partial'; count: number | null; missing: string[] } {
+export function useSettledNeeds(needRows: readonly NeedRow[], runsKnown: boolean, runsFailed = false, scope: string = ALL_NEEDS_SCOPE, scopeRuns: number | null = null): { phase: 'loading' | 'complete' | 'partial'; count: number | null; missing: string[] } {
   const s = useNeedsSources();
   useSystemPoll();
   // Crew has not answered its first read yet: a ranked crew's number may be on its way, so the
@@ -228,11 +226,12 @@ export function useSettledNeeds(needRows: readonly NeedRow[], runsKnown: boolean
   // Decide first (no early return before the effects): what to say, and when to look again.
   let out: { phase: 'loading' | 'complete' | 'partial'; count: number | null; missing: string[] };
   let wakeAt: number | null = null;
-  // studio#1073: a project's Desk keeps only the rows of its own runs (DeskV2). No REST source adds a row about a run
-  // (theirs are `chat:`, `proposal:`, `repo:` and `campaign:` rows, never a run key), and only the repo register changes
-  // one: a failed onboarding run becomes its repo's row (`needsYouRows` suppresses its `fail:` twin). So a project's
-  // count waits on the repos read alone; `GET /proposals` kept an empty project's skeleton up for seconds.
-  const sources = scope === ALL_NEEDS_SCOPE ? (Object.keys(NEEDS_SOURCE_NAMES) as NeedsSource[]) : PROJECT_NEEDS_SOURCES;
+  // studio#1073: a project's Desk keeps only the rows of its own runs (DeskV2), and no REST source adds a row about a
+  // run (theirs are `chat:`, `proposal:`, `repo:` and `campaign:` rows, never a run key). A project with NO runs has no
+  // row any read could add or take away, so it waits on none of them (`GET /proposals` kept an empty project's skeleton
+  // up for seconds). A project with runs waits on them all: their reads also cover the runs' own first reads (open
+  // questions, activity tails, a turn gate's kind, a failed onboarding run's repo row), which have no readiness signal.
+  const sources: NeedsSource[] = scope !== ALL_NEEDS_SCOPE && scopeRuns === 0 ? [] : (Object.keys(NEEDS_SOURCE_NAMES) as NeedsSource[]);
   const expired = now - since >= NEEDS_SETTLE_MS;
   const pending = sources.filter((k) => s.readAt[k] === undefined);
   if (runsFailed) {

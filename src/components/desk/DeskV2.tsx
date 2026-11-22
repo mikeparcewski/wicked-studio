@@ -165,8 +165,9 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   const roster = useRoster();
   const displayText = useDisplayText();
   const readState = deskReadState(runsLoaded, runsError);
-  // studio#833: a project's Desk counts its own rows, so it settles on its own (never the rail's count).
-  const settled = useSettledNeeds(needRows, readState === 'known', readState === 'failed', projectId ?? ALL_NEEDS_SCOPE);
+  // studio#833: a project's Desk counts its own rows, so it settles on its own (never the rail's count); studio#1073: an
+  // empty one settles without waiting on the needs sources.
+  const settled = useSettledNeeds(needRows, readState === 'known', readState === 'failed', projectId ?? ALL_NEEDS_SCOPE, projectId === undefined ? null : runs.length);
   // A ranked crew's list (crew api-types 0.140.0) is the needs-you list for the whole Desk.
   const ranked = useRankedNeeds();
   const [rereading, setRereading] = useState(false);
