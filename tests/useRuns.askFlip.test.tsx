@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  */
 
 const { useRuns } = await import('../src/hooks/useRuns.js');
+const { useOwnGateRead } = await import('../src/hooks/useOwnGateRead.js');
 const { useCapabilities } = await import('../src/store/capabilities.js');
 const { useAskThreadStore } = await import('../src/store/askThread.js');
 const { useGateStore } = await import('../src/store/gates.js');
@@ -40,7 +41,8 @@ function ok(body: unknown): Promise<Response> {
 
 describe('the capability lands after the runs list', () => {
   it('until then the gate is drawn; when askPath arrives the run is classified and the cached turn gate is recorded, not drawn', async () => {
-    const { result } = renderHook(() => useRuns());
+    // crew#1775: the chat on screen reads its own run's gate; the runs list reads none.
+    const { result } = renderHook(() => { useOwnGateRead(RUN, 'awaiting_human'); return useRuns(); });
     await waitFor(() => expect(result.current.loaded).toBe(true));
     await waitFor(() => expect(useGateStore.getState().gates[RUN]).toMatchObject({ ord: 1 }));
     expect(useAskThreadStore.getState().runs.has(RUN)).toBe(false);

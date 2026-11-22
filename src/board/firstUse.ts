@@ -105,6 +105,16 @@ export function setupAgents(rows: readonly AgentRow[]): AgentRow[] {
   return rows.filter((r) => r.picked && !r.optIn && r.usable && r.jobWork && r.repoWork && boundaryHolds(r.seat, 'scoped_bound'));
 }
 
+/**
+ * crew#1568 D05: Helpers step 5's names. `using`: the helpers new work uses now: picked, signed in (or needing no
+ * sign-in) and given job work, since crew's new-work pool draws only from helpers that can work. `off`: the ready
+ * helpers left out until picked. A helper that is not installed or not signed in is in neither list.
+ */
+export function newWorkHelpers(rows: readonly AgentRow[]): { using: AgentRow[]; off: AgentRow[] } {
+  const ready = rows.filter((r) => r.usable && r.jobWork);
+  return { using: ready.filter((r) => r.picked), off: ready.filter((r) => !r.picked) };
+}
+
 /** Projects that count: the synthesized "Unfiled" default (`id: 'default'`) never does. */
 export function realProjects(projects: readonly { id: string }[]): number {
   return projects.filter((p) => p.id !== 'default').length;

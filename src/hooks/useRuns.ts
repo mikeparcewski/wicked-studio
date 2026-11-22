@@ -1,23 +1,21 @@
 import { rememberProposalRuns } from '../board/planRevBinding.js';
-import { isAskTurnRun } from '../board/askTurn.js';
 import { useAskThreadStore } from '../store/askThread.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
 import { useConnectionStore } from '../store/connection.js';
 import { useCapabilities } from '../store/capabilities.js';
-import { needsRecheck, useGateStore } from '../store/gates.js';
+import { useGateStore } from '../store/gates.js';
 import { answerShapeOf, askerOf, useElicitationStore } from '../store/elicitations.js';
-import { GATE_READS_IN_FLIGHT, ensureGate, refreshGate, inGateSlot, reconcileGateRetries, rememberWorkTitles } from '../board/gateActions.js';
+import { reconcileGateRetries, rememberWorkTitles } from '../board/gateActions.js';
 
 /**
  * Owns the run list + the late-join reconcile (DES-STUDIO-001 §2.1, §3.3). A
  * WS client gets no replay, so on every (re)connect — and on every lifecycle
  * event, via `refresh()` — it re-fetches `GET /runs` (daemon-sorted actionable-
- * first) and self-heals the gate cache: prune to still-`awaiting_human`, then
- * backfill any missing prompt from the daemon cache (`GET /runs/:id/gate`). If a
- * prompt is unavailable (daemon restarted, §3.3 known limit), the retired gate card
- * still works id-only.
+ * first) and self-heals the gate cache: prune to still-`awaiting_human`. It reads no
+ * gate (crew#1775): a surface that shows a waiting run reads that run's gate
+ * (`useOwnGateRead`, `useShownGateReads`).
  *
  * `refresh()` is debounced at 400 ms so a burst of WS lifecycle events (e.g.
  * sessionStarted → unitPlanned → unitDistributed → unitExecuting) only issues
@@ -34,8 +32,6 @@ const TERMINAL = new Set(['completed', 'cancelled', 'failed']);
  * bought nothing. Keyed run → the status it had when it answered none.
  */
 const answeredNone = new Map<string, string>();
-
-export { GATE_READS_IN_FLIGHT, inGateSlot };
 
 /** Test seam. */
 export function resetElicitationProbes(): void {
@@ -135,7 +131,6 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
 
       const awaiting = fetched
         .filter((v) => v.session.status === 'awaiting_human')
-        .sort((a, b) => Number(isAskTurnRun(a.session)) - Number(isAskTurnRun(b.session)))
         .map((v) => v.session.id);
       reconcileGates(awaiting);
       // studio#1197: a gate read that is being retried stops when its run no longer waits on a person.
@@ -158,16 +153,9 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
       // cleared for a broken daemon).
       void hydrateElicitations(fetched, () => cancelled);
 
-      // T17/F31: real decisions before parked chat turns, preserving list order within each group; a few reads at a
-      // time across passes (`inGateSlot`). The visible run reads its own gate first through `useOwnGateRead`. A
-      // refresh that cancels this pass stops its new reads; a read that lands still applies, because `applyGateRead`
-      // drops it if the run's gate moved meanwhile. A failed read leaves the id-only gate working and is tried again on
-      // the next pass.
-      await Promise.all(awaiting.map((id) => inGateSlot(async () => {
-        if (cancelled) return;
-        if (useGateStore.getState().gates[id] === undefined) await ensureGate(id);
-        else if (needsRecheck(id)) await refreshGate(id);
-      })));
+      // crew#1775: no gate reads here. A page reads only the gates it shows: the visible run its own
+      // (`useOwnGateRead`), a list of waiting runs theirs (`useShownGateReads`). Reading every waiting run's gate on
+      // each load held the browser's connections while the page's own reads queued behind them.
     })();
 
     return () => {
