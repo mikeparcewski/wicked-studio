@@ -32,7 +32,8 @@ export class DemoCutAdapter implements HostAdapter {
     this.announcedHead = this.head;
     return { head: this.head, kind: 'generated' };
   }
-  artifact(): ArtifactRef { return { kind: this.kind, title: this.title, version: this.head, head: this.head, readonly: false, lockedParts: [] }; }
+  /** `read`: false until the cut is loaded (head 0 is no version a send may name; studio#1140). */
+  artifact(): ArtifactRef & { read: boolean } { return { kind: this.kind, title: this.title, version: this.head, head: this.head, read: this.cut !== null, readonly: false, lockedParts: [] }; }
   private url(path: string): string { return interactiveUrl(this.projectId, `/d/${encodeURIComponent(this.docId)}/api/demo/${path}`); }
   /** Same body/header/error convention as interactive.ts's private iFetch. */
   private async json<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
