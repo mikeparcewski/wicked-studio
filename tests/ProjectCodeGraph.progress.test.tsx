@@ -243,7 +243,58 @@ describe('following refreshes over time (studio#1099, xreview r1)', () => {
     await act(async () => { fail(new Error('502 bad gateway')); });
     expect(await screen.findByTestId('project-graph-build-error')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByTestId('project-graph-progress')).toBeNull());
+    // The refusal speaks for that refresh: crew's record of the same refresh does not repeat it.
     expect(screen.queryByTestId('project-graph-last-failure')).toBeNull();
+    // (xreview r2) crew then runs another refresh, which times out: that is said, and the old refusal gives way.
+    const later = { at: t0 + 2_000, repoId: 'r2', label: 'tiny-tip', error: 'index timed out', timedOut: true, budgetMs: 180_000 };
+    getProjectGraph.mockResolvedValue({ status: status({ refresh: { ...refreshing(t0), state: 'idle', startedAt: t0 + 1_000, repoId: null, lastFailure: later } }) });
+    await act(async () => { vi.advanceTimersByTime(PROJECT_GRAPH_IDLE_POLL_MS); });
+    expect(await screen.findByTestId('project-graph-last-failure')).toHaveTextContent('The last refresh stopped at tiny-tip');
+    expect(screen.queryByTestId('project-graph-build-error')).toBeNull();
+  });
+
+  it('a slow first read is waited for: a timed read joins it instead of starting another', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let first: (v: { status: ProjectGraphStatus }) => void = () => undefined;
+    getProjectGraph.mockImplementationOnce(() => new Promise((done) => { first = done; }));
+    render(<ProjectCodeGraph projectId="proj-1" repoCount={2} />);
+    await waitFor(() => expect(getProjectGraph).toHaveBeenCalledTimes(1));
+    await act(async () => { vi.advanceTimersByTime(PROJECT_GRAPH_IDLE_POLL_MS * 2); });
+    expect(getProjectGraph).toHaveBeenCalledTimes(1);
+    await act(async () => { first({ status: status({ detail: 'the slow answer' }) }); });
+    expect(await screen.findByTestId('project-graph-detail')).toHaveTextContent('the slow answer');
+  });
+
+  it('a progress read that fails during a build says so and stops showing progress; the next answer brings it back', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const t0 = Date.now();
+    getProjectGraph.mockResolvedValueOnce({ status: status({ state: 'not-indexed', action: 'projects.graph.refresh' }) });
+    refreshProjectGraph.mockImplementation(() => new Promise<ProjectGraphRefreshResult>(() => undefined));
+    render(<ProjectCodeGraph projectId="proj-1" repoCount={2} />);
+    fireEvent.click(await screen.findByTestId('project-graph-build'));
+    getProjectGraph.mockResolvedValueOnce({ status: status({ refresh: refreshing(t0) }) });
+    await act(async () => { vi.advanceTimersByTime(PROJECT_GRAPH_POLL_MS); });
+    await screen.findByTestId('project-graph-progress');
+    getProjectGraph.mockRejectedValueOnce(new Error('503 daemon busy'));
+    await act(async () => { vi.advanceTimersByTime(PROJECT_GRAPH_POLL_MS); });
+    expect(await screen.findByTestId('project-graph-read-error')).toBeInTheDocument();
+    expect(screen.queryByTestId('project-graph-progress')).toBeNull();
+    getProjectGraph.mockResolvedValueOnce({ status: status({ refresh: refreshing(t0) }) });
+    await act(async () => { vi.advanceTimersByTime(PROJECT_GRAPH_POLL_MS); });
+    expect(await screen.findByTestId('project-graph-progress')).toBeInTheDocument();
+    expect(screen.queryByTestId('project-graph-read-error')).toBeNull();
+  });
+
+  it('coming back to a build still running shows its progress from the first read', async () => {
+    const t0 = Date.now();
+    getProjectGraph.mockResolvedValue({ status: status({ state: 'not-indexed', action: 'projects.graph.refresh' }) });
+    refreshProjectGraph.mockImplementation(() => new Promise<ProjectGraphRefreshResult>(() => undefined));
+    const first = render(<ProjectCodeGraph projectId="proj-1" repoCount={2} />);
+    fireEvent.click(await screen.findByTestId('project-graph-build'));
+    first.unmount();
+    getProjectGraph.mockResolvedValue({ status: status({ refresh: refreshing(t0) }) });
+    render(<ProjectCodeGraph projectId="proj-1" repoCount={2} />);
+    expect(await screen.findByTestId('project-graph-progress')).toHaveTextContent('indexing tiny-tip');
   });
 
   it('tolerates the rows crew may leave short: a timed-out row with no budget, an idle refresh with no start', async () => {

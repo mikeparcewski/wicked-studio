@@ -54,15 +54,15 @@ function indexingOf(v: unknown): RepoWatchIndexing | undefined {
   return { startedAt: o.startedAt, budget };
 }
 
-/** "Re-indexing · 4 min 0 s of 12 min 40 s · 2,203 files": the elapsed time against the budget the engine stops it at,
- *  so a long index never reads as a hang (studio#1099). The time comes first: the list's cell cuts the end off (its
- *  title keeps the whole line). Without the wire's `indexing`, the plain words. */
-function indexingWords(x: RepoWatchIndexing | undefined, now: number): string {
-  if (x === undefined) return 'Re-indexing now…';
+/** " · 4 min 0 s of 12 min 40 s · 2,203 files" after "Re-indexing": the elapsed time against the budget the engine
+ *  stops it at, so a long index never reads as a hang (studio#1099). The time comes first: the list's cell cuts the end
+ *  off (its title keeps the whole line). null without the wire's `indexing` (then the words are "Re-indexing now…"). */
+function indexingClock(x: RepoWatchIndexing | undefined, now: number): string | null {
+  if (x === undefined) return null;
   const elapsed = elapsedWords(now - x.startedAt);
-  if (x.budget === null) return `Re-indexing · ${elapsed} so far`;
+  if (x.budget === null) return ` · ${elapsed} so far`;
   const files = x.budget.trackedFiles !== null ? ` · ${x.budget.trackedFiles.toLocaleString('en-US')} ${x.budget.trackedFiles === 1 ? 'file' : 'files'}` : '';
-  return `Re-indexing · ${elapsed} of ${elapsedWords(x.budget.budgetMs)}${files}`;
+  return ` · ${elapsed} of ${elapsedWords(x.budget.budgetMs)}${files}`;
 }
 
 export interface RepoWatchStatus {
@@ -148,6 +148,9 @@ export interface WatchLine {
   state: RepoWatchState | 'daemon-off';
   tone: 'ok' | 'busy' | 'wait' | 'bad' | 'quiet';
   words: string;
+  /** studio#1099: while re-indexing, the time against its budget, said after `words` (it changes with every read, so a
+   *  surface keeps it out of its live announcement). null otherwise, and when the last read failed. */
+  clock: string | null;
   /** The remedy (failed), or the limit's (capped). */
   remedy: string | null;
   waitingOn: RepoWatchHold[];
@@ -157,29 +160,32 @@ export interface WatchLine {
  *  `failed`: the last read failed — with nothing read yet the line says it cannot check; with an older read, it says
  *  that read may be out of date. */
 export function watchLine(status: RepoWatchStatus | null | undefined, repoId: string, now: number, failed = false): WatchLine | null {
-  if (status === undefined && failed) return { state: 'daemon-off', tone: 'quiet', words: 'Can’t check right now whether the code map is kept current', remedy: null, waitingOn: [] };
+  if (status === undefined && failed) return { state: 'daemon-off', tone: 'quiet', words: 'Can’t check right now whether the code map is kept current', clock: null, remedy: null, waitingOn: [] };
   const line = watchLineOf(status, repoId, now);
-  return line !== null && failed ? { ...line, words: `${line.words} (couldn’t refresh this just now)` } : line;
+  return line !== null && failed ? { ...line, clock: null, words: `${line.words} (couldn’t refresh this just now)` } : line;
 }
 
 function watchLineOf(status: RepoWatchStatus | null | undefined, repoId: string, now: number): WatchLine | null {
   if (status === null || status === undefined) return null;
-  if (!status.enabled) return { state: 'daemon-off', tone: 'quiet', words: 'Not kept current: the repo watcher is off on this computer', remedy: null, waitingOn: [] };
+  if (!status.enabled) return { state: 'daemon-off', tone: 'quiet', words: 'Not kept current: the repo watcher is off on this computer', clock: null, remedy: null, waitingOn: [] };
   const r = status.repos.find((x) => x.repoId === repoId);
   if (r === undefined) return null;
   const when = r.lastIndexedAt !== null ? ` · indexed ${relTime(r.lastIndexedAt, now)}` : '';
   switch (r.state) {
-    case 'current': return { state: r.state, tone: 'ok', words: `Watching for changes${when}`, remedy: null, waitingOn: [] };
-    case 'starting': return { state: r.state, tone: 'ok', words: `Watching for changes${when}`, remedy: null, waitingOn: [] };
-    case 'changed': return { state: r.state, tone: 'busy', words: 'Changes seen · re-indexing shortly', remedy: null, waitingOn: [] };
-    case 'indexing': return { state: r.state, tone: 'busy', words: indexingWords(r.indexing, now), remedy: null, waitingOn: [] };
+    case 'current': return { state: r.state, tone: 'ok', words: `Watching for changes${when}`, clock: null, remedy: null, waitingOn: [] };
+    case 'starting': return { state: r.state, tone: 'ok', words: `Watching for changes${when}`, clock: null, remedy: null, waitingOn: [] };
+    case 'changed': return { state: r.state, tone: 'busy', words: 'Changes seen · re-indexing shortly', clock: null, remedy: null, waitingOn: [] };
+    case 'indexing': {
+      const clock = indexingClock(r.indexing, now);
+      return { state: r.state, tone: 'busy', words: clock === null ? 'Re-indexing now…' : 'Re-indexing', clock, remedy: null, waitingOn: [] };
+    }
     case 'waiting-runs': {
       const n = r.waitingOn.length;
-      return { state: r.state, tone: 'wait', words: `Waiting: ${n === 1 ? '1 job on this repo is' : `${n} jobs on this repo are`} using its code map`, remedy: null, waitingOn: r.waitingOn };
+      return { state: r.state, tone: 'wait', words: `Waiting: ${n === 1 ? '1 job on this repo is' : `${n} jobs on this repo are`} using its code map`, clock: null, remedy: null, waitingOn: r.waitingOn };
     }
-    case 'failed': return { state: r.state, tone: 'bad', words: `Couldn’t re-index: ${r.error ?? 'the re-index failed'}`, remedy: r.remedy, waitingOn: [] };
-    case 'off': return { state: r.state, tone: 'quiet', words: 'Not kept current (turned off)', remedy: null, waitingOn: [] };
-    case 'capped': return { state: r.state, tone: 'quiet', words: `Not kept current: ${status.cap} repositories is the limit`, remedy: r.remedy, waitingOn: [] };
+    case 'failed': return { state: r.state, tone: 'bad', words: `Couldn’t re-index: ${r.error ?? 'the re-index failed'}`, clock: null, remedy: r.remedy, waitingOn: [] };
+    case 'off': return { state: r.state, tone: 'quiet', words: 'Not kept current (turned off)', clock: null, remedy: null, waitingOn: [] };
+    case 'capped': return { state: r.state, tone: 'quiet', words: `Not kept current: ${status.cap} repositories is the limit`, clock: null, remedy: r.remedy, waitingOn: [] };
   }
 }
 

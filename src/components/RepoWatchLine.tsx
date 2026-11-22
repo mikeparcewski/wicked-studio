@@ -23,10 +23,13 @@ export function RepoWatchLine({ status, repoId, now, compact = false, navigate, 
   const failed = useRepoWatchFailed();
   const line = watchLine(status, repoId, now, failed);
   if (line === null) return null;
+  const shown = `${line.words}${line.clock ?? ''}`;
+  // studio#1099: the re-index clock changes with every read: kept out of the live announcement (state changes still speak).
+  const clock = line.clock !== null ? <span aria-live="off" data-testid="repo-watch-clock">{line.clock}</span> : null;
   if (compact) {
     return (
-      <span className="wk-rl-watch" data-testid={testId} role="status" data-state={line.state} data-tone={line.tone} title={line.remedy !== null ? `${line.words}. ${line.remedy}` : line.words}>
-        {line.words}
+      <span className="wk-rl-watch" data-testid={testId} role="status" data-state={line.state} data-tone={line.tone} title={line.remedy !== null ? `${shown}. ${line.remedy}` : shown}>
+        {line.words}{clock}
       </span>
     );
   }
@@ -34,7 +37,7 @@ export function RepoWatchLine({ status, repoId, now, compact = false, navigate, 
     <div className="wk-rp-watch" data-testid="repo-watch" data-state={line.state} data-tone={line.tone} role="status">
       <span aria-hidden className="wk-rp-watch-dot" />
       <span>
-        <span data-testid="repo-watch-words">{line.waitingOn.length > 0 && navigate !== undefined ? 'Waiting:' : line.words}</span>
+        <span data-testid="repo-watch-words">{line.waitingOn.length > 0 && navigate !== undefined ? 'Waiting:' : line.words}{clock}</span>
         {line.waitingOn.length > 0 && navigate !== undefined && (
           <span className="wk-rp-watch-runs">
             {' '}

@@ -17126,6 +17126,12 @@
       ]
     },
     {
+      "testId": "repo-watch-clock",
+      "files": [
+        "src/components/RepoWatchLine.tsx"
+      ]
+    },
+    {
       "testId": "repo-watch-controls",
       "files": [
         "src/components/RepoWatchLine.tsx"

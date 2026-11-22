@@ -27,7 +27,7 @@ import { TechDetails } from './ui/TechDetails.js';
  * starts refreshes on its own), paused while the page is hidden. crew's `status.refresh` gives the time a refresh has
  * run against its budget and the member being indexed. During this page's own build only that `refresh` is taken from
  * the read (the build's answer still owns the standing). Between refreshes, the last refresh's failure is said (a
- * timeout names the budget it hit); a build answer shown here gives way once crew reports a newer refresh.
+ * timeout names the budget it hit); a build answer or refusal shown here gives way once crew reports another refresh.
  * studio#1104: the answer's `link` is read beside `failed`: a link step that errored or left members incomplete
  * published no new cross-repo links, so it never reads "Built".
  */
@@ -68,6 +68,12 @@ function refreshOf(s: ProjectGraphStatus | null | undefined): ProjectGraphRefres
   if (r === undefined || r === null || typeof r !== 'object') return null;
   if (r.state === 'refreshing') return finite(r.startedAt) ? r : null;
   return r.state === 'idle' ? r : null;
+}
+
+/** Which refresh a state is about, on crew's clock: its start (or, with none, when it finished); "none" without one. */
+function refreshKey(r: ProjectGraphRefreshState | null): string {
+  if (r === null) return 'none';
+  return finite(r.startedAt) ? `s:${r.startedAt}` : `f:${finite(r.finishedAt) ? r.finishedAt : ''}`;
 }
 
 /** "Running for 4 min 0 s of its 12 min 40 s budget; indexing tiny-tip (1 min 2 s of 3 min 0 s).", or null when idle. */
@@ -114,46 +120,54 @@ export function ProjectCodeGraph({ projectId, repoCount }: Props): React.ReactEl
   /** crew's refresh state (studio#1099), kept apart from `status` so a progress read never moves the standing. */
   const [refresh, setRefresh] = useState<ProjectGraphRefreshState | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  /** The project this control shows now, and the read generation a finished build bumps. */
+  /** The project this control shows now. */
   const live = useRef(projectId);
-  const readGen = useRef(0);
-  /** The start (crew's clock) of the refresh the shown build answer came from: a newer one retires that answer. */
-  const answeredStart = useRef<number | null>(null);
+  /** Bumped by a build's answer or refusal: a read that started before it is stale and dropped. */
+  const epoch = useRef(0);
+  /** One read at a time: the read in flight, and the project to read again once it settles. */
+  const inflight = useRef<Promise<void> | null>(null);
+  const againFor = useRef<string | null>(null);
+  /** Which refresh (crew's clock) the shown build answer or refusal is about: `undefined` = take it from the next read,
+   *  `null` = nothing shown. A read showing another refresh retires the shown outcome. */
+  const outcomeOf = useRef<string | null | undefined>(null);
 
-  const read = useCallback((forProject: string): Promise<void> => {
-    const gen = ++readGen.current;
-    setReadError(null);
-    return Promise.resolve()
+  const read = useCallback(function readGraph(forProject: string): Promise<void> {
+    if (inflight.current !== null) {
+      againFor.current = forProject;
+      return inflight.current;
+    }
+    const at = epoch.current;
+    const p = Promise.resolve()
       .then(() => api.getProjectGraph(forProject))
       .then(({ status: s }) => {
-        if (live.current !== forProject || readGen.current !== gen || building.has(forProject)) return;
+        if (live.current !== forProject || epoch.current !== at) return;
         const r = refreshOf(s);
-        // A refresh started after the one this page's answer came from: that answer no longer describes the graph.
-        if (r !== null && answeredStart.current !== null && finite(r.startedAt) && r.startedAt > answeredStart.current) {
-          answeredStart.current = null;
-          setResult(null);
-        }
-        setStatus(s);
+        setReadError(null);
         setRefresh(r);
         setNow(Date.now());
+        if (building.has(forProject)) return; // the build's answer owns the standing; the read gives its progress
+        const key = refreshKey(r);
+        if (outcomeOf.current === undefined) outcomeOf.current = key;
+        else if (outcomeOf.current !== null && outcomeOf.current !== key) {
+          // crew has run another refresh since: the answer (or refusal) shown here no longer describes the graph.
+          outcomeOf.current = null;
+          setResult(null);
+          setBuildError(null);
+        }
+        setStatus(s);
       })
       .catch((e: unknown) => {
-        if (live.current !== forProject || readGen.current !== gen) return;
+        if (live.current !== forProject || epoch.current !== at) return;
         setReadError(message(e));
-      });
-  }, []);
-
-  /** During this page's build: take only crew's refresh progress from a read (the build's answer owns the standing). */
-  const readProgress = useCallback((forProject: string): Promise<void> => {
-    const gen = ++readGen.current;
-    return Promise.resolve()
-      .then(() => api.getProjectGraph(forProject))
-      .then(({ status: s }) => {
-        if (live.current !== forProject || readGen.current !== gen || !building.has(forProject)) return;
-        setRefresh(refreshOf(s));
-        setNow(Date.now());
       })
-      .catch(() => { /* progress is best effort: the build's own answer still lands */ });
+      .finally(() => {
+        inflight.current = null;
+        const next = againFor.current;
+        againFor.current = null;
+        if (next !== null && live.current === next) void readGraph(next);
+      });
+    inflight.current = p;
+    return p;
   }, []);
 
   /** Wait on this project's build (ours or one a previous mount started) and apply its answer. */
@@ -163,10 +177,10 @@ export function ProjectCodeGraph({ projectId, repoCount }: Props): React.ReactEl
     run
       .then((r) => {
         if (live.current !== forProject) return;
-        readGen.current += 1; // a read that started before this answer is stale now
+        epoch.current += 1; // a read that started before this answer is stale now
         setReadError(null); // …and so is a read's failure (codex r2)
         const answered = refreshOf(r.status);
-        answeredStart.current = answered !== null && finite(answered.startedAt) ? answered.startedAt : null;
+        outcomeOf.current = refreshKey(answered);
         setResult(r);
         setStatus(r.status);
         setRefresh(answered);
@@ -174,8 +188,10 @@ export function ProjectCodeGraph({ projectId, repoCount }: Props): React.ReactEl
       .catch((e: unknown) => {
         failed = true;
         if (live.current !== forProject) return;
+        epoch.current += 1;
         setBuildError(message(e));
-        setRefresh(null); // a progress read's "running" ends with the build; the read below says what crew holds now
+        setRefresh(null);
+        outcomeOf.current = undefined; // the read below says which refresh crew holds now
       })
       .finally(() => {
         if (building.get(forProject) === run) building.delete(forProject);
@@ -189,11 +205,12 @@ export function ProjectCodeGraph({ projectId, repoCount }: Props): React.ReactEl
 
   useEffect(() => {
     live.current = projectId;
+    epoch.current += 1;
     setStatus(null);
     setResult(null);
     setBuildError(null);
     setRefresh(null);
-    answeredStart.current = null;
+    outcomeOf.current = null;
     const inFlight = building.get(projectId);
     if (inFlight !== undefined) follow(projectId, inFlight);
     else setPending(false);
@@ -204,8 +221,9 @@ export function ProjectCodeGraph({ projectId, repoCount }: Props): React.ReactEl
     void read(projectId);
   }, [projectId, repoCount, read]);
 
-  // Read again, one read at a time (the next is scheduled when the last settles): often while a refresh runs (ours,
-  // or one crew started), now and then otherwise, so a refresh crew starts on its own is seen. Paused while hidden.
+  // Read again (through the same one-at-a-time read, the next scheduled when the last settles): often while a refresh
+  // runs (ours, or one crew started), now and then otherwise, so a refresh crew starts on its own is seen. Paused
+  // while hidden. The clock moves only with a read that answered, so nothing counts on past what crew last said.
   const running = pending || refresh?.state === 'refreshing';
   useEffect(() => {
     let stopped = false;
@@ -214,20 +232,17 @@ export function ProjectCodeGraph({ projectId, repoCount }: Props): React.ReactEl
     const tick = (): void => {
       if (stopped) return;
       const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
-      if (!hidden) setNow(Date.now());
-      const next = hidden ? Promise.resolve() : building.has(projectId) ? readProgress(projectId) : read(projectId);
-      void next.finally(() => { if (!stopped) timer = setTimeout(tick, every); });
+      void (hidden ? Promise.resolve() : read(projectId)).finally(() => { if (!stopped) timer = setTimeout(tick, every); });
     };
     timer = setTimeout(tick, every);
     return () => { stopped = true; clearTimeout(timer); };
-  }, [running, projectId, read, readProgress]);
+  }, [running, projectId, read]);
 
   function build(): void {
     if (building.has(projectId)) return;
     setBuildError(null);
     setResult(null);
-    setRefresh(null);
-    answeredStart.current = null;
+    outcomeOf.current = null;
     const run = Promise.resolve().then(() => api.refreshProjectGraph(projectId));
     building.set(projectId, run);
     follow(projectId, run);
@@ -239,9 +254,10 @@ export function ProjectCodeGraph({ projectId, repoCount }: Props): React.ReactEl
   const failed = result?.failed ?? [];
   const link = linkNotRebuilt(result);
   const labelOf = (repoId: string): string => status?.repos.find((x) => x.repoId === repoId)?.label ?? repoId;
-  // A failed read says so; the progress it can no longer follow is not shown counting on.
+  // A failed read says so; the progress it can no longer follow is not shown.
   const progress = readError === null ? refreshProgressLine(refresh, now, labelOf) : null;
-  // The last refresh's failure, between refreshes; a build answered on this page (or refused) says its own outcome.
+  // The last refresh's failure, between refreshes; a build answered (or refused) here says its own outcome until crew
+  // reports another refresh.
   const lastFailure = !pending && result === null && buildError === null ? lastFailureLine(refresh, now, labelOf) : null;
   const timedOut = new Set((result?.repos ?? []).filter((x) => x.timedOut === true).map((x) => x.repoId));
   const budgetOf = new Map((result?.repos ?? []).flatMap((x) => {
