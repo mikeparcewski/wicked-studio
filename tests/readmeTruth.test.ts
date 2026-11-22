@@ -26,12 +26,14 @@ describe('README truth (studio#957, studio#888)', () => {
     expect(readme).toMatch(/Page and Document editors hold it by default/);
   });
 
-  it('power mode: New job offers the switch on every workflow but two; crew decides which run power (studio#957)', () => {
-    // LaunchWizard: `offerPower = powerCap && !drafting && !demoing` — the switch is not withheld from phase-based workflows.
-    const wizard = readFileSync(fileURLToPath(new URL('../src/components/launch/LaunchWizard.tsx', import.meta.url)), 'utf8');
-    expect(wizard).toMatch(/const offerPower = powerCap && !drafting && !demoing;/);
+  it('power mode: where it is switched off, and that crew decides which launches run power (studio#957)', () => {
+    const src = (f: string): string => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), 'utf8');
+    // New job's Options step: `offerPower = powerCap && !drafting && !demoing` (not withheld from phase-based workflows).
+    expect(src('components/launch/LaunchWizard.tsx')).toMatch(/const offerPower = powerCap && !drafting && !demoing;/);
+    // A job shaped in chat (New job's cards start in chat, codex r2 on #1304): the Start row's Review plan switch.
+    expect(src('components/session/InlineStart.tsx')).toMatch(/<Switch label="Review plan"/);
     expect(readme).not.toMatch(/a chat's own run and a phase-based workflow run phased/);
-    expect(readme).toMatch(/New job shows a power switch for every workflow except Draft epics and Demo video/);
-    expect(readme).toMatch(/any other workflow runs phased even with the switch on/);
+    expect(readme).toMatch(/a \*\*Review plan\*\* switch beside a chat's Start, or New job's \*\*Power mode\*\* switch \(not offered for Draft epics or Demo video\)/);
+    expect(readme).toMatch(/any other workflow runs phased even with power on/);
   });
 });

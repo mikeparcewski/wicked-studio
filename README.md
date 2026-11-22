@@ -89,12 +89,13 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
 
 - **Run governed agents on your repos** — register a local path or clone a URL; studio builds the
   code graph, then you launch runs (ask / balanced / autonomous), pick which agent seats join, and
-  bind a repo with optional PR delivery. On a crew with **power mode**, New job shows a power switch
-  for every workflow except Draft epics and Demo video, on by default unless Settings says otherwise
-  (the same switch sits beside the job's name). Crew runs power mode only for a preset or a composed
-  plan on a repository: any other workflow runs phased even with the switch on. In power mode, the
-  code-writing build step runs as one orchestrator's checkpointed turns (other required steps
-  can run separately): the job page shows its rigor (with ↑ when it rose since intake), its
+  bind a repo with optional PR delivery. On a crew with **power mode**, a job runs in power mode by
+  default unless Settings says otherwise, and you can turn it off where you start it: a **Review
+  plan** switch beside a chat's Start, or New job's **Power mode** switch (not offered for Draft epics
+  or Demo video); the same switch sits beside the job's name. Crew runs power mode only for a preset
+  or a composed plan on a repository: any other workflow runs phased even with power on. In power
+  mode, the code-writing build step runs as one orchestrator's checkpointed turns (other required
+  steps can run separately): the job page shows its rigor (with ↑ when it rose since intake), its
   checkpoints, and, when the change grows past its plan, a pause that offers to split it into lanes,
   switch to phased, continue at high rigor or stop.
 - **Steer runs live** — the Desk (the one shell) puts what needs you first; every run or chat
