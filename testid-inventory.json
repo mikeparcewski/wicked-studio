@@ -15127,7 +15127,19 @@
       ]
     },
     {
+      "testId": "project-graph-last-failure",
+      "files": [
+        "src/components/ProjectCodeGraph.tsx"
+      ]
+    },
+    {
       "testId": "project-graph-live",
+      "files": [
+        "src/components/ProjectCodeGraph.tsx"
+      ]
+    },
+    {
+      "testId": "project-graph-progress",
       "files": [
         "src/components/ProjectCodeGraph.tsx"
       ]

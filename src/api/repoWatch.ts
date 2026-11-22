@@ -54,14 +54,15 @@ function indexingOf(v: unknown): RepoWatchIndexing | undefined {
   return { startedAt: o.startedAt, budget };
 }
 
-/** "Re-indexing now · 4 min 0 s of 12 min 40 s (2,203 files)": the elapsed time against the budget the engine stops it
- *  at, so a long index never reads as a hang (studio#1099). Without the wire's `indexing`, the plain words. */
+/** "Re-indexing · 4 min 0 s of 12 min 40 s · 2,203 files": the elapsed time against the budget the engine stops it at,
+ *  so a long index never reads as a hang (studio#1099). The time comes first: the list's cell cuts the end off (its
+ *  title keeps the whole line). Without the wire's `indexing`, the plain words. */
 function indexingWords(x: RepoWatchIndexing | undefined, now: number): string {
   if (x === undefined) return 'Re-indexing now…';
   const elapsed = elapsedWords(now - x.startedAt);
-  if (x.budget === null) return `Re-indexing now · ${elapsed} so far`;
-  const files = x.budget.trackedFiles !== null ? ` (${x.budget.trackedFiles.toLocaleString('en-US')} ${x.budget.trackedFiles === 1 ? 'file' : 'files'})` : '';
-  return `Re-indexing now · ${elapsed} of ${elapsedWords(x.budget.budgetMs)}${files}`;
+  if (x.budget === null) return `Re-indexing · ${elapsed} so far`;
+  const files = x.budget.trackedFiles !== null ? ` · ${x.budget.trackedFiles.toLocaleString('en-US')} ${x.budget.trackedFiles === 1 ? 'file' : 'files'}` : '';
+  return `Re-indexing · ${elapsed} of ${elapsedWords(x.budget.budgetMs)}${files}`;
 }
 
 export interface RepoWatchStatus {
