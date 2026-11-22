@@ -20,7 +20,7 @@ function c3(over: Partial<WatchFinding>): WatchFinding {
   return {
     run_id: 'r-ask', ord: 5, attempt: 1, by: 'watch:path-repicked@1', at: 1_000, re: 'path.repicked#1',
     watch_id: 'w-repick', entry_id: 'path-repicked', entry_version: 1, check: 'deterministic:path_repicked',
-    kind: 'flag', severity: 'medium', watch_kind: 'problem', attach: null, project_id: null,
+    kind: 'flag', severity: 'medium', watch_kind: 'problem', attach: null, project_id: 'shop',
     sentence: 'codex takes over — claude stopped answering (timed out).',
     facts: { from: 'claude', to: 'codex', reason: 'timed out', pick_seq: 1 },
     anchor: { run_id: 'r-ask', ord: 5, attempt: 1, at: 900 }, evidence: [], model: null, rolled_up: 0,
