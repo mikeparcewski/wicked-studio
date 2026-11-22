@@ -12053,6 +12053,18 @@
       ]
     },
     {
+      "testId": "memory-retired-more",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-more-line",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
       "testId": "memory-retired-none",
       "files": [
         "src/components/memory/MemoryAdd.tsx"
@@ -12077,7 +12089,19 @@
       ]
     },
     {
+      "testId": "memory-retired-restored-note",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
       "testId": "memory-retired-row",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-unknown",
       "files": [
         "src/components/memory/MemoryAdd.tsx"
       ]

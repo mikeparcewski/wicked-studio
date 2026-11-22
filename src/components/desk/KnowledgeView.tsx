@@ -208,7 +208,11 @@ export function KnowledgeView(): React.ReactElement {
                     {selected.kind === 'tracker' && <TrackerFacts node={selected} edges={map.edges} byKey={byKey} />}
                     {canForget && (
                       <ForgetKnowledge key={selected.key} node={selected}
-                        onDone={(tone, text) => { setForgetNote({ tone, text }); if (tone === 'ok') { setSelectedKey(null); load(); } }} />
+                        onDone={(tone, text) => {
+                          setForgetNote({ tone, text });
+                          // A late answer for A must not dismiss B, picked while A's Forget was in flight (codex r1 #1339).
+                          if (tone === 'ok') { const gone = selected.key; setSelectedKey((cur) => (cur === gone ? null : cur)); load(); }
+                        }} />
                     )}
                   </div>
                 )}

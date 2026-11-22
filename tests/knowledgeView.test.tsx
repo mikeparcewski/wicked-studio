@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import { act, StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -445,13 +445,13 @@ describe('crew#1697 (studio#1248): Forget a piece of document knowledge', () => 
   const forgets: unknown[] = [];
   let answer: () => Promise<unknown> = () => Promise.resolve({ forgotten: 1, skipped_live_source: 0 });
   afterEach(() => useCapabilities.setState({ knowledgeForget: false }));
-  const renderWith = async (on: boolean): Promise<void> => {
+  const renderWith = async (on: boolean, map: typeof DOC_MAP = DOC_MAP): Promise<void> => {
     forgets.length = 0;
     useCapabilities.setState({ loaded: true, knowledgeForget: on });
     apiFetch.mockImplementation((path: unknown, init?: { method?: string; body?: string }) => {
       const s = String(path);
       calls.push(`${init?.method ?? 'GET'} ${s}`);
-      if (s === '/knowledge/map') return Promise.resolve(structuredClone(DOC_MAP));
+      if (s === '/knowledge/map') return Promise.resolve(structuredClone(map));
       if (s === '/knowledge/forget') { forgets.push(JSON.parse(init?.body ?? '{}')); return answer(); }
       if (s.startsWith('/proposals')) return Promise.resolve({ proposals: [] });
       return Promise.reject(new Error(`unexpected ${s}`));
@@ -478,6 +478,24 @@ describe('crew#1697 (studio#1248): Forget a piece of document knowledge', () => 
     expect(calls.filter((c) => c === 'POST /knowledge/forget')).toHaveLength(1);
     await waitFor(() => expect(calls.filter((c) => c === 'GET /knowledge/map').length).toBe(reads + 1));
     expect(screen.queryByTestId('knowledge-selected')).toBeNull();
+  });
+
+  it('a late Forget answer for one document leaves a newer selection and its confirm alone', async () => {
+    const DOC2 = 'knowledge:kdoc synthetic ingest:runbooks/oncall.md:';
+    let finish: (v: unknown) => void = () => {};
+    answer = () => new Promise((resolve) => { finish = resolve; });
+    await renderWith(true, { ...DOC_MAP, nodes: [...DOC_MAP.nodes, { key: DOC2, kind: 'knowledge', label: 'On-call runbook' }] });
+    const user = userEvent.setup();
+    await pick(user, DOC);
+    await user.click(screen.getByTestId('knowledge-forget'));
+    await user.click(screen.getByTestId('knowledge-forget-go'));
+    await pick(user, DOC2);
+    await user.click(screen.getByTestId('knowledge-forget'));
+    expect(screen.getByTestId('knowledge-forget-confirm')).toBeInTheDocument();
+    await act(async () => { finish({ forgotten: 1, skipped_live_source: 0 }); await Promise.resolve(); });
+    expect(await screen.findByTestId('knowledge-forget-note')).toHaveTextContent('Forgot “Escalation runbook”.');
+    expect(screen.getByTestId('knowledge-selected')).toHaveTextContent('On-call runbook');
+    expect(screen.getByTestId('knowledge-forget-confirm')).toBeInTheDocument();
   });
 
   it('a live data source\'s table is never offered Forget: it is refreshed through its source; a shape has no Forget', async () => {

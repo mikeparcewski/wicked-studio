@@ -262,16 +262,23 @@ export function MemoryTable({ memories, onSaved, onClose }: { memories: readonly
   );
 }
 
+/** Retired memories shown per page in Show retired. */
+const RETIRED_PAGE = 100;
+
 /**
  * Show retired. On a crew with soft retire (`soft`, crew#1697 `capabilities.memoryRestore`) it lists the retired
  * memories (`GET /memory?retired=1`, with when each was retired); Restore brings one back with the same id
  * (`POST /memory/unretire`) and Delete for good opens the page's delete dialog (`onErase`). On an older crew a retire
- * erased the memory, so there is nothing to list, and it says so. Below either: the suggestions you said no to, each
- * of which can be kept now.
+ * erased the memory, so there is nothing to list, and it says so. When the page doesn't know which (`soft === null`:
+ * health pending or unreadable) it lists nothing and says why: an older crew's `GET /memory` ignores `retired=1` and
+ * would answer the LIVE memories. Below each: the suggestions you said no to, each of which can be kept now.
+ *
+ * Every fresh read of the retired list is the truth: a local "Restored" mark lasts only until the next read
+ * (the page bumps `revision` on every change to the retired set and on Refresh).
  */
 export function MemoryRetired({ soft, revision = 0, onClose, onBrought, onErase }: {
-  soft: boolean;
-  /** Bumped by the page after a delete, so the retired list reads again. */
+  soft: boolean | null;
+  /** Bumped by the page on every change to the retired set and on Refresh, so the retired list reads again. */
   revision?: number;
   onClose: () => void;
   onBrought: () => void;
@@ -288,12 +295,16 @@ export function MemoryRetired({ soft, revision = 0, onClose, onBrought, onErase 
   const [retired, setRetired] = useState<RetiredRead>({ kind: 'loading' });
   const [restored, setRestored] = useState<string[]>([]);
   const [restoreFail, setRestoreFail] = useState<string | null>(null);
+  /** What the last Restore brought back: the row leaves the list on the next read, so the words stay here. */
+  const [restoredNote, setRestoredNote] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  /** How many retired memories are shown; Show more adds a page (a long inventory stays reachable). */
+  const [shownRetired, setShownRetired] = useState(RETIRED_PAGE);
   useEffect(() => {
-    if (!soft) return undefined;
+    if (soft !== true) return undefined;
     let alive = true;
     listRetiredMemories().then(
-      (rs) => { if (alive) setRetired({ kind: 'ok', rows: rs }); },
+      (rs) => { if (alive) { setRetired({ kind: 'ok', rows: rs }); setRestored([]); } },
       (e: unknown) => { if (alive) setRetired(isMemoryUnsupported(e) ? { kind: 'unsupported' } : { kind: 'failed', message: e instanceof Error ? e.message : String(e) }); },
     );
     return () => { alive = false; };
@@ -305,6 +316,7 @@ export function MemoryRetired({ soft, revision = 0, onClose, onBrought, onErase 
     try {
       await unretireMemory({ memory_id: m.id });
       setRestored((r) => [...r, m.id]);
+      setRestoredNote(`Restored: ${m.content.length > 80 ? `${m.content.slice(0, 79)}…` : m.content}. It is back in your memories.`);
       onBrought();
     } catch (e) {
       setRestoreFail(isMemoryUnsupported(e) ? 'This daemon’s memory store can’t restore a memory yet, so nothing changed.'
@@ -334,10 +346,11 @@ export function MemoryRetired({ soft, revision = 0, onClose, onBrought, onErase 
         <b>Retired</b>
         <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="memory-retired-close" onClick={onClose}>Back to memories</button>
       </div>
-      {soft ? (
+      {soft === true ? (
         <>
           <p className="wk-learn-quiet" data-testid="memory-retired-kept">A retired memory is hidden from helpers and kept. Restore brings it back as it was; Delete for good erases it.</p>
           {restoreFail !== null && <p className="wk-learn-quiet wk-learn-bad" role="alert" data-testid="memory-retired-restore-fail">{restoreFail}</p>}
+          {restoredNote !== null && <p className="wk-learn-quiet" role="status" data-testid="memory-retired-restored-note">{restoredNote}</p>}
           {retired.kind === 'loading' && <p className="wk-learn-quiet">Reading…</p>}
           {retired.kind === 'unsupported' && <p className="wk-learn-quiet" data-testid="memory-retired-unsupported">This daemon’s memory store can’t list retired memories yet (it needs a newer wicked-estate).</p>}
           {retired.kind === 'failed' && (
@@ -348,7 +361,7 @@ export function MemoryRetired({ soft, revision = 0, onClose, onBrought, onErase 
           {retired.kind === 'ok' && retired.rows.length === 0 && <p className="wk-learn-quiet" data-testid="memory-retired-none">No memory is retired.</p>}
           {retired.kind === 'ok' && retired.rows.length > 0 && (
             <ul className="wk-learn-rules" data-testid="memory-retired-memories">
-              {retired.rows.slice(0, 100).map((m) => (
+              {retired.rows.slice(0, shownRetired).map((m) => (
                 <li key={m.id} className="wk-learn-rule wk-mem-retired-row" data-testid="memory-retired-memory" data-memory-id={m.id}>
                   <span className="wk-learn-dot wk-learn-dot--off" aria-hidden />
                   <span>
@@ -365,8 +378,16 @@ export function MemoryRetired({ soft, revision = 0, onClose, onBrought, onErase 
               ))}
             </ul>
           )}
+          {retired.kind === 'ok' && retired.rows.length > shownRetired && (
+            <p className="wk-learn-quiet" data-testid="memory-retired-more-line">
+              Showing {shownRetired} of {retired.rows.length} retired memories.{' '}
+              <button type="button" className="wk-link wk-se-linkbtn" data-testid="memory-retired-more" onClick={() => setShownRetired((k) => k + RETIRED_PAGE)}>Show more</button>
+            </p>
+          )}
           <p className="wk-learn-quiet"><b>Suggestions you said no to</b> · you can keep any of them now.</p>
         </>
+      ) : soft === null ? (
+        <p className="wk-learn-quiet" data-testid="memory-retired-unknown">Studio couldn’t read what this daemon supports, so it can’t tell whether retired memories are kept. Refresh the page to try again. Below are the suggestions you said no to; you can keep any of them now.</p>
       ) : (
         <p className="wk-learn-quiet" data-testid="memory-retired-erased">A retired memory is erased: the memory store keeps no copy, so it can’t be listed or brought back. Below are the suggestions you said no to; you can keep any of them now.</p>
       )}
