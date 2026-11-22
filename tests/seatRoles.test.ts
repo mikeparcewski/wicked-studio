@@ -67,7 +67,7 @@ describe('joining a job: a reviewer-only seat joins (it votes and judges)', () =
   it('a signed-out reviewer-only seat does not join by default; the daemon’s auth wins over the old heuristic (codex r1, r2)', () => {
     expect(seatJoinStanding({ ...REVIEWER_ONLY, auth: 'signed_out', signed_in: false } as RosterSeat, NOW).state).not.toBe('ready');
     // No structured auth: the `signed_in` heuristic decides.
-    expect(seatJoinStanding({ ...REVIEWER_ONLY, auth: undefined, signed_in: false } as RosterSeat, NOW).state).not.toBe('ready');
+    expect(seatJoinStanding({ ...REVIEWER_ONLY, auth: undefined, signed_in: false } as unknown as RosterSeat, NOW).state).not.toBe('ready');
     // Structured auth says signed in, or no sign-in needed: the heuristic's false does not take the reviewer off.
     expect(seatJoinStanding({ ...REVIEWER_ONLY, signed_in: false } as RosterSeat, NOW)).toEqual({ state: 'ready', note: 'reviews only' });
     expect(seatJoinStanding({ ...REVIEWER_ONLY, auth: 'not_required', signed_in: false } as RosterSeat, NOW)).toEqual({ state: 'ready', note: 'reviews only' });
