@@ -26,9 +26,13 @@
 :root:not([data-theme]) .wk-calm { --calm-primary-hover: color-mix(in oklab, var(--accent) 60%, var(--surface-base)); --calm-primary-press: color-mix(in oklab, var(--accent) 50%, var(--surface-base)); }
 [data-theme="light"] .wk-calm { --calm-primary-hover: color-mix(in oklab, var(--accent) 74%, var(--surface-base)); --calm-primary-press: color-mix(in oklab, var(--accent) 64%, var(--surface-base)); }
 /* (studio#921) Link words keep AA with any accent: the mix's lightness is held on the ink's side of the ground (at most
-   0.46 on a light ground, at least 0.74 on a dark one). A preset's mix is already there, so its colour does not move. */
-[data-theme="wicked-light"] .wk-calm, [data-theme="light"] .wk-calm { --calm-link: oklch(from color-mix(in oklab, var(--accent) 50%, var(--ink-high)) min(l, 0.46) c h); }
-[data-theme="wicked-dark"] .wk-calm, :root:not([data-theme]) .wk-calm { --calm-link: oklch(from color-mix(in oklab, var(--accent) 50%, var(--ink-high)) max(l, 0.74) c h); }
+   0.46 on a light ground, at least 0.74 on a dark one). A preset's mix is already there, so its colour does not move.
+   Behind @supports: an engine without relative colour would drop the whole value (no link colour, no accent dot), so
+   it keeps the plain mix instead. */
+@supports (color: oklch(from red l c h)) {
+  [data-theme="wicked-light"] .wk-calm, [data-theme="light"] .wk-calm { --calm-link: oklch(from color-mix(in oklab, var(--accent) 50%, var(--ink-high)) min(l, 0.46) c h); }
+  [data-theme="wicked-dark"] .wk-calm, :root:not([data-theme]) .wk-calm { --calm-link: oklch(from color-mix(in oklab, var(--accent) 50%, var(--ink-high)) max(l, 0.74) c h); }
+}
 .wk-calm { flex: 1 1 auto; min-height: 0; min-width: 0; overflow-y: auto; display: flex; flex-direction: row; align-items: flex-start; justify-content: center; padding: 56px 40px 80px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;  top: 0; left: 0; }
 .wk-calm-col { width: 100%; max-width: 840px; display: flex; flex-direction: column; gap: 40px; min-width: 0; }
@@ -255,8 +259,10 @@ select.wk-calm-pick { field-sizing: content; }
 .wk-calm-btn--link:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 3px; }
 
 /* Links inside the calm pages (filter notes, the health line, the seed runbook) read like the page's own links:
-   the rig's dark-teal accent alone is ~1.5:1 on the classic dark ground. */
-.wk-calm .wk-link { color: var(--calm-link); }
+   the rig's dark-teal accent alone is ~1.5:1 on the classic dark ground. (studio#921) They are underlined at rest:
+   with an accent near the ink the link colour sits close to the muted words beside it, so colour alone cannot say
+   "link" (WCAG 1.4.1). */
+.wk-calm .wk-link { color: var(--calm-link); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .wk-calm .wk-link:hover { color: var(--ink-high); text-decoration: underline; text-underline-offset: 3px; }
 
 /* A header whose only action is the ⋯ menu (Memory, Steer): on a phone the menu stays beside the title

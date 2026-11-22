@@ -97,7 +97,7 @@ const contrast = (x: Lab, y: Lab): number => { const [a, b] = [Y(x), Y(y)]; retu
 function props(block: string): Record<string, string> {
   return Object.fromEntries([...block.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/gu)].map((m) => [m[1]!, m[2]!.trim()]));
 }
-/** Every rule's selector list and body, flat (calm.css has no nesting for these). */
+/** Every innermost rule's selector list and body (a rule inside an @supports block is read as its own rule). */
 const rules = (css: string): Array<{ sel: string[]; body: string }> =>
   [...css.matchAll(/([^{}]+)\{([^{}]*)\}/gu)].map((m) => ({ sel: m[1]!.split(',').map((s) => s.trim()), body: m[2]! }));
 
@@ -150,6 +150,19 @@ describe('calm rows and links keep their hover and contrast whatever the accent 
       expect(m.linkOnGround, 'link at rest').toBeGreaterThanOrEqual(4.5);
     });
   }
+  it('the link floor is behind @supports (an engine without relative colour keeps the plain mix and the accent dot)', () => {
+    const calm = read('src/styles/sections/calm.css');
+    const at = calm.indexOf('@supports (color: oklch(from red l c h))');
+    expect(at, 'the @supports block').toBeGreaterThanOrEqual(0);
+    const floors = [...calm.matchAll(/--calm-link:\s*oklch\(from/gu)].map((m) => m.index!);
+    expect(floors.length).toBe(2);
+    const close = calm.indexOf('\n}', at);
+    for (const i of floors) expect(i > at && i < close, 'every oklch(from) floor sits inside it').toBe(true);
+  });
+  it('inline calm links are underlined at rest, so colour is not the only cue (WCAG 1.4.1)', () => {
+    const r = rules(read('src/styles/sections/calm.css')).find((x) => x.sel.includes('.wk-calm .wk-link'));
+    expect(r!.body).toMatch(/text-decoration:\s*underline/u);
+  });
   it("a preset's link colour is the plain mix (the floor only moves a near-ground accent's)", () => {
     for (const [theme, accent] of PRESETS) {
       const t = tokens(theme, accent);
