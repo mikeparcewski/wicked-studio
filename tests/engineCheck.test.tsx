@@ -6,7 +6,7 @@ import { engineCheckConflict, engineChecksOf, otherObligations, withEngineChecks
 import { SteeringRuleFormModal } from '../src/components/SteeringRuleForm.js';
 import { SteeringRuleDrawer } from '../src/components/SteeringRuleDrawer.js';
 import { SteerSurface } from '../src/components/steer/SteerSurface.js';
-import { heldRule, holdBlocked } from '../src/board/holdRule.js';
+import { heldRule, holdBlocked, holdWords } from '../src/board/holdRule.js';
 
 /**
  * studio#1002: a rule's ENGINE CHECK is set from Steering's add / edit form (the one form behind
@@ -153,7 +153,14 @@ describe('Hold never drops an engine check', () => {
     expect(holdBlocked(rule({ applies_to: ['plan.compose'], obligations: ['step:test'] }))).toBeNull();
   });
 
-  it('an open Hold picker closes when the rule gains an engine check at plan compose (codex r2)', () => {
+  it('a held rule says only its plan steps are what work gets, never an engine check (coord r1 F2)', () => {
+    expect(holdWords(rule({ effect: 'allow_with_conditions', applies_to: ['review'], obligations: ['step:test', 'check:test-fails-on-base'] })))
+      .toBe('Held — when it fires, work gets a Test step; only your own plan can drop that.');
+    expect(holdWords(rule({ effect: 'allow_with_conditions', applies_to: ['review'], obligations: ['check:test-fails-on-base'] })))
+      .toBe('Held, but it names no plan step, so nothing is inserted.');
+  });
+
+    it('an open Hold picker closes when the rule gains an engine check at plan compose (codex r2)', () => {
     const before = rule({ id: 'TST-4000', applies_to: ['plan.compose'], obligations: [] });
     const { rerender } = render(<SteeringRuleDrawer rule={before} evidence={null} onClose={vi.fn()} onEdit={vi.fn()} onRetired={vi.fn()} />);
     fireEvent.click(screen.getByTestId('steering-rule-hold-switch'));

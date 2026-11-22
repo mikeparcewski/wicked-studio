@@ -340,7 +340,7 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved, create 
         </div>
 
         {/* studio#1002: the rule's engine check, the obligation tokens the engine reads at the rule check. */}
-        <fieldset data-testid="steering-form-engine-check" className="flex flex-col gap-1 rounded px-2 py-1.5 text-xs" style={{ border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}>
+        <fieldset data-testid="steering-form-engine-check" className="flex flex-col gap-1 rounded px-2 py-1.5 text-xs" style={{ border: '1px solid var(--border-strong)', color: 'var(--ink-muted)' }}>
           <legend className="px-1">Engine check (optional — none = a helper judges the rule)</legend>
           {ENGINE_CHECKS.map((c) => (
             <label key={c.token} className="flex items-start gap-2">

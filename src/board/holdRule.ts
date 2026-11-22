@@ -85,7 +85,10 @@ export function advisoryRule(rule: SteeringRule): SteeringRule {
 /** What the switch's state means, in words. */
 export function holdWords(rule: SteeringRule): string {
   if (isHeld(rule)) {
-    const what = (rule.obligations ?? []).map((t) => HOLD_VOCAB.find((v) => v.token === t)?.label ?? t);
+    // Only plan steps are something work GETS; an engine check or any other token the rule carries is not
+    // (it is listed under Obligations). Coord r1 on studio#1310.
+    const what = knownObligations(rule).map((t) => HOLD_VOCAB.find((v) => v.token === t)?.label ?? t);
+    if (what.length === 0) return 'Held, but it names no plan step, so nothing is inserted.';
     return `Held — when it fires, work gets ${joinWords(what)}; only your own plan can drop that.`;
   }
   return 'Advisory — helpers are told about it while planning; nothing is inserted.';
