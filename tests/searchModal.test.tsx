@@ -63,7 +63,7 @@ function renderModal(over: Partial<Parameters<typeof CommandPalette>[0]> = {}) {
   const navigate = vi.fn();
   const onClose = vi.fn();
   render(
-    <CommandPalette open onClose={onClose} runs={RUNS} navigate={navigate} runPath={(id) => `/s/run%3A${id}`} projectId={null} selectedRun={null} onKill={vi.fn()} {...over} />,
+    <CommandPalette open onClose={onClose} runs={RUNS} navigate={navigate} runPath={(id) => `/s/run%3A${id}`} projectId={null} {...over} />,
   );
   return { navigate, onClose };
 }
@@ -312,10 +312,10 @@ describe('states', () => {
     let signal: AbortSignal | undefined;
     search.mockImplementation((_q: string, o: { signal?: AbortSignal }) => { signal = o.signal; return new Promise(() => {}); });
     const navigate = vi.fn();
-    const { rerender } = render(<CommandPalette open onClose={vi.fn()} runs={RUNS} navigate={navigate} runPath={(id) => id} projectId={null} selectedRun={null} onKill={vi.fn()} />);
+    const { rerender } = render(<CommandPalette open onClose={vi.fn()} runs={RUNS} navigate={navigate} runPath={(id) => id} projectId={null} />);
     type('upload');
     await waitFor(() => expect(signal).toBeDefined());
-    act(() => { rerender(<CommandPalette open={false} onClose={vi.fn()} runs={RUNS} navigate={navigate} runPath={(id) => id} projectId={null} selectedRun={null} onKill={vi.fn()} />); });
+    act(() => { rerender(<CommandPalette open={false} onClose={vi.fn()} runs={RUNS} navigate={navigate} runPath={(id) => id} projectId={null} />); });
     expect(signal!.aborted).toBe(true);
   });
 });

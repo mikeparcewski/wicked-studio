@@ -20,7 +20,7 @@ import { routeTargets } from '../palette/routeTargets.js';
 import { useProjectsStore } from '../store/projects.js';
 import { useGateStore } from '../store/gates.js';
 import { toggledTheme, useAppearanceStore } from '../theming/appearance.js';
-import { decideGate, GATE_HASH } from '../board/gateActions.js';
+import { GATE_HASH } from '../board/gateActions.js';
 import { statusWord } from '../board/statusWords.js';
 import { relTime } from '../board/relTime.js';
 import { readRecentSearches, rememberSearch, searchHitHref } from '../board/searchModel.js';
@@ -53,7 +53,6 @@ import { pageComposerKey } from '../store/composerSeed.js';
  * once something is typed.
  */
 
-const TERMINAL: ReadonlySet<string> = new Set(['completed', 'cancelled', 'failed']);
 const ACTIVE: ReadonlySet<string> = new Set(['planning', 'distributing', 'executing']);
 /** Keystrokes coalesce for this long before a search goes out. */
 const SEARCH_DEBOUNCE_MS = 150;
@@ -131,19 +130,17 @@ interface SearchState {
 export { clearRepoCache as clearPaletteRepoCache } from '../store/repoCache.js';
 
 /**
- * The two global chords App registers (§1.2) — exported so the wiring the app
- * mounts is the wiring the unit tests exercise. Order matters: the modal
- * toggle first (and it alone survives `paletteOpen`), the relocated kill-run
- * (Ctrl+Shift+K, same guards + silent-fail contract as the old `useKillShortcut`)
- * after it.
+ * The palette chords App registers (§1.2) — exported so the wiring the app
+ * mounts is the wiring the unit tests exercise. The modal toggle comes first (it
+ * alone survives `paletteOpen`). studio#1075: the Ctrl+Shift+K "cancel the selected
+ * run" chord is gone; no route ever selected a run, so it never fired. A run is
+ * stopped from ⌘K on the run itself (Stop, with its 10 s undo).
  */
 export function paletteShortcutEntries(opts: {
   isOpen: () => boolean;
   setOpen: (open: boolean) => void;
   /** Ctrl/⌘+Shift+F: open the modal ready to search (the same modal). */
   openSearch: () => void;
-  killEligible: () => boolean;
-  kill: () => void;
 }): ShortcutEntry[] {
   const toggle = (e: KeyboardEvent): void => {
     // studio#473: the chords reach the modal from a focused field too (a modifier chord is never
@@ -183,17 +180,6 @@ export function paletteShortcutEntries(opts: {
         opts.openSearch();
       },
       allowInTypingContext: true,
-    },
-    {
-      id: 'kill-run',
-      group: 'palette',
-      chord: { key: 'k', ctrlOrMeta: true, shift: true },
-      description: 'Cancel the selected run',
-      guard: opts.killEligible,
-      handler: (e) => {
-        e.preventDefault();
-        opts.kill();
-      },
     },
   ];
 }
@@ -262,8 +248,6 @@ interface Props {
   navigate: Navigate;
   runPath: (id: string) => string;
   projectId: string | null;
-  selectedRun: SessionView | null;
-  onKill: (id: string) => void;
   /** Pre-typed query on OPEN (the rail's Search, a seeded search). */
   seed?: string;
   /** S11: the object ⌘K was pressed on (the open sheet's, else the pointed one) — its actions lead. */
@@ -271,7 +255,7 @@ interface Props {
 }
 
 export function CommandPalette({
-  open, onClose, runs, navigate, runPath, projectId, selectedRun, onKill, seed = '', object = null,
+  open, onClose, runs, navigate, runPath, projectId, seed = '', object = null,
 }: Props): React.ReactElement | null {
   const [query, setQuery] = useState('');
   const [sel, setSel] = useState(0);
@@ -444,7 +428,6 @@ export function CommandPalette({
   const staleAnswer = daemonAnswers && found.allQ !== needle;
 
   const rows = useMemo((): Row[] => {
-    const status = selectedRun?.session.status ?? '';
     const entries: Entry[] = [];
 
     // Runs & gates — a gated run IS its gate row (deep link to #gate); rank:
@@ -505,7 +488,7 @@ export function CommandPalette({
     });
 
     // Verbs (§1.3's table — each names its existing mechanism, none invents one).
-    const verbs: Array<{ name: string; action: () => void; when?: boolean }> = [
+    const verbs: Array<{ name: string; action: () => void }> = [
       {
         // The launch wizard (operator 2026-10-11): a new job opens the one modal where you are — it
         // asks for the kind of job first; a session page's composer is the one it launches from.
@@ -561,33 +544,8 @@ export function CommandPalette({
       // "General" since the rail restructure (2026-10-13); the verb still starts "Configure", so `>config`
       // finds it, and the GO TO row ("General — settings for …") answers "settings".
       { name: `Configure studio — ${PAGE_NAMES.system}`, action: () => navigate('/system') },
-      {
-        name: 'Cancel run',
-        when: selectedRun !== null && !TERMINAL.has(status),
-        action: () => {
-          if (selectedRun !== null) onKill(selectedRun.session.id);
-        },
-      },
-      // The gate verbs answer through the ONE shared action module (slice H,
-      // §2.3): same POST, same double-submit guard, same §3.3 states as the
-      // GateChip's buttons and the triage keys.
-      {
-        name: 'Approve gate',
-        when: status === 'awaiting_human',
-        action: () => {
-          if (selectedRun !== null) void decideGate(selectedRun.session.id, { approve: true });
-        },
-      },
-      {
-        name: 'Reject gate',
-        when: status === 'awaiting_human',
-        action: () => {
-          if (selectedRun !== null) void decideGate(selectedRun.session.id, { approve: false });
-        },
-      },
     ];
     verbs.forEach((v, i) => {
-      if (v.when === false) return;
       entries.push({ id: `verb-${v.name}`, group: 'verbs', label: v.name, context: 'command', action: v.action, rank: i });
     });
 
@@ -687,7 +645,7 @@ export function CommandPalette({
     const localAsWritten = local.filter((r) => readsAsWritten(needle, r.en.label));
     const localScattered = local.filter((r) => !readsAsWritten(needle, r.en.label));
     return [...capped, ...localAsWritten, ...scattered, ...localScattered];
-  }, [runs, projects, repos, gates, attachedAtByRun, goTargets, object, scope, needle, searching, recent, found, tab, runPath, navigate, projectId, selectedRun, onKill, onClose, projectName, openAs, loadTab, daemonAnswers, staleAnswer]);
+  }, [runs, projects, repos, gates, attachedAtByRun, goTargets, object, scope, needle, searching, recent, found, tab, runPath, navigate, projectId, onClose, projectName, openAs, loadTab, daemonAnswers, staleAnswer]);
 
   // Clamp the selection whenever the row set changes.
   const selIx = Math.min(sel, Math.max(0, rows.length - 1));
@@ -954,7 +912,7 @@ export function CommandPalette({
       {/* `> Open Terminal` — the RightPanel pair (Modal + governed Terminal) */}
       {showTerminal && (
         <Modal title="Operator shell" onClose={() => setShowTerminal(false)}>
-          <Terminal cwd={selectedRun?.session.workdir ?? '.'} governed />
+          <Terminal cwd="." governed />
         </Modal>
       )}
     </>

@@ -4,7 +4,7 @@ import { useEffect } from 'react';
  * The global shortcut registry (DES-FEEDBACK-002 §1.2, slice G).
  *
  * ONE `window.addEventListener('keydown')` for the whole app — the EC21
- * contract: every global chord (the palette toggle, the relocated kill-run,
+ * contract: every global chord (the palette toggle, the search chord,
  * slice H's triage keys) registers an entry in the ordered table below, and the
  * shared `isTypingContext` guard runs before ANY entry, so no shortcut — chorded
  * or not — ever acts while something editable has focus. The modal family's
@@ -17,7 +17,7 @@ export interface ShortcutChord {
   /** Chord requires Ctrl OR Meta (the cross-platform Cmd/Ctrl pairing). */
   ctrlOrMeta?: boolean;
   /** Chord requires Shift. Absent = Shift must be UP — this is what keeps
-   *  Ctrl+K (palette) and Ctrl+Shift+K (kill) two different chords. */
+   *  Ctrl+K (palette) and Ctrl+Shift+F (search) apart from their unshifted keys. */
   shift?: boolean;
   /** Chord requires Alt/Option (slice BD's in-textarea steer prefixes).
    *  Absent = Alt must be UP, the standing contract every prior entry keeps. */

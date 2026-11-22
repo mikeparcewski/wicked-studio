@@ -18,7 +18,7 @@ function mount() {
   const setOpen = vi.fn((v: boolean) => { open = v; });
   const openSearch = vi.fn();
   cleanups.push(registerShortcuts(paletteShortcutEntries({
-    isOpen: () => open, setOpen, openSearch, killEligible: () => false, kill: () => undefined,
+    isOpen: () => open, setOpen, openSearch,
   })));
   return { setOpen, openSearch };
 }

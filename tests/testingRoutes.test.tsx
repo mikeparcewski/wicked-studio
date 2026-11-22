@@ -34,7 +34,6 @@ describe('useRoute — /testing/:page', () => {
       expect(r.panel).toBe('testing');
       expect(r.testingPage).toBe(p);
       // No run-selected machinery ever fires against a testing address.
-      expect(r.runId).toBeNull();
       expect(r.projectId).toBeNull();
     }
   });

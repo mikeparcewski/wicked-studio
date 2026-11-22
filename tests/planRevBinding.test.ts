@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * DES-CATALOG-002 §2.7.6: a run launched from a chat proposal takes a plan answer only with the plan revision the person
- * was shown — on every path, not only the passage: the command palette's Approve gate (`decideGate`), the session
+ * was shown — on every path, not only the passage: a gate card's Approve (`decideGate`), the session
  * sheet's plan card (`commitGateDecision`) and batch approval (`runBatchDecision`). Unknown → refused unsent.
  */
 
@@ -37,7 +37,7 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); resetDecisionsForTest(); });
 
 describe('planRev on every approve path', () => {
-  it('the palette’s Approve gate names the revision the gate showed', async () => {
+  it('a gate card’s Approve (decideGate) names the revision the gate showed', async () => {
     gate('r-job', 'Approve plan rev 3 before unit 2 runs: build → review', 'plan_approval');
     void decideGate('r-job', { approve: true });
     await flushDecisionsForTest();

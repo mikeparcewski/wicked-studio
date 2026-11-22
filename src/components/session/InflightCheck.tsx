@@ -1,5 +1,5 @@
 import { useDisplayText } from '../../hooks/useHomePath.js';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { Ask, AskAnswer } from '../../api/ask.js';
 import { AskCard, AskRecord } from '../ask/AskCard.js';
@@ -7,7 +7,7 @@ import { apiStatus } from '../../api/errors.js';
 import { inspectionOf, type InspectAction, type InspectVerdict, type UnitInspection } from '../../api/inspect.js';
 import { checkAfterMs, costWords, elapsedWords, tokenWords, type TurnKind } from '../../board/liveTurn.js';
 import { useRunEventStore } from '../../store/events.js';
-import { stopRun } from '../../store/sheets.js';
+import { stopRun, useSheets } from '../../store/sheets.js';
 import { InlineUndo } from '../InlineUndo.js';
 
 /**
@@ -33,7 +33,8 @@ const VERDICT: Record<InspectVerdict, { word: string; tone: 'ok' | 'warn' | 'fai
   wasteful: { word: 'Wasting tokens', tone: 'warn' },
 };
 
-type Chosen = { action: InspectAction; at: number; note?: string; error?: string };
+/** `stopId`: for a Stop, the queued Stop it rides on (its own, or one already queued for the run; studio#1075). */
+type Chosen = { action: InspectAction; at: number; note?: string; error?: string; stopId?: number | null };
 
 export function InflightCheck({ runId, ord, attempt, kind, startedAt, now, seatName, seatKey, label }: {
   runId: string;
@@ -58,7 +59,23 @@ export function InflightCheck({ runId, ord, attempt, kind, startedAt, now, seatN
   const [asking, setAsking] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [snoozeAt, setSnoozeAt] = useState<number>(() => snoozed.get(key) ?? 0);
-  const [chosen, setChosen] = useState<Chosen | null>(null);
+  const [picked, setChosen] = useState<Chosen | null>(null);
+  // studio#1075: a Stop that was undone (or cancelled unsent) is no longer the answer: the run keeps going, so the card
+  // asks again instead of saying "You chose: Stop".
+  const stopId = picked?.stopId ?? null;
+  const stopUnsent = useSheets((s) => stopId !== null && s.unsentStops[stopId] === true);
+  const chosen = stopUnsent ? null : picked;
+  // codex r2: an Undo pressed in the Stop's record takes that record away; focus goes to the verdict that comes back
+  // (its chosen option), never to the page body.
+  const verdictRef = useRef<HTMLElement | null>(null);
+  const refocus = useRef(false);
+  const leftWithFocus = useCallback(() => { refocus.current = true; }, []);
+  useLayoutEffect(() => {
+    if (!stopUnsent || !refocus.current) return;
+    refocus.current = false;
+    const v = verdictRef.current;
+    (v?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]') ?? v?.querySelector<HTMLElement>('button:not([disabled])'))?.focus();
+  }, [stopUnsent]);
 
   // A check asked earlier on this attempt (a reload, another tab) is shown as it stands, once the turn is long enough
   // to have been checked at all.
@@ -124,8 +141,9 @@ export function InflightCheck({ runId, ord, attempt, kind, startedAt, now, seatN
       return;
     }
     if (a.option === 'stop') {
-      stopRun([runId], label);
-      setChosen({ action: 'stop', at: Date.now() });
+      // A Stop already in its window for this run is the one this answer rides on (stopRun queues no second one).
+      const queued = stopRun([runId], label) ?? useSheets.getState().stopping[runId] ?? null;
+      setChosen({ action: 'stop', at: Date.now(), stopId: queued });
       return;
     }
     const body = (a.reason ?? '').trim();
@@ -157,10 +175,10 @@ export function InflightCheck({ runId, ord, attempt, kind, startedAt, now, seatN
     if (chosen.action !== 'stop') return record;
     // studio 0.16.4: the Stop's countdown, Undo and result, under the answer that asked for it.
     return (
-      <div data-undo-host="inflight-check" className="wk-inflight-stopped">
+      <StopRecord onLeaveWithFocus={leftWithFocus}>
         {record}
         <InlineUndo host="inflight-check" keys={[`stop:${runId}`]} />
-      </div>
+      </StopRecord>
     );
   }
 
@@ -192,7 +210,7 @@ export function InflightCheck({ runId, ord, attempt, kind, startedAt, now, seatN
       record: 'You chose: {label}',
     };
     return (
-      <section data-testid="inflight-check" data-undo-host="inflight-check" data-state="done" data-verdict={record.verdict} data-source={record.source ?? ''} className="wk-ask wk-inflight" data-tone={v.tone} aria-label="How it is going">
+      <section ref={verdictRef} data-testid="inflight-check" data-undo-host="inflight-check" data-state="done" data-verdict={record.verdict} data-source={record.source ?? ''} className="wk-ask wk-inflight" data-tone={v.tone} aria-label="How it is going">
         <p className="wk-ask-who">
           <span data-testid="inflight-check-verdict" className={`wk-inflight-pill wk-inflight-pill--${v.tone}`}>{v.word}</span>
           <span data-testid="inflight-check-by">
@@ -250,4 +268,15 @@ export function InflightCheck({ runId, ord, attempt, kind, startedAt, now, seatN
       {refusal !== null && <p data-testid="inflight-check-refused" role="alert" className="wk-inflight-why">{refusal}</p>}
     </section>
   );
+}
+
+/** The Stop's record and its Undo. Leaving with focus inside (an Undo pressed here) is reported while it is still on the
+ *  page, so the verdict that replaces it can take the focus (studio#1075, codex r2). */
+function StopRecord({ onLeaveWithFocus, children }: { onLeaveWithFocus: () => void; children: React.ReactNode }): React.ReactElement {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    return () => { if (el !== null && el.contains(document.activeElement)) onLeaveWithFocus(); };
+  }, [onLeaveWithFocus]);
+  return <div ref={ref} data-undo-host="inflight-check" className="wk-inflight-stopped">{children}</div>;
 }

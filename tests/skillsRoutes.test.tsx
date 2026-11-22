@@ -26,7 +26,6 @@ describe('useRoute — /skills', () => {
   it('parses /skills to the skills panel with nothing else armed', () => {
     const r = routeAt('/skills').current;
     expect(r.panel).toBe('skills');
-    expect(r.runId).toBeNull();
     expect(r.projectId).toBeNull();
     expect(r.showLaunch).toBe(false);
     expect(r.steeringSection).toBeNull();

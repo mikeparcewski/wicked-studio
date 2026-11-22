@@ -30,7 +30,6 @@ describe('useRoute — /steering/{policies,proposals} and /memory', () => {
   it('parses the two Steer sub-sections to the one steering panel', () => {
     const pol = routeAt('/steering/policies').current;
     expect(pol).toMatchObject({ panel: 'steering', steeringSection: 'policies' });
-    expect(pol.runId).toBeNull();
     expect(pol.projectId).toBeNull();
     expect(routeAt('/steering/proposals').current).toMatchObject({ panel: 'steering', steeringSection: 'proposals' });
   });
@@ -57,7 +56,6 @@ describe('useRoute — /steering/{policies,proposals} and /memory', () => {
       expect(r.panel).toBe('steering');
       expect(r.steeringSection).toBeNull();
       // No run-selected machinery ever fires against a steering address.
-      expect(r.runId).toBeNull();
       expect(r.projectId).toBeNull();
     }
   });

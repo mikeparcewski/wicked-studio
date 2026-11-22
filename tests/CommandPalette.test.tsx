@@ -46,7 +46,7 @@ function calls(prop: string): ReturnType<typeof vi.fn> {
   return fn;
 }
 
-const { CommandPalette, clearPaletteRepoCache } = await import('../src/components/CommandPalette.js');
+const { CommandPalette, clearPaletteRepoCache, paletteShortcutEntries } = await import('../src/components/CommandPalette.js');
 const { useProjectsStore } = await import('../src/store/projects.js');
 const { useGateStore } = await import('../src/store/gates.js');
 const { useAppearanceStore } = await import('../src/theming/appearance.js');
@@ -64,7 +64,6 @@ const RUNS = [
 
 function renderPalette(over: Partial<Parameters<typeof CommandPalette>[0]> = {}) {
   const navigate = vi.fn();
-  const onKill = vi.fn();
   const onClose = vi.fn();
   const utils = render(
     <CommandPalette
@@ -74,12 +73,10 @@ function renderPalette(over: Partial<Parameters<typeof CommandPalette>[0]> = {})
       navigate={navigate}
       runPath={(id) => `/runs/${id}`}
       projectId={null}
-      selectedRun={null}
-      onKill={onKill}
       {...over}
     />,
   );
-  return { navigate, onKill, onClose, ...utils };
+  return { navigate, onClose, ...utils };
 }
 
 beforeEach(() => {
@@ -207,38 +204,24 @@ describe('keyboard navigation & activation (§1.7)', () => {
 });
 
 describe('the verb table (§1.3)', () => {
-  it('"> " lists the always-verbs; Cancel run and gate verbs need an eligible selected run', () => {
+  // studio#1075: Cancel run and Approve/Reject gate hung off a selected run no route ever set, so they never showed.
+  // They are gone; a run is stopped from ⌘K on the run itself, and a gate is answered on its card.
+  it('"> " lists the always-verbs and no run or gate verb (studio#1075)', () => {
     renderPalette();
     fireEvent.change(screen.getByTestId('palette-input'), { target: { value: '> ' } });
     const names = rows().map((r) => r.textContent ?? '');
     for (const v of ['New job', 'New Chat', 'New Project', 'Toggle Theme', 'Open Terminal']) {
       expect(names.some((n) => n.includes(v))).toBe(true);
     }
-    expect(names.some((n) => n.includes('Cancel run'))).toBe(false);
-    expect(names.some((n) => n.includes('Approve gate'))).toBe(false);
+    for (const gone of ['Cancel run', 'Approve gate', 'Reject gate']) {
+      expect(names.some((n) => n.includes(gone))).toBe(false);
+    }
   });
 
-  it('Cancel run shows for a non-terminal selected run and dispatches onKill; terminal hides it', () => {
-    const { onKill } = renderPalette({ selectedRun: RUNS[1] ?? null });
-    fireEvent.change(screen.getByTestId('palette-input'), { target: { value: '> cancel' } });
-    const row = rows().find((r) => r.textContent?.includes('Cancel run'));
-    expect(row).toBeDefined();
-    fireEvent.click(row!);
-    expect(onKill).toHaveBeenCalledWith('r-live');
-
-    cleanup();
-    renderPalette({ selectedRun: RUNS[2] ?? null });
-    fireEvent.change(screen.getByTestId('palette-input'), { target: { value: '> cancel' } });
-    expect(rows().find((r) => r.textContent?.includes('Cancel run'))).toBeUndefined();
-  });
-
-  it('Approve/Reject gate show only for awaiting_human and fire the chip wire (POST gate)', async () => {
-    renderPalette({ selectedRun: RUNS[0] ?? null });
-    fireEvent.change(screen.getByTestId('palette-input'), { target: { value: '> approve' } });
-    const row = rows().find((r) => r.textContent?.includes('Approve gate'));
-    expect(row).toBeDefined();
-    fireEvent.click(row!);
-    await vi.waitFor(() => expect(confirmGate).toHaveBeenCalledWith('r-gate', { approve: true }));
+  it('the palette registers no Ctrl+Shift+K "cancel the selected run" chord (studio#1075)', () => {
+    const entries = paletteShortcutEntries({ isOpen: () => false, setOpen: () => undefined, openSearch: () => undefined });
+    expect(entries.map((e) => e.id)).not.toContain('kill-run');
+    expect(entries.some((e) => e.chord.key === 'k' && e.chord.shift === true)).toBe(false);
   });
 
   it('Toggle Theme flips the appearance store instance (the §2.14 mechanism)', () => {

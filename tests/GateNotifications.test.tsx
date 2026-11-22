@@ -39,32 +39,17 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-// The pre-slice-AA scope contract (studio#10) — carried forward verbatim: the
-// runId prop still means "only this run's toast".
-describe('GateNotifications runId scope (studio#10)', () => {
-  it('announces every gate when no runId is provided: one card, the rest as "+N" (UI-CONTRACT §3)', () => {
+// studio#1075: the run-scoped toast (studio#10's `runId` prop) went with the selected run no route ever set.
+describe('GateNotifications announces every gate', () => {
+  it('one card, the rest as "+N" (UI-CONTRACT §3)', () => {
     seed(gate('run-1'), gate('run-2'));
     render(<GateNotifications onSelect={() => {}} />);
     expect(screen.getAllByTestId('gate-toast')).toHaveLength(1);
     expect(screen.getByTestId('gate-toast-overflow').textContent).toContain('+1 more waiting');
   });
 
-  it('shows only the matching gate when runId is provided', () => {
-    seed(gate('run-1'), gate('run-2'));
-    render(<GateNotifications onSelect={() => {}} runId="run-1" />);
-    const toasts = screen.getAllByTestId('gate-toast');
-    expect(toasts).toHaveLength(1);
-    expect(toasts[0]).toHaveAttribute('data-run-id', 'run-1');
-  });
-
-  it('shows nothing when runId matches no gate', () => {
-    seed(gate('run-1'), gate('run-2'));
-    render(<GateNotifications onSelect={() => {}} runId="run-99" />);
-    expect(screen.queryByTestId('gate-toast')).toBeNull();
-  });
-
   it('shows nothing when store is empty', () => {
-    render(<GateNotifications onSelect={() => {}} runId="run-1" />);
+    render(<GateNotifications onSelect={() => {}} />);
     expect(screen.queryByTestId('gate-notification')).toBeNull();
   });
 });
@@ -207,19 +192,6 @@ describe('GateNotifications — cross-project context (B4)', () => {
       />,
     );
     expect(screen.queryByTestId('gate-notification')).toBeNull();
-  });
-
-  it('the run-scoped view keeps its own gate card even inside a project shell', () => {
-    seed(gate('r-mine'));
-    render(
-      <GateNotifications
-        onSelect={() => {}}
-        runId="r-mine"
-        projectId="proj-a"
-        runs={[makeView({ id: 'r-mine', status: 'awaiting_human', project_id: 'proj-a' })]}
-      />,
-    );
-    expect(screen.getByTestId('gate-notification')).toBeInTheDocument();
   });
 });
 

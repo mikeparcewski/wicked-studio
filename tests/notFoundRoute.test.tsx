@@ -48,7 +48,6 @@ describe('useRoute — dead addresses parse to the not-found panel', () => {
   it('a garbage route with a second segment is not-found — never a fabricated run id', () => {
     const r = routeAt('/garbage/xyz').current;
     expect(r.panel).toBe('not-found');
-    expect(r.runId).toBeNull();
   });
 
   it('typo’d steering and testing SUB-routes are not-found', () => {
