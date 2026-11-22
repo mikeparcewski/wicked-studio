@@ -281,7 +281,8 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   const crewPosture = posture.answer.status === 'ready' ? posture.answer.posture : null;
   const powerOn = offerPower && crewPosture?.power === true;
   // While crew is asked about a change, the switch keeps the person's choice; the launch waits for crew's word (below).
-  const switchOn = crewPosture !== null ? powerOn : powerChoice === true;
+  // No answer (a failed preview, an older daemon): Off, as Launch then runs it (codex r1).
+  const switchOn = crewPosture !== null ? powerOn : posture.answer.status === 'loading' && powerChoice === true;
   /** A power run asks once, at hand-off, only when it delivers with a person (crew's `deliver` and `autoDeliver`). */
   const powerAsksAtHandOff = crewPosture !== null && crewPosture.deliver === 'pr' && !crewPosture.autoDeliver;
   const powerUnchecked: 'failed' | 'unsupported' | null = !offerPower ? null : posture.answer.status === 'failed' ? 'failed'
@@ -494,6 +495,8 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
     launchingRef.current = true;
     setLaunching(true);
     setError(null);
+    // A QE refusal speaks for the attempt that drew it; this one is new (codex r1).
+    setQeRefused(null);
     try {
       const key = draft.composerKey;
       const chatId = launchChatId(key, chatIdOnLaunch);
@@ -544,6 +547,7 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
     launchingRef.current = true;
     setLaunching(true);
     setError(null);
+    setQeRefused(null);
     try {
       const { runId } = await api.launchRun(reducedRelaunchBody(launched.body, launched.notice));
       useProvenanceStore.getState().markLaunchedHere(runId);

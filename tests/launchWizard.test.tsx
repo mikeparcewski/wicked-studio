@@ -19,6 +19,7 @@ import { clearCachedRoster, setCachedRoster } from '../src/store/rosterCache.js'
 import { clearCachedWorkflows, setCachedWorkflows } from '../src/store/workflowCache.js';
 import { useCapabilities } from '../src/store/capabilities.js';
 import { launchLead, workflowLaunchBody } from '../src/board/launchModel.js';
+import { postureFieldsOfBody } from '../src/board/launchPosture.js';
 
 const seat = (key: string): RosterSeat =>
   ({ key, display_name: key, binary: key, enabled_for_council: true, health: { status: 'active', since: 'x' }, signed_in: true }) as RosterSeat;
@@ -398,6 +399,8 @@ describe('power mode in the New job form (DES-POWER-MODE §2)', () => {
   beforeEach(() => {
     settings = {};
     presets = new Set(['mcp-server']);
+    // Capabilities read once (a first test's own /health read would reset powerMode under it).
+    useCapabilities.setState({ loaded: true });
     const inner = (globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>);
     vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
       const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
@@ -474,12 +477,31 @@ describe('power mode in the New job form (DES-POWER-MODE §2)', () => {
     expect(screen.getByTestId('launch-wizard-power-toggle').getAttribute('aria-checked')).toBe('false');
     expect(screen.getByTestId('launch-wizard-gate')).toBeTruthy();
     expect(screen.queryByTestId('launch-wizard-power-gates')).toBeNull();
-    // The preview asked about exactly the body Launch sends.
-    expect(posts.filter((p) => p.path === '/runs/preview').at(-1)!.body).toMatchObject({ workflow: 'mcp-server', repoRef: 'repo-1' });
     next();
     expect(screen.getByTestId('launch-wizard-review-power').textContent).toMatch(/Off: phased \(power mode runs a repo-scoped plan or preset launch/);
     expect(screen.getByTestId('launch-wizard-review').textContent).not.toMatch(/At hand-off/);
-    expect(await launched()).toMatchObject({ power: false, humanConfirm: expect.any(String) });
+    const body = await launched();
+    expect(body).toMatchObject({ power: false, humanConfirm: expect.any(String) });
+    // The preview asked about exactly the posture fields of the body Launch sent (and no power: the person chose none).
+    expect(posts.filter((p) => p.path === '/runs/preview').at(-1)!.body).toEqual(postureFieldsOfBody(body as never));
+  });
+
+  it('Launch waits while crew is asked, and then sends power as crew answered', async () => {
+    useCapabilities.setState({ powerMode: true });
+    const inner = (globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>);
+    let release!: () => void;
+    const held = new Promise<void>((r) => { release = r; });
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (path === '/runs/preview') return held.then(() => inner(url, init));
+      return inner(url, init);
+    }));
+    await toOptions();
+    next();
+    await waitFor(() => expect(screen.getByTestId('launch-wizard-blocker').textContent).toBe('Checking how this job will run…'));
+    expect((screen.getByTestId('launch-wizard-launch') as HTMLButtonElement).disabled).toBe(true);
+    release();
+    expect(await launched()).toMatchObject({ power: true });
   });
 
   it('a preview that fails says so with Retry, and Launch runs phased', async () => {
@@ -498,6 +520,34 @@ describe('power mode in the New job form (DES-POWER-MODE §2)', () => {
     fireEvent.click(screen.getByTestId('launch-wizard-power-retry'));
     await waitFor(() => expect(screen.getByTestId('launch-wizard-power-toggle').getAttribute('aria-checked')).toBe('true'));
     expect(screen.queryByTestId('launch-wizard-power-unchecked')).toBeNull();
+  });
+
+  it('a failed preview launches phased, with the gate chosen here; so does an older daemon with no preview (404)', async () => {
+    for (const status of [503, 404]) {
+      cleanup();
+      resetLaunchWizard();
+      posts.length = 0;
+      useCapabilities.setState({ powerMode: true });
+      const inner = (globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>);
+      vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+        const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+        if (path === '/runs/preview') return Promise.resolve(new Response(JSON.stringify({ error: 'no' }), { status, headers: { 'content-type': 'application/json' } }));
+        return inner(url, init);
+      }));
+      await toOptions();
+      await waitFor(() => expect(screen.getByTestId('launch-wizard-power-unchecked').dataset['reason']).toBe(status === 404 ? 'unsupported' : 'failed'));
+      // Turned on by the person, still no answer: the switch says Off, as Launch runs it (codex r1).
+      fireEvent.click(screen.getByTestId('launch-wizard-power-toggle'));
+      await waitFor(() => {
+        expect(screen.getByTestId('launch-wizard-power-unchecked')).toBeTruthy();
+        expect(screen.getByTestId('launch-wizard-power-toggle').getAttribute('aria-checked')).toBe('false');
+        expect(useLaunchWizard.getState().draft?.power).toBe(true);
+      });
+      expect(screen.getByTestId('launch-wizard-gate')).toBeTruthy();
+      next();
+      expect(await launched()).toMatchObject({ power: false, humanConfirm: expect.any(String) });
+      vi.stubGlobal('fetch', inner);
+    }
   });
 
   it('turned off for this job, it sends power: false and the gate posture again', async () => {
@@ -542,11 +592,13 @@ describe('studio#1239: New job shows crew’s assurance notice', () => {
       return inner(url, init);
     }));
   });
-  afterEach(() => { useCapabilities.setState({ reducedAssurance: false }); });
+  beforeEach(() => { useCapabilities.setState({ chatIdOnLaunch: true }); });
+  afterEach(() => { useCapabilities.setState({ reducedAssurance: false, chatIdOnLaunch: false }); });
 
   async function launchOnce(): Promise<void> {
     render(<Harness />);
-    act(() => { openLaunchWizard({ workflowId: 'mcp-server', composerKey: 'desk' }); });
+    // From a chat: the first launch binds to it (chatIdOnLaunch), so the relaunch's dropping it is observable.
+    act(() => { openLaunchWizard({ workflowId: 'mcp-server', composerKey: 'chat-abc' }); });
     fireEvent.change(await screen.findByTestId('launch-wizard-intent'), { target: { value: 'build an MCP server for the ledger' } });
     next();
     await waitFor(() => expect((screen.getByTestId('launch-wizard-repo') as HTMLSelectElement).value).toBe('repo-1'));
@@ -568,6 +620,7 @@ describe('studio#1239: New job shows crew’s assurance notice', () => {
     fireEvent.click(screen.getByTestId('launch-wizard-assurance-relaunch'));
     await waitFor(() => expect(posts.filter((p) => p.path === '/runs')).toHaveLength(2));
     const [first, again] = posts.filter((p) => p.path === '/runs');
+    expect(first!.body['chatId']).toBe('chat-abc');
     const { chatId: _c, ...sameJob } = first!.body;
     void _c;
     expect(again!.body).toEqual({ ...sameJob, retryOf: 'r-new', reducedAssurance: true });

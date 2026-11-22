@@ -1710,7 +1710,7 @@ describe('studio#1239: a Start refused for want of an independent reviewer offer
         if (refuse(body)) return Promise.resolve(ok({ ...REFUSAL, view: { proposal: jobProposal(), state: 'open' } }, 409));
         return Promise.resolve(ok({ view: {} }));
       }
-      if (path.startsWith('/chats/') && !path.includes('/considered')) return Promise.resolve(ok({ chatId: CHAT, seats: ['claude'], scope: { kind: 'none' }, messages }));
+      if (path.startsWith('/chats/') && !path.includes('/considered')) { reads += 1; return Promise.resolve(ok({ chatId: CHAT, seats: ['claude'], scope: { kind: 'none' }, messages })); }
       if (path.endsWith('/team')) return Promise.resolve(ok(team));
       if (path.endsWith('/events')) return Promise.resolve(ok({ events: [] }));
       return Promise.resolve(new Response('{}', { status: 404 }));
@@ -1733,6 +1733,18 @@ describe('studio#1239: a Start refused for want of an independent reviewer offer
       [goPath, { decision: 'go', reducedAssurance: true }],
     ]);
     await waitFor(() => expect(screen.queryByTestId('job-passage-reduced')).toBeNull());
+  });
+
+  it('a same-pid re-resolution after the refusal offers no reduced-assurance Start for the changed job', async () => {
+    answerGo((b) => b['reducedAssurance'] !== true);
+    page();
+    await screen.findByTestId('job-passage');
+    fireEvent.click(reply('start'));
+    await screen.findByTestId('job-passage-reduced');
+    // crew re-resolves the proposal under the same pid (its suggestions changed): the refusal spoke for the old one.
+    await frame({ at: T0 + 3, turnId: 't1', kind: 'proposal', proposal: jobProposal({ suggestions: [] }) });
+    await waitFor(() => expect(screen.queryByTestId('job-passage-reduced')).toBeNull());
+    expect(posts.filter((p) => p.body['reducedAssurance'] === true)).toEqual([]);
   });
 
   it('a refusal that names no reduced-assurance way on offers none', async () => {
