@@ -201,7 +201,8 @@ export function resetSettledNeedsForTest(): void { settledScopes.clear(); }
  * After the first `complete`, a refresh keeps that number until the next `complete`, and a FAILED
  * runs read (`runsFailed`, studio#684) keeps it too: a read that failed never changes a count.
  * `scope` names WHAT is counted (studio#833): every caller counting the same rows passes the same
- * scope; a project's Desk passes its project id.
+ * scope; a project's Desk passes its project id. A project's count waits on no REST source (studio#1073): none of
+ * them adds a row about a run, and a project counts only its runs' rows.
  */
 export function useSettledNeeds(needRows: readonly NeedRow[], runsKnown: boolean, runsFailed = false, scope: string = ALL_NEEDS_SCOPE): { phase: 'loading' | 'complete' | 'partial'; count: number | null; missing: string[] } {
   const s = useNeedsSources();
@@ -225,7 +226,10 @@ export function useSettledNeeds(needRows: readonly NeedRow[], runsKnown: boolean
   // Decide first (no early return before the effects): what to say, and when to look again.
   let out: { phase: 'loading' | 'complete' | 'partial'; count: number | null; missing: string[] };
   let wakeAt: number | null = null;
-  const sources = Object.keys(NEEDS_SOURCE_NAMES) as NeedsSource[];
+  // studio#1073: a project's Desk keeps only the rows of its own runs (DeskV2), and no REST source adds a row about a
+  // run (theirs are `chat:`, `proposal:`, `repo:` and `campaign:` rows, never a run key), so a project's count waits
+  // on none of them and never names one missing. `GET /proposals` alone kept an empty project's skeleton up for seconds.
+  const sources = scope === ALL_NEEDS_SCOPE ? (Object.keys(NEEDS_SOURCE_NAMES) as NeedsSource[]) : [];
   const expired = now - since >= NEEDS_SETTLE_MS;
   const pending = sources.filter((k) => s.readAt[k] === undefined);
   if (runsFailed) {
