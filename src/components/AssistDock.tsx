@@ -992,15 +992,21 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   }, [seed?.nonce]);
 
   // A flowing chat (page or window) follows its tail while an answer streams in, unless the person scrolled up to read.
+  // studio#940: a chat kept mounted but hidden (Understand while Compare or Coverage shows) has no layout, so a write
+  // while hidden goes nowhere and the browser keeps the old offset; the follow is owed until it is laid out again. A
+  // scroll event with no layout is not the person's, so it never unpins.
   useEffect(() => {
     const el = threadRef.current;
     if (!flow || el === null || typeof MutationObserver === 'undefined') return undefined;
     let pinned = true;
-    const onScroll = (): void => { pinned = el.scrollHeight - el.scrollTop - el.clientHeight < 48; };
-    const mo = new MutationObserver(() => { if (pinned) el.scrollTop = el.scrollHeight; });
+    const follow = (): void => { if (pinned && el.clientHeight > 0) el.scrollTop = el.scrollHeight; };
+    const onScroll = (): void => { if (el.clientHeight > 0) pinned = el.scrollHeight - el.scrollTop - el.clientHeight < 48; };
+    const mo = new MutationObserver(follow);
     mo.observe(el, { childList: true, subtree: true, characterData: true });
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(follow) : null;
+    ro?.observe(el);
     el.addEventListener('scroll', onScroll);
-    return () => { mo.disconnect(); el.removeEventListener('scroll', onScroll); };
+    return () => { mo.disconnect(); ro?.disconnect(); el.removeEventListener('scroll', onScroll); };
   }, [flow]);
 
   /** studio#328: a resumed block's probe answered. Reclaimed → drop the resumed block
