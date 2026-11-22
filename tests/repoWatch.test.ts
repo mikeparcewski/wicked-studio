@@ -59,6 +59,36 @@ describe('readRepoWatch', () => {
   });
 });
 
+describe('a re-index against its budget (studio#1099)', () => {
+  it('keeps the wire\'s indexing start and budget, tolerantly', () => {
+    const got = readRepoWatch({ enabled: true, cap: 24, covers: 'x', repos: [
+      { repoId: 'r1', state: 'indexing', indexing: { startedAt: NOW - 240_000, budget: { budgetMs: 760_000, trackedFiles: 2203 } } },
+      { repoId: 'r2', state: 'indexing', indexing: { startedAt: NOW - 60_000, budget: null } },
+      { repoId: 'r3', state: 'indexing', indexing: { startedAt: 'soon', budget: null } },
+      { repoId: 'r4', state: 'current', indexing: { startedAt: NOW, budget: null } },
+    ] });
+    expect(got?.repos[0]?.indexing).toEqual({ startedAt: NOW - 240_000, budget: { budgetMs: 760_000, trackedFiles: 2203 } });
+    expect(got?.repos[1]?.indexing).toEqual({ startedAt: NOW - 60_000, budget: null });
+    expect(got?.repos[2]?.indexing).toBeUndefined();
+    expect(got?.repos[3]?.indexing).toBeUndefined();
+  });
+
+  it('says the time so far against the budget, and the files it was sized from', () => {
+    const at = (indexing: RepoWatchStatus['repos'][number]['indexing']) => {
+      const line = watchLine(status({ state: 'indexing', ...(indexing !== undefined ? { indexing } : {}) }), 'r1', NOW);
+      return `${line?.words ?? ''}${line?.clock ?? ''}`;
+    };
+    expect(at({ startedAt: NOW - 240_000, budget: { budgetMs: 760_000, trackedFiles: 2203 } })).toBe('Re-indexing · 4 min 0 s of 12 min 40 s · 2,203 files');
+    expect(at({ startedAt: NOW - 240_000, budget: { budgetMs: 760_000, trackedFiles: null } })).toBe('Re-indexing · 4 min 0 s of 12 min 40 s');
+    expect(at({ startedAt: NOW - 45_000, budget: null })).toBe('Re-indexing · 45 s so far');
+    expect(at(undefined)).toBe('Re-indexing now…');
+    // The clock is said apart from the words (kept out of the live announcement), and not after a failed read.
+    const line = watchLine(status({ state: 'indexing', indexing: { startedAt: NOW - 45_000, budget: null } }), 'r1', NOW);
+    expect(line).toMatchObject({ words: 'Re-indexing', clock: ' · 45 s so far' });
+    expect(watchLine(status({ state: 'indexing', indexing: { startedAt: NOW - 45_000, budget: null } }), 'r1', NOW, true)?.clock).toBeNull();
+  });
+});
+
 describe('the Repositories sentence and dots under the watcher (coord, crew-0183)', () => {
   it('never says all ready while one could not re-index or waits on a job', async () => {
     const { reposSentence } = await import('../src/board/repoRows.js');
