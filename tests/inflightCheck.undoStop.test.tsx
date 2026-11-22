@@ -24,7 +24,7 @@ const { LiveActivity } = await import('../src/components/session/LiveActivity.js
 const { useRunEventStore } = await import('../src/store/events.js');
 const { useRuntimeStore } = await import('../src/store/runtime.js');
 const { stopRun, useSheets } = await import('../src/store/sheets.js');
-const { cancelDecision, resetDecisionsForTest, undoDecision } = await import('../src/board/undoQueue.js');
+const { cancelDecision, resetDecisionsForTest, setUndoWindowForTest, undoDecision } = await import('../src/board/undoQueue.js');
 
 const T = (s: number): number => 1_800_000_000_000 + s * 1000;
 
@@ -48,6 +48,8 @@ function chooseStop(): void {
 }
 
 beforeEach(() => {
+  // codex r2: the suite-wide setup shortens the window to 0; these tests need the real 10 s one to Undo inside it.
+  setUndoWindowForTest(null);
   resetDecisionsForTest();
   useSheets.setState({ open: null, pointed: null, stopping: {}, unsentStops: {} });
   useRunEventStore.setState({ byRun: {} });
@@ -57,7 +59,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(T(4 * 60));
 });
-afterEach(() => { cleanup(); resetDecisionsForTest(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); resetDecisionsForTest(); setUndoWindowForTest(0); vi.useRealTimers(); });
 
 describe('the in-flight check after a Stop (studio#1075)', () => {
   it('Undo inside the window: "You chose: Stop" goes and the verdict asks again; nothing is sent', async () => {
@@ -67,10 +69,26 @@ describe('the in-flight check after a Stop (studio#1075)', () => {
     expect(screen.getByTestId('inflight-check-record').textContent).toContain('You chose: Stop this answer');
     const qid = useSheets.getState().stopping['r-undo'];
     expect(qid).toBeDefined();
+    // Partway through the window: nothing has gone out yet.
+    act(() => { vi.advanceTimersByTime(5_000); });
+    expect(cancelRun).not.toHaveBeenCalled();
     act(() => { undoDecision(qid!); });
     expect(screen.queryByTestId('inflight-check-record')).toBeNull();
     expect(screen.getByTestId('inflight-check-commit')).toBeInTheDocument();
     act(() => { vi.advanceTimersByTime(15_000); });
+    expect(cancelRun).not.toHaveBeenCalled();
+  });
+
+  it('the Undo button in the record hands keyboard focus to the verdict that comes back (codex r2)', async () => {
+    stuck('r-focus');
+    await verdictShown('r-focus');
+    chooseStop();
+    const undo = screen.getByTestId('inline-undo-button');
+    undo.focus();
+    expect(document.activeElement).toBe(undo);
+    act(() => { fireEvent.click(undo); });
+    expect(screen.queryByTestId('inflight-check-record')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByTestId('inflight-check-opt-stop'));
     expect(cancelRun).not.toHaveBeenCalled();
   });
 
