@@ -204,10 +204,8 @@ export function DecisionDockFrame({ items, children, composer, now = Date.now() 
     requestAnimationFrame(tryFocus);
   }, [activeKey, slot]);
 
-  // The folded sheet's headline is the docked renderer's own (the cause in plain words), read off the slot as it
-  // renders; the item's question stands in until it has.
   // studio#1021: the surface scrolls inside itself (60vh) under a sticky go-row; while there is more below the row, the
-  // surface says so (`data-more`: a fade and "More below" over the row's top edge, decision-dock.css), so a choice the
+  // surface says so (`data-more`: a fade and "More below" over the row's top edge, ask-card.css), so a choice the
   // row hides is never taken for the last one. Measured on scroll and whenever the surface or its content resizes.
   const [surface, setSurface] = useState<HTMLDivElement | null>(null);
   const [moreBelow, setMoreBelow] = useState(false);
@@ -224,6 +222,8 @@ export function DecisionDockFrame({ items, children, composer, now = Date.now() 
     return () => { surface.removeEventListener('scroll', soon); ro?.disconnect(); if (frame !== 0) cancelAnimationFrame(frame); };
   }, [surface, slot]);
 
+  // The folded sheet's headline is the docked renderer's own (the cause in plain words), read off the slot as it
+  // renders; the item's question stands in until it has.
   const [drawn, setDrawn] = useState<string | null>(null);
   useEffect(() => {
     if (slot === null) return;
