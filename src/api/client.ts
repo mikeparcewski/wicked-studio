@@ -768,13 +768,15 @@ export const api = {
   listConformanceRules: () => apiFetch<{ rules: import('./types.js').ConformanceRule[] }>('/governance/rules'),
 
   /** Front-half coverage gate report; `report` is `null` on an empty store. */
-  getCoverageReport: () => apiFetch<{ report: import('./types.js').CoverageReport | null }>('/governance/coverage'),
+  getCoverageReport: (opts: { signal?: AbortSignal } = {}) =>
+    apiFetch<{ report: import('./types.js').CoverageReport | null }>('/governance/coverage', opts.signal !== undefined ? { signal: opts.signal } : undefined),
 
   /** Coverage for ONE registered repo, over that repo's OWN code graph (FINDING-009) — not the
    *  vacuous daemon-store report. The daemon rejects an unknown repo, surfaced here as a 404 throw. */
-  getCoverageReportForRepo: (repoRef: string) =>
+  getCoverageReportForRepo: (repoRef: string, opts: { signal?: AbortSignal } = {}) =>
     apiFetch<{ report: import('./types.js').CoverageReport | null }>(
       `/governance/coverage?repo=${encodeURIComponent(repoRef)}`,
+      opts.signal !== undefined ? { signal: opts.signal } : undefined,
     ),
 
   /** A repo's code-graph summary — node counts by kind, over that repo's OWN store (#122). Repo-scoped

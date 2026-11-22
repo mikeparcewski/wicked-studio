@@ -3,6 +3,7 @@
  * The pane now says what it is reading, stops waiting after COVERAGE_READ_TIMEOUT_MS with Try again, drops a late
  * answer, and offers Try again on a failed read.
  */
+import { StrictMode } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as client from '../src/api/client.js';
@@ -70,5 +71,68 @@ describe('the coverage read (studio#1289)', () => {
     get.mockResolvedValueOnce({ report: REPORT });
     fireEvent.click(screen.getByTestId('coverage-retry'));
     await waitFor(() => expect(screen.getByText('Total nodes')).toBeInTheDocument());
+  });
+});
+
+describe('the coverage read ends cleanly (studio#1289, xreview r1)', () => {
+  it('a timeout ends the request, and Try again starts a fresh one', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const signals: AbortSignal[] = [];
+    vi.spyOn(client.api, 'getCoverageReport').mockImplementation(((opts?: { signal?: AbortSignal }) => {
+      if (opts?.signal !== undefined) signals.push(opts.signal);
+      return new Promise(() => {});
+    }) as never);
+    render(<CoverageView />);
+    await act(async () => { vi.advanceTimersByTime(COVERAGE_READ_TIMEOUT_MS); });
+    await screen.findByTestId('coverage-error');
+    expect(signals).toHaveLength(1);
+    expect(signals[0]!.aborted).toBe(true);
+    fireEvent.click(screen.getByTestId('coverage-retry'));
+    await waitFor(() => expect(signals).toHaveLength(2));
+    expect(signals[1]!.aborted).toBe(false);
+  });
+
+  it('leaving the pane ends the read in flight', async () => {
+    let signal: AbortSignal | undefined;
+    vi.spyOn(client.api, 'getCoverageReport').mockImplementation(((opts?: { signal?: AbortSignal }) => {
+      signal = opts?.signal;
+      return new Promise(() => {});
+    }) as never);
+    const { unmount } = render(<CoverageView />);
+    await waitFor(() => expect(signal).toBeDefined());
+    unmount();
+    expect(signal!.aborted).toBe(true);
+  });
+
+  it('an older read that answers after a newer one started is dropped (strict-mode remount)', async () => {
+    const answers: Array<(v: { report: CoverageReport }) => void> = [];
+    vi.spyOn(client.api, 'getCoverageReport').mockImplementation((() => new Promise((done) => { answers.push(done); })) as never);
+    render(<StrictMode><CoverageView /></StrictMode>);
+    await waitFor(() => expect(answers.length).toBe(2));
+    await act(async () => { answers[0]!({ report: { ...REPORT, total: 111 } }); });
+    expect(screen.queryByText('Total nodes')).toBeNull();
+    expect(screen.getByTestId('coverage-reading')).toBeInTheDocument();
+    await act(async () => { answers[1]!({ report: { ...REPORT, total: 222 } }); });
+    await waitFor(() => expect(screen.getByText('Total nodes')).toBeInTheDocument());
+    expect(screen.getByText('222')).toBeInTheDocument();
+    expect(screen.queryByText('111')).toBeNull();
+  });
+
+  it('a repository that times out never shows the previous repository\'s numbers', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.spyOn(client.api, 'listRepos').mockResolvedValue({ repos: [{ id: 'repo-b', name: 'billing-api' }] } as never);
+    vi.spyOn(client.api, 'getCoverageReport').mockResolvedValue({ report: { ...REPORT, total: 333 } });
+    vi.spyOn(client.api, 'getCoverageReportForRepo').mockReturnValue(new Promise(() => {}));
+    vi.spyOn(client.api, 'getGraphKindsForRepo').mockResolvedValue({ kinds: [] });
+    render(<CoverageView />);
+    await waitFor(() => expect(screen.getByText('333')).toBeInTheDocument());
+    await screen.findByRole('option', { name: 'billing-api' });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Coverage repo' }), { target: { value: 'repo-b' } });
+    expect(await screen.findByTestId('coverage-reading')).toHaveTextContent('Reading coverage for billing-api…');
+    expect(screen.queryByText('333')).toBeNull();
+    await act(async () => { vi.advanceTimersByTime(COVERAGE_READ_TIMEOUT_MS); });
+    expect(await screen.findByTestId('coverage-error')).toHaveAttribute('data-kind', 'timeout');
+    expect(screen.queryByText('Total nodes')).toBeNull();
+    expect(screen.queryByText('333')).toBeNull();
   });
 });

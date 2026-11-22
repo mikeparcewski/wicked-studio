@@ -323,21 +323,32 @@ export function CoverageView(): React.ReactElement {
   // store has no repo code graph — so it's null for the daemon-wide view.
   const [graphKinds, setGraphKinds] = useState<GraphKind[] | null>(null);
 
+  /** Ends the read in flight: its requests and its deadline (a new read, leaving the pane). */
+  const endRead = useRef<(() => void) | null>(null);
+
   const load = useCallback(async () => {
+    endRead.current?.();
     const gen = ++readGen.current;
+    const ctl = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_done, fail) => {
+      timer = setTimeout(() => { fail(new CoverageReadTimeout()); ctl.abort(); }, COVERAGE_READ_TIMEOUT_MS);
+    });
+    endRead.current = () => { clearTimeout(timer); ctl.abort(); };
     setLoading(true);
     setError(null);
     setTimedOut(false);
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const deadline = new Promise<never>((_done, fail) => {
-      timer = setTimeout(() => fail(new CoverageReadTimeout()), COVERAGE_READ_TIMEOUT_MS);
-    });
+    // The pane never shows one read's numbers under another's question (a switched repo, a timed-out refresh).
+    setReport(null);
+    setGraphKinds(null);
     try {
+      const signal = ctl.signal;
       // Coverage + graph summary for the chosen repo, in parallel (#122); the daemon-wide view has no code graph.
       const read = repoRef
-        ? Promise.all([api.getCoverageReportForRepo(repoRef), api.getGraphKindsForRepo(repoRef)])
+        ? Promise.all([api.getCoverageReportForRepo(repoRef, { signal }), api.getGraphKindsForRepo(repoRef, { signal })])
           .then(([{ report: r }, { kinds }]) => ({ report: r, kinds: kinds as GraphKind[] | null }))
-        : api.getCoverageReport().then(({ report: r }) => ({ report: r, kinds: null }));
+          .catch((e: unknown) => { ctl.abort(); throw e; }) // one half failed: end the other
+        : api.getCoverageReport({ signal }).then(({ report: r }) => ({ report: r, kinds: null }));
       const got = await Promise.race([read, deadline]);
       if (readGen.current !== gen) return;
       setReport(got.report);
@@ -348,12 +359,15 @@ export function CoverageView(): React.ReactElement {
       setError(e instanceof CoverageReadTimeout ? '' : e instanceof Error ? e.message : String(e));
     } finally {
       clearTimeout(timer);
-      if (readGen.current === gen) setLoading(false);
+      if (readGen.current === gen) {
+        endRead.current = null;
+        setLoading(false);
+      }
     }
   }, [repoRef]);
 
-  // Leaving the pane drops any read still running.
-  useEffect(() => () => { readGen.current += 1; }, []);
+  // Leaving the pane ends any read still running and drops its answer.
+  useEffect(() => () => { readGen.current += 1; endRead.current?.(); endRead.current = null; }, []);
 
   // Load the repo list once so the picker can offer real, registered repos.
   useEffect(() => {
