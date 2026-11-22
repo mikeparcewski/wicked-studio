@@ -1,7 +1,7 @@
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WatchFinding } from '../src/api/watch-wire.js';
-import { EMPTY_WATCH, foldWatchFrame, jumpPath, watchFeed } from '../src/store/watch.js';
+import { EMPTY_WATCH, foldTeamFrame, foldWatchFrame, jumpPath, watchFeed } from '../src/store/watch.js';
 
 /**
  * studio#888 (ASK-S3, second half): crew's ASK-C3 rows (crew `watch/checks/team-path.ts`, entries
@@ -59,7 +59,19 @@ describe('studio#888: the ask path’s Watchtower rows', () => {
     for (const r of watchFeed(f)) expect(jumpPath(r)).toBe('/s/run%3Ar-ask?jump=5:1:900');
   });
 
-  it('the row’s address opens the chat the run belongs to, at the row’s moment', () => {
+  it('a team finding on the same run, step and attempt never absorbs them: they name no path (codex r1)', () => {
+    const team = (id: string, path: string | null) => ({ type: 'teamEvent', event: { event_type: 'wicked.team.finding.raised', payload: {
+      finding_id: id, run_id: 'r-ask', ord: 5, attempt: 1, at: 950, severity: 'medium', ...(path !== null ? { path } : {}) } } });
+    let f = foldTeamFrame(EMPTY_WATCH, team('f-path', 'src/a.ts'));
+    f = foldTeamFrame(f, team('f-nopath', null));
+    for (const r of ROWS) f = foldWatchFrame(f, raised(r));
+    f = foldTeamFrame(f, team('f-late', 'src/b.ts'));
+    for (const r of ROWS) expect(f.rows[r.watch_id]!.foldedInto).toBeNull();
+    for (const id of ['team:f-path', 'team:f-nopath', 'team:f-late']) expect(f.rows[id]!.corroboratedBy).toStrictEqual([]);
+    expect(watchFeed(f).map((r) => r.id).sort()).toStrictEqual(['team:f-late', 'team:f-nopath', 'team:f-path', 'w-help', 'w-repick', 'w-reviewer']);
+  });
+
+  it('the row’s address opens the chat the run belongs to (a run in the index), at the row’s moment', () => {
     useCapabilities.setState({ loaded: true, runChatId: true });
     window.history.pushState({}, '', '/s/run%3Ar-ask?jump=5:1:900');
     const navigate = vi.fn();

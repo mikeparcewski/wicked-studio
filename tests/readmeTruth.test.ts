@@ -13,6 +13,8 @@ const readme = readFileSync(fileURLToPath(new URL('../README.md', import.meta.ur
 describe('README truth (studio#957, studio#888)', () => {
   it('sells no warm CLI seats: ASK-K4 deleted them (studio#888)', () => {
     expect(readme).not.toMatch(/\bwarm (CLI )?seats?\b/i);
+    // codex r1 on #1304: an analysis chat seats one helper and no reviewer (crew's chat-workflow contract).
+    expect(readme).toMatch(/an Understand analysis chat uses one helper and no reviewer/);
   });
 
   it('the editors sentence names network.media, which the built-in Page and Document editors hold (studio#957)', () => {

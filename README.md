@@ -130,11 +130,12 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
   searchable. Choose up to 40 requirements and **Draft epics** opens New job on the Draft epics
   workflow with them. The old Product address (`/product?project=<id>`) opens that project's page
   at its Requirements section. Publishing the drafted epics is not offered yet.
-- **Ask a team** — one helper answers a chat (your pick, or picked at random), a second signed-in
-  helper reviews, and the answering helper can ask other helpers mid-answer. The chat's Helpers tab
+- **Ask a team** — in a chat, one helper answers (your pick, or picked at random), a second
+  signed-in helper reviews when there is one, and the answering helper can ask other helpers
+  mid-answer (an Understand analysis chat uses one helper and no reviewer). The chat's Helpers tab
   names who answers, who reviews and who helped; the Watchtower says when another helper takes over,
-  when no reviewer could join, or when a helper's question went unanswered, and each row opens the
-  chat. The daemon checks every path, `path:line` and commit a reply cites against the repo.
+  when no reviewer could join, or when a helper's question went unanswered. The daemon checks every
+  path, `path:line` and commit a reply cites against the repo.
 - **Govern the work** — author steering rules and policies (or import a markdown rule doc; a
   refused entry shows crew's reason), browse the decisions ledger, and review what the platform has
   learned about your repos. **Evaluate** runs your rules against example behaviours: it recommends
