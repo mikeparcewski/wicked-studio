@@ -27601,6 +27601,12 @@
       ]
     },
     {
+      "expression": "ids.name",
+      "files": [
+        "src/components/ui/SiteBrand.tsx"
+      ]
+    },
+    {
       "expression": "it.testId",
       "files": [
         "src/components/ui/OverflowMenu.tsx"
@@ -27732,6 +27738,7 @@
         "src/components/ui/Progress.tsx",
         "src/components/ui/QuietPage.tsx",
         "src/components/ui/Segmented.tsx",
+        "src/components/ui/SiteBrand.tsx",
         "src/components/ui/StatLine.tsx",
         "src/components/ui/StatTile.tsx",
         "src/components/ui/StateBanner.tsx",

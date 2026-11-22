@@ -19,7 +19,6 @@ import type { NeedRow } from '../../board/needsYou.js';
 import { MoveToProject, MoveProjectStatus, useMovableBoardModel } from './MoveToProject.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { projectDetailPath, type Navigate } from '../../hooks/useRoute.js';
-import { useAppearanceStore } from '../../theming/appearance.js';
 import { openLaunchWizard } from '../../store/launchWizard.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
 import { NerveCenterTile } from './NerveCenterTile.js';
@@ -29,7 +28,8 @@ import { useChatWindow } from '../../store/chatWindow.js';
 import { openSearch } from '../../store/searchModal.js';
 import { pageComposerKey } from '../../store/composerSeed.js';
 import { useProjectsStore } from '../../store/projects.js';
-import { ShorelineMark, StudioLettering, StudioLockup } from '../ui/BrandMarks.js';
+import { ShorelineMark } from '../ui/BrandMarks.js';
+import { SiteBrand, SiteLogo, useSiteBrand } from '../ui/SiteBrand.js';
 
 /** The modifier the shortcuts are said with (⌘ on a Mac, Ctrl elsewhere). */
 const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/u.test(navigator.platform || navigator.userAgent) ? '⌘' : 'Ctrl+';
@@ -238,22 +238,9 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
     useSidebar.getState().setIcons(next);
   };
   const recentNeeds = groups.reduce((n, g) => n + g.sessions.reduce((m, x) => m + x.badge, 0), 0);
-  const siteName = useAppearanceStore((s) => s.appearance.site_name?.trim() || null);
-  // studio#512 (S18b): Theme › Logo takes the dot's place — the classic chrome's §3.1 slot, 32 px, contain-fit.
-  const logoUrl = useAppearanceStore((s) => s.appearance.logo_url);
-
-  // The brand: Theme › Logo takes the mark's place (studio#512); in the icon rail the mark (or logo) alone.
-  const logo = logoUrl !== null
-    ? <span
-        aria-hidden
-        data-testid="desk-rail-logo"
-        style={{
-          width: 32, height: 32, flexShrink: 0,
-          backgroundImage: `url(${JSON.stringify(logoUrl)})`,
-          backgroundSize: 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat',
-        }}
-      />
-    : null;
+  // studio#512 (S18b): Theme › Logo takes the mark's place — the classic chrome's §3.1 slot, 32 px, contain-fit. The
+  // wordmark's choice is SiteBrand's (shared with the phone top bar); in the icon rail the mark (or logo) alone.
+  const { logoUrl } = useSiteBrand();
   const needsWordsEl = count > 0 ? <span id={needsId} className="wk-visually-hidden">{needWords}</span> : null;
   const homeBadge = count > 0
     ? <span aria-hidden data-testid="desk-rail-badge" data-phase={settled.phase} className="wk-rail-badge wk-rail-badge--home">{badgeText}</span>
@@ -299,7 +286,7 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
               which the expand control says as its description. */}
           <button type="button" tabIndex={-1} aria-hidden data-testid="desk-rail-brand-expand" title={count > 0 ? `Expand the sidebar · ${needWords}` : 'Expand the sidebar'}
             className="wk-rail-brand-btn" onClick={() => setRailIcons(false)}>
-            {logo ?? <ShorelineMark size={22} testId="desk-rail-mark" />}
+            {logoUrl !== null ? <SiteLogo url={logoUrl} size={32} testId="desk-rail-logo" /> : <ShorelineMark size={22} testId="desk-rail-mark" />}
             {homeBadge}
           </button>
           <button type="button" id="rail-fold" data-testid="rail-fold" className="wk-rail-icon-btn wk-rail-fold" aria-label="Expand the sidebar"
@@ -350,12 +337,10 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
           aria-describedby={count > 0 ? needsId : undefined} aria-current={on === 'home' ? 'page' : undefined}
           title={count > 0 ? `${PAGE_NAMES.home} · ${needWords}` : PAGE_NAMES.home} className="wk-rail-home wk-rail-wordmark">
           <span data-testid="desk-rail-brand" className="wk-rail-brand">
-            {logo ?? (siteName !== null ? <ShorelineMark testId="desk-rail-mark" /> : null)}
-            {/* The default is the drawn lockup (the Shoreline mark beside the Wave W lettering, fonts-v3); beside a
-                custom logo, the lettering alone; a custom name is the user's words, in the text face, beside the mark. */}
-            {siteName !== null
-              ? <span className="wk-rail-brand-name"><b>{siteName}</b></span>
-              : logoUrl !== null ? <StudioLettering testId="desk-rail-lettering" /> : <StudioLockup testId="desk-rail-lockup" />}
+            <SiteBrand logoSize={32} nameClass="wk-rail-brand-name" ids={{
+              logo: /* testid */ 'desk-rail-logo', mark: /* testid */ 'desk-rail-mark', lettering: /* testid */ 'desk-rail-lettering',
+              lockup: /* testid */ 'desk-rail-lockup',
+            }} />
           </span>
           {homeBadge}
           {needsWordsEl}
