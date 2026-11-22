@@ -5,7 +5,7 @@ import { FEEDBACK_EVENT } from '../interactive/feedbackBatch.js';
 import { subscribeCoreEvents } from '../hooks/eventTap.js';
 import type { CoreEvent } from '../api/types.js';
 import type { DocumentRequirements } from './adapters/requirements.js';
-import type { AdapterResult, ArtifactRef, HostAdapter, MovedOn } from './host.js';
+import type { AdapterResult, ArtifactRef, HostAdapter, MovedOn, NotApplied } from './host.js';
 import type { VersionKind } from './model.js';
 import type { WireItem } from './ops.js';
 import { beginThemeWrite, isMatching } from './themeLock.js';
@@ -24,8 +24,8 @@ const PROCESSED = 'wicked.interactive.feedback.processed';
 /** One batch the engine processed without landing a version: what it refused, and why. */
 export interface FeedbackRefusal { rejected: { selector: string; reason: string }[]; stale: string[]; unchanged: boolean }
 
-/** The engine's refusal reasons for a page edit (interactive `core/regenerate.js`), in plain words. */
-export function editRefusalWords(r: FeedbackRefusal): string {
+/** The engine's reasons for items of a page edit it did not apply (interactive `core/regenerate.js`), in plain words. */
+function refusalLines(r: Pick<FeedbackRefusal, 'rejected' | 'stale'>): string[] {
   const plural = (n: number, one: string, many: string): string => (n === 1 ? one : many.replace('#', String(n)));
   const why = (reason: string): string | null => {
     const cut = reason.indexOf(':');
@@ -43,25 +43,48 @@ export function editRefusalWords(r: FeedbackRefusal): string {
   };
   const lines = [...new Set(r.rejected.map((x) => why(x.reason)).filter((x): x is string => x !== null))];
   if (r.stale.length > 0) lines.push('the part you edited changed since you opened it');
+  return lines;
+}
+
+/** The engine's refusal reasons for a page edit (interactive `core/regenerate.js`), in plain words. */
+export function editRefusalWords(r: FeedbackRefusal): string {
+  const lines = refusalLines(r);
   if (lines.length > 0) return `the page refused this edit: ${lines.join('; ')}`;
   if (r.rejected.length > 0) return 'the page refused this edit';
   return r.unchanged ? 'the page already says that, so nothing changed' : 'the page did not take this edit';
 }
 
 /**
- * A relayed `feedback.processed` frame for `docId` that answers a batch sent against `base` and landed nothing, or
- * `null`. Matched by the project, the doc, the batch's base, and a batch version not already in the manifest before the
- * post. The bridge echoes no request id on it, so a second editor's refused batch on the same document and base in the
- * same moment would be taken for this one (no such actor today: one person edits a page in one place).
+ * (studio#1252) The items of a batch that LANDED which the engine did not apply (`rejected`, `stale` on a
+ * `landed: true` frame), with its reasons in plain words; `null` when it applied all of them. The version is the part
+ * that landed: the host says what was left out, never "done" for the whole edit.
  */
-export function refusalOf(event: CoreEvent, projectId: string, docId: string, base: number, before: ReadonlySet<number>): FeedbackRefusal | null {
+export function notAppliedOf(r: Pick<FeedbackRefusal, 'rejected' | 'stale'>): NotApplied | null {
+  const items = [...r.rejected, ...r.stale.filter((s) => !r.rejected.some((x) => x.selector === s)).map((selector) => ({ selector, reason: 'stale' }))];
+  if (items.length === 0) return null;
+  const lines = refusalLines(r);
+  return { items, words: lines.length > 0 ? lines.join('; ') : 'the page did not take it' };
+}
+
+/** One batch the engine processed, as its `feedback.processed` frame says: whether it landed a version (`version`, the
+ *  batch's own number), and what it did not apply. */
+export interface FeedbackProcessed extends FeedbackRefusal { landed: boolean; version: number | null }
+
+/**
+ * A relayed `feedback.processed` frame for `docId` that answers a batch sent against `base`, or `null`. Matched by the
+ * project, the doc, the batch's base, and a batch version not already in the manifest before the post. The bridge
+ * echoes no request id on it, so a second editor's batch on the same document and base in the same moment would be
+ * taken for this one (no such actor today: one person edits a page in one place). A frame without `landed` (an engine
+ * before F-RECON-005) is a landed one, as the engine itself sends it.
+ */
+export function processedOf(event: CoreEvent, projectId: string, docId: string, base: number, before: ReadonlySet<number>): FeedbackProcessed | null {
   if (event.type !== 'interactiveEvent') return null;
   const ev = (event as { event?: unknown }).event;
   if (typeof ev !== 'object' || ev === null) return null;
   const e = ev as Record<string, unknown>;
   if ((e['event_type'] ?? e['type']) !== PROCESSED) return null;
   const p = (typeof e['payload'] === 'object' && e['payload'] !== null ? e['payload'] : e) as Record<string, unknown>;
-  if (p['document_id'] !== docId || p['landed'] !== false) return null;
+  if (p['document_id'] !== docId) return null;
   // The bridge stamps a bound document's project on every frame and none on an Unfiled one (docThread's rule): a
   // same-named document in another project is not this one.
   if ((typeof p['project_id'] === 'string' ? p['project_id'] : UNFILED_MOUNT) !== projectId) return null;
@@ -72,12 +95,22 @@ export function refusalOf(event: CoreEvent, projectId: string, docId: string, ba
       ? [{ selector: String((x as { selector?: unknown }).selector ?? ''), reason: (x as { reason: string }).reason }] : []))
     : [];
   const stale = Array.isArray(p['stale']) ? (p['stale'] as unknown[]).map(String) : [];
-  return { rejected, stale, unchanged: p['unchanged'] === true };
+  return { rejected, stale, unchanged: p['unchanged'] === true, landed: p['landed'] !== false, version: typeof p['version'] === 'number' ? p['version'] : null };
+}
+
+/** {@link processedOf} for a batch that landed nothing: what it refused, and why; `null` for any other frame. */
+export function refusalOf(event: CoreEvent, projectId: string, docId: string, base: number, before: ReadonlySet<number>): FeedbackRefusal | null {
+  const p = processedOf(event, projectId, docId, base, before);
+  return p === null || p.landed ? null : { rejected: p.rejected, stale: p.stale, unchanged: p.unchanged };
 }
 
 /** After a write: how often, and how long, the manifest is re-read for the edit's own version. */
 const POLL_MS = 400;
 const POLL_FOR_MS = 20_000;
+/** (studio#1252) After the edit's version is seen land: how long its own `feedback.processed` frame (which says what the
+ *  batch did not apply) is waited for. The engine sends it right after it records the version; the bus and the
+ *  manifest read arrive on two roads, so either can come first. */
+const SETTLE_MS = 1_500;
 
 /**
  * The `interactive-doc` adapter (DES-EDITOR-PLUGINS-001 §4, EP-P2): the host's one road from a plugin's
@@ -100,6 +133,7 @@ export class InteractiveDocAdapter implements HostAdapter {
   readonly writes = new Map<number, number>();
 
   private readonly pollForMs: number;
+  private readonly settleMs: number;
   private readonly requirements: (() => Promise<DocumentRequirements>) | undefined;
   /** Writes sent and not yet settled (a text edit is settled when its version is seen land, up to 20 s). */
   private readonly inFlight = new Set<Promise<unknown>>();
@@ -113,9 +147,10 @@ export class InteractiveDocAdapter implements HostAdapter {
     private readonly title: string,
     private readonly kind: string = 'page',
     private readonly onHead?: (head: number) => void,
-    opts: { pollForMs?: number; requirements?: () => Promise<DocumentRequirements> } = {},
+    opts: { pollForMs?: number; settleMs?: number; requirements?: () => Promise<DocumentRequirements> } = {},
   ) {
     this.pollForMs = opts.pollForMs ?? POLL_FOR_MS;
+    this.settleMs = opts.settleMs ?? SETTLE_MS;
     this.requirements = opts.requirements;
   }
 
@@ -279,11 +314,11 @@ export class InteractiveDocAdapter implements HostAdapter {
     }
   }
 
-  write(base: number, items: WireItem[]): Promise<AdapterResult<{ version: number }>> {
+  write(base: number, items: WireItem[]): Promise<AdapterResult<{ version: number; notApplied?: NotApplied }>> {
     return this.track(this.writeNow(base, items));
   }
 
-  private async writeNow(base: number, items: WireItem[]): Promise<AdapterResult<{ version: number }>> {
+  private async writeNow(base: number, items: WireItem[]): Promise<AdapterResult<{ version: number; notApplied?: NotApplied }>> {
     const [first] = items;
     if (first?.type === 'deck') return this.writeDeckOp(base, first);
     // What exists before the post: a version already there can never be the one this post makes. The
@@ -304,14 +339,31 @@ export class InteractiveDocAdapter implements HostAdapter {
     }
     // The engine's refusal comes back on the bus, not in the manifest: listen before the post, so it is never missed.
     let refusal: FeedbackRefusal | null = null;
-    const stop = subscribeCoreEvents((ev) => { refusal ??= refusalOf(ev, this.projectId, this.docId, base, before); });
+    // (studio#1252) The frames of batches that landed, by version: what each did not apply.
+    const landedFrames = new Map<number, FeedbackProcessed>();
+    const stop = subscribeCoreEvents((ev) => {
+      const p = processedOf(ev, this.projectId, this.docId, base, before);
+      if (p === null) return;
+      if (!p.landed) refusal ??= { rejected: p.rejected, stale: p.stale, unchanged: p.unchanged };
+      else if (p.version !== null && !landedFrames.has(p.version)) landedFrames.set(p.version, p);
+    });
     let landed: Awaited<ReturnType<InteractiveDocAdapter['waitForLanded']>>;
+    let notApplied: NotApplied | null = null;
     try {
       await postEvent(this.projectId, {
         event_type: FEEDBACK_EVENT,
         payload: { document_id: this.docId, version: base, author: 'studio', items },
       });
       landed = await this.waitForLanded(base, before, () => refusal);
+      // The edit's version is in the manifest: its frame says whether every item of it landed (a partly refused batch
+      // lands the rest). It is waited for briefly; an engine whose frame never comes is taken at its version.
+      if (landed !== null && 'version' in landed) {
+        const mine = landed.version;
+        const until = Date.now() + this.settleMs;
+        while (!landedFrames.has(mine) && Date.now() < until) await new Promise((r) => setTimeout(r, 50));
+        const frame = landedFrames.get(mine);
+        notApplied = frame === undefined ? null : notAppliedOf(frame);
+      }
     } finally {
       stop();
     }
@@ -331,7 +383,7 @@ export class InteractiveDocAdapter implements HostAdapter {
     }
     this.writes.set(landed.version, base);
     this.made.add(landed.version);
-    return { version: landed.version, ...(moved !== undefined ? { moved } : {}) };
+    return { version: landed.version, ...(notApplied !== null ? { notApplied } : {}), ...(moved !== undefined ? { moved } : {}) };
   }
 
   /** How a version came to be, as the plugin is told (`artifact.changed.kind`), from the manifest. */
