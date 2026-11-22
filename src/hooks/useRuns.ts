@@ -159,7 +159,7 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
       void hydrateElicitations(fetched, () => cancelled);
 
       // T17/F31: real decisions before parked chat turns, preserving list order within each group; one read at a time
-      // across passes (`inGateSlot`, crew#1775: it never holds more than one of the browser's connections). The visible run reads its own gate first through `useOwnGateRead`. A
+      // across passes (`inGateSlot`, crew#1775: first reads hold one of the browser's connections; a failed read's retries wait in their own slot, studio#1319). The visible run reads its own gate first through `useOwnGateRead`. A
       // refresh that cancels this pass stops its new reads; a read that lands still applies, because `applyGateRead`
       // drops it if the run's gate moved meanwhile. A failed read leaves the id-only gate working and is tried again on
       // the next pass.
