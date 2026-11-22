@@ -13,6 +13,7 @@ import { create } from 'zustand';
 import { apiFetch } from './client.js';
 import { isRouteUnsupported } from './errors.js';
 import { relTime } from '../board/relTime.js';
+import { elapsedWords } from '../board/liveTurn.js';
 
 export interface RepoWatchHold {
   runId: string;
@@ -31,6 +32,36 @@ export interface RepoGraphWatch {
   waitingOn: RepoWatchHold[];
   error: string | null;
   remedy: string | null;
+  /** (api-types 0.203.0, crew#1481) While `indexing`: when the re-index started (unix ms) and its budget (`null` when
+   *  it could not be sized up front). Absent from an older crew. */
+  indexing?: RepoWatchIndexing;
+}
+
+/** studio#1099: a running re-index's start and the budget the engine stops it at. */
+export interface RepoWatchIndexing {
+  startedAt: number;
+  budget: { budgetMs: number; trackedFiles: number | null } | null;
+}
+
+/** The `indexing` object as the wire carries it, or undefined when it is absent or malformed. */
+function indexingOf(v: unknown): RepoWatchIndexing | undefined {
+  const o = v as { startedAt?: unknown; budget?: unknown } | null | undefined;
+  if (o === null || o === undefined || typeof o !== 'object' || typeof o.startedAt !== 'number' || !Number.isFinite(o.startedAt)) return undefined;
+  const b = o.budget as { budgetMs?: unknown; trackedFiles?: unknown } | null | undefined;
+  const budget = b !== null && b !== undefined && typeof b === 'object' && typeof b.budgetMs === 'number' && Number.isFinite(b.budgetMs) && b.budgetMs > 0
+    ? { budgetMs: b.budgetMs, trackedFiles: typeof b.trackedFiles === 'number' && Number.isFinite(b.trackedFiles) && b.trackedFiles >= 0 ? b.trackedFiles : null }
+    : null;
+  return { startedAt: o.startedAt, budget };
+}
+
+/** "Re-indexing now · 4 min 0 s of 12 min 40 s (2,203 files)": the elapsed time against the budget the engine stops it
+ *  at, so a long index never reads as a hang (studio#1099). Without the wire's `indexing`, the plain words. */
+function indexingWords(x: RepoWatchIndexing | undefined, now: number): string {
+  if (x === undefined) return 'Re-indexing now…';
+  const elapsed = elapsedWords(now - x.startedAt);
+  if (x.budget === null) return `Re-indexing now · ${elapsed} so far`;
+  const files = x.budget.trackedFiles !== null ? ` (${x.budget.trackedFiles.toLocaleString('en-US')} ${x.budget.trackedFiles === 1 ? 'file' : 'files'})` : '';
+  return `Re-indexing now · ${elapsed} of ${elapsedWords(x.budget.budgetMs)}${files}`;
 }
 
 export interface RepoWatchStatus {
@@ -52,6 +83,7 @@ export function readRepoWatch(raw: unknown): RepoWatchStatus | null {
     if (x === null || typeof x !== 'object' || typeof x.repoId !== 'string' || typeof x.state !== 'string' || !STATES.has(x.state)) return [];
     const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
     const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
+    const indexing = x.state === 'indexing' ? indexingOf(x.indexing) : undefined;
     return [{
       repoId: x.repoId, state: x.state as RepoWatchState, enabled: x.enabled !== false,
       lastIndexedAt: num(x.lastIndexedAt), lastPolledAt: num(x.lastPolledAt), changedAt: num(x.changedAt),
@@ -60,6 +92,7 @@ export function readRepoWatch(raw: unknown): RepoWatchStatus | null {
           ? [{ runId: (h as RepoWatchHold).runId, reason: (h as RepoWatchHold).reason === 'domain-mapping' ? 'domain-mapping' as const : 'executing' as const }] : []))
         : [],
       error: str(x.error), remedy: str(x.remedy),
+      ...(indexing !== undefined ? { indexing } : {}),
     }];
   });
   return {
@@ -138,7 +171,7 @@ function watchLineOf(status: RepoWatchStatus | null | undefined, repoId: string,
     case 'current': return { state: r.state, tone: 'ok', words: `Watching for changes${when}`, remedy: null, waitingOn: [] };
     case 'starting': return { state: r.state, tone: 'ok', words: `Watching for changes${when}`, remedy: null, waitingOn: [] };
     case 'changed': return { state: r.state, tone: 'busy', words: 'Changes seen · re-indexing shortly', remedy: null, waitingOn: [] };
-    case 'indexing': return { state: r.state, tone: 'busy', words: 'Re-indexing now…', remedy: null, waitingOn: [] };
+    case 'indexing': return { state: r.state, tone: 'busy', words: indexingWords(r.indexing, now), remedy: null, waitingOn: [] };
     case 'waiting-runs': {
       const n = r.waitingOn.length;
       return { state: r.state, tone: 'wait', words: `Waiting: ${n === 1 ? '1 job on this repo is' : `${n} jobs on this repo are`} using its code map`, remedy: null, waitingOn: r.waitingOn };
