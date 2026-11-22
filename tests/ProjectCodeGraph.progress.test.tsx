@@ -18,7 +18,7 @@ vi.mock('../src/api/client.js', () => ({
   },
 }));
 
-const { ProjectCodeGraph, resetProjectGraphBuilds, PROJECT_GRAPH_POLL_MS, PROJECT_GRAPH_IDLE_POLL_MS } = await import('../src/components/ProjectCodeGraph.js');
+const { ProjectCodeGraph, resetProjectGraphBuilds, PROJECT_GRAPH_POLL_MS, PROJECT_GRAPH_IDLE_POLL_MS, PROJECT_GRAPH_READ_TIMEOUT_MS } = await import('../src/components/ProjectCodeGraph.js');
 
 const REPOS = [
   { repoId: 'r1', label: 'svc-a', rootPath: '/src/svc-a', indexed: true },
@@ -259,10 +259,25 @@ describe('following refreshes over time (studio#1099, xreview r1)', () => {
     getProjectGraph.mockImplementationOnce(() => new Promise((done) => { first = done; }));
     render(<ProjectCodeGraph projectId="proj-1" repoCount={2} />);
     await waitFor(() => expect(getProjectGraph).toHaveBeenCalledTimes(1));
-    await act(async () => { vi.advanceTimersByTime(PROJECT_GRAPH_IDLE_POLL_MS * 2); });
+    await act(async () => { vi.advanceTimersByTime(PROJECT_GRAPH_IDLE_POLL_MS + 5_000); });
     expect(getProjectGraph).toHaveBeenCalledTimes(1);
     await act(async () => { first({ status: status({ detail: 'the slow answer' }) }); });
     expect(await screen.findByTestId('project-graph-detail')).toHaveTextContent('the slow answer');
+  });
+
+  it('a read that never answers is abandoned at the bound, and Try again reads again (coord F1)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    getProjectGraph.mockImplementationOnce(() => new Promise(() => undefined));
+    // The idle read at 30 s joins the hung one; once the hang is abandoned, the joined read runs (and fails here).
+    getProjectGraph.mockRejectedValueOnce(new Error('503 daemon busy'));
+    render(<ProjectCodeGraph projectId="proj-1" repoCount={2} />);
+    await waitFor(() => expect(getProjectGraph).toHaveBeenCalledTimes(1));
+    await act(async () => { vi.advanceTimersByTime(PROJECT_GRAPH_READ_TIMEOUT_MS); });
+    expect(await screen.findByTestId('project-graph-read-error')).toBeInTheDocument();
+    getProjectGraph.mockResolvedValue({ status: status({ detail: 'answered after the hang' }) });
+    fireEvent.click(screen.getByTestId('project-graph-read-retry'));
+    expect(await screen.findByTestId('project-graph-detail')).toHaveTextContent('answered after the hang');
+    expect(screen.queryByTestId('project-graph-read-error')).toBeNull();
   });
 
   it('a progress read that fails during a build says so and stops showing progress; the next answer brings it back', async () => {

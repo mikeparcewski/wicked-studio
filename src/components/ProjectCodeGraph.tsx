@@ -36,6 +36,8 @@ import { TechDetails } from './ui/TechDetails.js';
 export const PROJECT_GRAPH_POLL_MS = 5_000;
 /** How often the standing is read while no refresh runs, so one crew starts on its own is seen. */
 export const PROJECT_GRAPH_IDLE_POLL_MS = 30_000;
+/** A status read with no answer by then is abandoned, so a hung read never holds the one-at-a-time gate (coord F1). */
+export const PROJECT_GRAPH_READ_TIMEOUT_MS = 45_000;
 
 interface Props {
   projectId: string;
@@ -138,7 +140,13 @@ export function ProjectCodeGraph({ projectId, repoCount }: Props): React.ReactEl
     }
     const at = epoch.current;
     const p = Promise.resolve()
-      .then(() => api.getProjectGraph(forProject))
+      .then(() => new Promise<{ status: ProjectGraphStatus }>((resolve, reject) => {
+        const t = setTimeout(
+          () => reject(new Error(`the status read did not answer within ${PROJECT_GRAPH_READ_TIMEOUT_MS / 1000} s`)),
+          PROJECT_GRAPH_READ_TIMEOUT_MS,
+        );
+        api.getProjectGraph(forProject).then(resolve, reject).finally(() => clearTimeout(t));
+      }))
       .then(({ status: s }) => {
         if (live.current !== forProject || epoch.current !== at) return;
         const r = refreshOf(s);
