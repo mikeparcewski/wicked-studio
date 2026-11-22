@@ -41,8 +41,6 @@ export function resetToastLedger(): void {
 
 interface Props {
   onSelect: (runId: string) => void;
-  /** When set, only show the gate toast for this run (fixes studio#10). */
-  runId?: string | null;
   /** The ambient project shell (`/p/:id/*`), when inside one — B4's context
    *  rule: another project's gate announces in the bottom bar + bell, never
    *  as an overlay card over this project's canvas. */
@@ -72,7 +70,7 @@ export function leadCardOrder(gates: readonly OpenGate[], runs: readonly Session
   return [...read, ...gates.filter((g) => g.fromRead !== true)];
 }
 
-export function GateNotifications({ onSelect, runId, projectId = null, runs = [], hideRuns = NO_RUNS }: Props): React.ReactElement {
+export function GateNotifications({ onSelect, projectId = null, runs = [], hideRuns = NO_RUNS }: Props): React.ReactElement {
   const gates = useGateStore((s) => s.gates);
   // studio#441: the toast speaks the Desk's words (the plain question, the work's title), in its
   // palette — no run hash, engine ordinal, raw prompt, violet or mono. The Desk is the one shell (S18d).
@@ -86,13 +84,13 @@ export function GateNotifications({ onSelect, runId, projectId = null, runs = []
   // is not announced as "waiting", so the strip never counts more than Needs you does.
   const ranked = useRankedNeeds();
   const held = ranked === null ? null : new Set(ranked.attention.flatMap((a) => a.blockedRunIds ?? []));
-  const scoped = (runId ? all.filter((g) => g.runId === runId) : all).filter((g) => !hideRuns.has(g.runId) && (held === null || held.has(g.runId)));
+  const scoped = all.filter((g) => !hideRuns.has(g.runId) && (held === null || held.has(g.runId)));
 
   // B4 (§7.1): inside a project shell, keep only THIS project's gates as
   // cards. DTO claim first (CREW-UX-2), membership mirror second; a gate we
   // genuinely cannot place (pre-0.8.0 daemon, no mirror row) still shows —
   // suppression requires KNOWING the gate is foreign, never assuming it.
-  const placed = projectId === null || runId
+  const placed = projectId === null
     ? scoped
     : scoped.filter((g) => {
         const run = runs.find((r) => r.session.id === g.runId);

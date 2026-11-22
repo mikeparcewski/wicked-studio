@@ -14,9 +14,12 @@ interface SheetsStore {
   pointed: ObjectRef | null;
   /** Runs whose Stop is waiting in its undo window. */
   stopping: Record<string, number>;
+  /** studio#1075: per run, how many of its Stops ended unsent (undone, or cancelled by the world). A surface that
+   *  says "You chose: Stop" keeps the count it saw and forgets the choice once it moves; a sent Stop never moves it. */
+  stopUndone: Record<string, number>;
 }
 
-export const useSheets = create<SheetsStore>(() => ({ open: null, pointed: null, stopping: {} }));
+export const useSheets = create<SheetsStore>(() => ({ open: null, pointed: null, stopping: {}, stopUndone: {} }));
 
 /**
  * The run page holds a session's look-underneath content in its one panel (src/board/runPanelModel.ts): while it is
@@ -136,7 +139,11 @@ export function stopRun(runIds: readonly string[], label: string, why?: { reason
       if (failed.length === 0) reportDecision('sent', `Stopped ${label}.`, { keys });
       else reportDecision('failed', `Not stopped: ${failed.join('; ')}`, { keys });
     },
-    onUndo: clear,
+    // Undone, or cancelled by the world (`onCancel` defaults to this): nothing was sent.
+    onUndo: () => {
+      clear();
+      useSheets.setState((s) => ({ stopUndone: { ...s.stopUndone, ...Object.fromEntries(ids.map((id) => [id, (s.stopUndone[id] ?? 0) + 1])) } }));
+    },
   });
   useSheets.setState((s) => ({ stopping: { ...s.stopping, ...Object.fromEntries(ids.map((id) => [id, qid])) } }));
   return qid;

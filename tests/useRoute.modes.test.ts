@@ -16,9 +16,11 @@ afterEach(() => {
 describe('useRoute — the existing panel routes keep working', () => {
   it('still parses every legacy shape unchanged', () => {
     // `/` became the orchestrator board in slice 5; the run list moved to `/runs`.
-    expect(routeAt('/').current).toMatchObject({ panel: 'home', runId: null });
+    expect(routeAt('/').current).toMatchObject({ panel: 'home' });
     expect(routeAt('/runs/new').current).toMatchObject({ panel: 'runs', showLaunch: true });
-    expect(routeAt('/s/abc-123').current).toMatchObject({ panel: 'session', artifactId: 'abc-123', runId: null, showLaunch: false });
+    expect(routeAt('/s/abc-123').current).toMatchObject({ panel: 'session', artifactId: 'abc-123', showLaunch: false });
+    // studio#1075: no route selects a run (the field was never set, and the palette verbs on it were dead).
+    expect(routeAt('/s/run%3Ar1').current).not.toHaveProperty('runId');
     expect(routeAt('/repos/new').current).toMatchObject({ panel: 'repos', showRegisterRepo: true });
     expect(routeAt('/repo-detail/repo-1').current).toMatchObject({ panel: 'repo-detail', repoId: 'repo-1' });
     expect(routeAt('/repo-detail').current.panel).toBe('repos');

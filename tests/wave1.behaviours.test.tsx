@@ -53,10 +53,10 @@ describe('raw in one step — run targets', () => {
     expect(runEventsPath('r 1')).toBe('/runs/r%201/events');
     window.history.replaceState(null, '', runEventsPath('r1'));
     const ev = renderHook(() => useRoute()).result.current;
-    expect([ev.panel, ev.artifactId, ev.runId]).toEqual(['run-events', 'r1', null]);
+    expect([ev.panel, ev.artifactId]).toEqual(['run-events', 'r1']);
     window.history.replaceState(null, '', runFilesPath('r1'));
     const fi = renderHook(() => useRoute()).result.current;
-    expect([fi.panel, fi.artifactId, fi.runId]).toEqual(['run-files', 'r1', null]);
+    expect([fi.panel, fi.artifactId]).toEqual(['run-files', 'r1']);
   });
 });
 

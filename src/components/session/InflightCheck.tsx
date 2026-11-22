@@ -7,7 +7,7 @@ import { apiStatus } from '../../api/errors.js';
 import { inspectionOf, type InspectAction, type InspectVerdict, type UnitInspection } from '../../api/inspect.js';
 import { checkAfterMs, costWords, elapsedWords, tokenWords, type TurnKind } from '../../board/liveTurn.js';
 import { useRunEventStore } from '../../store/events.js';
-import { stopRun } from '../../store/sheets.js';
+import { stopRun, useSheets } from '../../store/sheets.js';
 import { InlineUndo } from '../InlineUndo.js';
 
 /**
@@ -33,7 +33,8 @@ const VERDICT: Record<InspectVerdict, { word: string; tone: 'ok' | 'warn' | 'fai
   wasteful: { word: 'Wasting tokens', tone: 'warn' },
 };
 
-type Chosen = { action: InspectAction; at: number; note?: string; error?: string };
+/** `undone`: for a Stop, the run's unsent-Stop count when it was chosen (studio#1075). */
+type Chosen = { action: InspectAction; at: number; note?: string; error?: string; undone?: number };
 
 export function InflightCheck({ runId, ord, attempt, kind, startedAt, now, seatName, seatKey, label }: {
   runId: string;
@@ -58,7 +59,11 @@ export function InflightCheck({ runId, ord, attempt, kind, startedAt, now, seatN
   const [asking, setAsking] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [snoozeAt, setSnoozeAt] = useState<number>(() => snoozed.get(key) ?? 0);
-  const [chosen, setChosen] = useState<Chosen | null>(null);
+  const [picked, setChosen] = useState<Chosen | null>(null);
+  // studio#1075: a Stop that was undone (or cancelled unsent) is no longer the answer: the run keeps going, so the card
+  // asks again instead of saying "You chose: Stop".
+  const undoneStops = useSheets((s) => s.stopUndone[runId] ?? 0);
+  const chosen = picked !== null && picked.action === 'stop' && picked.undone !== undoneStops ? null : picked;
 
   // A check asked earlier on this attempt (a reload, another tab) is shown as it stands, once the turn is long enough
   // to have been checked at all.
@@ -124,8 +129,9 @@ export function InflightCheck({ runId, ord, attempt, kind, startedAt, now, seatN
       return;
     }
     if (a.option === 'stop') {
+      const undone = useSheets.getState().stopUndone[runId] ?? 0;
       stopRun([runId], label);
-      setChosen({ action: 'stop', at: Date.now() });
+      setChosen({ action: 'stop', at: Date.now(), undone });
       return;
     }
     const body = (a.reason ?? '').trim();

@@ -145,8 +145,6 @@ const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
   'powerToggled',
 ]);
 
-/** Terminal run states — a run here can no longer be cancelled. */
-const TERMINAL_STATES = ['completed', 'cancelled', 'failed'];
 /** The expanded RightPanel's width (`w-72`) — the Ask launcher stays clear of it. */
 const RIGHT_PANEL_PX = 288;
 /** The Desk's Start row + composer band (skin `desk`): the Ask panel opens above it. */
@@ -164,7 +162,7 @@ function chatOnScreen(): string | null {
 }
 
 export function App(): React.ReactElement {
-  const { panel, runId, repoId, projectId, artifactId, showLaunch, campaignId, testingPage, artifactKey, navigate, search, pathname } = useRoute();
+  const { panel, repoId, projectId, artifactId, showLaunch, campaignId, testingPage, artifactKey, navigate, search, pathname } = useRoute();
   const { runs, refresh, loaded: runsLoaded, error: runsError } = useRuns();
   // This page changed a run's power state (a flip, a raise, a pause answered): re-read the run list.
   useEffect(() => {
@@ -334,40 +332,6 @@ export function App(): React.ReactElement {
   // `/runs/:id`, `/p/:id/…`, `/chat/…`, …) no longer redirect — each parses to `not-found`, which
   // keeps the typed URL and offers the way out. Studio never generates one (tests/linksResolve).
 
-  // FINDING-013: /ws has no late-join replay, so a page reloaded against a run shows an empty Burn
-  // panel even though usage was durably recorded. When the selected run has no frames yet (a reload
-  // with no live socket history), backfill from the persisted event trail. Guarded on emptiness (and
-  // again inside the store) so a live run's streamed frames are never double-counted; a 503 (engine
-  // with no event-log binding) or a run with no history simply leaves the panels as they are.
-  //
-  // The same replay gap hid the run thread's live narration: the runtime store's `outputs` buffers
-  // were fed ONLY by live `unitOutputDelta`/`cliOutputDelta` frames (the structured-event hydrate
-  // above deliberately drops them), so opening an already-executing run showed a bare "Working…"
-  // even though the streamed text was durably recorded. The same fetch now also seeds those
-  // buffers, per-key guarded inside the store so live frames are never double-counted.
-  useEffect(() => {
-    if (!runId) return;
-    const hasFrames = (useRunEventStore.getState().byRun[runId] ?? []).length > 0;
-    const hasOutputs = Object.keys(useRuntimeStore.getState().outputs).some((k) =>
-      k.startsWith(`${runId}:u`),
-    );
-    if (hasFrames && hasOutputs) return;
-    let cancelled = false;
-    api
-      .getRunEvents(runId)
-      .then(({ events }) => {
-        if (cancelled) return;
-        useRunEventStore.getState().hydrate(runId, events);
-        useRuntimeStore.getState().hydrateOutputs(runId, events);
-      })
-      .catch(() => {
-        /* no event-log binding, or the run has no persisted history — no backfill */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [runId]);
-
   // S16a-2d: a run opens its session thread (the run page retired); S16a-4f: never a `/p/` address.
   const runPath = useCallback((id: string) => sessionPath(`run:${id}`), []);
 
@@ -392,27 +356,12 @@ export function App(): React.ReactElement {
     [navigate, refresh, runPath],
   );
 
-  const onKill = useCallback(
-    async (id: string) => {
-      try {
-        await api.cancelRun(id);
-        refresh();
-      } catch {
-        // surface kill errors only in RightPanel; fail silently from the shortcut
-      }
-    },
-    [refresh],
-  );
-
-  const selected = runs.find((v) => v.session.id === runId) ?? null;
   // The project on screen (its page, or a page carrying `?project=`): the rail's New job and Chat start there.
   const ambientProject = projectId ?? ambientProjectId(pathname, search);
 
   // ── DES-FEEDBACK-002 §1.2 (slice G): shortcut registry + command palette ────
   // Cmd/Ctrl+K and Ctrl/Cmd+P open the palette (the unconditional, safe action
-  // gets the prime chord); kill-run relocates to Ctrl/Cmd+Shift+K with its
-  // guards and silent-fail contract intact, and also rides the palette as the
-  // `> Cancel run` verb. One listener, one guard — `useGlobalShortcuts`.
+  // gets the prime chord). One listener, one guard — `useGlobalShortcuts`.
   const [paletteOpen, setPaletteOpen] = useState(false);
   // The seed a search request carries (the rail's Search seeds nothing; a seeded open pre-types it).
   const [paletteSeed, setPaletteSeed] = useState('');
@@ -534,14 +483,6 @@ export function App(): React.ReactElement {
           setPaletteObject(null);
           setPaletteOpen(true);
         },
-        killEligible: () => {
-          if (!runId) return false;
-          const run = runs.find((r) => r.session.id === runId);
-          return run !== undefined && !TERMINAL_STATES.includes(run.session.status);
-        },
-        kill: () => {
-          if (runId) void onKill(runId);
-        },
       }),
       // Ctrl/⌘+Shift+A — the ASK toggle, documented in the shortcut overlay via the registry.
       {
@@ -566,7 +507,7 @@ export function App(): React.ReactElement {
         },
       },
     ],
-    [runId, runs, onKill, navigate],
+    [navigate],
   );
   useGlobalShortcuts(shortcutEntries);
 
@@ -894,7 +835,7 @@ export function App(): React.ReactElement {
             a strip in the main column's flow, so it never covers a composer, a card or a page's controls. */}
         <ThemePreviewBar />
         {panel !== 'home' && (
-          <GateNotifications onSelect={selectRun} runId={runId} projectId={projectId} runs={shownRuns} hideRuns={viewedRunIds} />
+          <GateNotifications onSelect={selectRun} projectId={projectId} runs={shownRuns} hideRuns={viewedRunIds} />
         )}
         <div className="flex flex-1 overflow-hidden min-h-0">
           {renderCenter()}
@@ -1001,8 +942,6 @@ export function App(): React.ReactElement {
         // codex on studio#664: the ONE ambient rule — a page outside the project shell that carries
         // `?project=` (Made › Videos) is standing in that project too.
         projectId={ambientProject}
-        selectedRun={selected}
-        onKill={(id) => void onKill(id)}
         object={paletteObject}
       />
 

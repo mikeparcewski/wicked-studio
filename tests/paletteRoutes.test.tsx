@@ -61,7 +61,7 @@ describe('the palette carries them', () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('{"repos":[]}', { status: 200, headers: { 'content-type': 'application/json' } }))));
     const { CommandPalette } = await import('../src/components/CommandPalette.js');
     const navigate = vi.fn();
-    render(<CommandPalette open onClose={() => {}} seed="" runs={DATA.runs} navigate={navigate} runPath={(id) => `/runs/${id}`} projectId={null} selectedRun={null} onKill={() => {}} />);
+    render(<CommandPalette open onClose={() => {}} seed="" runs={DATA.runs} navigate={navigate} runPath={(id) => `/runs/${id}`} projectId={null} />);
     const input = screen.getByTestId('palette-input');
     fireEvent.change(input, { target: { value: 'go: settings' } });
     await waitFor(() => expect(screen.getAllByTestId('palette-row').length).toBeGreaterThan(0));
@@ -81,7 +81,7 @@ describe('the palette carries them', () => {
     const { useProjectsStore } = await import('../src/store/projects.js');
     clearPaletteRepoCache();
     useProjectsStore.setState({ projects: [{ id: 'kes', name: 'Kestrel', description: null, status: 'active', scope: 'project:kes', created_at: 1, updated_at: 1 }] });
-    render(<CommandPalette open onClose={() => {}} seed="" runs={DATA.runs} navigate={() => {}} runPath={(id) => `/runs/${id}`} projectId={null} selectedRun={null} onKill={() => {}} />);
+    render(<CommandPalette open onClose={() => {}} seed="" runs={DATA.runs} navigate={() => {}} runPath={(id) => `/runs/${id}`} projectId={null} />);
     await waitFor(() => expect(screen.getAllByTestId('palette-row').some((r) => r.dataset.group === 'repos')).toBe(true));
     const hrefs = screen.getAllByTestId('palette-row').filter((r) => ['runs', 'projects', 'repos'].includes(r.dataset.group ?? '')).map((r) => r.getAttribute('href') ?? '');
     for (const id of REACHED_BY_OTHER_GROUPS) {
@@ -94,7 +94,7 @@ describe('the palette carries them', () => {
   it('with nothing typed, GO TO lists the destinations only; a word finds the per-item rows', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('{"repos":[]}', { status: 200, headers: { 'content-type': 'application/json' } }))));
     const { CommandPalette } = await import('../src/components/CommandPalette.js');
-    render(<CommandPalette open onClose={() => {}} seed="" runs={DATA.runs} navigate={() => {}} runPath={(id) => `/runs/${id}`} projectId={null} selectedRun={null} onKill={() => {}} />);
+    render(<CommandPalette open onClose={() => {}} seed="" runs={DATA.runs} navigate={() => {}} runPath={(id) => `/runs/${id}`} projectId={null} />);
     const input = screen.getByTestId('palette-input');
     fireEvent.change(input, { target: { value: 'go:' } });
     const empty = screen.getAllByTestId('palette-row').map((r) => r.getAttribute('href'));

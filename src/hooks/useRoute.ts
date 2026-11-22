@@ -92,8 +92,6 @@ export const RETIRED_ADDRESSES: readonly string[] = [
 
 export interface Route {
   panel: Panel;
-  /** Non-null only when panel === 'runs' and a run is selected. */
-  runId: string | null;
   /** True when panel === 'runs' and the launch form is open. */
   showLaunch: boolean;
   /** Non-null only when panel === 'repo-detail'. */
@@ -131,7 +129,6 @@ export interface Route {
 /** Route options a caller can override; everything else takes its inert default. */
 const INERT: Route = {
   panel: 'runs',
-  runId: null,
   showLaunch: false,
   repoId: null,
   showRegisterRepo: false,
