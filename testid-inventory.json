@@ -19989,6 +19989,24 @@
       ]
     },
     {
+      "testId": "session-gate-failing-unplaced",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-failing-unplaced-toggle",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-failing-unplaced-words",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-failing-words",
       "files": [
         "src/components/session/GateRow.tsx"

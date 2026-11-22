@@ -539,34 +539,62 @@ function setFailed(runId: string, n: number): void {
  * looking at. The shown run reads its own gate outside these slots (`useOwnGateRead`). F31 chose four when 98 parked
  * runs read one by one took ~28 s. crew#1775's one-run read stops the per-read whole-store fold, but a read still
  * costs ~90 ms on a 4k-run store and seconds when the engine is busy, so the k-th waiting run's gate lands after about
- * k reads (wicked-studio#1319 tracks the slot a slow gate's retry holds).
+ * k reads.
  */
 export const GATE_READS_IN_FLIGHT = 1;
 
 /**
- * F31: the late-join passes' shared read slots. At most `GATE_READS_IN_FLIGHT` reads are on their way across every
- * pass (a refresh that replaces a pass does not add more). A slot is held until its read ends; a hydration read
- * ends by its deadline at the latest (`GATE_READ_DEADLINE_MS`), so a hung request cannot stall the passes after it.
+ * studio#1319: how many retried gate reads (`scheduleGateRetry`, the skip-QE read's retry) are on their way at once,
+ * apart from the first reads above. A retry's deadline grows to `GATE_READ_DEADLINE_MAX_MS`, so in the first reads' one
+ * slot a single slow gate held every other waiting run's first read for up to a minute. Retries wait for each other
+ * here, never for the first reads and never in front of them: at most two background reads hold browser connections.
  */
-let slotsBusy = 0;
-const slotWaiters: Array<() => void> = [];
-export async function inGateSlot(fn: () => Promise<void>): Promise<void> {
-  // A freed slot is handed to the longest waiter (first in, first out), never taken by a newcomer.
-  if (slotsBusy < GATE_READS_IN_FLIGHT) slotsBusy += 1;
-  else await new Promise<void>((r) => slotWaiters.push(r));
-  try {
-    await fn();
-  } finally {
-    const next = slotWaiters.shift();
-    if (next !== undefined) next();
-    else slotsBusy -= 1;
-  }
+export const GATE_RETRY_READS_IN_FLIGHT = 1;
+
+/**
+ * F31: a set of shared read slots. At most `limit` reads are on their way across every pass (a refresh that replaces a
+ * pass does not add more). A slot is held until its read ends; a read ends by its deadline at the latest, so a hung
+ * request cannot stall the reads after it. A freed slot is handed to the longest waiter (first in, first out), never
+ * taken by a newcomer.
+ */
+function readSlots(limit: number): { run: (fn: () => Promise<void>) => Promise<void>; reset: () => void } {
+  let busy = 0;
+  const waiters: Array<() => void> = [];
+  return {
+    async run(fn) {
+      if (busy < limit) busy += 1;
+      else await new Promise<void>((r) => waiters.push(r));
+      try {
+        await fn();
+      } finally {
+        const next = waiters.shift();
+        if (next !== undefined) next();
+        else busy -= 1;
+      }
+    },
+    reset() {
+      busy = 0;
+      waiters.length = 0;
+    },
+  };
+}
+const firstReadSlots = readSlots(GATE_READS_IN_FLIGHT);
+const retryReadSlots = readSlots(GATE_RETRY_READS_IN_FLIGHT);
+
+/** The late-join passes' first gate reads, `GATE_READS_IN_FLIGHT` at a time. */
+export function inGateSlot(fn: () => Promise<void>): Promise<void> {
+  return firstReadSlots.run(fn);
+}
+
+/** studio#1319: a retried gate read, `GATE_RETRY_READS_IN_FLIGHT` at a time, apart from the first reads. */
+export function inGateRetrySlot(fn: () => Promise<void>): Promise<void> {
+  return retryReadSlots.run(fn);
 }
 
 /** Test seam: a test that abandons a hung read must not leave its slot held for the next. */
 export function resetGateSlotsForTest(): void {
-  slotsBusy = 0;
-  slotWaiters.length = 0;
+  firstReadSlots.reset();
+  retryReadSlots.reset();
 }
 
 const retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -581,12 +609,17 @@ function scheduleGateRetry(runId: string, failures: number): void {
   clearRetry(runId);
   const wait = Math.min(GATE_RETRY_BASE_MS * 2 ** (failures - 1), GATE_RETRY_MAX_MS);
   const epoch = epochOf(runId);
-  retryTimers.set(runId, setTimeout(() => {
-    retryTimers.delete(runId);
-    // Through the runs list's shared read slots, so many runs retrying at once never read all at once; eligibility is
-    // rechecked once a slot is held (the run may have stopped waiting, or its gate arrived, meanwhile).
-    void inGateSlot(async () => { if (epochOf(runId) === epoch) await ensureGate(runId); });
-  }, wait));
+  const timer = setTimeout(() => {
+    // Through the retry slots (studio#1319), so many runs retrying at once never read all at once and no retry holds a
+    // first read's slot; eligibility is rechecked once a slot is held (the run may have stopped waiting, or its gate
+    // arrived, meanwhile). The run stays marked as retrying until its retry holds a slot, so a late-join pass leaves it
+    // to the retry (`hydrateGate`) rather than starting its long-deadline read in a first read's slot.
+    void inGateRetrySlot(async () => {
+      if (retryTimers.get(runId) === timer) retryTimers.delete(runId);
+      if (epochOf(runId) === epoch) await ensureGate(runId);
+    });
+  }, wait);
+  retryTimers.set(runId, timer);
 }
 /** studio#1197: stop retrying the gate reads of every run that no longer waits on a person (`waiting` = the ids
  *  that do), and forget their failures. */
