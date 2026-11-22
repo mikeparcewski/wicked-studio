@@ -1,6 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { CoveragePerApp, CoverageReport, GraphKind, RepoEntry, UnaccountedNode } from '../api/types.js';
+
+/**
+ * studio#1289: how long one coverage read may take before the pane stops waiting and offers Try again. On a loaded host
+ * the read sat for 20 s and more behind a lone disabled "Loading…" button, with nothing said.
+ */
+export const COVERAGE_READ_TIMEOUT_MS = 30_000;
+
+/** The read passed {@link COVERAGE_READ_TIMEOUT_MS}. */
+class CoverageReadTimeout extends Error {}
 
 type SortKey = 'name' | 'kind' | 'file' | 'app';
 type SortDir = 'asc' | 'desc';
@@ -301,6 +310,10 @@ export function CoverageView(): React.ReactElement {
   const [report, setReport] = useState<CoverageReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** The last read ran past {@link COVERAGE_READ_TIMEOUT_MS} (studio#1289). */
+  const [timedOut, setTimedOut] = useState(false);
+  /** The newest read: an older one's late answer (past its deadline, or for another repo) is dropped. */
+  const readGen = useRef(0);
   // FINDING-009: coverage is per-repo (computed over the repo's OWN graph). The bare endpoint reads
   // the daemon store and reports a vacuous 1.0 that names no repo, so let the operator pick a repo.
   // `''` = the legacy daemon-wide view (kept so the panel still renders before any repo is chosen).
@@ -310,29 +323,51 @@ export function CoverageView(): React.ReactElement {
   // store has no repo code graph — so it's null for the daemon-wide view.
   const [graphKinds, setGraphKinds] = useState<GraphKind[] | null>(null);
 
+  /** Ends the read in flight: its requests and its deadline (a new read, leaving the pane). */
+  const endRead = useRef<(() => void) | null>(null);
+
   const load = useCallback(async () => {
+    endRead.current?.();
+    const gen = ++readGen.current;
+    const ctl = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_done, fail) => {
+      timer = setTimeout(() => { fail(new CoverageReadTimeout()); ctl.abort(); }, COVERAGE_READ_TIMEOUT_MS);
+    });
+    endRead.current = () => { clearTimeout(timer); ctl.abort(); };
     setLoading(true);
     setError(null);
+    setTimedOut(false);
+    // The pane never shows one read's numbers under another's question (a switched repo, a timed-out refresh).
+    setReport(null);
+    setGraphKinds(null);
     try {
-      if (repoRef) {
-        // Coverage + graph summary for the chosen repo, in parallel (#122).
-        const [{ report: r }, { kinds }] = await Promise.all([
-          api.getCoverageReportForRepo(repoRef),
-          api.getGraphKindsForRepo(repoRef),
-        ]);
-        setReport(r);
-        setGraphKinds(kinds);
-      } else {
-        const { report: r } = await api.getCoverageReport();
-        setReport(r);
-        setGraphKinds(null); // no daemon-wide code graph
-      }
+      const signal = ctl.signal;
+      // Coverage + graph summary for the chosen repo, in parallel (#122); the daemon-wide view has no code graph.
+      const read = repoRef
+        ? Promise.all([api.getCoverageReportForRepo(repoRef, { signal }), api.getGraphKindsForRepo(repoRef, { signal })])
+          .then(([{ report: r }, { kinds }]) => ({ report: r, kinds: kinds as GraphKind[] | null }))
+          .catch((e: unknown) => { ctl.abort(); throw e; }) // one half failed: end the other
+        : api.getCoverageReport({ signal }).then(({ report: r }) => ({ report: r, kinds: null }));
+      const got = await Promise.race([read, deadline]);
+      if (readGen.current !== gen) return;
+      setReport(got.report);
+      setGraphKinds(got.kinds);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (readGen.current !== gen) return;
+      if (e instanceof CoverageReadTimeout) setTimedOut(true);
+      setError(e instanceof CoverageReadTimeout ? '' : e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      clearTimeout(timer);
+      if (readGen.current === gen) {
+        endRead.current = null;
+        setLoading(false);
+      }
     }
   }, [repoRef]);
+
+  // Leaving the pane ends any read still running and drops its answer.
+  useEffect(() => () => { readGen.current += 1; endRead.current?.(); endRead.current = null; }, []);
 
   // Load the repo list once so the picker can offer real, registered repos.
   useEffect(() => {
@@ -375,13 +410,33 @@ export function CoverageView(): React.ReactElement {
         </div>
       </div>
 
-      {error && (
-        <p className="rounded px-3 py-2 text-xs" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
-          {error}
+      {/* studio#1289: the read in flight is said, not only a disabled button. */}
+      {loading && (
+        <p role="status" data-testid="coverage-reading" className="text-xs" style={{ color: 'var(--ink-dim)' }}>
+          Reading coverage for {repoRef ? repos.find((r) => r.id === repoRef)?.name ?? 'this repository' : 'all repositories (daemon)'}…
         </p>
       )}
 
-      {!loading && !error && report === null && (
+      {error !== null && (
+        <div role="alert" data-testid="coverage-error" data-kind={timedOut ? 'timeout' : 'error'} className="flex items-start justify-between gap-3 rounded px-3 py-2 text-xs" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
+          <p>
+            {timedOut
+              ? `Coverage didn’t answer within ${Math.round(COVERAGE_READ_TIMEOUT_MS / 1000)} s. The daemon may be busy; try again in a moment.`
+              : <>Coverage couldn’t be read: {error}</>}
+          </p>
+          <button
+            type="button"
+            data-testid="coverage-retry"
+            onClick={() => void load()}
+            className="shrink-0 rounded px-2 py-1 text-xs"
+            style={{ border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
+      {!loading && error === null && report === null && (
         <p className="text-xs" style={{ color: 'var(--ink-dim)' }}>
           No coverage data — run{' '}
           <code className="font-mono" style={{ color: 'var(--ink-muted)' }}>wicked-core rules ingest</code>{' '}

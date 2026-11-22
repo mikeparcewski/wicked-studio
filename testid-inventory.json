@@ -4000,6 +4000,24 @@
       ]
     },
     {
+      "testId": "coverage-error",
+      "files": [
+        "src/components/CoverageView.tsx"
+      ]
+    },
+    {
+      "testId": "coverage-reading",
+      "files": [
+        "src/components/CoverageView.tsx"
+      ]
+    },
+    {
+      "testId": "coverage-retry",
+      "files": [
+        "src/components/CoverageView.tsx"
+      ]
+    },
+    {
       "testId": "data-panel",
       "files": [
         "src/components/sources/DataPanel.tsx"
