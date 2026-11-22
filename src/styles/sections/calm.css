@@ -8,7 +8,9 @@
   /* Hover = a tint of the accent mixed with the theme's own ink, so it shows on every ground and with any
      accent the picker holds (the rail's language, fix/rail-hover-visible): rows 14%, controls 20%. */
   --calm-tint: color-mix(in oklab, var(--accent) 50%, var(--ink-high));
-  --calm-hover-row: color-mix(in oklab, var(--calm-tint) 14%, transparent);
+  /* (studio#921) A row's hover is the rail's recipe: a step toward the ink with a little accent in it, so an accent close
+     to the ground cannot flatten it (half accent, it measured dE 0.062 with a near-white accent on Wicked Light). */
+  --calm-hover-row: color-mix(in oklab, color-mix(in oklab, var(--accent) 10%, var(--ink-high)) 14%, transparent);
   --calm-hover-ctl: color-mix(in oklab, var(--calm-tint) 20%, transparent);
   --calm-press-ctl: color-mix(in oklab, var(--calm-tint) 28%, transparent);
   --calm-hover-edge: color-mix(in oklab, var(--calm-tint) 60%, transparent);
@@ -23,6 +25,10 @@
    its hover deepens the fill toward the page instead. */
 :root:not([data-theme]) .wk-calm { --calm-primary-hover: color-mix(in oklab, var(--accent) 60%, var(--surface-base)); --calm-primary-press: color-mix(in oklab, var(--accent) 50%, var(--surface-base)); }
 [data-theme="light"] .wk-calm { --calm-primary-hover: color-mix(in oklab, var(--accent) 74%, var(--surface-base)); --calm-primary-press: color-mix(in oklab, var(--accent) 64%, var(--surface-base)); }
+/* (studio#921) Link words keep AA with any accent: the mix's lightness is held on the ink's side of the ground (at most
+   0.46 on a light ground, at least 0.74 on a dark one). A preset's mix is already there, so its colour does not move. */
+[data-theme="wicked-light"] .wk-calm, [data-theme="light"] .wk-calm { --calm-link: oklch(from color-mix(in oklab, var(--accent) 50%, var(--ink-high)) min(l, 0.46) c h); }
+[data-theme="wicked-dark"] .wk-calm, :root:not([data-theme]) .wk-calm { --calm-link: oklch(from color-mix(in oklab, var(--accent) 50%, var(--ink-high)) max(l, 0.74) c h); }
 .wk-calm { flex: 1 1 auto; min-height: 0; min-width: 0; overflow-y: auto; display: flex; flex-direction: row; align-items: flex-start; justify-content: center; padding: 56px 40px 80px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;  top: 0; left: 0; }
 .wk-calm-col { width: 100%; max-width: 840px; display: flex; flex-direction: column; gap: 40px; min-width: 0; }
