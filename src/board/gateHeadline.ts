@@ -154,7 +154,8 @@ export function gateCause({ view, gate, events, model, roster, pool = runPoolOf(
         // (J4 0.16.6) The live roster has a helper of this job, not the builder, signed in: say so, never "sign one in".
         ? `${seatName(judges.inJob.cli, judges.inJob.label)} is signed in but wasn’t used to check this step`
         : 'No helper could check this step independently')
-        : fresh !== null ? 'Every failing test fails on the base too'
+        // studio#1276: failures the base's re-run could not separate are not the base's: no "every" claim over them.
+        : fresh !== null ? ((split?.unplaced?.length ?? 0) > 0 ? 'No failing test is known to be this change’s alone' : 'Every failing test fails on the base too')
           : gate !== undefined ? governanceDenialHeadline(gate.prompt) : null;
   return { seatRefusal, judgeWait, judges, fresh, headline };
 }

@@ -713,7 +713,7 @@ function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
     ? FLOOR_OVERRIDE_CONSEQUENCE
     : floorFix
     ? `A seat other than this phase makes the fix from ${freshCount !== null
-      ? freshCount > 0 ? `the ${freshCount === 1 ? 'test' : `${freshCount} tests`} only this change fails` : 'your note (every failure fails on the base too)'
+      ? freshCount > 0 ? `the ${freshCount === 1 ? 'test' : `${freshCount} tests`} only this change fails` : (failingTests?.split?.unplaced?.length ?? 0) > 0 ? 'your note (no failure is known to be this change’s alone)' : 'your note (every failure fails on the base too)'
       : rec!.items.length > 0 ? `the ${rec!.items.length} failing check${rec!.items.length === 1 ? '' : 's'}` : 'note'}; only the floor re-runs`
     : suggested && rec!.consequence !== '' ? rec!.consequence : null;
   const source = gateSourceLine(gate.gateKind ?? gateFrameFor(events, gate.ord)?.gateKind ?? null);
@@ -1278,7 +1278,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
             : overridePath ? overrideAt
               : changeOnly !== null && escInline[recommendedChoiceIndex(escInline, rec) ?? -1]?.key === FLOOR_OVERRIDE_KEY ? null
                 : recommendedChoiceIndex(escInline, rec);
-    if (backAt >= 0) noteDefault = namedSendBackNote(changeOnly!.slice(0, FACE_MAX * 2));
+    if (backAt >= 0) noteDefault = namedSendBackNote(changeOnly!.slice(0, FACE_MAX * 2), (split?.unplaced?.length ?? 0) > 0);
     // A retry with findings is taken with ITS note (a validator's failing checks are not "the
     // reviewer's"), so the note field opens on the move's own prefill.
     if (!deniedUnit && !qeNoVerdict && !qeRedo && !rejudgeOffered && !overridePath && backAt < 0 && recommended !== null && rec?.kind === 'retry-findings' && rec.prefill !== null) {
@@ -1356,8 +1356,10 @@ export function gateFloorSplit(events: readonly CoreEvent[], gate: Pick<OpenGate
 }
 
 /** The note a named send-back opens with: the tests only this change has, and nothing else. */
-export function namedSendBackNote(fresh: readonly string[]): string {
-  return `Fix only the test${fresh.length === 1 ? '' : 's'} this change broke (the others fail on the base too): ${fresh.join(', ')}`;
+export function namedSendBackNote(fresh: readonly string[], unplaced = false): string {
+  // studio#1276: with failures the base's re-run could not separate, the others are not all the base's.
+  const others = unplaced ? 'the others fail on the base too, or can’t be told apart from this change' : 'the others fail on the base too';
+  return `Fix only the test${fresh.length === 1 ? '' : 's'} this change broke (${others}): ${fresh.join(', ')}`;
 }
 
 /**
