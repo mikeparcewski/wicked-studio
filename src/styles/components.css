@@ -1972,6 +1972,9 @@ html :is(input, textarea)::placeholder { color: var(--ink-placeholder); opacity:
   .wk-topbar-menu { width: var(--tap-min); height: var(--tap-min); min-width: var(--tap-min); color: var(--ink-high); }
   .wk-topbar-brand { display: inline-flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; }
   .wk-topbar-brand b { color: var(--ink-high); }
+  /* (studio#983) A custom site name: one line, ellipsised, so the badge and the actions keep their room. */
+  .wk-topbar-brand-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .wk-topbar-logo { width: 28px; height: 28px; flex-shrink: 0; background-size: contain; background-position: center; background-repeat: no-repeat; }
   .wk-topbar-badge { flex-shrink: 0; padding-right: var(--space-2); }
   .wk-topbar-search { width: var(--tap-min); height: var(--tap-min); min-width: var(--tap-min); color: var(--ink-high); }
   .wk-topbar-checking { color: var(--ink-muted); font-size: var(--text-xs); }

@@ -14,7 +14,10 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
  *    behind is `inert` and does not scroll; it takes the modal rung of store/layers so only it
  *    answers Escape;
  *  - Escape or the scrim closes it (focus back to the menu button); a route change or growing past
- *    767 px closes it (focus to #main); a modal opened from it closes it (focus stays in the modal).
+ *    767 px closes it (focus to #main); a modal opened from it closes it (focus stays in the modal);
+ *  - a control in it that shows a surface outside it without a route change or a modal (the Chat icon: the
+ *    chat window) carries `data-drawer-closes`, and a click on it closes the drawer the same way, leaving
+ *    focus to what it opened (studio#974: the drawer and its scrim stayed over the chat window).
  */
 export function RailDrawer({ pathname, search = '', badge, children, ambientProject = null }: {
   pathname: string; badge: React.ReactNode; children: React.ReactNode;
@@ -31,7 +34,7 @@ export function RailDrawer({ pathname, search = '', badge, children, ambientProj
   const shown = phone && open;
   /** Where focus goes once the drawer has closed and the page is no longer inert. */
   const focusAfter = useRef<'toggle' | 'main' | null>(null);
-  const closeTo = (to: 'toggle' | 'main'): void => { focusAfter.current = to; setOpen(false); };
+  const closeTo = (to: 'toggle' | 'main' | null): void => { focusAfter.current = to; setOpen(false); };
 
   // Close on a route change and when the window leaves phone width.
   const address = pathname + search;
@@ -93,6 +96,8 @@ export function RailDrawer({ pathname, search = '', badge, children, ambientProj
         id="rail-drawer" ref={drawer} data-testid="rail-drawer" data-open={open ? 'true' : 'false'}
         className={`wk-rail-drawer${open ? ' wk-rail-drawer--open' : ''}`}
         {...(open ? { role: 'dialog', 'aria-modal': true, 'aria-label': 'Navigation' } : { inert: '' as unknown as boolean, 'aria-hidden': true })}
+        // After the control's own click (bubble phase), so what it opens is already asked for.
+        onClick={(e) => { if (open && e.target instanceof Element && e.target.closest('[data-drawer-closes]') !== null) closeTo(null); }}
       >
         {children}
       </div>

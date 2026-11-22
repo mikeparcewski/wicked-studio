@@ -24838,7 +24838,31 @@
       ]
     },
     {
+      "testId": "topbar-brand",
+      "files": [
+        "src/components/ui/TopBar.tsx"
+      ]
+    },
+    {
+      "testId": "topbar-lettering",
+      "files": [
+        "src/components/ui/TopBar.tsx"
+      ]
+    },
+    {
       "testId": "topbar-lockup",
+      "files": [
+        "src/components/ui/TopBar.tsx"
+      ]
+    },
+    {
+      "testId": "topbar-logo",
+      "files": [
+        "src/components/ui/TopBar.tsx"
+      ]
+    },
+    {
+      "testId": "topbar-mark",
       "files": [
         "src/components/ui/TopBar.tsx"
       ]
@@ -24851,6 +24875,12 @@
     },
     {
       "testId": "topbar-search",
+      "files": [
+        "src/components/ui/TopBar.tsx"
+      ]
+    },
+    {
+      "testId": "topbar-site-name",
       "files": [
         "src/components/ui/TopBar.tsx"
       ]

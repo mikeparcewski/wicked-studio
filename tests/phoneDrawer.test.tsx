@@ -94,6 +94,34 @@ describe('phone rail drawer', () => {
     expect(useLayerStore.getState().modalIds).toEqual([modalId]);
     act(() => useLayerStore.getState().popModal(modalId));
   });
+  it('a drawer control that opens something outside it (Chat) closes it; other controls do not (studio#974)', () => {
+    const opened: string[] = [];
+    render(
+      <div data-shell="desk">
+        <RailDrawer pathname="/" badge={null}>
+          <nav data-testid="session-rail">
+            <button type="button" data-testid="fold" onClick={() => opened.push('fold')}>Recent</button>
+            <button type="button" data-testid="chat" data-drawer-closes onClick={() => opened.push('chat')}><svg data-testid="chat-icon" /></button>
+          </nav>
+        </RailDrawer>
+        <div id="main" tabIndex={-1} />
+      </div>,
+    );
+    const t = screen.getByTestId('rail-drawer-toggle');
+    fireEvent.click(t);
+    // A control that stays inside the drawer (a fold, a toggle) leaves it open.
+    fireEvent.click(screen.getByTestId('fold'));
+    expect(screen.getByTestId('rail-drawer').getAttribute('data-open')).toBe('true');
+    // Chat: its own click runs, the drawer and its scrim go, the page is live again, and focus is not pulled back
+    // to the menu button (the chat window takes it). A tap on the icon inside the button counts too.
+    fireEvent.click(screen.getByTestId('chat-icon'));
+    expect(opened).toEqual(['fold', 'chat']);
+    expect(screen.getByTestId('rail-drawer').getAttribute('data-open')).toBe('false');
+    expect(screen.queryByTestId('rail-drawer-scrim')).toBeNull();
+    expect(document.getElementById('main')!.hasAttribute('inert')).toBe(false);
+    expect(document.activeElement).not.toBe(t);
+    expect(useLayerStore.getState().modalIds).toEqual([]);
+  });
   it('desktop: the rail renders as before, no top bar, no toggle', () => {
     phone = false;
     shell();

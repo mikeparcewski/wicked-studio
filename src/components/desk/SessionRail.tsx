@@ -270,7 +270,8 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
         <button type="button" data-testid="desk-rail-new-project" className="wk-rail-action" aria-label="New project" title="New project" onClick={() => setNewProjectOpen(true)}>
           <FolderPlus size={17} aria-hidden />
         </button>
-        <button type="button" data-testid="desk-rail-chat" data-chat-mode={chatMode} className="wk-rail-action" aria-label={chatName} title={chatName}
+        {/* data-drawer-closes: on a phone the chat window opens over the page, so the drawer gets out of its way (studio#974). */}
+        <button type="button" data-testid="desk-rail-chat" data-chat-mode={chatMode} data-drawer-closes className="wk-rail-action" aria-label={chatName} title={chatName}
           onClick={() => openSystemChat(inProject?.id ?? null)}>
           {chatMode === 'closed' ? <MessageSquarePlus size={17} aria-hidden /> : <MessageSquare size={17} aria-hidden />}
         </button>
