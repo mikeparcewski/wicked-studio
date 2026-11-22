@@ -155,9 +155,12 @@ describe('not counted (crew api-types 0.167.0)', () => {
     expect(uncountedOf({})).toBeNull();
     expect(pageUncountedOf({ uncounted: { stated: 441, placeholders: 1017 } })).toEqual({ stated: 441, placeholders: 1017 });
     expect(pageUncountedOf({ uncounted: { stated: -1, placeholders: 2 } })).toBeNull();
-    expect(uncountedLine({ stated: 441, placeholders: 1017 })).toBe('441 stated rules and 1,017 placeholders sit on type shapes and are not counted.');
-    expect(uncountedLine({ stated: 0, placeholders: 1 })).toBe('1 placeholder sits on a type shape and is not counted.');
-    expect(uncountedLine({ stated: 2, placeholders: 0 })).toBe('2 stated rules sit on type shapes and are not counted.');
+    // studio#1118: the page count holds every uncounted reason, so the header never says they all sit on type shapes.
+    const why = 'type shapes, code outside the product, or files the code index skipped.';
+    expect(uncountedLine({ stated: 441, placeholders: 1017 })).toBe(`441 stated rules and 1,017 placeholders are not counted: ${why} Each row says which.`);
+    expect(uncountedLine({ stated: 0, placeholders: 1 })).toBe(`1 placeholder is not counted: ${why} Its row says which.`);
+    expect(uncountedLine({ stated: 2, placeholders: 0 })).toBe(`2 stated rules are not counted: ${why} Each row says which.`);
+    expect(uncountedLine({ stated: 48, placeholders: 140 })).not.toMatch(/sits? on (a )?type shapes?/);
     expect(uncountedLine({ stated: 0, placeholders: 0 })).toBeNull();
     expect(configDataCountOf({ categories: { functional: 5770, configData: 0 } })).toBe(0);
     expect(configDataCountOf({})).toBeNull();
