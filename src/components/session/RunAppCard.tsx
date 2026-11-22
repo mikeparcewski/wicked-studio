@@ -13,6 +13,7 @@ import { APPS_EDITOR } from '../../editors/protocol.js';
 import { readThemeTokens } from '../../editors/theme.js';
 import { useRoute } from '../../hooks/useRoute.js';
 import { appPath } from '../apps/AppCard.js';
+import { TurnRules } from '../apps/TurnRules.js';
 
 /** An `apps-turn` run's app: crew names the run `apps-<slug>-<12 hex>` (crew `apps/store.ts`, the turn launch). */
 export function appSlugOfRun(runId: string): string | null {
@@ -89,6 +90,7 @@ function RunAppCardOf({ runId, runStatus }: { runId: string; runStatus: string }
       </header>
       {load.kind === 'ready' && load.pinned !== null && <PinnedPreview slug={slug} detail={load.pinned} />}
       <p data-testid="run-app-line" className="wk-artifact-line">{line}</p>
+      {turn !== null && (turn.state === 'refused' || turn.state === 'failed') && <div className="wk-run-app-rules"><TurnRules rules={turn.rules} navigate={navigate} /></div>}
       <footer className="wk-pcard-foot">
         <button type="button" data-testid="run-app-open" className="wk-host-btn wk-host-btn--primary" onClick={() => navigate(appPath(slug))}>Open the app</button>
       </footer>

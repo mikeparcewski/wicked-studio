@@ -1,6 +1,6 @@
 import { apiFetch } from '../../api/client.js';
 import { ApiError } from '../../api/errors.js';
-import type { AppDetail, AppDetailResponse, AppSpec, AppTurnRecord, SessionView } from '../../api/types.js';
+import type { AppDetail, AppDetailResponse, AppSpec, AppTurnRecord as WireTurnRecord, SessionView } from '../../api/types.js';
 import { seatLabel } from '../../board/seatNames.js';
 import { KNOWLEDGE_SOURCE } from './knowledgeSeeds.js';
 
@@ -15,8 +15,38 @@ import { KNOWLEDGE_SOURCE } from './knowledgeSeeds.js';
  * when it lands, the reason when it does not), and the suggestions the composer offers.
  */
 
-/** One turn as crew records it: crew api-types 0.185.0 `AppTurnRecord`, from the package (pin 0.186.0). */
-export type { AppTurnRecord };
+/**
+ * (studio#1295) A steering rule a refused turn broke, as crew records it (crew#1755, `AppTurnRule`: the rule's id as
+ * Steering names it, and the judge's cite else its reason, one line, `''` when none was recorded). Newer than the
+ * api-types pin, so it is typed here.
+ */
+export interface AppTurnRule { id: string; reason: string }
+
+/** One turn as crew records it: crew api-types 0.185.0 `AppTurnRecord`, from the package (pin 0.216.0), with crew#1755's
+ *  `rules` (absent when no broken rule refused the turn, and on a crew before it). */
+export type AppTurnRecord = WireTurnRecord & { rules?: AppTurnRule[] };
+
+/** At most this many rules are shown on a turn (crew names every one in the reason). */
+const RULES_MAX = 20;
+
+/** Whether an id can be a Steering link: a lone surrogate (valid JSON, not valid UTF-16) cannot be URI-encoded (xreview r1). */
+function linkable(id: string): boolean {
+  try { encodeURIComponent(id); return true; } catch { return false; }
+}
+
+/** The broken rules on a record, read defensively: a malformed entry is dropped, an id is kept exactly as written. */
+function rulesOf(v: unknown): AppTurnRule[] {
+  if (!Array.isArray(v)) return [];
+  const out: AppTurnRule[] = [];
+  for (const r of v) {
+    if (typeof r !== 'object' || r === null) continue;
+    const id = (r as { id?: unknown }).id;
+    if (typeof id !== 'string' || id === '' || id.length > 256 || out.some((x) => x.id === id) || !linkable(id)) continue;
+    out.push({ id, reason: str((r as { reason?: unknown }).reason, 300) ?? '' });
+    if (out.length === RULES_MAX) break;
+  }
+  return out;
+}
 
 const STATES = new Set(['running', 'landed', 'refused', 'failed', 'cancelled']);
 const str = (v: unknown, max: number): string | null => (typeof v === 'string' ? v.slice(0, max) : null);
@@ -53,7 +83,9 @@ export function turnsOf(detail: AppDetail | null): AppTurnRecord[] {
     const message = str(o['message'], 8000);
     const state = o['state'];
     if (runId === null || message === null || typeof state !== 'string' || !STATES.has(state) || int(o['at']) === null) continue;
+    const rules = state === 'refused' || state === 'failed' ? rulesOf(o['rules']) : [];
     out.push(plainOld({
+      ...(rules.length > 0 ? { rules } : {}),
       runId, message, state: state as AppTurnRecord['state'],
       at: int(o['at'])!, actor: str(o['actor'], 128) ?? '', about: Array.isArray(o['about']) ? o['about'].filter((x): x is string => typeof x === 'string').slice(0, 20) : [],
       base: int(o['base']) ?? 0, endedAt: int(o['endedAt']), version: int(o['version']), change: str(o['change'], 300), summary: str(o['summary'], 600),

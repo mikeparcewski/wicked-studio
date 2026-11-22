@@ -6,7 +6,35 @@ import { useModalEscape } from '../Modal.js';
 import { useDialogFocus } from '../steer/useDialogFocus.js';
 
 type Concern = 'site' | 'identity' | 'audience' | 'embed' | 'publish';
-interface Finding { concern: Concern; message: string }
+/** `allow`: the ranges crew's identity finding names as the ones that would let it reach the issuer (studio#1296). */
+interface Finding { concern: Concern; message: string; allow?: string[] }
+
+/**
+ * A CIDR range as the field takes it (`10.1.2.3/32`, `fd00::/8`): an IPv4 address with a prefix of 0-32, or an IPv6
+ * address (as a URL host reads it) with 0-128. Crew checks that it is loopback or private (`validateAllowRanges`).
+ */
+export function isCidr(range: string): boolean {
+  const m = /^([^/\s]{2,45})\/(\d{1,3})$/u.exec(range);
+  if (m === null) return false;
+  const [, addr, bits] = m as unknown as [string, string, string];
+  const prefix = Number(bits);
+  if (/^\d{1,3}(\.\d{1,3}){3}$/u.test(addr)) return prefix <= 32 && addr.split('.').every((o) => Number(o) <= 255 && (o === '0' || !o.startsWith('0')));
+  if (!addr.includes(':') || !/^[0-9A-Fa-f:.]+$/u.test(addr)) return false;
+  try { new URL(`http://[${addr}]/`); } catch { return false; }
+  return prefix <= 128;
+}
+
+/**
+ * (studio#1296, crew#1457) The ranges crew's identity finding suggests for an issuer on a private network: it ends
+ * "…allows its range (identity.allowRanges, e.g. 10.1.2.3/32)" (crew `apps/publish/run.ts` discoveryRefusal). Crew
+ * sends the finding as words only, so the ranges are read from them; none when the words name none.
+ */
+export function suggestedRanges(message: string): string[] {
+  const m = /identity\.allowRanges, e\.g\. ([^)]{1,400})\)/u.exec(message);
+  if (m === null) return [];
+  const ranges = m[1]!.split(/,\s*/u).map((r) => r.trim());
+  return ranges.length > 0 && ranges.every(isCidr) ? ranges.slice(0, 100) : [];
+}
 
 /** The site's origin grammar is also crew's: HTTPS, or HTTP on the two loopback hosts. */
 export function publishOrigin(value: string, embed = false): string | null {
@@ -39,7 +67,10 @@ function refusal(e: unknown): Finding[] {
     const findings: Finding[] = body.findings.flatMap((f: unknown) => {
       if (typeof f !== 'object' || f === null) return [];
       const item = f as { code?: unknown; message?: unknown };
-      return typeof item.message === 'string' ? [{ concern: concernOf(typeof item.code === 'string' ? item.code : ''), message: item.message }] : [];
+      if (typeof item.message !== 'string') return [];
+      const concern = concernOf(typeof item.code === 'string' ? item.code : '');
+      const allow = concern === 'identity' ? suggestedRanges(item.message) : [];
+      return [{ concern, message: item.message, ...(allow.length > 0 ? { allow } : {}) }];
     });
     if (findings.length > 0) return findings;
   }
@@ -56,6 +87,10 @@ export function PublishSheet({ detail, onClose, onStarted }: {
   const [issuer, setIssuer] = useState('');
   const [client, setClient] = useState('');
   const [tenant, setTenant] = useState('');
+  // (studio#1296) An issuer on a private network (a Dex fixture, an internal identity provider): the ranges crew may
+  // reach it at. Off unless the person turns it on.
+  const [allowPrivate, setAllowPrivate] = useState(false);
+  const [ranges, setRanges] = useState('');
   const [members, setMembers] = useState('');
   const [embed, setEmbed] = useState(false);
   const [origins, setOrigins] = useState('');
@@ -66,14 +101,18 @@ export function PublishSheet({ detail, onClose, onStarted }: {
   useDialogFocus(true, box, { modal: true });
   const publicWhy = detail.spec.actions.length > 0 ? 'This app has an action. Public apps can only read data and have no actions.'
     : detail.spec.queries.some((q) => q.public !== true) ? 'Every query must be marked public before anyone with the link can open this app.' : null;
+  const allowRanges = (r: readonly string[]): void => { setAllowPrivate(true); setRanges(r.join(', ')); };
   const errors = (concern: Concern): React.ReactNode => findings.some((f) => f.concern === concern)
-    ? <ul className="wk-share-note" role="alert">{findings.filter((f) => f.concern === concern).map((f, i) => <li key={i}>{f.message}</li>)}</ul> : null;
+    ? <ul className="wk-share-note" role="alert">{findings.filter((f) => f.concern === concern).map((f, i) => (
+      <li key={i}>{f.message}{f.allow !== undefined && audience === 'signed-in' && <>{' '}<button type="button" className="wk-btn wk-btn--link" data-testid="publish-allow-suggested" onClick={() => allowRanges(f.allow!)}>Allow {f.allow.join(', ')}</button></>}</li>
+    ))}</ul> : null;
   const start = async (): Promise<void> => {
     if (starting) return;
     const origin = publishOrigin(site);
     const list = (text: string): string[] => text.split(/[,\n]/u).map((s) => s.trim()).filter(Boolean);
     const values = list(members);
     const framedBy = list(origins).map((o) => publishOrigin(o, true));
+    const allowed = allowPrivate ? list(ranges) : [];
     const invalid: Finding[] = [];
     if (origin === null) invalid.push({ concern: 'site', message: 'Use an HTTPS origin, or HTTP for localhost or 127.0.0.1, with no path, query or credentials.' });
     if (audience === 'public' && publicWhy !== null) invalid.push({ concern: 'audience', message: publicWhy });
@@ -83,6 +122,7 @@ export function PublishSheet({ detail, onClose, onStarted }: {
       if (client.trim() === '') invalid.push({ concern: 'identity', message: 'Enter the client id for this site.' });
       if (rule.startsWith('entra-') && tenant.trim() === '') invalid.push({ concern: 'identity', message: 'Enter the Entra tenant id.' });
       if (values.length === 0) invalid.push({ concern: 'audience', message: 'Enter at least one group, email domain or role that may open the site.' });
+      if (allowPrivate && (allowed.length === 0 || allowed.length > 100 || allowed.some((r) => !isCidr(r)))) invalid.push({ concern: 'identity', message: 'Enter the private-network ranges as CIDR, such as 10.1.2.3/32 (at most 100), or turn off the private-network issuer.' });
     }
     if (audience === 'public' && embed && (framedBy.length === 0 || framedBy.some((o) => o === null))) invalid.push({ concern: 'embed', message: 'Enter an HTTPS origin for every page that may embed this app, with no path.' });
     setFindings(invalid);
@@ -93,7 +133,7 @@ export function PublishSheet({ detail, onClose, onStarted }: {
     const body: AppPublishBody = {
       base: detail.head.version, targets: ['studio', 'site', ...(audience === 'public' && embed ? ['embed' as const] : [])],
       site: { origin }, audience: audienceRule,
-      identity: audience === 'public' ? null : { profile: rule.startsWith('entra-') ? 'entra' : 'oidc', issuer: issuer.trim(), clientId: client.trim(), ...(rule.startsWith('entra-') ? { tenantId: tenant.trim() } : {}) },
+      identity: audience === 'public' ? null : { profile: rule.startsWith('entra-') ? 'entra' : 'oidc', issuer: issuer.trim(), clientId: client.trim(), ...(rule.startsWith('entra-') ? { tenantId: tenant.trim() } : {}), ...(allowed.length > 0 ? { allowRanges: allowed } : {}) },
       ...(audience === 'public' && embed ? { embedOrigins: framedBy as string[] } : {}),
     };
     setStarting(true);
@@ -130,6 +170,9 @@ export function PublishSheet({ detail, onClose, onStarted }: {
                 <label className="wk-share-label" htmlFor="publish-issuer">Issuer URL</label><input className="wk-share-field" id="publish-issuer" value={issuer} onChange={(e) => setIssuer(e.target.value)} />
                 <label className="wk-share-label" htmlFor="publish-client">Client id</label><input className="wk-share-field" id="publish-client" value={client} onChange={(e) => setClient(e.target.value)} />
                 {rule.startsWith('entra-') && <><label className="wk-share-label" htmlFor="publish-tenant">Entra tenant id</label><input className="wk-share-field" id="publish-tenant" value={tenant} onChange={(e) => setTenant(e.target.value)} /></>}
+                <label><input type="checkbox" data-testid="publish-allow-private" checked={allowPrivate} aria-describedby="publish-private-why" onChange={(e) => setAllowPrivate(e.target.checked)} /> Allow a private-network issuer</label>
+                <p id="publish-private-why" className="wk-share-note">For internal deployments and testing, such as a Dex fixture or an internal identity provider. Crew reaches the issuer only at addresses inside these private or loopback ranges.</p>
+                {allowPrivate && <><label className="wk-share-label" htmlFor="publish-ranges">Private-network ranges (CIDR, comma separated)</label><input className="wk-share-field" id="publish-ranges" placeholder="10.1.2.3/32" value={ranges} onChange={(e) => setRanges(e.target.value)} /></>}
               </>}{errors('identity')}{errors('audience')}
               <label><input type="checkbox" checked={embed && audience === 'public'} disabled={audience !== 'public'} onChange={(e) => setEmbed(e.target.checked)} /> Embed</label>
               <p className="wk-share-note">Public apps only: an iframe can’t sign in.</p>

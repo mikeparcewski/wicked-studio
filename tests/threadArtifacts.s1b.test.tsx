@@ -183,6 +183,19 @@ describe('G3: the App card in an app turn\'s thread', () => {
     expect(push.mock.calls.at(-1)?.[2]).toBe('/apps/open-tickets');
   });
 
+  it('studio#1295: a turn a steering rule refused links each broken rule to it in Steering, with its cite', async () => {
+    // crew#1755's settlement (crew apps/turns.ts:891-894; crew tests/apps-turns.test.ts:855-856): rules + a reason that names them.
+    apiFetch.mockResolvedValue(detail([{ runId: 'apps-open-tickets-0123456789ab', at: 1, actor: 'u', message: 'm', about: [], base: 3, state: 'refused', endedAt: 2, version: null, change: null, summary: null, builder: 'claude', reviewer: 'codex', code: 'review_refused', reason: "the evaluator's verdict is FAIL The chart has no text alternative. It breaks steering rule learn-accessible. Nothing landed.", rules: [{ id: 'learn-accessible', reason: 'charts/kpi.json:4 has no alt text' }] }]));
+    const push = vi.spyOn(history, 'pushState');
+    render(<RunAppCard runId="apps-open-tickets-0123456789ab" runStatus="failed" />);
+    const link = await screen.findByTestId('app-turn-rule-link');
+    expect(link.textContent).toBe('learn-accessible');
+    expect(link.getAttribute('href')).toBe('/rules/learn-accessible');
+    expect(screen.getByTestId('app-turn-rule').textContent).toBe('learn-accessible · charts/kpi.json:4 has no alt text');
+    fireEvent.click(link);
+    expect(push.mock.calls.at(-1)?.[2]).toBe('/rules/learn-accessible');
+  });
+
   it('another run in the same place never shows the first run\'s result under its link (review r1)', async () => {
     apiFetch.mockResolvedValueOnce(detail([{ runId: 'apps-open-tickets-0123456789ab', at: 1, actor: 'u', message: 'm', about: [], base: 3, state: 'refused', endedAt: 2, version: null, change: null, summary: null, builder: null, reviewer: null, code: 'x', reason: 'Alpha failure' }]));
     const { rerender } = render(<RunAppCard runId="apps-open-tickets-0123456789ab" runStatus="failed" />);

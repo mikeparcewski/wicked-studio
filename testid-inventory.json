@@ -819,6 +819,30 @@
       ]
     },
     {
+      "testId": "app-turn-rule",
+      "files": [
+        "src/components/apps/TurnRules.tsx"
+      ]
+    },
+    {
+      "testId": "app-turn-rule-link",
+      "files": [
+        "src/components/apps/TurnRules.tsx"
+      ]
+    },
+    {
+      "testId": "app-turn-rule-why",
+      "files": [
+        "src/components/apps/TurnRules.tsx"
+      ]
+    },
+    {
+      "testId": "app-turn-rules",
+      "files": [
+        "src/components/apps/TurnRules.tsx"
+      ]
+    },
+    {
       "testId": "appearance-preview",
       "files": [
         "src/components/AppearanceSettings.tsx"
@@ -16198,6 +16222,18 @@
       "testId": "proposals-section-unsupported",
       "files": [
         "src/components/ProposalsSection.tsx"
+      ]
+    },
+    {
+      "testId": "publish-allow-private",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
+      ]
+    },
+    {
+      "testId": "publish-allow-suggested",
+      "files": [
+        "src/components/apps/PublishSheet.tsx"
       ]
     },
     {
