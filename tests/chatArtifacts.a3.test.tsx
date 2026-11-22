@@ -565,6 +565,28 @@ describe('Change something on a create card (A3)', () => {
     expect(screen.queryByTestId('artifact-proposal-go-again')).toBeNull();
   });
 
+  it('studio#951 (review r1): a read showing an older Go never hides the refusal of this tab’s newer one', async () => {
+    // Another tab's Go (A) was recorded and failed; this tab's Go is crew's Go again (B), refused with B's `at`. A read
+    // captured before B (it shows A) arrives first, and the read after the refusal fails.
+    const a = Date.now() - 50;
+    const b = a + 20;
+    let release: (r: Response) => void = () => {};
+    decideAnswer = () => new Promise<Response>((r) => { release = r; });
+    page();
+    await screen.findByTestId('artifact-proposal');
+    fireEvent.click(screen.getByTestId('artifact-proposal-confirm'));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    chatBody = { ...chatBody, messages: [...(chatBody['messages'] as unknown[]),
+      { at: a, turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } }] };
+    // A live frame re-reads the chat: the card now shows A (older than this Go's B).
+    act(() => useAskThreadStore.getState().ingest({ type: 'chatProposal', chat: 'chat-ask', turn_id: 't1', record: {} } as never));
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal').getAttribute('data-state')).toBe('accepting'));
+    // The refusal names B; the read after it still shows only A.
+    release(launchFailed(b));
+    await screen.findByTestId('artifact-proposal-go-again');
+    expect(text('artifact-proposal-record')).toBe('Interrupted before it was recorded as started.');
+  });
+
   it('studio#951: a launch_failed that names no record (an older crew) marks nothing stopped: the starting window decides', async () => {
     const at = Date.now();
     decideAnswer = () => new Response(JSON.stringify({ code: 'launch_failed', error: 'could not start it: the engine is restarting. Go again resumes the same job.', view: { proposal: proposal(), state: 'accepting' } }), { status: 502, headers: { 'content-type': 'application/json' } });

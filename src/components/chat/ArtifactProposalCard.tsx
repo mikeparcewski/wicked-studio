@@ -108,7 +108,12 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
   // Two accepting records of one proposal are told apart by when each was recorded (another tab's Go is a new one).
   const same = (a: ProposalEntry, b: ProposalEntry): boolean =>
     a.state === b.state && a.acceptingAt === b.acceptingAt && JSON.stringify(shownProposal(a)) === JSON.stringify(shownProposal(b));
-  const view: ProposalEntry = answered !== null && !terminal(entry.state) && (terminal(answered.view.state) || same(answered.against, entry)) ? answered.view : entry;
+  // (crew#1695) An answer that names a newer accepting record than the one a read shows is the newer fact: a read
+  // captured before this Go's record (another tab's older Go) never hides it. A record newer than the answer's wins.
+  const newer = (a: ProposalEntry, b: ProposalEntry): boolean =>
+    a.state === 'accepting' && b.state === 'accepting' && a.acceptingAt !== undefined && b.acceptingAt !== undefined && a.acceptingAt > b.acceptingAt;
+  const view: ProposalEntry = answered !== null && !terminal(entry.state)
+    && (terminal(answered.view.state) || same(answered.against, entry) || newer(answered.view, entry)) ? answered.view : entry;
   const p = shownProposal(view);
   const open = view.state === 'open';
   // A7: a theme proposal is previewed on this tab, measured on the exact merged result, and applied from the preview.
