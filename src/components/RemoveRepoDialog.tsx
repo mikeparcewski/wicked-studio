@@ -42,7 +42,8 @@ export function RemoveRepoDialog({ repo, onClose, onRemoved, onOpenRun }: {
   const titleId = useId();
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<RemoveRefusal | null>(null);
-  useModalEscape(onClose);
+  // A removal on its way can't be dismissed: its answer belongs to this dialog.
+  useModalEscape(() => { if (!busy) onClose(); });
 
   const remove = async (): Promise<void> => {
     if (busy) return;
@@ -66,6 +67,8 @@ export function RemoveRepoDialog({ repo, onClose, onRemoved, onOpenRun }: {
         className="flex flex-col gap-3 p-4"
         style={{
           width: 'min(420px, calc(100vw - 32px))',
+          maxHeight: 'calc(100dvh - 32px)',
+          overflowY: 'auto',
           background: 'var(--surface-overlay)',
           border: '1px solid var(--surface-raised)',
           borderRadius: 'var(--radius-xl)',

@@ -64,6 +64,68 @@ describe('the drain toggle', () => {
   });
 });
 
+describe('review r1: reads and writes never undo each other', () => {
+  it('a read out before a toggle lands after it: the toggle\'s answer stands', async () => {
+    let lateRead: (v: unknown) => void = () => undefined;
+    render(<MaintenanceSettings navigate={vi.fn()} />);
+    await screen.findByTestId('maintenance-drain-toggle');
+    getMaintenance.mockImplementationOnce(() => new Promise((r) => { lateRead = r as (v: unknown) => void; }));
+    fireEvent.click(screen.getByTestId('maintenance-reread'));
+    const before = { ...state };
+    fireEvent.click(screen.getByTestId('maintenance-drain-toggle'));
+    await waitFor(() => expect(screen.getByTestId('maintenance-drain-toggle')).toHaveAttribute('aria-checked', 'true'));
+    await act(async () => { lateRead(before); });
+    expect(screen.getByTestId('maintenance-drain-toggle')).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('a read asked while a toggle is on its way never drops the toggle\'s answer', async () => {
+    let post: (v: unknown) => void = () => undefined;
+    render(<MaintenanceSettings navigate={vi.fn()} />);
+    await screen.findByTestId('maintenance-drain-toggle');
+    setMaintenance.mockImplementationOnce((drain: boolean) => new Promise((r) => { post = () => r({ ...state, draining: drain, since: Date.now() }); }));
+    fireEvent.click(screen.getByTestId('maintenance-drain-toggle'));
+    // Check again is held while the toggle is out; crew's GET would still say "not draining".
+    fireEvent.click(screen.getByTestId('maintenance-reread'));
+    await act(async () => { post(undefined); });
+    await waitFor(() => expect(screen.getByTestId('maintenance-drain-toggle')).toHaveAttribute('aria-checked', 'true'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByTestId('maintenance-drain-toggle')).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('a toggle whose answer is lost makes no "safe" claim, says it isn\'t known, and reads crew again', async () => {
+    state = { draining: true, since: Date.now(), idle: true, active: [] };
+    render(<MaintenanceSettings navigate={vi.fn()} />);
+    await screen.findByTestId('maintenance-idle');
+    setMaintenance.mockImplementationOnce(() => Promise.reject(new TypeError('Failed to fetch')));
+    getMaintenance.mockImplementationOnce(() => Promise.reject(new TypeError('Failed to fetch')));
+    const reads = getMaintenance.mock.calls.length;
+    fireEvent.click(screen.getByTestId('maintenance-drain-toggle'));
+    await screen.findByTestId('maintenance-unsure');
+    expect(screen.queryByTestId('maintenance-idle')).toBeNull();
+    expect(getMaintenance.mock.calls.length).toBe(reads + 1);
+    // Once crew answers, its state is shown again.
+    state = { draining: false, since: null, idle: true, active: [] };
+    fireEvent.click(screen.getByTestId('maintenance-reread'));
+    await waitFor(() => expect(screen.queryByTestId('maintenance-unsure')).toBeNull());
+    expect(screen.getByTestId('maintenance-drain-toggle')).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('a read slower than the poll: one read at a time, and its answer lands', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    state = { draining: true, since: Date.now(), idle: false, active: [{ runId: 'run-1', status: 'executing' }] };
+    render(<MaintenanceSettings navigate={vi.fn()} />);
+    await screen.findByTestId('maintenance-busy');
+    let slow: (v: unknown) => void = () => undefined;
+    getMaintenance.mockImplementation(() => new Promise((r) => { slow = r as (v: unknown) => void; }));
+    const reads = getMaintenance.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(DRAIN_POLL_MS * 3); });
+    expect(getMaintenance.mock.calls.length).toBe(reads + 1);
+    await act(async () => { slow({ ...state, idle: true, active: [] }); });
+    expect(await screen.findByTestId('maintenance-idle')).toBeTruthy();
+    getMaintenance.mockImplementation(() => Promise.resolve(state));
+  });
+});
+
 describe('a 503 maintenance_drain reads as crew\'s sentence and the way on', () => {
   const body = { code: 'maintenance_drain', error: 'This daemon is draining for maintenance and is refusing new work.', hint: 'Wait for maintenance to finish, or POST /api/v1/maintenance with {"drain":false} to admit work again.' };
   it('the message every surface shows names drain and Settings, never "the daemon refused this"', () => {

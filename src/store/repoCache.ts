@@ -12,6 +12,8 @@ import type { RepoEntry } from '../api/types.js';
 
 let cache: RepoEntry[] | null = null;
 let inFlight: Promise<RepoEntry[]> | null = null;
+/** Bumped when the list is known to have changed: a fill begun before that never lands. */
+let generation = 0;
 
 /** The cached list, or null when no gesture has fetched it yet. */
 export function getCachedRepos(): RepoEntry[] | null {
@@ -23,16 +25,27 @@ export function getCachedRepos(): RepoEntry[] | null {
  *  next gesture retries. */
 export function fetchReposCached(): Promise<RepoEntry[]> {
   if (cache !== null) return Promise.resolve(cache);
-  inFlight ??= api
+  if (inFlight !== null) return inFlight;
+  const mine = generation;
+  const fill: Promise<RepoEntry[]> = api
     .listRepos()
     .then(({ repos }) => {
-      cache = repos;
+      if (mine === generation) cache = repos;
       return repos;
     })
     .finally(() => {
-      inFlight = null;
+      if (inFlight === fill) inFlight = null;
     });
-  return inFlight;
+  inFlight = fill;
+  return fill;
+}
+
+/** (crew#1230) A repository was removed: the next gesture reads the list again, and a read already out never fills
+ *  the cache with the list from before. */
+export function invalidateRepoCache(): void {
+  generation++;
+  cache = null;
+  inFlight = null;
 }
 
 /** Test seam: back to cold. */

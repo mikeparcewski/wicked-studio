@@ -7,8 +7,8 @@
 /* ── The list: one row per repository, in columns on a desktop ── */
 .wk-jr-col.wk-rl-col { max-width: 1080px; }
 .wk-rl { display: flex; flex-direction: column; min-width: 0; container: repos-list / inline-size; }
-.wk-rl-grid { display: grid; grid-template-columns: minmax(0, 2.1fr) minmax(0, 1.3fr) minmax(0, 1.6fr) 104px 132px; align-items: center; column-gap: 20px; }
-.wk-rl[data-links="true"] .wk-rl-grid { grid-template-columns: minmax(0, 2.1fr) minmax(0, 1.3fr) minmax(0, 1.6fr) 76px 104px 132px; }
+.wk-rl-grid { display: grid; grid-template-columns: minmax(0, 2.1fr) minmax(0, 1.3fr) minmax(0, 1.6fr) 104px 172px; align-items: center; column-gap: 20px; }
+.wk-rl[data-links="true"] .wk-rl-grid { grid-template-columns: minmax(0, 2.1fr) minmax(0, 1.3fr) minmax(0, 1.6fr) 76px 104px 172px; }
 .wk-rl-head { padding: 0 16px 10px; border-bottom: 1px solid var(--border); font-size: var(--text-xs); font-weight: var(--weight-medium); color: var(--ink-dim); }
 .wk-rl-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .wk-rl-item { position: relative; border-bottom: 1px solid var(--border-subtle); border-radius: var(--radius-md); min-width: 0; transition: background-color 0.14s; }
@@ -102,7 +102,8 @@
   .wk-rl-grid { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
   .wk-rl-row { padding: 14px 12px; min-height: 0; }
   .wk-rl-desk { display: none; }
-  .wk-rl-name { padding-right: 112px; }
+  /* The step and the Remove button (studio#1253) sit at the right: the name keeps clear of both. */
+  .wk-rl-name { padding-right: 172px; }
   .wk-rl-phone { display: block; padding-left: 22px; padding-right: 8px; font-size: var(--text-xs); color: var(--ink-muted); white-space: normal; }
   .wk-rl-phone .wk-rl-watch { white-space: normal; }
   .wk-rl-act { top: 14px; right: 12px; transform: none; }

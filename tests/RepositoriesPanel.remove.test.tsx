@@ -35,6 +35,7 @@ vi.mock('../src/api/client.js', () => ({
 
 const { RepositoriesPanel } = await import('../src/components/RepositoriesPanel.js');
 const { useNeedsSources } = await import('../src/store/needsSources.js');
+const { clearRepoCache, fetchReposCached, getCachedRepos } = await import('../src/store/repoCache.js');
 
 const card = (id: string): HTMLElement => screen.getAllByTestId('repo-card').find((c) => c.getAttribute('data-repo-id') === id)!;
 
@@ -43,7 +44,7 @@ async function panel(onSelectRun = vi.fn()): Promise<void> {
   await screen.findByTestId('repos-list');
 }
 
-beforeEach(() => { listRepos.mockClear(); unregisterRepo.mockClear(); });
+beforeEach(() => { listRepos.mockClear(); unregisterRepo.mockClear(); clearRepoCache(); });
 afterEach(() => cleanup());
 
 describe('Remove a repository', () => {
@@ -127,5 +128,34 @@ describe('Remove a repository', () => {
     fireEvent.click(within(card('billing')).getByTestId('repo-row-remove'));
     fireEvent.click(screen.getByTestId('repo-remove-confirm'));
     expect((await screen.findByTestId('repo-remove-refused')).textContent).toMatch(/can’t remove a repository. Update wicked/);
+  });
+
+  it('review r1: a removal empties the pickers\' repository cache, and a list read already out never refills it', async () => {
+    await fetchReposCached();
+    expect(getCachedRepos()?.map((r) => r.id)).toEqual(['billing', 'tiny-math']);
+    let late: (v: unknown) => void = () => undefined;
+    await panel();
+    // A picker's read goes out (cache cold after this test's clear below), then the removal lands, then the read.
+    clearRepoCache();
+    listRepos.mockImplementationOnce(() => new Promise((r) => { late = r as (v: unknown) => void; }));
+    const out = fetchReposCached();
+    fireEvent.click(within(card('billing')).getByTestId('repo-row-remove'));
+    fireEvent.click(screen.getByTestId('repo-remove-confirm'));
+    await waitFor(() => expect(screen.queryByTestId('repo-remove-dialog')).toBeNull());
+    late({ repos: [REPO_CLEAN, GONE] });
+    await out;
+    expect(getCachedRepos()).toBeNull();
+  });
+
+  it('review r1: a removal on its way can\'t be dismissed with Escape', async () => {
+    let answer: (v: unknown) => void = () => undefined;
+    unregisterRepo.mockImplementationOnce(() => new Promise((r) => { answer = r; }));
+    await panel();
+    fireEvent.click(within(card('billing')).getByTestId('repo-row-remove'));
+    fireEvent.click(screen.getByTestId('repo-remove-confirm'));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByTestId('repo-remove-dialog')).toBeTruthy();
+    answer({ repoId: 'billing', removed: true });
+    await waitFor(() => expect(screen.queryByTestId('repo-remove-dialog')).toBeNull());
   });
 });

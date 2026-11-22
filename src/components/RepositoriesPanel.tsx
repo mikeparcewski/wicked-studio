@@ -24,6 +24,7 @@ import { NewProjectModal } from './NewProjectModal.js';
 import { RemoveRepoDialog } from './RemoveRepoDialog.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
 import { useNeedsSources } from '../store/needsSources.js';
+import { invalidateRepoCache } from '../store/repoCache.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import { PageAskButton, usePageChatFor } from './chat/PageChat.js';
 import { knowledgeOf, useRepoKnowledge, useRepoKnowledgeFor } from '../store/repoKnowledge.js';
@@ -271,7 +272,9 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
 
   /** crew removed the registration (or it was already gone): the list, and the needs-you queue's register, drop it. */
   function removed(repoId: string): void {
-    setRemoving(null);
+    // Only the confirm that belongs to this removal closes (another repository's may be open by now).
+    setRemoving((cur) => (cur !== null && cur.id === repoId ? null : cur));
+    invalidateRepoCache(); // the launch and chat pickers read the list again
     reposSeq.current++; // a list read that was out before the removal never brings it back
     setRepos((prev) => prev.filter((r) => r.id !== repoId));
     const known = useNeedsSources.getState().repos;
