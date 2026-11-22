@@ -84,13 +84,20 @@ export function AgentAccess({ source, dialect, agents, unverified = false, onRer
     if (asking) confirmOn.current?.focus();
   }, [asking]);
 
-  useEffect(() => {
-    let live = true;
-    // Another source's projects, reads, refusal or open confirmation never show under this one.
+  // Another source's projects, reads, refusal or open confirmation never show under this one. Reset while rendering
+  // the new source (studio#1280), never from an effect: a mount effect's reset ran after a click that landed before
+  // React flushed it, and undid that click (the confirmation never opened).
+  const [shownFor, setShownFor] = useState(source);
+  if (shownFor !== source) {
+    setShownFor(source);
     setProjects(null);
     setRecent(null);
     setError(null);
     setAsking(false);
+  }
+
+  useEffect(() => {
+    let live = true;
     // Read-only calls; a crew without them (or a failed read) leaves an empty list and "not known".
     Promise.resolve().then(() => sourceAgentsApi.projects()).then(
       (r) => { if (live) setProjects(projectsOf(r)); },

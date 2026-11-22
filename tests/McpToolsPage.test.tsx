@@ -7,6 +7,7 @@ vi.mock('../src/api/client.js', () => ({ apiFetch: (...a: unknown[]) => apiFetch
 import { ApiError } from '../src/api/errors.js';
 import { McpToolsPage, schemePrefix } from '../src/components/McpToolsPage.js';
 import { approvals, policies, preview, server, serversResponse } from './mcpFixtures.js';
+import { unconfirmedBody } from './sourcesFixtures.js';
 
 /**
  * MCP tools (`/mcp`, DES-MCP-TOOLS-001 §7, slice S6) over a mocked `/mcp/*` wire shaped exactly
@@ -378,7 +379,7 @@ describe('MCP tools: add an existing server', () => {
         bodies.push(body);
         if (body['address'] === undefined) return Promise.reject(new ApiError(409,
           '127.0.0.1 is a loopback address, which a source reaches only when the person confirms a range covering it.',
-          { code: 'address_unconfirmed' }));
+          unconfirmedBody([{ address: '127.0.0.1', class: 'loopback' }], '127.0.0.1 is a loopback address, which a source reaches only when the person confirms a range covering it.')));
       }
       return base(p, i);
     });

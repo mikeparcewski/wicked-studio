@@ -6,7 +6,7 @@ vi.mock('../src/api/client.js', () => ({ apiFetch: (...a: unknown[]) => apiFetch
 
 import { ApiError } from '../src/api/errors.js';
 import { SourceSheet } from '../src/components/sources/SourceSheet.js';
-import { CATALOG, pgPreview, pgServer, restPreview, UNCONFIRMED_WORDS, WRITER } from './sourcesFixtures.js';
+import { CATALOG, pgPreview, pgServer, restPreview, restServer, UNCONFIRMED_WORDS, unconfirmedBody, WRITER } from './sourcesFixtures.js';
 
 /**
  * "Add a data source" (DES-APPS-001 §5, mockup state A; K3 acceptance) over a mocked crew wire:
@@ -126,7 +126,7 @@ describe('the secret field never echoes the secret', () => {
 describe('the address confirmation can\'t be skipped', () => {
   it('nothing carries a range until the tick; the tick tests under it; a host edit unticks it', async () => {
     previewImpl = (body) => (body['address'] === undefined
-      ? Promise.reject(new ApiError(409, UNCONFIRMED_WORDS, { error: UNCONFIRMED_WORDS, code: 'address_unconfirmed' }))
+      ? Promise.reject(new ApiError(409, UNCONFIRMED_WORDS, unconfirmedBody()))
       : Promise.resolve(pgPreview(String(body['name']))));
     sheet();
     fillPostgres();
@@ -203,7 +203,7 @@ describe('review r1 folds: consent is for what the person saw', () => {
       const host = (body['sql'] as { host: string }).host;
       const allow = (body['address'] as { allow?: string[] } | undefined)?.allow ?? [];
       const needs = host === 'db.support.internal' ? '10.40.2.0/24' : '10.40.9.0/24';
-      if (!allow.includes(needs)) return Promise.reject(new ApiError(409, host === 'db.support.internal' ? PRIV_A : PRIV_B, { error: 'x', code: 'address_unconfirmed' }));
+      if (!allow.includes(needs)) return Promise.reject(new ApiError(409, host === 'db.support.internal' ? PRIV_A : PRIV_B, host === 'db.support.internal' ? unconfirmedBody() : unconfirmedBody([{ address: '10.40.9.4', class: 'private' }], PRIV_B)));
       return Promise.resolve(pgPreview(String(body['name'])));
     };
     sheet();
@@ -269,7 +269,7 @@ describe('review r1 folds: consent is for what the person saw', () => {
 
   it('a private http: API endpoint can be given "without TLS" consent (codex K17)', async () => {
     const words = 'the server did not answer tools/list: gql.internal (10.40.2.30) is a private address, which a source reaches only when the person confirms a range covering it for that source (e.g. 10.0.0.0/8)';
-    previewImpl = () => Promise.reject(new ApiError(409, words, { error: words, code: 'address_unconfirmed' }));
+    previewImpl = () => Promise.reject(new ApiError(409, words, unconfirmedBody([{ address: '10.40.2.30', class: 'private' }], words)));
     sheet();
     fireEvent.click(screen.getByTestId('source-kind-graphql'));
     fireEvent.change(screen.getByTestId('source-name'), { target: { value: 'gql' } });
@@ -382,5 +382,92 @@ describe('Test connection after a save in the same sheet (sources-ask review r1,
     expect(box.getAttribute('data-ok')).toBe('no');
     expect(screen.queryByTestId('source-test-ok')).toBeNull();
     expect(screen.getByTestId('source-test').textContent).not.toMatch(/Connected and described/);
+  });
+});
+
+describe('crew#1294: the addresses come from the refusal\'s structured fields', () => {
+  it('a name that resolved to two private addresses: one refusal asks both, and both ranges ride the next test', async () => {
+    const body = unconfirmedBody([{ address: '10.40.2.17', class: 'private' }, { address: '10.40.3.8', class: 'private' }]);
+    previewImpl = (b) => {
+      const allow = (b['address'] as { allow?: string[] } | undefined)?.allow ?? [];
+      return allow.includes('10.40.2.0/24') && allow.includes('10.40.3.0/24')
+        ? Promise.resolve(pgPreview(String(b['name'])))
+        : Promise.reject(new ApiError(409, UNCONFIRMED_WORDS, body));
+    };
+    sheet();
+    fillPostgres();
+    fireEvent.click(screen.getByTestId('source-test-run'));
+    await waitFor(() => expect(screen.getAllByTestId('source-address-confirm')).toHaveLength(2));
+    expect(screen.getAllByTestId('source-address-confirm').map((r) => r.getAttribute('data-range'))).toEqual(['10.40.2.0/24', '10.40.3.0/24']);
+    expect(calls.filter((c) => c.path === '/mcp/servers/preview')).toHaveLength(1);
+    const ticks = screen.getAllByTestId('source-address-tick');
+    fireEvent.click(ticks[0]!);
+    await waitFor(() => expect(screen.getByTestId('source-test-unconfirmed').textContent).toContain('10.40.3.8'));
+    fireEvent.click(screen.getAllByTestId('source-address-tick')[1]!);
+    await screen.findByTestId('source-test-ok');
+    expect((calls.filter((c) => c.path === '/mcp/servers/preview').at(-1)!.body as Record<string, unknown>)['address']).toEqual({ allow: ['10.40.2.0/24', '10.40.3.0/24'] });
+  });
+
+  it('a refusal with no structured addresses offers no tick: crew\'s words are the error', async () => {
+    previewImpl = () => Promise.reject(new ApiError(409, UNCONFIRMED_WORDS, { error: UNCONFIRMED_WORDS, code: 'address_unconfirmed' }));
+    sheet();
+    fillPostgres();
+    fireEvent.click(screen.getByTestId('source-test-run'));
+    expect((await screen.findByTestId('source-sheet-error')).textContent).toContain('10.40.2.17');
+    expect(screen.queryByTestId('source-address-tick')).toBeNull();
+  });
+});
+
+describe('crew#1295: a saved REST source\'s reads are accepted, or withdrawn, one at a time', () => {
+  function savedRest(server = restServer(false), onReread = vi.fn()) {
+    return render(<SourceSheet target={{ mode: 'saved', server }} existing={['tickets-api']} onSaved={vi.fn()} onAllowWrites={vi.fn()} onReread={onReread} onClose={vi.fn()} />);
+  }
+  function wire(answer: (subject: string, body: Record<string, unknown>) => Promise<unknown>): void {
+    apiFetch.mockImplementation((path: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      const raw = typeof init?.body === 'string' ? init.body : undefined;
+      const body = raw !== undefined ? JSON.parse(raw) : undefined;
+      calls.push({ path, method, body, raw });
+      if (path.startsWith('/mcp/tools/') && method === 'PATCH') return answer(decodeURIComponent(path.slice('/mcp/tools/'.length)), body as Record<string, unknown>);
+      return Promise.reject(new Error(`unexpected ${method} ${path}`));
+    });
+  }
+
+  it('lists the read only, says it is not accepted, and a tick sends PATCH {readAccepted: true} for that tool', async () => {
+    const onReread = vi.fn();
+    wire((subject, body) => Promise.resolve({ ...restServer(true).tools.find((t) => t.subject === subject)!, readAccepted: body['readAccepted'] }));
+    savedRest(restServer(false), onReread);
+    const rows = screen.getAllByTestId('source-read-accept');
+    expect(rows.map((r) => r.getAttribute('data-tool'))).toEqual(['list_tickets']);
+    expect(rows[0]!.textContent).toMatch(/not accepted: apps can’t query it/);
+    expect(screen.getByTestId('source-read-acceptance-count').textContent).toBe('0 of 1 accepted');
+    fireEvent.click(screen.getByTestId('source-read-accept-tick'));
+    await waitFor(() => expect(screen.getByTestId('source-read-accept').getAttribute('data-accepted')).toBe('true'));
+    const patch = calls.filter((c) => c.method === 'PATCH');
+    expect(patch).toEqual([expect.objectContaining({ path: '/mcp/tools/mcp%3Atickets-api%2Flist_tickets', body: { readAccepted: true } })]);
+    expect(screen.getByTestId('source-read-acceptance-count').textContent).toBe('1 of 1 accepted');
+    expect(onReread).toHaveBeenCalledTimes(1);
+  });
+
+  it('an accepted read is withdrawn with one click', async () => {
+    wire((subject, body) => Promise.resolve({ ...restServer(true).tools.find((t) => t.subject === subject)!, readAccepted: body['readAccepted'] }));
+    savedRest(restServer(true));
+    expect(screen.getByTestId('source-read-accept').getAttribute('data-accepted')).toBe('true');
+    fireEvent.click(screen.getByTestId('source-read-accept-tick'));
+    await waitFor(() => expect(screen.getByTestId('source-read-accept').getAttribute('data-accepted')).toBe('false'));
+    expect(calls.filter((c) => c.method === 'PATCH').map((c) => c.body)).toEqual([{ readAccepted: false }]);
+  });
+
+  it('crew\'s refusal is said in plain words and the tick stays as crew has it', async () => {
+    wire((subject) => Promise.reject(new ApiError(409, `${subject}'s schema is not the saved one: preview and save the server again, then accept it`, { error: 'x', code: 'not_registered' })));
+    savedRest(restServer(false));
+    fireEvent.click(screen.getByTestId('source-read-accept-tick'));
+    expect((await screen.findByTestId('source-read-accept-error')).textContent).toMatch(/test and save the source again/);
+    expect(screen.getByTestId('source-read-accept').getAttribute('data-accepted')).toBe('false');
+  });
+
+  it('an older crew that sends no readAccepted gets no box', () => {
+    savedRest(restServer(null));
+    expect(screen.queryByTestId('source-read-acceptance')).toBeNull();
   });
 });

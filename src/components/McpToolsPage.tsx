@@ -45,7 +45,7 @@ import { ApiError, readErrorKind } from '../api/errors.js';
 import { seatLabel } from '../board/seatNames.js';
 import { OverflowMenu } from './ui/OverflowMenu.js';
 import { Tabs } from './ui/Tabs.js';
-import { unconfirmedAddress, type UnconfirmedAddress } from './sources/sourceModel.js';
+import { unconfirmedAddresses, type UnconfirmedAddress } from './sources/sourceModel.js';
 
 /**
  * MCP tools (DES-MCP-TOOLS-001 §7, slice S6): the operator's registry of upstream MCP servers and
@@ -497,12 +497,12 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
       // secret is at least 8 characters" must not land on a form whose secret the operator has
       // already lengthened, or on another server entirely.
       if (!stillMine()) return;
-      const u = kind !== 'mcp-stdio' && e instanceof ApiError
+      // (crew#1294) Every address still to confirm, from the refusal's structured fields.
+      const us = kind !== 'mcp-stdio' && e instanceof ApiError
         && typeof e.body === 'object' && e.body !== null && 'code' in e.body && e.body.code === 'address_unconfirmed'
-        ? unconfirmedAddress(e.wire) : null;
-      if (u !== null) {
-        setAsks((list) => list.some((a) => a.forTarget === forTarget && a.range === u.range)
-          ? list : [...list, { ...u, forTarget }]);
+        ? unconfirmedAddresses(e.body) : [];
+      if (us.length > 0) {
+        setAsks((list) => [...list, ...us.filter((u) => !list.some((a) => a.forTarget === forTarget && a.range === u.range)).map((u) => ({ ...u, forTarget }))]);
         return;
       }
       setError(e instanceof ApiError && e.status === 403

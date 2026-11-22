@@ -69,6 +69,21 @@ export function pgPreview(name: string, privileges: SourcePrivilegeReport = READ
 /** crew's human words for an unconfirmed private host (`sources/dialer.ts` resolveTarget). */
 export const UNCONFIRMED_WORDS = 'the server did not answer tools/list: db.support.internal (10.40.2.17) is a private address, which a source reaches only when the person confirms a range covering it for that source (e.g. 10.0.0.0/8)';
 
+/**
+ * crew's 409 `address_unconfirmed` body, as crew writes it: `api/mcp.ts` fail() sends `{ error, code, ...err.detail }`,
+ * and the dialer's `DialRefusedError` (`sources/dialer.ts` resolveTarget) carries every unconfirmed address the name
+ * resolved to, with `suggestRange` for each (the whole private or loopback block), in the same order.
+ */
+export function unconfirmedBody(
+  addresses: ReadonlyArray<{ address: string; class: 'private' | 'loopback' }> = [{ address: '10.40.2.17', class: 'private' }],
+  words: string = UNCONFIRMED_WORDS,
+): { error: string; code: 'address_unconfirmed'; addresses: Array<{ address: string; class: 'private' | 'loopback' }>; suggest: string[] } {
+  const block = (a: { address: string; class: string }): string => a.address.includes(':')
+    ? (a.class === 'loopback' ? '::1/128' : 'fc00::/7')
+    : a.class === 'loopback' ? '127.0.0.0/8' : a.address.startsWith('10.') ? '10.0.0.0/8' : a.address.startsWith('192.168.') ? '192.168.0.0/16' : '172.16.0.0/12';
+  return { error: words, code: 'address_unconfirmed', addresses: addresses.map((a) => ({ ...a })), suggest: addresses.map(block) };
+}
+
 export const TRIGGER_UNSAFE: SourceSafetyResponse = {
   table: { schema: 'support', name: 'assignments' }, safe: false,
   reasons: [
@@ -88,4 +103,27 @@ export function restPreview(hash: string, egress: McpPreviewResponse['egress'] =
     server: { name: 'tickets-api', kind: 'rest', command: null, args: [], url: 'https://api.support.test/v1', auth: null, openapiUrl: 'https://api.support.test/openapi.json' },
     serverInfo: null, tools: [tool('list_tickets', 'read'), tool('assign_ticket', 'write')], diff: null, egress,
   };
+}
+
+/**
+ * A saved REST source with one read and one write, each tool as crew's `toolView` writes it (`mcp/registry.ts`: the
+ * saved schema, its class, and `readAccepted: effectiveReadAccepted(t)`, api-types 0.219.0). `accepted` = the read's
+ * acceptance; `null` = an older crew that sends no `readAccepted` at all.
+ */
+export function restServer(accepted: boolean | null = false): McpServer {
+  const tool = (name: string, cls: 'read' | 'write') => ({
+    name, rest: null, subject: `mcp:tickets-api/${name}`, description: null, annotations: null, inputSchema: null,
+    derivedClass: cls, classOverride: null, class: cls, enabled: cls === 'read', status: 'registered' as const,
+    schemaHash: `h-${name}`, observedSchemaHash: `h-${name}`, disclosure: null,
+    ...(accepted === null ? {} : { readAccepted: cls === 'read' ? accepted : false }),
+  });
+  // A REST record carries no `sql` or `address` (crew writes neither for it).
+  const base: Partial<McpServer> = pgServer({
+    id: 'id-tickets-api', name: 'tickets-api', kind: 'rest', url: 'https://api.support.test/v1', auth: null,
+    tools: [tool('list_tickets', 'read'), tool('assign_ticket', 'write')] as never,
+    counts: { total: 2, enabled: 1, registered: 2, read: 1, write: 1, destructive: 0 },
+  });
+  delete base.sql;
+  delete base.address;
+  return base as McpServer;
 }

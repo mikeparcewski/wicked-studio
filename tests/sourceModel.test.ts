@@ -22,28 +22,37 @@ import {
   plaintextOffered,
   rowWriteKey,
   targetKey,
-  unconfirmedAddress,
+  unconfirmedAddresses,
   withEdit,
   withPlaintext,
   withRange,
   type SourceForm,
 } from '../src/components/sources/sourceModel.js';
-import { ASSIGNMENTS, CATALOG, READ_ONLY, TICKETS, TICKETS_SAFE, TRIGGER_UNSAFE, UNCONFIRMED_WORDS, WRITER } from './sourcesFixtures.js';
+import { ASSIGNMENTS, CATALOG, READ_ONLY, TICKETS, TICKETS_SAFE, TRIGGER_UNSAFE, UNCONFIRMED_WORDS, unconfirmedBody, WRITER } from './sourcesFixtures.js';
 
 const PG: SourceForm = { ...EMPTY_FORM, kind: 'postgres', name: 'support-pg', host: 'db.support.internal', port: '5432', database: 'support', user: 'reader' };
 
-describe('the address a refusal names (crew dialer words)', () => {
-  it('a private host name: its resolved address, and the /24 the mockup offers', () => {
-    expect(unconfirmedAddress(UNCONFIRMED_WORDS)).toEqual({ address: '10.40.2.17', cls: 'private', range: '10.40.2.0/24' });
+describe('the addresses a refusal asks about (crew#1294: the 409\'s structured fields)', () => {
+  it('a private host name: its resolved address, and the /24 the mockup offers (not crew\'s whole-block suggestion)', () => {
+    expect(unconfirmedAddresses(unconfirmedBody())).toEqual([{ address: '10.40.2.17', cls: 'private', range: '10.40.2.0/24' }]);
   });
-  it('an IP literal and a loopback address: the address itself', () => {
-    expect(unconfirmedAddress('the server did not answer tools/list: 127.0.0.1 is a loopback address, which a source reaches only when …'))
-      .toEqual({ address: '127.0.0.1', cls: 'loopback', range: '127.0.0.1/32' });
-    expect(unconfirmedAddress('localhost (::1) is a loopback address, which …')).toEqual({ address: '::1', cls: 'loopback', range: '::1/128' });
+  it('a name that resolved to several: every one crew lists, in its order, from one refusal', () => {
+    const body = unconfirmedBody([{ address: '10.40.2.17', class: 'private' }, { address: '127.0.0.1', class: 'loopback' }, { address: 'FD00::5', class: 'private' }]);
+    expect(unconfirmedAddresses(body)).toEqual([
+      { address: '10.40.2.17', cls: 'private', range: '10.40.2.0/24' },
+      { address: '127.0.0.1', cls: 'loopback', range: '127.0.0.1/32' },
+      { address: 'fd00::5', cls: 'private', range: 'fd00::5/128' },
+    ]);
   });
-  it('words that name no address, or an impossible one, offer nothing', () => {
-    expect(unconfirmedAddress('the server did not answer tools/list: connect ECONNREFUSED')).toBeNull();
-    expect(unconfirmedAddress('10.300.2.17 is a private address')).toBeNull();
+  it('the words alone ask nothing: studio no longer reads crew\'s sentence', () => {
+    expect(unconfirmedAddresses({ error: UNCONFIRMED_WORDS, code: 'address_unconfirmed' })).toEqual([]);
+  });
+  it('an entry it can\'t read is skipped; a body that isn\'t one asks nothing', () => {
+    expect(unconfirmedAddresses({ addresses: [{ address: '10.300.2.17', class: 'private' }, { address: '10.1.1.1', class: 'public' }, 'x', null, { address: '192.168.4.9', class: 'private' }] }))
+      .toEqual([{ address: '192.168.4.9', cls: 'private', range: '192.168.4.0/24' }]);
+    expect(unconfirmedAddresses(undefined)).toEqual([]);
+    expect(unconfirmedAddresses('words')).toEqual([]);
+    expect(unconfirmedAddresses({ addresses: 'x' })).toEqual([]);
   });
 });
 

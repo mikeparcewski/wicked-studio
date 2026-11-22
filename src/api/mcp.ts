@@ -65,7 +65,8 @@ export const mcpApi = {
   save: (previewHash: string) => apiFetch<McpServer>('/mcp/servers', j({ previewHash })),
   remove: (name: string) => apiFetch<{ removed: string }>(`/mcp/servers/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   test: (name: string) => apiFetch<McpServerTestResponse>(`/mcp/servers/${encodeURIComponent(name)}/test`, { method: 'POST' }),
-  setTool: (subject: string, body: { enabled?: boolean; classOverride?: McpToolClass | null }) =>
+  /** `readAccepted` (crew#1295, api-types 0.219.0): accept or withdraw the tool as an Apps read (a person only). */
+  setTool: (subject: string, body: { enabled?: boolean; classOverride?: McpToolClass | null; readAccepted?: boolean }) =>
     apiFetch<McpTool>(`/mcp/tools/${encodeURIComponent(subject)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   policies: (body: McpPolicyPreviewBody) => apiFetch<McpPolicyPreviewResponse>('/mcp/policies/preview', j(body)),
   approvals: () => apiFetch<McpApprovalsResponse>('/mcp/approvals'),
