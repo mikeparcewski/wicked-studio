@@ -64,9 +64,17 @@ describe('joining a job: a reviewer-only seat joins (it votes and judges)', () =
     expect(seatJoinStanding(WORK_ONLY, NOW).state).toBe('ready');
   });
 
-  it('a signed-out reviewer-only seat does not join by default (codex r1)', () => {
+  it('a signed-out reviewer-only seat does not join by default; the daemon’s auth wins over the old heuristic (codex r1, r2)', () => {
     expect(seatJoinStanding({ ...REVIEWER_ONLY, auth: 'signed_out', signed_in: false } as RosterSeat, NOW).state).not.toBe('ready');
-    expect(seatJoinStanding({ ...REVIEWER_ONLY, signed_in: false } as RosterSeat, NOW).state).not.toBe('ready');
+    // No structured auth: the `signed_in` heuristic decides.
+    expect(seatJoinStanding({ ...REVIEWER_ONLY, auth: undefined, signed_in: false } as RosterSeat, NOW).state).not.toBe('ready');
+    // Structured auth says signed in, or no sign-in needed: the heuristic's false does not take the reviewer off.
+    expect(seatJoinStanding({ ...REVIEWER_ONLY, signed_in: false } as RosterSeat, NOW)).toEqual({ state: 'ready', note: 'reviews only' });
+    expect(seatJoinStanding({ ...REVIEWER_ONLY, auth: 'not_required', signed_in: false } as RosterSeat, NOW)).toEqual({ state: 'ready', note: 'reviews only' });
+    const failed = makeView({ id: 'r-fail3', status: 'failed', clis: ['claude', 'cursor'], problem: 'p' } as never, []);
+    const plan = retryLaunchOf(failed, [BOTH, { ...REVIEWER_ONLY, auth: 'not_required', signed_in: false } as RosterSeat]);
+    if (plan.via === 'runs') expect((JSON.parse(plan.body.clisJson ?? '[]') as RosterSeat[]).map((x) => x.key)).toEqual(['claude', 'cursor']);
+    else throw new Error('expected a runs relaunch');
   });
 
   it('a job whose helpers all only review is refused before it is sent (codex r1)', () => {

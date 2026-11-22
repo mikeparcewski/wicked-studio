@@ -974,9 +974,12 @@ export function seatRoles(seat: RosterSeat): SeatRoles {
  */
 export function seatJoinStanding(seat: RosterSeat | undefined, now: number = Date.now()): ReturnType<typeof seatStanding> {
   const st = seatStanding(seat, now);
-  // Only the work refusal is lifted: a signed-out reading still reads signed out (codex r1 on #1302).
+  // Only the work refusal is lifted: a signed-out reading still reads signed out (codex r1 on #1302). The daemon's `auth`
+  // decides when it says one; the `signed_in` heuristic only when it does not (codex r2, as `seatStanding` reads them).
   const bag = (seat ?? {}) as Record<string, unknown>;
-  if (st.state === 'ineligible' && reviewsOnly(seat) && bag['auth'] !== 'signed_out' && bag['signed_in'] !== false) {
+  const auth = bag['auth'];
+  const signedOut = auth === 'signed_out' || (auth !== 'signed_in' && auth !== 'not_required' && bag['signed_in'] === false);
+  if (st.state === 'ineligible' && reviewsOnly(seat) && !signedOut) {
     return { state: 'ready', note: 'reviews only' };
   }
   return st;
