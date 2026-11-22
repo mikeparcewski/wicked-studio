@@ -46,6 +46,8 @@ let failProjects = false;
 let projectList = [{ id: 'default', name: 'Unfiled' }, { id: 'p1', name: 'reqgraph' }, { id: 'p2', name: 'other' }];
 let createStatus = 201;
 let attachStatus = 200;
+/** Held until released: a project's members read (codex r1: a slow read under a remount). */
+let membersGate: Record<string, Promise<void>> = {};
 let notNowStatus = 200;
 /** Held until released: the Not now answer. */
 let notNowGate: Promise<void> = Promise.resolve();
@@ -68,13 +70,14 @@ beforeEach(() => {
   failProjects = false;
   createStatus = 201;
   attachStatus = 200;
+  membersGate = {};
   projectList = [{ id: 'default', name: 'Unfiled' }, { id: 'p1', name: 'reqgraph' }, { id: 'p2', name: 'other' }];
   useProjectsStore.setState({ projects: [] });
   clearRepoCache();
   notNowStatus = 200;
   notNowGate = Promise.resolve();
   chatMessages = {};
-  useJobMoves.setState({ moves: {} });
+  useJobMoves.setState({ moves: {}, moving: {} });
   resetJobLocal();
   resetDecisionsForTest();
   resetChatFlow();
@@ -95,7 +98,10 @@ beforeEach(() => {
     if (path === '/projects') return Promise.resolve(ok({ projects: projectList }));
     if (path === '/repos') return Promise.resolve(ok({ repos: [{ id: 'rg1', name: 'Repository name' }] }));
     const m = /^\/projects\/([^/]+)\/members$/.exec(path);
-    if (m !== null) return Promise.resolve(failMembers.has(m[1]!) ? ok({ error: 'down' }, 503) : ok({ members: members[m[1]!] ?? [] }));
+    // A gate holds the next members read of its project only (one-shot).
+    const gate = m !== null ? membersGate[m[1]!] : undefined;
+    if (m !== null) delete membersGate[m[1]!];
+    if (m !== null) return (gate ?? Promise.resolve()).then(() => (failMembers.has(m[1]!) ? ok({ error: 'down' }, 503) : ok({ members: members[m[1]!] ?? [] })));
     const cm = /^\/chats\/([^/]+)/.exec(path);
     if (cm !== null && !path.includes('/considered')) return Promise.resolve(ok({ chatId: cm[1], seats: ['claude'], scope: { kind: 'none' }, messages: chatMessages[cm[1]!] ?? messages }));
     if (path.endsWith('/team')) return Promise.resolve(ok({ teamed: false, rows: [], units: [] }));
@@ -140,6 +146,61 @@ describe('T16: make a project while answering Which project?', () => {
     await waitFor(() => expect(posts.some((p) => p.path === '/chats')).toBe(true));
     expect(posts.filter((p) => p.path === '/projects')).toHaveLength(1);
     expect(posts.filter((p) => p.path === '/projects/new-project/members')).toHaveLength(2);
+  });
+  // studio#1273: whether a project needs the attach is the daemon's answer at the pick, not component memory.
+  it('a failed attach survives a remount: picking the made project then attaches the repository before the move', async () => {
+    projectList = [];
+    attachStatus = 503;
+    page();
+    fireEvent.click(await screen.findByRole('button', { name: 'New project' }));
+    await waitFor(() => expect((screen.getByRole('textbox', { name: 'Project name' }) as HTMLInputElement).value).toBe('Repository name'));
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await screen.findByText(/The repository was not attached/);
+    // The chat is reopened: the passage mounts afresh, and the daemon lists the made project (still without the repository).
+    cleanup();
+    projectList = [{ id: 'new-project', name: 'Domain work' }];
+    members = { 'new-project': [] };
+    attachStatus = 200;
+    posts.length = 0;
+    page();
+    await waitFor(() => expect(chips().map((c) => c.dataset['project'])).toEqual(['new-project']));
+    fireEvent.click(chips()[0]!);
+    await waitFor(() => expect(posts.some((p) => p.path === '/chats')).toBe(true));
+    expect(posts.slice(0, 2)).toMatchObject([
+      { path: '/projects/new-project/members', body: { kind: 'crew.repo', ref: 'rg1', attachedBy: 'studio' } },
+      { path: '/chats', body: { projectId: 'new-project', repoRefs: ['rg1'] } },
+    ]);
+  });
+  it('a project that already holds the repository is not attached again; a members read that fails moves nothing', async () => {
+    page();
+    await waitFor(() => expect(chips()).toHaveLength(1));
+    failMembers = new Set(['p1']);
+    fireEvent.click(chips()[0]!);
+    await screen.findByText(/The members of reqgraph could not be read/);
+    expect(posts).toEqual([]);
+    failMembers = new Set();
+    fireEvent.click(chips()[0]!);
+    await waitFor(() => expect(posts.some((p) => p.path === '/chats')).toBe(true));
+    expect(posts.some((p) => p.path.endsWith('/members'))).toBe(false);
+  });
+  it('a slow members read holds the job’s move: a pick from a remounted passage sends nothing, and only the first project gets the repository', async () => {
+    members = { p1: [], p2: [] };
+    page();
+    await waitFor(() => expect(chips().map((c) => c.dataset['project'])).toEqual(['p1', 'p2']));
+    let release!: () => void;
+    membersGate = { p1: new Promise<void>((r) => { release = r; }) };
+    fireEvent.click(chips().find((c) => c.dataset['project'] === 'p1')!);
+    await new Promise((r) => setTimeout(r, 20));
+    cleanup();
+    page();
+    await waitFor(() => expect(chips().map((c) => c.dataset['project'])).toEqual(['p1', 'p2']));
+    fireEvent.click(chips().find((c) => c.dataset['project'] === 'p2')!);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(posts).toEqual([]);
+    release();
+    await waitFor(() => expect(posts.some((p) => p.path === '/chats')).toBe(true));
+    expect(posts.filter((p) => p.path.endsWith('/members')).map((p) => p.path)).toEqual(['/projects/p1/members']);
+    expect(posts.find((p) => p.path === '/chats')).toMatchObject({ body: { projectId: 'p1' } });
   });
   it('says when creation fails and sends no attachment or job', async () => {
     createStatus = 409;

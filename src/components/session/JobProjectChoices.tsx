@@ -45,6 +45,13 @@ export function JobMovedLine({ chatId, pid, moved }: { chatId: string; pid: stri
   );
 }
 
+/** Whether project `projectId` holds repository `repoId` (a `crew.repo` member) as the daemon says now (studio#1273).
+ *  A members read that fails throws: nothing is decided on a guess. */
+async function projectHoldsRepo(projectId: string, repoId: string): Promise<boolean> {
+  const { members } = await api.listProjectMembers(projectId);
+  return members.some((m) => m.member_kind === 'crew.repo' && m.member_ref === repoId);
+}
+
 type Choices = { repo: string | null; list: Project[]; holding: boolean } | { repo: string | null; failed: true } | null;
 
 /**
@@ -70,7 +77,6 @@ export function JobProjectChoices({ chatId, proposal, onError, endSourceChat = f
   const busyRef = useRef(false);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
-  const needsAttach = useRef(new Set<string>());
   useEffect(() => {
     if (!creating || repo === null) return;
     let live = true;
@@ -102,13 +108,39 @@ export function JobProjectChoices({ chatId, proposal, onError, endSourceChat = f
     return <p data-testid="job-passage-projects" data-state="failed" role="alert" className="wk-pass-sub">This job can’t be moved to a project from here. Start it again from the / list in a project’s chat.</p>;
   }
   const moveTo = async (p: Project, here: string): Promise<void> => {
-    if (repo !== null && needsAttach.current.has(p.id)) {
+    // studio#1273: whether the project holds the job's repository is the daemon's answer, read at the press (never
+    // component memory, which a remount loses): a project made here whose attach failed is attached on the next pick.
+    // The read and the attach run under the job's shared move guard (`moving`, which a remount keeps), so a second
+    // pick from a remounted passage waits; a person who went elsewhere meanwhile gets no attach (codex r1).
+    if (repo !== null) {
+      const pid = proposal.pid;
+      const st = useJobMoves.getState();
+      if (st.moving[pid] === true || moveOf(st.moves, pid) !== null) return;
+      useJobMoves.setState((s) => ({ moving: { ...s.moving, [pid]: true } }));
       try {
-        await api.attachProjectMember(p.id, { kind: 'crew.repo', ref: repo, attachedBy: 'studio' });
-        needsAttach.current.delete(p.id);
-      } catch (e: unknown) {
-        onError(`The repository was not attached to ${p.name}: ${e instanceof Error ? e.message : String(e)}. Pick the project to try again.`);
-        return;
+        let holds: boolean;
+        try {
+          holds = await projectHoldsRepo(p.id, repo);
+        } catch (e: unknown) {
+          onError(`The members of ${p.name} could not be read: ${e instanceof Error ? e.message : String(e)}. Pick the project to try again.`);
+          return;
+        }
+        if (placeToken() !== here) return;
+        if (!holds) {
+          try {
+            await api.attachProjectMember(p.id, { kind: 'crew.repo', ref: repo, attachedBy: 'studio' });
+          } catch (e: unknown) {
+            onError(`The repository was not attached to ${p.name}: ${e instanceof Error ? e.message : String(e)}. Pick the project to try again.`);
+            return;
+          }
+        }
+      } finally {
+        // Released just before `moveJob` takes the same guard, in this same turn: no other pick can slip between.
+        useJobMoves.setState((s) => {
+          const moving = { ...s.moving };
+          delete moving[pid];
+          return { moving };
+        });
       }
     }
     try {
@@ -141,7 +173,6 @@ export function JobProjectChoices({ chatId, proposal, onError, endSourceChat = f
       }
       useProjectsStore.getState().addProject(project);
       setChoices((current) => current !== null && !('failed' in current) ? { ...current, list: [project, ...current.list] } : current);
-      if (repo !== null) needsAttach.current.add(project.id);
       setCreating(false);
       await moveTo(project, here);
     })().finally(() => { busyRef.current = false; setBusy(null); });

@@ -570,7 +570,9 @@ describe('F41 review folds (r7, r8), on the project move that remains (F39)', ()
     act(() => { useChatFlow.setState({ request: { chatId: 'elsewhere', nonce: 99 } as never }); });
     releaseCat();
     await waitFor(() => expect(useJobMoves.getState().moving[`${CHAT}:t1`]).toBeUndefined());
-    expect(posts).toEqual([]);
+    // studio#1273: the picked project did not hold the job's repository, so it was attached at the press, while the
+    // person was still here; the move itself (its seed and the Not now) never went out.
+    expect(posts.map((p) => p.path).filter((path) => !/^\/projects\/[^/]+\/members$/.test(path))).toEqual([]);
     expect(useChatFlow.getState().request?.chatId).toBe('elsewhere');
   });
 });

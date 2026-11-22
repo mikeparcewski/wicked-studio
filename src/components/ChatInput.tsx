@@ -1277,7 +1277,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     .filter((s) => selectedClis.has(s.key))
     .map((s) => ({ seat: s, standing: seatStandingWord(s) }));
   const unsignedSelected = selectedStanding.filter((x) => x.standing.kind === 'signed-out').map((x) => x.seat);
-  /** Seats the daemon SAYS a council would not seat (its reason, its words) — a separate sentence. */
+  /** Seats the daemon SAYS it leaves out (no work and no ballot, `seatRoles`; its reason, its words) — a separate sentence. */
   const ineligibleSelected = selectedStanding.filter((x) => x.standing.kind === 'ineligible');
 
   // Delivery verdict, said out loud BEFORE the send (studio#123): with the
@@ -1715,8 +1715,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           }}
         >
           <span className="flex-1">
-            ⚠ {ineligibleSelected.map((x) => `${seatLabel(x.seat)}: ${x.standing.detail}`).join(' · ')} — a council benches
-            {ineligibleSelected.length === 1 ? ' it' : ' them'}; the other helpers carry the run.
+            {/* studio#1312: `ineligible` is a seat the daemon gives no work (both roles off, `seatRoles`); a work-only
+                helper is not here. */}
+            ⚠ {ineligibleSelected.map((x) => `${seatLabel(x.seat)}: ${x.standing.detail}`).join(' · ')} — Studio’s service
+            leaves {ineligibleSelected.length === 1 ? 'it' : 'them'} out; the other helpers carry the run.
           </span>
         </div>
       )}
