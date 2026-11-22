@@ -59,7 +59,7 @@ export function clickedIn(frame: HTMLIFrameElement | null | undefined): boolean 
 
 /** studio#1140: what the chat beside a video can't do, and where the video does change. */
 const VIDEO_CHAT_NOTE_CUT = "This chat can't change the video. Change it here by hand in Options: Chapters (rename, move, trim), Captions and Theme. Caption words can't be edited yet; for new words, make a new demo video.";
-const VIDEO_CHAT_NOTE_RECORDING = "This chat can't change the video. Edit the cut makes a copy you can change by hand; at the review gate, Record it again records a new take.";
+const VIDEO_CHAT_NOTE_RECORDING = "This chat can't change the video. Once the run is done, Edit the cut makes a copy you can change by hand; at the review gate, Record it again records a new take.";
 
 export function PluginCard(props: PluginCardProps): React.ReactElement {
   const fromRegistry = useEditorFor(props.binding.kind);

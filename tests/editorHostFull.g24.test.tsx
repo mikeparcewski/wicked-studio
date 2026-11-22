@@ -291,7 +291,7 @@ it.each(['demo', 'interactive-doc'] as const)('full-screen chat explains video e
   fireEvent.click(screen.getByTestId('plugin-card-full'));
   act(() => useHostChrome.getState().setChatOpen(true));
   // A run's recording (no document yet) changes only through its gate verbs (studio#1140).
-  const words = "This chat can't change the video. Edit the cut makes a copy you can change by hand; at the review gate, Record it again records a new take.";
+  const words = "This chat can't change the video. Once the run is done, Edit the cut makes a copy you can change by hand; at the review gate, Record it again records a new take.";
   if (source === 'demo') expect(screen.getByText(words)).toBeTruthy();
   else expect(screen.queryByText(words)).toBeNull();
 });
