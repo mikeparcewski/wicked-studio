@@ -6,9 +6,9 @@ import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
 import { useConnectionStore } from '../store/connection.js';
 import { useCapabilities } from '../store/capabilities.js';
-import { needsRecheck, useGateStore } from '../store/gates.js';
+import { useGateStore } from '../store/gates.js';
 import { answerShapeOf, askerOf, useElicitationStore } from '../store/elicitations.js';
-import { GATE_READS_IN_FLIGHT, ensureGate, refreshGate, inGateSlot, reconcileGateRetries, rememberWorkTitles } from '../board/gateActions.js';
+import { GATE_READS_IN_FLIGHT, hydrateGate, inGateSlot, reconcileGateRetries, rememberWorkTitles } from '../board/gateActions.js';
 
 /**
  * Owns the run list + the late-join reconcile (DES-STUDIO-001 §2.1, §3.3). A
@@ -158,15 +158,13 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
       // cleared for a broken daemon).
       void hydrateElicitations(fetched, () => cancelled);
 
-      // T17/F31: real decisions before parked chat turns, preserving list order within each group; a few reads at a
-      // time across passes (`inGateSlot`). The visible run reads its own gate first through `useOwnGateRead`. A
+      // T17/F31: real decisions before parked chat turns, preserving list order within each group; one read at a time
+      // across passes (`inGateSlot`, crew#1775: it never holds more than one of the browser's connections). The visible run reads its own gate first through `useOwnGateRead`. A
       // refresh that cancels this pass stops its new reads; a read that lands still applies, because `applyGateRead`
       // drops it if the run's gate moved meanwhile. A failed read leaves the id-only gate working and is tried again on
       // the next pass.
       await Promise.all(awaiting.map((id) => inGateSlot(async () => {
-        if (cancelled) return;
-        if (useGateStore.getState().gates[id] === undefined) await ensureGate(id);
-        else if (needsRecheck(id)) await refreshGate(id);
+        if (!cancelled) await hydrateGate(id);
       })));
     })();
 

@@ -2,7 +2,7 @@ import { useEffect, useId, useState } from 'react';
 import { useNewWorkSeats } from '../../store/newWorkSeats.js';
 import { Check } from 'lucide-react';
 import { setPickedForNewWork } from './useAgentRows.js';
-import { goodEnough, setupAgents, setupMove, setupSteps, withRowRuntime } from '../../board/firstUse.js';
+import { goodEnough, newWorkHelpers, setupAgents, setupMove, setupSteps, withRowRuntime } from '../../board/firstUse.js';
 import { authOf, type AgentRow } from '../../board/agentsModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useFirstUseReads } from '../../store/firstUseReads.js';
@@ -64,8 +64,8 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
   const placeFailed = !f.counted && f.state === 'failed';
   const reading = f.state === 'idle' || f.state === 'loading';
 
-  const picked = rows.filter((r) => r.picked);
-  const off = rows.filter((r) => !r.picked);
+  // crew#1568 D05: only the helpers new work will use (ready and picked), and the ready ones left off.
+  const { using: picked, off } = newWorkHelpers(rows, newWorkSeats.seats === null);
   const skip = (): void => { void f.save({ skippedAt: Date.now() }); navigate('/'); };
 
   return (

@@ -347,7 +347,7 @@ describe('the runs list’s late-join pass', () => {
     const gates = Array.from({ length: 9 }, () => deferred<void>());
     const all = gates.map((g, i) => inGateSlot(async () => { started.push(i); open += 1; peak = Math.max(peak, open); await g.promise; open -= 1; }));
     await new Promise((r) => setTimeout(r, 0));
-    expect(started).toStrictEqual([0, 1, 2, 3]);
+    expect(started).toStrictEqual(Array.from({ length: GATE_READS_IN_FLIGHT }, (_, i) => i));
     for (const g of gates) { g.resolve(); await new Promise((r) => setTimeout(r, 0)); }
     await Promise.all(all);
     expect(started).toStrictEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
@@ -380,7 +380,7 @@ describe('the runs list’s late-join pass', () => {
 
   it('reads parked runs in the list’s order, at most GATE_READS_IN_FLIGHT at once even when a refresh replaces the pass, and every gate lands', async () => {
     // The daemon lists the oldest first, as the rig did (98 parked; the run just launched was last). The run a person is
-    // looking at reads its own gate (RunBlock); the pass keeps main's order, a few at a time.
+    // looking at reads its own gate (RunBlock); the pass keeps main's order, one at a time (crew#1775).
     let views: SessionView[] = Array.from({ length: 10 }, (_, i) =>
       makeView({ id: `p${i + 1}`, status: 'awaiting_human', created_at: 1_000 + i } as never));
     const pending = new Map<string, () => void>();
@@ -404,8 +404,8 @@ describe('the runs list’s late-join pass', () => {
     }));
     const { result } = renderHook(() => useRuns());
     await waitFor(() => expect(asked.length).toBe(GATE_READS_IN_FLIGHT));
-    expect(asked).toStrictEqual(['p1', 'p2', 'p3', 'p4']);
-    // Four more runs park and a refresh replaces the pass while the first four reads are still on their way.
+    expect(asked).toStrictEqual(['p1', 'p2', 'p3', 'p4'].slice(0, GATE_READS_IN_FLIGHT));
+    // Four more runs park and a refresh replaces the pass while the first reads are still on their way.
     views = [...views, ...Array.from({ length: 4 }, (_, i) => makeView({ id: `q${i + 1}`, status: 'awaiting_human', created_at: 2_000 + i } as never))];
     act(() => { result.current.refresh(); });
     await new Promise((r) => setTimeout(r, 600));

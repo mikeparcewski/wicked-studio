@@ -1,6 +1,6 @@
 import type { SystemSnapshot } from '../api/system.js';
 import { helperNotInstalled, helperRuntimeDown } from './agentsCopy.js';
-import { boundaryHolds, type AgentRow } from './agentsModel.js';
+import { authOf, boundaryHolds, type AgentRow } from './agentsModel.js';
 
 /** First use stays open until the live helper, skills, code map and runtime checks pass,
  * and there is somewhere to work. Only an explicit skip hides incomplete setup. */
@@ -103,6 +103,23 @@ export function withRowRuntime(checks: SetupChecks, rows: readonly AgentRow[]): 
 export function setupAgents(rows: readonly AgentRow[]): AgentRow[] {
   // studio#856: `jobWork`, so a work-only seat no studio job draws from never completes setup (coord F1 on #1302).
   return rows.filter((r) => r.picked && !r.optIn && r.usable && r.jobWork && r.repoWork && boundaryHolds(r.seat, 'scoped_bound'));
+}
+
+/**
+ * crew#1568 D05: Helpers step 5's names. `using`: the helpers new work uses now: picked, signed in (or needing no
+ * sign-in) and given job work, since crew's new-work pool draws only from helpers that can work. `off`: the ready
+ * helpers left out until picked. A helper that is not installed or not signed in is in neither list.
+ * `defaultPick`: no pick is saved (`newWorkSeats` unset), so crew's default rule applies, which leaves opt-in helpers
+ * out unless one is all that can work: then it uses them (crew `defaultLaunchRoster`). A saved pick, even an empty
+ * one, is used as it stands.
+ */
+export function newWorkHelpers(rows: readonly AgentRow[], defaultPick: boolean): { using: AgentRow[]; off: AgentRow[] } {
+  const ready = rows.filter((r) => r.usable && r.jobWork);
+  // crew's fallback looks at its own eligible list (`proposalRoster`: job work, not signed out), where a helper whose
+  // sign-in cannot be read still counts: an opt-in helper stands in only when no ordinary helper is on that list.
+  const crewHasOrdinary = rows.some((r) => !r.optIn && r.jobWork && authOf(r.seat) !== 'signed_out');
+  if (defaultPick && !crewHasOrdinary) return { using: ready.filter((r) => r.optIn), off: ready.filter((r) => !r.optIn) };
+  return { using: ready.filter((r) => r.picked), off: ready.filter((r) => !r.picked) };
 }
 
 /** Projects that count: the synthesized "Unfiled" default (`id: 'default'`) never does. */

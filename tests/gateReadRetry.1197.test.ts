@@ -94,7 +94,7 @@ describe('a gate read that misses its deadline', () => {
     });
     // The initial reads fail one by one through the slots; their retries come due together.
     const firsts = Promise.all(ids.map((id) => inGateSlot(() => ensureGate(id))));
-    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(3_000 * Math.ceil(ids.length / GATE_READS_IN_FLIGHT) + 1_000);
     await firsts;
     peak = 0;
     await vi.advanceTimersByTimeAsync(GATE_RETRY_BASE_MS + 1);
