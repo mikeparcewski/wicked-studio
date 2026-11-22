@@ -20,6 +20,7 @@ import { clearCachedWorkflows, setCachedWorkflows } from '../src/store/workflowC
 import { useCapabilities } from '../src/store/capabilities.js';
 import { launchLead, workflowLaunchBody } from '../src/board/launchModel.js';
 import { postureFieldsOfBody } from '../src/board/launchPosture.js';
+import { sessionPath } from '../src/board/sessionModel.js';
 
 const seat = (key: string): RosterSeat =>
   ({ key, display_name: key, binary: key, enabled_for_council: true, health: { status: 'active', since: 'x' }, signed_in: true }) as RosterSeat;
@@ -50,12 +51,12 @@ function stubWire(): void {
   }));
 }
 
-function Harness(): React.ReactElement {
+function Harness({ navigate = () => {} }: { navigate?: (path: string) => void } = {}): React.ReactElement {
   const [text, setText] = useState('');
   return (
     <>
       <Composer composerKey="desk" text={text} setText={setText} onSend={() => {}} placeholder="p" ariaLabel="a" variant="desk" navigate={() => {}} />
-      <LaunchWizard navigate={() => {}} />
+      <LaunchWizard navigate={navigate} />
     </>
   );
 }
@@ -522,6 +523,31 @@ describe('power mode in the New job form (DES-POWER-MODE §2)', () => {
     expect(screen.queryByTestId('launch-wizard-power-unchecked')).toBeNull();
   });
 
+  // codex r2: while crew is asked about the person's On, the form promises nothing about the run.
+  it('an On still being checked says so, and crew’s phased answer then reads Off with its reason', async () => {
+    presets = new Set();
+    useCapabilities.setState({ powerMode: true });
+    await toOptions();
+    await waitFor(() => expect(screen.getByTestId('launch-wizard-power-notice')).toBeTruthy());
+    const inner = (globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>);
+    let release!: () => void;
+    const held = new Promise<void>((r) => { release = r; });
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (path === '/runs/preview') return held.then(() => inner(url, init));
+      return inner(url, init);
+    }));
+    fireEvent.click(screen.getByTestId('launch-wizard-power-toggle'));
+    await waitFor(() => expect(screen.getByTestId('launch-wizard-power').textContent).toContain('Power mode: checking…'));
+    expect(screen.getByTestId('launch-wizard-power-note').textContent).toMatch(/^Checking with Studio’s service/);
+    expect(screen.getByTestId('launch-wizard-power').textContent).not.toMatch(/One orchestrator/);
+    expect(screen.queryByTestId('launch-wizard-power-gates')).toBeNull();
+    release();
+    await waitFor(() => expect(screen.getByTestId('launch-wizard-power-toggle').getAttribute('aria-checked')).toBe('false'));
+    expect(screen.getByTestId('launch-wizard-power').textContent).toContain('Power mode: Off');
+    expect(screen.getByTestId('launch-wizard-power-notice').textContent).toMatch(/repo-scoped plan or preset launch/);
+  });
+
   it('a failed preview launches phased, with the gate chosen here; so does an older daemon with no preview (404)', async () => {
     for (const status of [503, 404]) {
       cleanup();
@@ -595,8 +621,10 @@ describe('studio#1239: New job shows crew’s assurance notice', () => {
   beforeEach(() => { useCapabilities.setState({ chatIdOnLaunch: true }); });
   afterEach(() => { useCapabilities.setState({ reducedAssurance: false, chatIdOnLaunch: false }); });
 
+  const nav = vi.fn();
   async function launchOnce(): Promise<void> {
-    render(<Harness />);
+    nav.mockReset();
+    render(<Harness navigate={nav} />);
     // From a chat: the first launch binds to it (chatIdOnLaunch), so the relaunch's dropping it is observable.
     act(() => { openLaunchWizard({ workflowId: 'mcp-server', composerKey: 'chat-abc' }); });
     fireEvent.change(await screen.findByTestId('launch-wizard-intent'), { target: { value: 'build an MCP server for the ledger' } });
@@ -625,13 +653,26 @@ describe('studio#1239: New job shows crew’s assurance notice', () => {
     void _c;
     expect(again!.body).toEqual({ ...sameJob, retryOf: 'r-new', reducedAssurance: true });
     await waitFor(() => expect(useLaunchWizard.getState().open).toBe(false));
+    expect(nav).toHaveBeenCalledWith(sessionPath('run:r-reduced'));
   });
 
   it('Open the job goes to it and sends nothing more; a daemon without reduced assurance offers no relaunch', async () => {
     await launchOnce();
     expect(screen.queryByTestId('launch-wizard-assurance-reduced')).toBeNull();
+    expect(nav).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId('launch-wizard-assurance-open'));
     await waitFor(() => expect(useLaunchWizard.getState().open).toBe(false));
+    expect(nav).toHaveBeenCalledWith(sessionPath('chat-abc'));
+    expect(posts.filter((p) => p.path === '/runs')).toHaveLength(1);
+  });
+
+  // codex r2: the notice belongs to the job that drew it; another job opened over the dialog starts without it.
+  it('another job opened over the notice starts fresh: no notice, no relaunch of the first job', async () => {
+    useCapabilities.setState({ reducedAssurance: true });
+    await launchOnce();
+    act(() => { openLaunchWizard({ workflowId: 'other-wf', composerKey: 'desk' }); });
+    await waitFor(() => expect(screen.queryByTestId('launch-wizard-assurance')).toBeNull());
+    expect(screen.getByTestId('launch-wizard-step').dataset.step).not.toBe('launched');
     expect(posts.filter((p) => p.path === '/runs')).toHaveLength(1);
   });
 });

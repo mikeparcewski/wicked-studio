@@ -90,6 +90,12 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
    *  offers the explicit relaunch in reduced assurance before it goes to the job. */
   const [launched, setLaunched] = useState<{ notice: LaunchAssuranceNotice; body: LaunchBodyWithDeliver; dest: string } | null>(null);
   const [confirmReduced, setConfirmReduced] = useState(false);
+  // The draft the dialog shows (codex r2): another job opened over it starts without this one's notice, and a launch
+  // answered after its draft was replaced shows nothing here.
+  const draftSig = JSON.stringify([draft.workflowId, draft.composerKey, draft.catalogEntryId, draft.projectId]);
+  const draftSigNow = useRef(draftSig);
+  draftSigNow.current = draftSig;
+  useEffect(() => { setLaunched(null); setConfirmReduced(false); }, [draftSig]);
   // A launched job's draft is done: closing ends it (never a second launch from a kept draft).
   const close = (): void => { if (launchingRef.current) return; if (launched !== null) finish(); else closeStore(); };
   // "Don't show this again" (operator 2026-10-16): the saved choice, shown as it is. Ticking it saves
@@ -280,9 +286,11 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   const posture = usePosturePreview(postureFields, powerChoice, offerPower && draft.workflowId !== null);
   const crewPosture = posture.answer.status === 'ready' ? posture.answer.posture : null;
   const powerOn = offerPower && crewPosture?.power === true;
-  // While crew is asked about a change, the switch keeps the person's choice; the launch waits for crew's word (below).
-  // No answer (a failed preview, an older daemon): Off, as Launch then runs it (codex r1).
-  const switchOn = crewPosture !== null ? powerOn : posture.answer.status === 'loading' && powerChoice === true;
+  // While crew is asked about a change, the switch keeps the person's choice and says it is being checked (nothing
+  // about the run is promised until crew answers); the launch waits for crew's word (below). No answer (a failed
+  // preview, an older daemon): Off, as Launch then runs it (codex r1, r2).
+  const powerPending = offerPower && posture.answer.status === 'loading';
+  const switchOn = crewPosture !== null ? powerOn : powerPending && powerChoice === true;
   /** A power run asks once, at hand-off, only when it delivers with a person (crew's `deliver` and `autoDeliver`). */
   const powerAsksAtHandOff = crewPosture !== null && crewPosture.deliver === 'pr' && !crewPosture.autoDeliver;
   const powerUnchecked: 'failed' | 'unsupported' | null = !offerPower ? null : posture.answer.status === 'failed' ? 'failed'
@@ -490,6 +498,7 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
       return;
     }
     // What the form shows as Launch is pressed (studio#1305): crew's answer for these fields, captured now.
+    const sigAtLaunch = draftSigNow.current;
     const postureKeyAtLaunch = posture.key;
     const postureAtLaunch = posture.answer;
     launchingRef.current = true;
@@ -528,7 +537,10 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
       if (key !== null) clearAboutChips(key);
       const dest = chatId !== null ? sessionPath(chatId) : sessionPath(`run:${runId}`);
       const notice = assuranceNoticeOf(out);
-      if (notice !== null) { setConfirmReduced(false); setLaunched({ notice, body, dest }); return; }
+      if (notice !== null) {
+        if (draftSigNow.current === sigAtLaunch) { setConfirmReduced(false); setLaunched({ notice, body, dest }); }
+        return;
+      }
       finish();
       navigate?.(dest);
     } catch (err) {
@@ -758,8 +770,10 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
               )}
               {offerPower && (
                 <div className="wk-launch-wizard-field pm-launch-power" data-testid="launch-wizard-power" aria-busy={posture.answer.status === 'loading'}>
-                  <Switch label={`Power mode: ${switchOn ? 'On' : 'Off'}`} checked={switchOn} onChange={(v) => update({ power: v })} data-testid="launch-wizard-power-toggle" />
-                  <span className="wk-field-note">{switchOn
+                  <Switch label={`Power mode: ${powerPending ? 'checking…' : switchOn ? 'On' : 'Off'}`} checked={switchOn} onChange={(v) => update({ power: v })} data-testid="launch-wizard-power-toggle" />
+                  <span className="wk-field-note" data-testid="launch-wizard-power-note">{powerPending
+                    ? 'Checking with Studio’s service how this job will run…'
+                    : powerOn
                     ? `One orchestrator builds it with you in this conversation, re-checked at every commit. Rigor is sized at intake${powerAsksAtHandOff ? ' and applied once, at hand-off' : ''}.`
                     : 'Phased: one helper per step, with a gate after each step the plan declares.'}{draft.power === null && crewPosture !== null && powerNotice === null ? ' Preset from Settings.' : ''}</span>
                 </div>
