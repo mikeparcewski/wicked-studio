@@ -46,6 +46,9 @@ export interface FailingSplit {
   fresh: string[];
   onBase: string[];
   baseCount?: number;
+  /** studio#1276: the failing tests of a check whose base passed only on its own re-run (`baseCleared`): neither the
+   *  change's nor the base's, so in neither list and never counted as the change's. Present only when there are any. */
+  unplaced?: string[];
 }
 
 /** How many failures fail on the base too, named or only counted. */
@@ -75,10 +78,16 @@ export function failingSplit(floor: GateFloorView | null | undefined, said?: str
   const flaky = new Set(flakyIdsOf(floor));
   const fresh: string[] = [];
   const onBase: string[] = [];
+  const unplaced: string[] = [];
   let told = false;
   for (const c of failedChecks(floor)) {
-    // A base that passed only on retry cannot tell these failures apart from the change.
-    if (c.baseCleared === true) continue;
+    // A base that passed only on retry cannot tell these failures apart from the change (run 9397a34b): not the
+    // change's and not the base's, said apart (studio#1276) so the split never shows fewer failures than the floor.
+    if (c.baseCleared === true) {
+      const head = [...new Set([...names(c.failureIds), ...names(c.rerunFailureIds)])];
+      unplaced.push(...(head.length > 0 ? head : [`the ${c.name} check`]));
+      continue;
+    }
     const pre = names(c.preExisting);
     const reg = names(c.regressions);
     const ids = names(c.failureIds);
@@ -102,7 +111,9 @@ export function failingSplit(floor: GateFloorView | null | undefined, said?: str
   }
   if (told) {
     const f = [...new Set(fresh)].filter((x) => !flaky.has(x));
-    return { fresh: f, onBase: [...new Set(onBase)].filter((x) => !flaky.has(x) && !f.includes(x)) };
+    const b = [...new Set(onBase)].filter((x) => !flaky.has(x) && !f.includes(x));
+    const u = [...new Set(unplaced)].filter((x) => !flaky.has(x) && !f.includes(x) && !b.includes(x));
+    return { fresh: f, onBase: b, ...(u.length > 0 ? { unplaced: u } : {}) };
   }
   return failedChecks(floor).length === 0 && typeof said === 'string' ? splitFromWords(said) : null;
 }

@@ -666,6 +666,13 @@ export function allOnBaseWords(n: number): string {
     : `All ${n} failures also fail on the base, so they aren’t caused by this change.`;
 }
 
+/** studio#1276: the failures of a check whose base failed too and then passed on its own re-run. `more` when the
+ *  card already named others. */
+export function unplacedWords(n: number, more: boolean): string {
+  const lead = n === 1 ? `${more ? 'One more' : 'One failure'} can’t be told apart from this change` : `${n} ${more ? 'more' : 'failures'} can’t be told apart from this change`;
+  return `${lead}: the base failed ${n === 1 ? 'it' : 'them'} too, then passed when run again.`;
+}
+
 type DerivedLead = { choice: GateRowChoice; act?: undefined; prefill?: string } | { act: { key: string; label: string; title: string; onClick: () => void }; choice?: undefined; prefill?: undefined };
 
 function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsReading = false, eventsUnavailable, retryEvents, depth, refusalLines = null, drift = null, assurance = null, assuranceTech = null, rulesLine = null, explain = null, unavailable = null, signInModal = null, headline = null, derived = null, extraItems = null, builders = [], builderName = (c) => c }: {
@@ -730,6 +737,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsReading = fal
   const [chosen, setChosen] = useState<{ key: string; label: string; sentAt: number | null } | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const [baseOpen, setBaseOpen] = useState(false);
+  const [unplacedOpen, setUnplacedOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   // (operator 2026-10-27) The reply box under the dock answers through this gate's note choice: Send back, else the
   // retry / steer note (never the floor override, whose rationale is asked for on its own).
@@ -976,7 +984,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsReading = fal
                   "and N more"; the list scrolls inside the dock so its buttons stay in view. */}
               <FailingGroups ids={split.fresh} />
             </>
-          ) : (
+          ) : baseCountOf(split) > 0 && (
             <p data-testid="session-gate-failing-words" className="wk-gate2-p">{allOnBaseWords(baseCountOf(split))}</p>
           )}
           {baseCountOf(split) > 0 && (
@@ -988,6 +996,17 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsReading = fal
                   {baseOpen ? 'Hide the base’s failures' : split.onBase.length === 1 ? 'See the one that fails on the base' : `See the ${split.onBase.length} that fail on the base`}
                 </button>
               )}
+            </div>
+          )}
+          {/* studio#1276: a check whose base failed too and passed only on its own re-run tells its failures apart from
+              neither side; they are said apart, folded, so the split never shows fewer failures than the floor. */}
+          {split.unplaced !== undefined && split.unplaced.length > 0 && (
+            <div data-testid="session-gate-failing-unplaced" data-count={split.unplaced.length} className="wk-gate2-base">
+              <p data-testid="session-gate-failing-unplaced-words" className="wk-gate2-base-words">{unplacedWords(split.unplaced.length, split.fresh.length + baseCountOf(split) > 0)}</p>
+              {unplacedOpen && <ul>{split.unplaced.map((n) => <li key={n} title={n}><span>{testWords(n)}</span>{testWords(n) !== n && testPlace(n) !== null && <code className="wk-gate2-new-id">{testPlace(n)}</code>}</li>)}</ul>}
+              <button type="button" data-testid="session-gate-failing-unplaced-toggle" aria-expanded={unplacedOpen} onClick={() => setUnplacedOpen((v) => !v)} className="wk-gate2-link">
+                {unplacedOpen ? (split.unplaced.length === 1 ? 'Hide it' : 'Hide them') : split.unplaced.length === 1 ? 'See which one' : `See the ${split.unplaced.length}`}
+              </button>
             </div>
           )}
         </div>
