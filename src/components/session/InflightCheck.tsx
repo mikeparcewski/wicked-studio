@@ -33,8 +33,8 @@ const VERDICT: Record<InspectVerdict, { word: string; tone: 'ok' | 'warn' | 'fai
   wasteful: { word: 'Wasting tokens', tone: 'warn' },
 };
 
-/** `undone`: for a Stop, the run's unsent-Stop count when it was chosen (studio#1075). */
-type Chosen = { action: InspectAction; at: number; note?: string; error?: string; undone?: number };
+/** `stopId`: for a Stop, the queued Stop it rides on (its own, or one already queued for the run; studio#1075). */
+type Chosen = { action: InspectAction; at: number; note?: string; error?: string; stopId?: number | null };
 
 export function InflightCheck({ runId, ord, attempt, kind, startedAt, now, seatName, seatKey, label }: {
   runId: string;
@@ -62,8 +62,9 @@ export function InflightCheck({ runId, ord, attempt, kind, startedAt, now, seatN
   const [picked, setChosen] = useState<Chosen | null>(null);
   // studio#1075: a Stop that was undone (or cancelled unsent) is no longer the answer: the run keeps going, so the card
   // asks again instead of saying "You chose: Stop".
-  const undoneStops = useSheets((s) => s.stopUndone[runId] ?? 0);
-  const chosen = picked !== null && picked.action === 'stop' && picked.undone !== undoneStops ? null : picked;
+  const stopId = picked?.stopId ?? null;
+  const stopUnsent = useSheets((s) => stopId !== null && s.unsentStops[stopId] === true);
+  const chosen = stopUnsent ? null : picked;
 
   // A check asked earlier on this attempt (a reload, another tab) is shown as it stands, once the turn is long enough
   // to have been checked at all.
@@ -129,9 +130,9 @@ export function InflightCheck({ runId, ord, attempt, kind, startedAt, now, seatN
       return;
     }
     if (a.option === 'stop') {
-      const undone = useSheets.getState().stopUndone[runId] ?? 0;
-      stopRun([runId], label);
-      setChosen({ action: 'stop', at: Date.now(), undone });
+      // A Stop already in its window for this run is the one this answer rides on (stopRun queues no second one).
+      const queued = stopRun([runId], label) ?? useSheets.getState().stopping[runId] ?? null;
+      setChosen({ action: 'stop', at: Date.now(), stopId: queued });
       return;
     }
     const body = (a.reason ?? '').trim();

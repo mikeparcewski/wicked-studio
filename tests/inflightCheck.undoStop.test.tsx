@@ -49,7 +49,7 @@ function chooseStop(): void {
 
 beforeEach(() => {
   resetDecisionsForTest();
-  useSheets.setState({ open: null, pointed: null, stopping: {}, stopUndone: {} });
+  useSheets.setState({ open: null, pointed: null, stopping: {}, unsentStops: {} });
   useRunEventStore.setState({ byRun: {} });
   useRuntimeStore.setState({ outputs: {} } as never);
   getInspections.mockReset(); cancelRun.mockReset();
@@ -88,6 +88,23 @@ describe('the in-flight check after a Stop (studio#1075)', () => {
     chooseStop();
     await act(async () => { vi.advanceTimersByTime(11_000); await Promise.resolve(); await Promise.resolve(); });
     expect(cancelRun).toHaveBeenCalledWith('r-sent');
+    expect(screen.getByTestId('inflight-check-record').textContent).toContain('You chose: Stop this answer');
+  });
+
+  // codex r1 on #1308: a second Stop queued and undone while the first one's cancel is still in flight must not wipe
+  // the first, which was sent.
+  it('undoing a later Stop never forgets one that was already sent', async () => {
+    stuck('r-twice');
+    await verdictShown('r-twice');
+    cancelRun.mockReturnValue(new Promise(() => undefined)); // the first cancel stays in flight
+    chooseStop();
+    await act(async () => { vi.advanceTimersByTime(11_000); await Promise.resolve(); });
+    expect(cancelRun).toHaveBeenCalledWith('r-twice');
+    expect(useSheets.getState().stopping['r-twice']).toBeUndefined();
+    let second: number | null = null;
+    act(() => { second = stopRun(['r-twice'], '“the job”'); });
+    expect(second).not.toBeNull();
+    act(() => { undoDecision(second!); });
     expect(screen.getByTestId('inflight-check-record').textContent).toContain('You chose: Stop this answer');
   });
 
