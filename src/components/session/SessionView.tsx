@@ -210,11 +210,21 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
 }): React.ReactElement {
   const ref = useMemo(() => parseSessionId(sessionId), [sessionId]);
   const runChatId = useCapabilities((s) => s.runChatId);
+  // studio#675: a run: address the live index lacks (crew#265 leaves archived runs out of GET /runs) is
+  // read through GET /runs/:id. The read belongs to its address; while the index holds the run there is
+  // no read, so a run that later leaves the index (archived) is read afresh.
+  const runInIndex = ref.kind === 'run' && runs.some((v) => v.session.id === ref.runId);
+  const [detail, setDetail] = useState<{ id: string; run: RunView | null; error: string | null } | null>(null);
+  const [detailTry, setDetailTry] = useState(0);
+  const detailOwn = detail !== null && ref.kind === 'run' && detail.id === ref.runId ? detail : null;
+  const detailRun = detailOwn?.run ?? null;
+  const detailError = detailOwn?.error ?? null;
   // With C1, a run launched from a chat belongs to that chat's session: a `run:<id>` address for
   // it (followed while `/health` was still loading) is replaced by the chat's (Copilot).
   useEffect(() => {
     if (ref.kind !== 'run' || !runChatId) return;
-    const v = runs.find((r) => r.session.id === ref.runId);
+    // studio#888: an archived run (left out of GET /runs, crew#265) is found through its detail read.
+    const v = runs.find((r) => r.session.id === ref.runId) ?? detailRun ?? undefined;
     const chat = v === undefined ? null : runChatIdOf(v);
     // The address's search and hash ride along (a Watchtower `?jump=`, a `#gate`), so the moment the
     // operator was sent to survives the move onto the chat's thread.
@@ -226,16 +236,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     // S16a-4a: a grown artifact's segment rides along too (`/a/<key>`).
     const grownAt = artifactKey !== null ? `/a/${encodeURIComponent(artifactKey)}` : '';
     navigate(`${sessionPath(chat)}${grownAt}${search !== '' ? `?${search}` : ''}${window.location.hash}`, { replace: true });
-  }, [ref, runChatId, runs, navigate, artifactKey]);
-  // studio#675: a run: address the live index lacks (crew#265 leaves archived runs out of GET /runs) is
-  // read through GET /runs/:id. The read belongs to its address; while the index holds the run there is
-  // no read, so a run that later leaves the index (archived) is read afresh.
-  const runInIndex = ref.kind === 'run' && runs.some((v) => v.session.id === ref.runId);
-  const [detail, setDetail] = useState<{ id: string; run: RunView | null; error: string | null } | null>(null);
-  const [detailTry, setDetailTry] = useState(0);
-  const detailOwn = detail !== null && ref.kind === 'run' && detail.id === ref.runId ? detail : null;
-  const detailRun = detailOwn?.run ?? null;
-  const detailError = detailOwn?.error ?? null;
+  }, [ref, runChatId, runs, detailRun, navigate, artifactKey]);
 
   const mine = useMemo(() => {
     const fromIndex = ref.kind === 'run'

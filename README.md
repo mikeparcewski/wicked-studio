@@ -89,11 +89,13 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
 
 - **Run governed agents on your repos** — register a local path or clone a URL; studio builds the
   code graph, then you launch runs (ask / balanced / autonomous), pick which agent seats join, and
-  bind a repo with optional PR delivery. On a crew with **power mode**, it is on by default when you
-  launch a preset or a composed plan on a repository, unless Settings says otherwise (a switch on
-  New job and beside the job's name); a chat's own run and a phase-based workflow run phased. The
-  code-writing build step then runs as one orchestrator's checkpointed turns (other required steps
-  can run separately): the job page shows its rigor (with ↑ when it rose since intake), its
+  bind a repo with optional PR delivery. On a crew with **power mode**, a job runs in power mode by
+  default unless Settings says otherwise, and you can turn it off where you start it: a **Review
+  plan** switch beside a chat's Start, or New job's **Power mode** switch when New job opens on a named
+  workflow (not offered for Draft epics or Demo video), and a Power mode switch sits beside the job's name. Crew runs power mode only for a preset
+  or a composed plan on a repository: any other workflow runs phased even with power on. In power
+  mode, the code-writing build step runs as one orchestrator's checkpointed turns (other required
+  steps can run separately): the job page shows its rigor (with ↑ when it rose since intake), its
   checkpoints, and, when the change grows past its plan, a pause that offers to split it into lanes,
   switch to phased, continue at high rigor or stop.
 - **Steer runs live** — the Desk (the one shell) puts what needs you first; every run or chat
@@ -129,8 +131,12 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
   searchable. Choose up to 40 requirements and **Draft epics** opens New job on the Draft epics
   workflow with them. The old Product address (`/product?project=<id>`) opens that project's page
   at its Requirements section. Publishing the drafted epics is not offered yet.
-- **Ask several seats at once** — a chat can hold more than one warm CLI seat; each answers in the
-  thread, and the daemon checks every path, `path:line` and commit a reply cites against the repo.
+- **Ask a team** — in a chat, one helper answers (your pick, or picked at random), a second
+  signed-in helper reviews when there is one, and the answering helper can ask other helpers
+  mid-answer (an Understand analysis chat uses one helper and no reviewer). The chat's Helpers tab
+  names who answers, who reviews and who helped; the Watchtower says when another helper takes over,
+  when no reviewer could join, or when a helper's question went unanswered. The daemon checks every
+  path, `path:line` and commit a reply cites against the repo.
 - **Govern the work** — author steering rules and policies (or import a markdown rule doc; a
   refused entry shows crew's reason), browse the decisions ledger, and review what the platform has
   learned about your repos. **Evaluate** runs your rules against example behaviours: it recommends
@@ -296,8 +302,10 @@ any `localhost` / `127.0.0.1` origin, so a standalone studio drives a local daem
 
 ### Plugins
 
-Artifact editors are plugins: one self-contained HTML file per editor, run in a sandboxed frame with no network
-and talking to studio's plugin host over one MessagePort (the `wicked.editor` envelope, protocols 1 to 3,
+Artifact editors are plugins: one self-contained HTML file per editor, run in a sandboxed frame whose scripts
+can't connect anywhere (no fetch, XHR, WebSocket or beacon). A built-in editor holding `network.media` may load
+images and fonts over https; the Page and Document editors hold it by default, and a third-party editor never
+gets it. Each editor talks to studio's plugin host over one MessagePort (the `wicked.editor` envelope, protocols 1 to 3,
 `src/editors/`). A **run plugin** uses the same sandbox on protocol 3: the host sends it the job's events on the
 topics it was granted (`events.batch`), and it draws a section of the job's Details panel; the built-in Phase
 report is one. The **Plugins** page (`/plugins`, under Build & settings) shows every plugin as a card with what
