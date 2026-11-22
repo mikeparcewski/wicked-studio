@@ -182,7 +182,7 @@ describe('RequirementsModal — coverage label and corroboration (operator rulin
     expect(within(rows[1]!).getByText('risk')).toHaveAttribute('title', 'placeholder: the engine does not resolve it');
     // the counted row keeps its own mark
     expect(within(rows[0]!).getByTestId('requirement-corroboration')).toBeInTheDocument();
-    expect(screen.getByTestId('requirements-uncounted')).toHaveTextContent('441 stated rules and 1,017 placeholders sit on type shapes and are not counted.');
+    expect(screen.getByTestId('requirements-uncounted')).toHaveTextContent('441 stated rules and 1,017 placeholders are not counted: type shapes, code outside the product, or files the code index skipped. Each row says which.');
     const filters = screen.getByRole('group', { name: 'Category filter' });
     expect(within(filters).queryByText('Config & data')).not.toBeInTheDocument();
     expect(within(filters).getByText('Functional')).toBeInTheDocument();

@@ -914,6 +914,9 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsReading = fal
     // studio#612: the floor fix's note is the fixing seat's whole task, not a steer.
     if (o.id === 'steer' && c?.label === FLOOR_FIX_LABEL) return { label: 'What the fixing helper should change', placeholder: 'What should the fixing helper change…', prefill: model.noteDefault, send: o.label };
     if (c?.landSkipsRules !== undefined) return { label: 'Your reason (required, recorded as the reason each rule was skipped)', placeholder: 'Why the work can land without these rules…', send: o.label };
+    // studio#1118: the operator's own judgment is an approve: its box asks for the reason, empty — never the
+    // reviewer's failing items, which are send-back words.
+    if (o.id === 'steer' && c?.label === OPERATOR_JUDGMENT_LABEL) return { label: 'Your reason (required, recorded on the run and the delivery)', labelTestId: /* testid */ 'session-gate-judgment-label', placeholder: 'Why the work is good as it stands…', send: o.label };
     if (o.id === 'steer') return { label: 'Your note', placeholder: 'Steer the next step…', prefill: model.noteDefault, send: o.label };
     // The derived move's note names what to fix (the new failure); still the person's to edit before it is sent.
     if (o.id === 'send-back') return { label: 'What to fix', placeholder: 'Explain what to fix…', prefill: leadChoice?.key === 'send-back' && lead?.prefill !== undefined ? lead.prefill : model.noteDefault, send: o.label };

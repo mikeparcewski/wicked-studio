@@ -191,22 +191,29 @@ export const UNCOUNTED_TITLE: Readonly<Record<Uncounted, string>> = {
   unindexed: 'In a file the code index skipped: the coverage share does not count it.',
 };
 
-/** The page's counts of stated rules and placeholders on type shapes (0.167.0 `page.uncounted`), or null. */
+/** The page's counts of stated rules and placeholders the share does not count, any reason (0.167.0 `page.uncounted`), or null. */
 export function pageUncountedOf(page: unknown): { stated: number; placeholders: number } | null {
   const u = (page as { uncounted?: unknown } | null)?.uncounted as Record<string, unknown> | null | undefined;
   if (u === null || u === undefined || typeof u !== 'object' || !isCount(u['stated']) || !isCount(u['placeholders'])) return null;
   return { stated: u['stated'], placeholders: u['placeholders'] };
 }
 
-/** "441 stated rules and 1,017 placeholders sit on type shapes and are not counted.", or null when there are none. */
+/**
+ * "441 stated rules and 1,017 placeholders are not counted: type shapes, code outside the product, or files the code
+ * index skipped. Each row says which.", or null when there are none.
+ *
+ * studio#1118: crew's `page.uncounted` counts every row with any `uncounted` reason (structural, not_product,
+ * unindexed) and does not split them, so the header names every reason and leaves the which to each row's mark
+ * ({@link UNCOUNTED_TITLE}); it never claims they all sit on type shapes.
+ */
 export function uncountedLine(u: { stated: number; placeholders: number } | null): string | null {
   if (u === null || u.stated + u.placeholders === 0) return null;
   const parts = [
     ...(u.stated > 0 ? [`${count(u.stated)} stated ${u.stated === 1 ? 'rule' : 'rules'}`] : []),
     ...(u.placeholders > 0 ? [`${count(u.placeholders)} ${u.placeholders === 1 ? 'placeholder' : 'placeholders'}`] : []),
   ];
-  const verb = u.stated + u.placeholders === 1 ? 'sits on a type shape and is' : 'sit on type shapes and are';
-  return `${parts.join(' and ')} ${verb} not counted.`;
+  const one = u.stated + u.placeholders === 1;
+  return `${parts.join(' and ')} ${one ? 'is' : 'are'} not counted: type shapes, code outside the product, or files the code index skipped. ${one ? 'Its row says which.' : 'Each row says which.'}`;
 }
 
 /** How many config-and-data requirements the corpus holds (0.167.0 `page.categories.configData`), or null. */
