@@ -7,7 +7,7 @@ import { EMPTY_WATCH, foldTeamFrame, foldWatchFrame, jumpPath, watchFeed } from 
  * studio#888 (ASK-S3, second half): crew's ASK-C3 rows (crew `watch/checks/team-path.ts`, entries
  * `path-repicked`, `reviewer-absent`, `help-unanswered`, all enabled) reach the Watchtower as ordinary watch
  * findings. This pins that they show as rows and that each opens its chat's session: the row links to the run's
- * thread, and the session page moves a chat's run onto the chat, keeping the row's moment.
+ * thread, and the session page moves a chat's run onto the chat (an archived run too), keeping the row's moment.
  */
 
 const { SessionPage } = await import('../src/components/session/SessionView.js');
@@ -78,5 +78,19 @@ describe('studio#888: the ask path’s Watchtower rows', () => {
     const run = makeView({ id: 'r-ask', status: 'executing', problem: 'why does the build fail', chat_id: 'chat-9' } as never);
     render(<SessionPage sessionId="run:r-ask" runs={[run]} runsLoaded needRows={[]} navigate={navigate} onAsk={() => {}} />);
     expect(navigate).toHaveBeenCalledWith('/s/chat-9?jump=5%3A1%3A900&jumpRun=r-ask', { replace: true });
+  });
+
+  it('an archived run (left out of GET /runs, crew#265) also opens its chat, found through its detail read (coord F2)', async () => {
+    useCapabilities.setState({ loaded: true, runChatId: true });
+    window.history.pushState({}, '', '/s/run%3Ar-ask?jump=5:1:900');
+    const archived = makeView({ id: 'r-ask', status: 'completed', problem: 'why does the build fail', chat_id: 'chat-9', archived_at: 1_759_601_000 } as never);
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      const body = /^\/runs\/r-ask$/.test(path) ? { run: archived } : {};
+      return Promise.resolve(new Response(JSON.stringify(body), { status: /^\/runs\/r-ask$/.test(path) ? 200 : 404, headers: { 'content-type': 'application/json' } }));
+    }));
+    const navigate = vi.fn();
+    render(<SessionPage sessionId="run:r-ask" runs={[]} runsLoaded needRows={[]} navigate={navigate} onAsk={() => {}} />);
+    await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith('/s/chat-9?jump=5%3A1%3A900&jumpRun=r-ask', { replace: true }));
   });
 });
