@@ -376,13 +376,38 @@ describe('the Lead agent (DES-TEAMING-002 §8.1)', () => {
 
 describe('power mode in the New job form (DES-POWER-MODE §2)', () => {
   let settings: Record<string, unknown> = {};
+  /** The workflows this daemon resolves to a preset; any other is a registered def crew plans the legacy way. */
+  let presets = new Set(['mcp-server']);
+  /** `POST /runs/preview`, answered by crew's rule (crew `core/launch-posture.ts`, the route's shape at
+   *  `api/routes.ts` `${V}/runs/preview`): power when wanted (the body's `power`, else Settings, on when unset) for a
+   *  repo-scoped preset launch; else phased, with `powerNotice` when power was wanted. */
+  function crewPreview(b: Record<string, unknown>): Record<string, unknown> {
+    const wanted = typeof b['power'] === 'boolean' ? b['power'] : b['repoRef'] !== undefined && b['workflow'] !== undefined ? settings['powerModeDefault'] !== false : false;
+    const runsPower = wanted && b['repoRef'] !== undefined && presets.has(String(b['workflow']));
+    const deliver = b['deliver'] === 'pr' ? 'pr' : 'none';
+    return {
+      posture: {
+        power: runsPower,
+        ...(runsPower ? { humanConfirm: 'none' } : {}),
+        deliver,
+        autoDeliver: b['deliverGate'] === 'auto',
+        ...(wanted && !runsPower ? { powerNotice: 'power mode runs a repo-scoped plan or preset launch; this launch runs phased' } : {}),
+      },
+    };
+  }
   beforeEach(() => {
     settings = {};
+    presets = new Set(['mcp-server']);
     const inner = (globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>);
     vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
       const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
       if (path === '/settings' && init?.method !== 'POST' && init?.method !== 'PUT' && init?.method !== 'PATCH') {
         return Promise.resolve(new Response(JSON.stringify({ settings }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      }
+      if (path === '/runs/preview' && init?.method === 'POST') {
+        const b = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>;
+        posts.push({ path, body: b });
+        return Promise.resolve(new Response(JSON.stringify(crewPreview(b)), { status: 200, headers: { 'content-type': 'application/json' } }));
       }
       return inner(url, init);
     }));
@@ -398,6 +423,8 @@ describe('power mode in the New job form (DES-POWER-MODE §2)', () => {
     next();
   }
   async function launched(): Promise<Record<string, unknown>> {
+    // Launch waits for crew's posture answer (studio#1305).
+    await waitFor(() => expect((screen.getByTestId('launch-wizard-launch') as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByTestId('launch-wizard-launch'));
     await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
     return posts.find((p) => p.path === '/runs')!.body;
@@ -414,7 +441,7 @@ describe('power mode in the New job form (DES-POWER-MODE §2)', () => {
     useCapabilities.setState({ powerMode: true });
     await toOptions();
     const sw = screen.getByTestId('launch-wizard-power-toggle');
-    expect(sw.getAttribute('aria-checked')).toBe('true');
+    await waitFor(() => expect(sw.getAttribute('aria-checked')).toBe('true'));
     expect(screen.queryByTestId('launch-wizard-gate')).toBeNull();
     expect(screen.getByTestId('launch-wizard-power-gates').textContent).toMatch(/once, at hand-off/);
     next();
@@ -431,13 +458,52 @@ describe('power mode in the New job form (DES-POWER-MODE §2)', () => {
     expect(screen.getByTestId('launch-wizard-gate')).toBeTruthy();
     fireEvent.click(sw);
     expect(sw.getAttribute('aria-checked')).toBe('true');
+    await waitFor(() => expect(posts.some((p) => p.path === '/runs/preview' && p.body['power'] === true)).toBe(true));
     next();
+    await waitFor(() => expect(screen.queryByTestId('launch-wizard-blocker')).toBeNull());
     expect(await launched()).toMatchObject({ power: true });
+  });
+
+  // studio#1305: crew runs a registered (non-preset) workflow phased. The switch, the gates and the review say what crew
+  // will do, with crew's reason, and Launch sends power: false (never the On the form used to promise).
+  it('a workflow crew runs phased reads Off with crew’s reason, keeps the Ask me choice, and launches phased', async () => {
+    presets = new Set();
+    useCapabilities.setState({ powerMode: true });
+    await toOptions();
+    await waitFor(() => expect(screen.getByTestId('launch-wizard-power-notice').textContent).toMatch(/repo-scoped plan or preset launch/));
+    expect(screen.getByTestId('launch-wizard-power-toggle').getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByTestId('launch-wizard-gate')).toBeTruthy();
+    expect(screen.queryByTestId('launch-wizard-power-gates')).toBeNull();
+    // The preview asked about exactly the body Launch sends.
+    expect(posts.filter((p) => p.path === '/runs/preview').at(-1)!.body).toMatchObject({ workflow: 'mcp-server', repoRef: 'repo-1' });
+    next();
+    expect(screen.getByTestId('launch-wizard-review-power').textContent).toMatch(/Off: phased \(power mode runs a repo-scoped plan or preset launch/);
+    expect(screen.getByTestId('launch-wizard-review').textContent).not.toMatch(/At hand-off/);
+    expect(await launched()).toMatchObject({ power: false, humanConfirm: expect.any(String) });
+  });
+
+  it('a preview that fails says so with Retry, and Launch runs phased', async () => {
+    useCapabilities.setState({ powerMode: true });
+    const inner = (globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>);
+    let fail = true;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (path === '/runs/preview' && fail) return Promise.resolve(new Response(JSON.stringify({ error: 'down' }), { status: 503, headers: { 'content-type': 'application/json' } }));
+      return inner(url, init);
+    }));
+    await toOptions();
+    await waitFor(() => expect(screen.getByTestId('launch-wizard-power-unchecked').dataset['reason']).toBe('failed'));
+    expect(screen.getByTestId('launch-wizard-power-toggle').getAttribute('aria-checked')).toBe('false');
+    fail = false;
+    fireEvent.click(screen.getByTestId('launch-wizard-power-retry'));
+    await waitFor(() => expect(screen.getByTestId('launch-wizard-power-toggle').getAttribute('aria-checked')).toBe('true'));
+    expect(screen.queryByTestId('launch-wizard-power-unchecked')).toBeNull();
   });
 
   it('turned off for this job, it sends power: false and the gate posture again', async () => {
     useCapabilities.setState({ powerMode: true });
     await toOptions();
+    await waitFor(() => expect(screen.getByTestId('launch-wizard-power-toggle').getAttribute('aria-checked')).toBe('true'));
     fireEvent.click(screen.getByTestId('launch-wizard-power-toggle'));
     expect(screen.getByTestId('launch-wizard-gate')).toBeTruthy();
     next();
@@ -452,3 +518,67 @@ describe('power mode in the New job form (DES-POWER-MODE §2)', () => {
   });
 });
 
+
+// studio#1239: `POST /runs` → 201 `assuranceNotice` (crew `core/assurance.ts` launchAssuranceNotice, the
+// `single_cli_roster` words): the job started under full assurance and will wait for a judge. New job says crew's
+// words before it goes to the job, and offers the relaunch in reduced assurance as an explicit, confirmed choice.
+describe('studio#1239: New job shows crew’s assurance notice', () => {
+  const NOTICE = {
+    code: 'single_cli_roster',
+    message: 'Every seat that can work (claude) runs the same CLI, so no other CLI can evaluate or judge this run\'s work. Under full assurance the engine refuses a review on its builder\'s seat and holds a gate that needs a judge, so if this run reviews or changes code it will wait at a gate for a distinct seat. Sign a second CLI in, or relaunch with "reducedAssurance": true to let it evaluate its own work, disclosed on every receipt.',
+    seats: ['claude'],
+    retryWith: { retryOf: 'r-new', reducedAssurance: true },
+  };
+  beforeEach(() => {
+    const inner = (globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>);
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (path === '/runs' && init?.method === 'POST') {
+        const b = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>;
+        posts.push({ path, body: b });
+        const answer = b['retryOf'] !== undefined ? { runId: 'r-reduced' } : { runId: 'r-new', assuranceNotice: NOTICE };
+        return Promise.resolve(new Response(JSON.stringify(answer), { status: 201, headers: { 'content-type': 'application/json' } }));
+      }
+      return inner(url, init);
+    }));
+  });
+  afterEach(() => { useCapabilities.setState({ reducedAssurance: false }); });
+
+  async function launchOnce(): Promise<void> {
+    render(<Harness />);
+    act(() => { openLaunchWizard({ workflowId: 'mcp-server', composerKey: 'desk' }); });
+    fireEvent.change(await screen.findByTestId('launch-wizard-intent'), { target: { value: 'build an MCP server for the ledger' } });
+    next();
+    await waitFor(() => expect((screen.getByTestId('launch-wizard-repo') as HTMLSelectElement).value).toBe('repo-1'));
+    next();
+    next();
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    await screen.findByTestId('launch-wizard-assurance');
+  }
+
+  it('says crew’s notice after the launch, and the relaunch is confirmed before it is sent with retryWith', async () => {
+    useCapabilities.setState({ reducedAssurance: true });
+    await launchOnce();
+    expect(screen.getByTestId('launch-wizard-assurance-message').textContent).toBe(NOTICE.message);
+    expect(useLaunchWizard.getState().open).toBe(true);
+    fireEvent.click(screen.getByTestId('launch-wizard-assurance-reduced'));
+    // Nothing more is sent until the person confirms.
+    expect(posts.filter((p) => p.path === '/runs')).toHaveLength(1);
+    expect(screen.getByTestId('launch-wizard-assurance-confirm').textContent).toMatch(/labelled “Reduced assurance”/);
+    fireEvent.click(screen.getByTestId('launch-wizard-assurance-relaunch'));
+    await waitFor(() => expect(posts.filter((p) => p.path === '/runs')).toHaveLength(2));
+    const [first, again] = posts.filter((p) => p.path === '/runs');
+    const { chatId: _c, ...sameJob } = first!.body;
+    void _c;
+    expect(again!.body).toEqual({ ...sameJob, retryOf: 'r-new', reducedAssurance: true });
+    await waitFor(() => expect(useLaunchWizard.getState().open).toBe(false));
+  });
+
+  it('Open the job goes to it and sends nothing more; a daemon without reduced assurance offers no relaunch', async () => {
+    await launchOnce();
+    expect(screen.queryByTestId('launch-wizard-assurance-reduced')).toBeNull();
+    fireEvent.click(screen.getByTestId('launch-wizard-assurance-open'));
+    await waitFor(() => expect(useLaunchWizard.getState().open).toBe(false));
+    expect(posts.filter((p) => p.path === '/runs')).toHaveLength(1);
+  });
+});

@@ -266,6 +266,43 @@ export function workflowLaunchBody(c: WorkflowLaunchChoices): LaunchBodyWithDeli
 }
 
 /**
+ * (studio#1239, crew ≥ 0.9.0; `no_independent_judge` from api-types 0.217.0) `POST /runs` → 201 `assuranceNotice`: the
+ * run started under full assurance with no seat that can judge another's work, so it will hold at a gate that needs a
+ * judge. `retryWith` is the explicit relaunch: merged into the launch body, it starts a new run linked to this one in
+ * reduced assurance. Crew never applies it itself.
+ */
+export interface LaunchAssuranceNotice {
+  code: string;
+  message: string;
+  seats: string[];
+  retryWith: { retryOf: string; reducedAssurance: true };
+}
+
+/** The launch answer's `assuranceNotice`, when it is whole (its message and its relaunch), else `null`. */
+export function assuranceNoticeOf(answer: unknown): LaunchAssuranceNotice | null {
+  const n = typeof answer === 'object' && answer !== null ? (answer as { assuranceNotice?: unknown }).assuranceNotice : undefined;
+  if (typeof n !== 'object' || n === null) return null;
+  const o = n as Record<string, unknown>;
+  const retry = o['retryWith'] as Record<string, unknown> | null | undefined;
+  if (typeof o['message'] !== 'string' || o['message'].trim() === '' || typeof retry !== 'object' || retry === null
+    || typeof retry['retryOf'] !== 'string' || retry['reducedAssurance'] !== true) return null;
+  return {
+    code: typeof o['code'] === 'string' ? o['code'] : '',
+    message: o['message'].trim(),
+    seats: Array.isArray(o['seats']) ? o['seats'].filter((x): x is string => typeof x === 'string') : [],
+    retryWith: { retryOf: retry['retryOf'], reducedAssurance: true },
+  };
+}
+
+/** The relaunch an assurance notice offers: the same body, merged with its `retryWith`, in a run of its own (no chat
+ *  binding: the first run keeps its chat). */
+export function reducedRelaunchBody(body: LaunchBodyWithDeliver, notice: LaunchAssuranceNotice): LaunchBodyWithDeliver {
+  const { chatId: _chat, ...rest } = body as LaunchBodyWithDeliver & { chatId?: string };
+  void _chat;
+  return { ...rest, ...notice.retryWith } as LaunchBodyWithDeliver;
+}
+
+/**
  * The lead agent a launch sends (DES-TEAMING-002 §8.1): the operator's pick when the daemon takes
  * `primary` and the pick is still one of the launch's seats, else null (Random — the engine picks).
  */

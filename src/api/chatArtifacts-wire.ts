@@ -200,7 +200,12 @@ export type ChatProposalRecord =
 
 /** `POST /chats/:id/proposals/:pid` body. (api-types 0.196.0) `power`: a job Start's choice, sent only where crew
  *  advertises `chatJobPower` and the proposal says `powerChoice` (true = a power run, false = it stops at its plan). */
-export interface ChatProposalDecisionBody { decision: 'go' | 'not_now'; edits?: ProposalEdits; power?: boolean }
+export interface ChatProposalDecisionBody {
+  decision: 'go' | 'not_now'; edits?: ProposalEdits; power?: boolean;
+  /** (api-types 0.217.0, crew#1679) A job's Go in reduced assurance: sent only after crew refused the launch with
+   *  `retryWith: { reducedAssurance: true }` and the person chose it. */
+  reducedAssurance?: boolean;
+}
 
 /** `POST /chats/:id/proposals/:pid` → 200 (and the `view` a 409 carries). */
 export interface ChatProposalDecisionResponse { view: ChatProposalView }

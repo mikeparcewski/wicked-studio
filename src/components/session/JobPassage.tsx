@@ -62,6 +62,15 @@ import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
  * (Swap pending); `revising` holds Start; plan answers carry `ord` + `planRev`.
  */
 
+/** studio#1239: whether a refused Go names reduced assurance as its way on (crew#1679 `retryWith.reducedAssurance`). */
+export function reducedRetryOffered(body: unknown): boolean {
+  const retry = typeof body === 'object' && body !== null ? (body as { retryWith?: unknown }).retryWith : undefined;
+  return typeof retry === 'object' && retry !== null && (retry as { reducedAssurance?: unknown }).reducedAssurance === true;
+}
+
+/** What Start with reduced assurance does, said before it is pressed. */
+export const REDUCED_GO_WORDS = 'Or start it with reduced assurance: the helpers who wrote the change review it themselves, labelled “Reduced assurance” on the job, every gate and the delivery.';
+
 /**
  * F43: crew's helper_unavailable sentence ("opencode and pi can't work now; change who works on it", seat keys) in the
  * passage's words: the helpers by their display names, and without the "change who works on it" an interrupted job
@@ -121,6 +130,9 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   const [goRefusal, setGoRefusal] = useState<{ words: string; code: string | null } | null>(null);
   // It speaks for the interrupted job only: once the job moves on (started, Not now, replaced), it goes.
   useEffect(() => { if (v.phase !== 'interrupted' && v.phase !== 'starting') setGoRefusal(null); }, [v.phase]);
+  /** studio#1239: the proposal whose Start crew refused with `retryWith: { reducedAssurance: true }` (crew#1679: e.g.
+   *  `no_independent_reviewer`, every helper wrote the change): its card offers Start with reduced assurance. */
+  const [reducedRetry, setReducedRetry] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
   /** The run the open "Stop the job?" confirm was made for: it never stops another run. */
   const [confirmStop, setConfirmStop] = useState<string | null>(null);
@@ -211,9 +223,10 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   const leadName = lead !== null ? seatResponder(lead, roster).name : 'The lead';
 
   // ── the routes ────────────────────────────────────────────────────────────────────────────────────────────────────
-  const decide = (decision: 'go' | 'not_now'): void => {
+  const decide = (decision: 'go' | 'not_now', reduced = false): void => {
     setError(null);
     setGoRefusal(null);
+    setReducedRetry(null);
     // F43: a refusal of Go again is said where the passage says "Interrupted", in crew's words — never under a line that
     // still promises Go again resumes the job.
     const fromInterrupted = v.phase === 'interrupted';
@@ -235,10 +248,12 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
               : null;
         if (why !== null) { setError(why); return; }
       }
-      return api.decideChatProposal(chatId, pid, { decision, ...(power !== undefined ? { power } : {}) })
+      return api.decideChatProposal(chatId, pid, { decision, ...(power !== undefined ? { power } : {}), ...(reduced ? { reducedAssurance: true } : {}) })
         .then(() => onChanged())
         .catch((e: unknown) => {
           const r = proposalRefusal(e);
+          // studio#1239: crew's typed launch refusal names its way on; a job's Go in reduced assurance is offered for it.
+          if (decision === 'go' && !reduced && e instanceof ApiError && reducedRetryOffered(e.body)) setReducedRetry(pid);
           // Only crew's own refusal (a 4xx) establishes that nothing started; a gateway or server failure (5xx) leaves the
           // outcome open, so it keeps the Interrupted line and says crew's words under it, as before (codex on F43).
           if (fromInterrupted && decision === 'go' && e instanceof ApiError && e.status >= 400 && e.status < 500) setGoRefusal({ words: r.words, code: r.code });
@@ -867,6 +882,13 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
         </p>
       )}
       {error !== null && <p data-testid="job-passage-error" role="alert" className="wk-pass-sub wk-pass-error">{error}</p>}
+      {reducedRetry === pid && preStart && v.phase !== 'revising' && v.phase !== 'swapPending' && (
+        <div role="group" aria-label="Start with reduced assurance" className="wk-pass-acts" data-testid="job-passage-reduced">
+          <span className="wk-pass-why">{REDUCED_GO_WORDS}</span>
+          <button type="button" className="wk-pass-act" data-testid="job-passage-reduced-go" disabled={local.deciding[lineage.lineage] === true}
+            onClick={() => decide('go', true)}>Start with reduced assurance</button>
+        </div>
+      )}
       <div aria-live="polite" className="wk-visually-hidden" data-testid="job-passage-live">{announce}</div>
     </section>
   );
