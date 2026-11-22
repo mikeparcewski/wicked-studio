@@ -181,8 +181,12 @@ with sync_playwright() as p:
     page.wait_for_timeout(400)
     d = page.evaluate(LAYOUT)
     page.screenshot(path=str(SHOTS / "desk-run-header-jump-1440.png"))
+    # studio#985: the button sits in the thread's right gutter (the .wk-measure--thread padding), beside the reading
+    # column, never over its words; centred in that gutter.
+    gutter = max(48, (d["thread"]["w"] - 864) / 2 + 48) if d["thread"] is not None else 0
     check("jump-shows", d["jump"] is not None and d["jump"]["b"] <= d["composer"]["t"]
-          and abs((d["jump"]["l"] + d["jump"]["r"]) / 2 - (d["thread"]["l"] + d["thread"]["r"]) / 2) <= 4, page=d)
+          and d["jump"]["l"] >= d["thread"]["r"] - gutter and d["jump"]["r"] <= d["thread"]["r"]
+          and abs((d["jump"]["l"] + d["jump"]["r"]) / 2 - (d["thread"]["r"] - gutter / 2)) <= 4, page=d, gutter=gutter)
     page.get_by_test_id("session-jump-latest").click()
     page.wait_for_timeout(1200)
     at_end = thread.evaluate("el => el.scrollHeight - el.scrollTop - el.clientHeight < 80")
