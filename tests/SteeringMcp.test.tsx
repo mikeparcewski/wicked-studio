@@ -2,14 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ApiError } from '../src/api/errors.js';
 import type { SteeringRule } from '../src/api/steering.js';
-import { SteeringPage } from '../src/components/SteeringPage.js';
+import { SteerSurface } from '../src/components/steer/SteerSurface.js';
 import { serversResponse } from './mcpFixtures.js';
 
 /**
  * MCP policies on the Steering surface (DES-MCP-TOOLS-001 §4.7, slice S6):
- *  - the MCP chip filters the Policies grid to the rules that govern MCP calls (`?mcp=1`), and
- *    counts them;
- *  - Add ▾ → Add MCP policy opens the rule form with the Subject picker (the registry's servers and
+ *  - the MCP choice filters the Steer page to the rules that govern MCP calls (`?mcp=1`), in its
+ *    Table layout too (studio#689 ruling b: the table is a layout of the one page);
+ *  - ⋯ → Add an MCP policy opens the rule form with the Subject picker (the registry's servers and
  *    tools fill `applies_to`) and the When builder (compiled into `trigger.contains`, visible and
  *    editable), and saves through the shipping upsert with `source: "ui"`;
  *  - an effect-bearing rule without an `applies_to` cannot be saved (INV-S3).
@@ -61,29 +61,26 @@ beforeEach(() => {
   });
 });
 
-describe('the MCP filter', () => {
-  it('counts and shows only the rules that govern MCP calls; the chip toggles ?mcp=1', async () => {
-    const navigate = vi.fn();
-    const { rerender } = render(<SteeringPage type={null} navigate={navigate} search="" />);
-    const chip = await screen.findByTestId('steering-mcp-chip');
-    await waitFor(() => expect(chip.textContent).toBe('MCP (2)'));
-    fireEvent.click(chip);
-    expect(navigate).toHaveBeenCalledWith('/steering/policies?mcp=1');
+/** The Steer page, rules read; then ⋯ → Add an MCP policy. */
+async function openAddMcp(): Promise<void> {
+  render(<SteerSurface pathname="/steering/policies" search="" navigate={vi.fn()} runs={[]} />);
+  await screen.findAllByTestId('rules-row');
+  fireEvent.click(screen.getByTestId('steer-more-button'));
+  fireEvent.click(await screen.findByTestId('steering-add-mcp'));
+}
 
-    rerender(<SteeringPage type={null} navigate={navigate} search="?mcp=1" />);
-    await waitFor(() => expect(screen.getAllByTestId('steering-grid-row').map((r) => r.dataset['ruleId'])).toEqual(['MCP-POSTURE-WRITE', 'SEC-JIRA']));
-    expect(screen.getByTestId('steering-mcp-chip').dataset['active']).toBe('true');
-    // A type chip keeps the MCP filter on.
-    fireEvent.click(screen.getAllByTestId('steering-type-chip').find((c) => c.dataset['type'] === 'security') as HTMLElement);
-    expect(navigate).toHaveBeenLastCalledWith('/steering/policies?type=security&mcp=1');
+describe('the MCP filter', () => {
+  it('the Table layout shows only the rules that govern MCP calls on ?mcp=1, under the one heading', async () => {
+    render(<SteerSurface pathname="/steering/policies" search="?mcp=1&view=table" navigate={vi.fn()} runs={[]} />);
+    await waitFor(() => expect(screen.getAllByTestId('steering-grid-row').map((r) => r.dataset['ruleId']).sort()).toEqual(['MCP-POSTURE-WRITE', 'SEC-JIRA']));
+    expect(screen.getByTestId('steer-mcp-note')).toBeTruthy();
+    expect((screen.getByTestId('steer-type-pick') as HTMLSelectElement).value).toBe('mcp');
   });
 });
 
 describe('Add MCP policy: Subject and When builders', () => {
   it('picks a tool, compiles the When, and upserts a deny scoped to that tool', async () => {
-    render(<SteeringPage type={null} navigate={vi.fn()} search="" />);
-    fireEvent.click(await screen.findByTestId('steering-add-menu'));
-    fireEvent.click(screen.getByTestId('steering-add-mcp'));
+    await openAddMcp();
     const form = screen.getByTestId('steering-rule-form');
     expect((within(form).getByTestId('steering-form-id') as HTMLInputElement).value).toBe('MCP-POL-100');
     const builder = within(form).getByTestId('steering-mcp-builder');
@@ -121,9 +118,7 @@ describe('Add MCP policy: Subject and When builders', () => {
   });
 
   it('a When the engine regex cannot compile cannot become the trigger, and a typed one blocks the save', async () => {
-    render(<SteeringPage type={null} navigate={vi.fn()} search="" />);
-    fireEvent.click(await screen.findByTestId('steering-add-menu'));
-    fireEvent.click(screen.getByTestId('steering-add-mcp'));
+    await openAddMcp();
     const form = screen.getByTestId('steering-rule-form');
     fireEvent.change(within(form).getByTestId('steering-mcp-args'), { target: { value: '"to":"(?!ourco)' } });
     expect((within(form).getByTestId('steering-mcp-use-when') as HTMLButtonElement).disabled).toBe(true);
@@ -136,9 +131,7 @@ describe('Add MCP policy: Subject and When builders', () => {
   });
 
   it('a deny with no Applies to cannot be saved (INV-S3), and a taken id is refused', async () => {
-    render(<SteeringPage type={null} navigate={vi.fn()} search="" />);
-    fireEvent.click(await screen.findByTestId('steering-add-menu'));
-    fireEvent.click(screen.getByTestId('steering-add-mcp'));
+    await openAddMcp();
     const form = screen.getByTestId('steering-rule-form');
     fireEvent.change(within(form).getByTestId('steering-form-statement'), { target: { value: 'something' } });
     expect((within(form).getByTestId('steering-form-save') as HTMLButtonElement).disabled).toBe(true);

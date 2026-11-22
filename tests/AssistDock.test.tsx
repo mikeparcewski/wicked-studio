@@ -16,7 +16,7 @@ import { useGateStore } from '../src/store/gates.js';
  *  - collapse is a per-surface persisted preference (localStorage), restored across mounts.
  *
  * The Steering BINDING of these verbs (author/import wires, types, 501 copy) is pinned in
- * SteeringPage.manage.test.tsx — this file owns the surface-agnostic mechanics.
+ * steerEval.test.tsx and SteeringGrid.test.tsx (the Steer page) — this file owns the surface-agnostic mechanics.
  */
 
 const confirmGate = vi.fn();

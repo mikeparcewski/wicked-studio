@@ -23229,6 +23229,24 @@
       ]
     },
     {
+      "testId": "steer-layout",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-layout-list",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-layout-table",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
       "testId": "steer-mcp-clear",
       "files": [
         "src/components/steer/SteerSurface.tsx"
@@ -23343,12 +23361,6 @@
       ]
     },
     {
-      "testId": "steer-table",
-      "files": [
-        "src/components/steer/SteerSurface.tsx"
-      ]
-    },
-    {
       "testId": "steer-type-pick",
       "files": [
         "src/components/steer/SteerSurface.tsx"
@@ -23388,18 +23400,6 @@
       "testId": "steering-add-mcp",
       "files": [
         "src/components/steer/SteerSurface.tsx"
-      ]
-    },
-    {
-      "testId": "steering-add-menu",
-      "files": [
-        "src/components/SteeringAddMenu.tsx"
-      ]
-    },
-    {
-      "testId": "steering-add-menu-list",
-      "files": [
-        "src/components/SteeringAddMenu.tsx"
       ]
     },
     {
@@ -23493,12 +23493,6 @@
       ]
     },
     {
-      "testId": "steering-commit-error",
-      "files": [
-        "src/components/SteeringPage.tsx"
-      ]
-    },
-    {
       "testId": "steering-diagnostics",
       "files": [
         "src/components/SteeringHealth.tsx"
@@ -23508,18 +23502,6 @@
       "testId": "steering-diagnostics-toggle",
       "files": [
         "src/components/SteeringHealth.tsx"
-      ]
-    },
-    {
-      "testId": "steering-dock-open",
-      "files": [
-        "src/components/SteeringPage.tsx"
-      ]
-    },
-    {
-      "testId": "steering-dock-sheet",
-      "files": [
-        "src/components/SteeringPage.tsx"
       ]
     },
     {
@@ -23610,12 +23592,6 @@
       "testId": "steering-entry",
       "files": [
         "src/components/SteeringTimeline.tsx"
-      ]
-    },
-    {
-      "testId": "steering-filter-retired",
-      "files": [
-        "src/components/SteeringGrid.tsx"
       ]
     },
     {
@@ -23745,12 +23721,6 @@
       ]
     },
     {
-      "testId": "steering-grid-filter",
-      "files": [
-        "src/components/SteeringGrid.tsx"
-      ]
-    },
-    {
       "testId": "steering-grid-id",
       "files": [
         "src/components/SteeringGrid.tsx"
@@ -23766,30 +23736,6 @@
       "testId": "steering-grid-row",
       "files": [
         "src/components/SteeringGrid.tsx"
-      ]
-    },
-    {
-      "testId": "steering-health",
-      "files": [
-        "src/components/SteeringHealth.tsx"
-      ]
-    },
-    {
-      "testId": "steering-health-error",
-      "files": [
-        "src/components/SteeringHealth.tsx"
-      ]
-    },
-    {
-      "testId": "steering-health-loading",
-      "files": [
-        "src/components/SteeringHealth.tsx"
-      ]
-    },
-    {
-      "testId": "steering-health-unsupported",
-      "files": [
-        "src/components/SteeringHealth.tsx"
       ]
     },
     {
@@ -23814,12 +23760,6 @@
       "testId": "steering-mcp-builder",
       "files": [
         "src/components/SteeringMcpBuilder.tsx"
-      ]
-    },
-    {
-      "testId": "steering-mcp-chip",
-      "files": [
-        "src/components/SteeringTypeFilter.tsx"
       ]
     },
     {
@@ -23892,12 +23832,6 @@
       "testId": "steering-mcp-when-seats",
       "files": [
         "src/components/SteeringMcpBuilder.tsx"
-      ]
-    },
-    {
-      "testId": "steering-page",
-      "files": [
-        "src/components/SteeringPage.tsx"
       ]
     },
     {
@@ -24012,12 +23946,6 @@
       "testId": "steering-retire-reason",
       "files": [
         "src/components/SteeringRetireModal.tsx"
-      ]
-    },
-    {
-      "testId": "steering-retired-note",
-      "files": [
-        "src/components/SteeringPage.tsx"
       ]
     },
     {
@@ -24203,21 +24131,18 @@
     {
       "testId": "steering-rules-error",
       "files": [
-        "src/components/SteeringGrid.tsx",
-        "src/components/SteeringPage.tsx"
+        "src/components/SteeringGrid.tsx"
       ]
     },
     {
       "testId": "steering-rules-loading",
       "files": [
-        "src/components/SteeringGrid.tsx",
-        "src/components/SteeringPage.tsx"
+        "src/components/SteeringGrid.tsx"
       ]
     },
     {
       "testId": "steering-saved-note",
       "files": [
-        "src/components/SteeringPage.tsx",
         "src/components/steer/SteerSurface.tsx"
       ]
     },
@@ -24225,12 +24150,6 @@
       "testId": "steering-scope-note",
       "files": [
         "src/components/SteeringTimeline.tsx"
-      ]
-    },
-    {
-      "testId": "steering-seed-command",
-      "files": [
-        "src/components/SteeringPage.tsx"
       ]
     },
     {
@@ -24247,12 +24166,6 @@
     },
     {
       "testId": "steering-stat-rules",
-      "files": [
-        "src/components/SteeringHealth.tsx"
-      ]
-    },
-    {
-      "testId": "steering-stat-rules-type",
       "files": [
         "src/components/SteeringHealth.tsx"
       ]
@@ -24276,90 +24189,21 @@
       ]
     },
     {
-      "testId": "steering-type-chip",
-      "files": [
-        "src/components/SteeringTypeFilter.tsx"
-      ]
-    },
-    {
-      "testId": "steering-type-filter",
-      "files": [
-        "src/components/SteeringTypeFilter.tsx"
-      ]
-    },
-    {
       "testId": "steering-unseeded",
       "files": [
-        "src/components/SteeringPage.tsx",
         "src/components/steer/SteerSurface.tsx"
-      ]
-    },
-    {
-      "testId": "steering-usage",
-      "files": [
-        "src/components/SteeringUsageBand.tsx"
-      ]
-    },
-    {
-      "testId": "steering-usage-claims-note",
-      "files": [
-        "src/components/SteeringUsageBand.tsx"
-      ]
-    },
-    {
-      "testId": "steering-usage-delta",
-      "files": [
-        "src/components/SteeringUsageBand.tsx"
-      ]
-    },
-    {
-      "testId": "steering-usage-eval",
-      "files": [
-        "src/components/SteeringUsageBand.tsx"
       ]
     },
     {
       "testId": "steering-usage-filter-clear",
       "files": [
-        "src/components/SteeringPage.tsx",
         "src/components/steer/SteerSurface.tsx"
       ]
     },
     {
       "testId": "steering-usage-filter-note",
       "files": [
-        "src/components/SteeringPage.tsx",
         "src/components/steer/SteerSurface.tsx"
-      ]
-    },
-    {
-      "testId": "steering-usage-governed",
-      "files": [
-        "src/components/SteeringUsageBand.tsx"
-      ]
-    },
-    {
-      "testId": "steering-usage-rules",
-      "files": [
-        "src/components/SteeringUsageBand.tsx"
-      ]
-    },
-    {
-      "testId": "steering-usage-rules-note",
-      "files": [
-        "src/components/SteeringUsageBand.tsx"
-      ]
-    },
-    {
-      "testId": "steering-usage-runs",
-      "files": [
-        "src/components/SteeringUsageBand.tsx"
-      ]
-    },
-    {
-      "testId": "steering-usage-top",
-      "files": [
-        "src/components/SteeringUsageBand.tsx"
       ]
     },
     {
@@ -28255,7 +28099,6 @@
         "src/components/McpToolsPage.tsx",
         "src/components/McpUsage.tsx",
         "src/components/ProposalChips.tsx",
-        "src/components/SteeringAddMenu.tsx",
         "src/components/SteeringGrid.tsx",
         "src/components/SteeringHealth.tsx",
         "src/components/SteeringRuleDrawer.tsx",

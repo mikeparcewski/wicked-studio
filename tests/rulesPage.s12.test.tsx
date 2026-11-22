@@ -160,10 +160,9 @@ describe('the page', () => {
     expect(open.getAttribute('href')).toBe('/rules/proposal%3Apr-auto');
     fireEvent.click(open);
     expect(navigate).toHaveBeenCalledWith('/rules/proposal%3Apr-auto');
-    // The table editor is one menu away (Add a rule's menu).
-    fireEvent.click(screen.getByTestId('steer-more-button'));
-    fireEvent.click(screen.getByTestId('steer-table'));
-    expect(navigate).toHaveBeenLastCalledWith('/steering/policies?view=table');
+    // The table is a layout of this page (studio#689 ruling b): the List | Table toggle, on this address.
+    fireEvent.click(screen.getByTestId('steer-layout-table'));
+    expect(navigate).toHaveBeenLastCalledWith('/rules?view=table');
     // No drawer without a rule in the address; "Followed" is nowhere (DC rev 2 B10).
     expect(screen.queryByTestId('steering-rule-drawer')).toBeNull();
     expect(document.body.textContent).not.toContain('Followed');

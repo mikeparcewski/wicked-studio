@@ -395,16 +395,18 @@ with sync_playwright() as p:
     page.get_by_test_id("mcp-add-cancel").click()
 
     # ── 5. Steering: the MCP filter and the Subject picker ───────────────────────
-    page.goto(f"{origin}/steering/policies?mcp=1&view=table", wait_until="domcontentloaded")  # the spreadsheet editor (DES-steer-eval §2.2)
+    # The Steer page's Table layout (studio#689 ruling b), on the MCP choice of its type picker.
+    page.goto(f"{origin}/steering/policies?mcp=1&view=table", wait_until="domcontentloaded")
     try:
-        page.get_by_test_id("steering-mcp-chip").wait_for(state="visible", timeout=15000)
+        page.get_by_test_id("steer-mcp-note").wait_for(state="visible", timeout=15000)
         page.wait_for_function("() => document.querySelectorAll('[data-testid=\"steering-grid-row\"]').length === 1", timeout=5000)
     except Exception:
         fail("steering-mcp-filter", page.locator("body").inner_text()[:2000])
     rows = page.evaluate("() => [...document.querySelectorAll('[data-testid=\"steering-grid-row\"]')].map(r => r.dataset.ruleId)")
     check("steering-mcp-filter", rows == ["MCP-POSTURE-WRITE"]
-          and page.get_by_test_id("steering-mcp-chip").get_attribute("data-active") == "true", rows=rows)
-    page.get_by_test_id("steering-add-menu").click()
+          and page.get_by_test_id("steer-type-pick").input_value() == "mcp"
+          and page.get_by_test_id("steer-layout-table").get_attribute("aria-checked") == "true", rows=rows)
+    page.get_by_test_id("steer-more-button").click()
     page.get_by_test_id("steering-add-mcp").click()
     try:
         page.locator('[data-testid="steering-mcp-server"] option[value="jira"]').wait_for(state="attached", timeout=5000)
