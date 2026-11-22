@@ -278,7 +278,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   // (board/gateHeadline.ts) with every row that names this gate.
   const builder = builderResponder(view, gate?.ord ?? null, roster);
   // evaluator ≠ creator: who may judge this step is read off the live roster, never a seat that built the work.
-  const { seatRefusal, judgeWait, judges, fresh, headline } = useMemo(
+  const { seatRefusal, judgeWait, judges, noneInJob, fresh, headline } = useMemo(
     () => gateCause({ view, gate, events, model, roster, pool, benched }), [view, gate, events, model, roster, pool, benched]);
   // The action the gate's own words name is a button. Crew marked no suggestion: the gate describes the move.
   const derived = useMemo<DerivedLead | null>(() => {
@@ -308,7 +308,9 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
           title: `Opens the launch form with this job's brief and ${name} added as a helper, so it can review. Nothing starts until you launch; this job stays here.`,
           onClick: () => { setRetryPrefill({ ...retryPrefillOf(view), clis: [...new Set([...retryPrefillOf(view).clis, seat.key])] }); navigate?.('/runs/new'); } } };
       }
-      return signInLead();
+      // (studio#1329) The engine ruled out every helper of this job (signed in or not): signing one in changes nothing,
+      // so no lead; the gate's own choices (start again, reduced assurance) stand.
+      return noneInJob ? null : signInLead();
     }
     // A new failure the engine told apart from the base's: send just that back to the builder, with the test named.
     const back = all.find((c) => c.key === 'send-back' && c.decision !== null);
@@ -331,7 +333,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
       return signInLead();
     }
     return null;
-  }, [model, gate, events, seatRefusal, judgeWait, roster, pool, view, signIn, navigate, fresh, builder, judges, actions]);
+  }, [model, gate, events, seatRefusal, judgeWait, roster, pool, view, signIn, navigate, fresh, builder, judges, noneInJob, actions]);
   const explain = model === null ? null : (
     <>
       {model.deadSeat !== undefined && (

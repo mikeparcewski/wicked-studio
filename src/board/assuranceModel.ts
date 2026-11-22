@@ -1067,6 +1067,21 @@ export const REDUCED_OPT_IN_DISCLOSURE =
  * ("a team run never grades on its creator seat"), so only the distinct-evaluator wording offers
  * the reduced opt-in; a run already reduced never sees it.
  */
+/**
+ * (core#1719, studio#1329) The engine's dead end for a distinct-evaluator review: no seat among this run's helpers can
+ * review the work independently (an author, a seat calling an author's provider, one that failed or can't take the
+ * step: core `pipeline.rs` `no_distinct_reviewer`, said in the denial). `outside` is the helper outside the run the
+ * engine named as able to review it, or `null` when it named none. `null` when the engine did not say so (a retry on
+ * another helper of the job may still work).
+ */
+export function noDistinctReviewer(events: readonly CoreEvent[] | null, ord: number | null | undefined, prompt: string | undefined): { outside: string | null } | null {
+  const esc = escalationFor(events, ord);
+  const said = `${esc?.summary ?? ''}\n${prompt ?? ''}`;
+  if (!/no distinct reviewer remains among this run's helpers/i.test(said)) return null;
+  const named = /`([^`]+)` could review it, but it is not one of this run's helpers/.exec(said)?.[1] ?? null;
+  return { outside: named };
+}
+
 export function creatorSeatRefusal(events: readonly CoreEvent[] | null, ord: number | null | undefined, prompt: string | undefined): boolean {
   const esc = escalationFor(events, ord);
   const said = `${esc?.summary ?? ''}\n${prompt ?? ''}`;

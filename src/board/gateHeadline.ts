@@ -3,7 +3,7 @@ import { reassignCandidates, reassignRefusedOf, runBenchesOf, type ReassignCandi
 import { isDeliverGate } from '../components/gateMoveModel.js';
 import { deliverAcceptance } from './checkState.js';
 import { choicesOf, type OpenGate } from '../store/gates.js';
-import { creatorSeatRefusal, isReduced, ruleHolds, rulesHoldAt, sessionAssurance, sessionQe, waitsForJudge, type RuleRow } from './assuranceModel.js';
+import { creatorSeatRefusal, isReduced, noDistinctReviewer, ruleHolds, rulesHoldAt, sessionAssurance, sessionQe, waitsForJudge, type RuleRow } from './assuranceModel.js';
 import { governanceDenialHeadline, plainGateQuestion, rulesHoldWords } from './deskWords.js';
 import type { GateRowModel } from './gateRowModel.js';
 import { isHelperSeat } from './responder.js';
@@ -115,6 +115,9 @@ export interface GateCause {
   /** A required judge could not run; the gate waits for one. */
   judgeWait: boolean;
   judges: ReturnType<typeof judgeSeats> | null;
+  /** (studio#1329) The engine said no helper of this job can review the work independently ({@link noDistinctReviewer}):
+   *  `judges` then names no seat of the job, and only the outside helper the engine named, if any. */
+  noneInJob: boolean;
   /** The failures new with this change, when the engine told them apart from the base's; else null. */
   fresh: string[] | null;
   /** The cause in plain words, or null when the gate's own question says it. */
@@ -135,7 +138,14 @@ export function gateCause({ view, gate, events, model, roster, pool = runPoolOf(
   const seatRefusal = gate !== undefined && model !== null && !reduced && creatorSeatRefusal(events, gate.ord, gate.prompt);
   const split = model?.failingTests?.split;
   const fresh = split !== undefined ? split.fresh : null;
-  const judges = gate === undefined ? null : judgeSeats(view, gate.ord, gate.prompt, pool, roster, benched);
+  const seats = gate === undefined ? null : judgeSeats(view, gate.ord, gate.prompt, pool, roster, benched);
+  // (studio#1329, core#1719) When the engine's denial says no helper of this job can review the work, studio never names
+  // one (its builder count misses authors and provider-sharing seats the engine rules out): only the helper outside the
+  // job the engine named, when the live roster has it signed in.
+  const deadEnd = seatRefusal && gate !== undefined ? noDistinctReviewer(events, gate.ord, gate.prompt) : null;
+  const named = deadEnd?.outside ?? null;
+  const outsideSeat = named === null ? undefined : (roster ?? []).find((r) => r.key === named && r.signed_in === true);
+  const judges = seats === null || deadEnd === null ? seats : { builders: seats.builders, ...(outsideSeat !== undefined ? { outside: outsideSeat } : {}) };
   const broke = fresh !== null && fresh.length > 0
     ? (fresh.length === 1 ? 'One test this change broke needs fixing before the job can go on' : `${fresh.length} tests this change broke need fixing before the job can go on`)
     : null;
@@ -147,7 +157,7 @@ export function gateCause({ view, gate, events, model, roster, pool = runPoolOf(
   // The failures only this change has come before a missing judge (J4 0.16.6: a fix gate with both led with the judge).
   const headline = seatRefusal ? (judges?.inJob !== undefined ? `${seatName(judges.inJob.cli, judges.inJob.label)} can review this instead`
       : judges?.outside !== undefined ? `${seatName(judges.outside.key, judges.outside.display_name ?? null)} could review this, but isn’t one of this job’s helpers`
-        : 'No second helper is free to review this')
+        : deadEnd !== null ? 'None of this job’s helpers can review this independently' : 'No second helper is free to review this')
     : broke !== null ? broke
     : rulesHeld !== null ? rulesHeld
       : judgeWait && model?.qe === undefined ? (judges?.inJob !== undefined
@@ -157,7 +167,7 @@ export function gateCause({ view, gate, events, model, roster, pool = runPoolOf(
         // studio#1276: failures the base's re-run could not separate are not the base's: no "every" claim over them.
         : fresh !== null ? ((split?.unplaced?.length ?? 0) > 0 ? 'No failing test is known to be this change’s alone' : 'Every failing test fails on the base too')
           : gate !== undefined ? governanceDenialHeadline(gate.prompt) : null;
-  return { seatRefusal, judgeWait, judges, fresh, headline };
+  return { seatRefusal, judgeWait, judges, noneInJob: deadEnd !== null, fresh, headline };
 }
 
 /** A governance denial as a plain cause (the words live in deskWords, beside the gate questions). */
