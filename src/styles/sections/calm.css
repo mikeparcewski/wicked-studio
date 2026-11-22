@@ -27,9 +27,9 @@
 [data-theme="light"] .wk-calm { --calm-primary-hover: color-mix(in oklab, var(--accent) 74%, var(--surface-base)); --calm-primary-press: color-mix(in oklab, var(--accent) 64%, var(--surface-base)); }
 /* (studio#921) Link words keep AA with any accent: the mix's lightness is held on the ink's side of the ground (at most
    0.46 on a light ground, at least 0.74 on a dark one). A preset's mix is already there, so its colour does not move.
-   Behind @supports: an engine without relative colour would drop the whole value (no link colour, no accent dot), so
-   it keeps the plain mix instead. */
-@supports (color: oklch(from red l c h)) {
+   Behind @supports: an engine without relative colour, or without min()/max() in it, would drop the whole value (no
+   link colour, no accent dot), so it keeps the plain mix instead; the probe uses the rule's own min(). */
+@supports (color: oklch(from red min(l, 0.46) c h)) {
   [data-theme="wicked-light"] .wk-calm, [data-theme="light"] .wk-calm { --calm-link: oklch(from color-mix(in oklab, var(--accent) 50%, var(--ink-high)) min(l, 0.46) c h); }
   [data-theme="wicked-dark"] .wk-calm, :root:not([data-theme]) .wk-calm { --calm-link: oklch(from color-mix(in oklab, var(--accent) 50%, var(--ink-high)) max(l, 0.74) c h); }
 }

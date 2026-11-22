@@ -152,7 +152,7 @@ describe('calm rows and links keep their hover and contrast whatever the accent 
   }
   it('the link floor is behind @supports (an engine without relative colour keeps the plain mix and the accent dot)', () => {
     const calm = read('src/styles/sections/calm.css');
-    const at = calm.indexOf('@supports (color: oklch(from red l c h))');
+    const at = calm.indexOf('@supports (color: oklch(from red min(l, 0.46) c h))');
     expect(at, 'the @supports block').toBeGreaterThanOrEqual(0);
     const floors = [...calm.matchAll(/--calm-link:\s*oklch\(from/gu)].map((m) => m.index!);
     expect(floors.length).toBe(2);
