@@ -1,6 +1,8 @@
 import { PAGE_NAMES } from '../board/pageNames.js';
 import { mcpInspectPath } from '../api/mcpInspect.js';
-import { useInspectorInstalled } from '../store/editors.js';
+import { useEditors, useInspectorInstalled } from '../store/editors.js';
+import { lastEditorsRead, listEditors } from '../api/editors.js';
+import { REGISTRY_FRESH_MS } from '../store/runPlugins.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ageOf,
@@ -738,6 +740,12 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
   const [usageRefresh, setUsageRefresh] = useState(0);
   const [openServers, setOpenServers] = useState<Set<string>>(() => new Set(deepLinked !== null ? [deepLinked] : []));
   const inspectorInstalled = useInspectorInstalled();
+  // codex r1 on #1303: the registry is read once per tab and kept by its events, which a dropped socket misses (no
+  // replay). Opening this page re-reads a registry older than the run plugins' freshness window, and Refresh always
+  // does, so a plugin installed meanwhile brings the row's Inspect back. listEditors shares a read already in flight.
+  useEffect(() => {
+    if (useEditors.getState().state === 'ready' && Date.now() - lastEditorsRead() >= REGISTRY_FRESH_MS) void listEditors().catch(() => undefined);
+  }, []);
 
   // Only the latest load may land: an older, slower answer never overwrites a newer one.
   const loadSeq = useRef(0);
@@ -789,7 +797,7 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
           <a className="wk-btn wk-btn--secondary" href={policiesPath(null, true)} onClick={(e) => { e.preventDefault(); navigate(policiesPath(null, true)); }} data-testid="mcp-steering-link">Steering</a>
           <a className="wk-btn wk-btn--secondary" href={mcpInspectPath()} onClick={(e) => { e.preventDefault(); navigate(mcpInspectPath()); }} data-testid="mcp-inspector-link">Inspector</a>
           {view === 'servers' && loaded !== null && !adding && <button type="button" data-testid="mcp-add-open" onClick={() => setAdding(true)} className="wk-btn wk-btn--primary">Add existing server</button>}
-          <button type="button" className="wk-btn wk-btn--secondary" onClick={() => { void load(); setUsageRefresh((n) => n + 1); }}>Refresh</button>
+          <button type="button" className="wk-btn wk-btn--secondary" onClick={() => { void load(); setUsageRefresh((n) => n + 1); void listEditors().catch(() => undefined); }}>Refresh</button>
         </>}>
         {view === 'servers' && <div className="wk-pg-mcp-mode">
           <p className="wk-field-label">When helpers use tools</p>

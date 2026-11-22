@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 const apiFetch = vi.fn();
 vi.mock('../src/api/client.js', () => ({ apiFetch: (...a: unknown[]) => apiFetch(...a) }));
@@ -63,6 +63,28 @@ describe('studio#1014: Inspect on an MCP server row', () => {
     wire(() => Promise.resolve({ editors: [PAGE, INSPECTOR] }));
     const list = await rows();
     for (const row of list) expect(within(row).getByTestId('mcp-server-inspect').getAttribute('href')).toMatch(/^\/mcp\/inspect\?server=/);
+  });
+
+  it('a plugin installed while this tab missed the event: Refresh re-reads the registry and brings Inspect back (codex r1)', async () => {
+    let editors: unknown[] = [PAGE];
+    wire(() => Promise.resolve({ editors }));
+    for (const row of await rows()) expect(within(row).queryByTestId('mcp-server-inspect')).toBeNull();
+    editors = [PAGE, INSPECTOR];
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => expect(screen.getAllByTestId('mcp-server-inspect')).toHaveLength(2));
+  });
+
+  it('opening the page re-reads a registry read before the freshness window (codex r1)', async () => {
+    useEditors.setState({ state: 'ready', editors: [PAGE as never], reason: null });
+    wire(() => Promise.resolve({ editors: [PAGE, INSPECTOR] }));
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 60_000);
+    try {
+      render(<McpToolsPage navigate={() => {}} search="" />);
+      await waitFor(() => expect(screen.getAllByTestId('mcp-server-inspect')).toHaveLength(2));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('the registry could not be read: the row keeps Inspect', async () => {
