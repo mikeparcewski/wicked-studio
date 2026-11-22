@@ -29,8 +29,10 @@ export function fetchReposCached(): Promise<RepoEntry[]> {
   const mine = generation;
   const fill: Promise<RepoEntry[]> = api
     .listRepos()
-    .then(({ repos }) => {
-      if (mine === generation) cache = repos;
+    .then(({ repos }): RepoEntry[] | Promise<RepoEntry[]> => {
+      // The list changed while this read was out: its callers get the list read after the change.
+      if (mine !== generation) return fetchReposCached();
+      cache = repos;
       return repos;
     })
     .finally(() => {

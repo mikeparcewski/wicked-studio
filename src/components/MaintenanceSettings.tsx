@@ -46,7 +46,7 @@ export function MaintenanceSettings({ navigate }: { navigate: Navigate }): React
     reading.current = true;
     const mine = readGen.current;
     api.getMaintenance().then(
-      (s) => { if (alive.current && mine === readGen.current) { setState(s); setUnsure(false); setReadError(null); } },
+      (s) => { if (alive.current && mine === readGen.current) { setState(s); setUnsure(false); setReadError(null); setWriteError(null); } },
       (e: unknown) => {
         if (!alive.current || mine !== readGen.current) return;
         if (isRouteUnsupported(e)) { setUnsupported(true); return; }
@@ -124,7 +124,7 @@ export function MaintenanceSettings({ navigate }: { navigate: Navigate }): React
           )}
           <div data-testid="maintenance-status" data-idle={idle ? 'true' : 'false'} role="status">
             {draining && <p className="wk-field-note" data-testid="maintenance-since">{sinceWords(state.since)}.</p>}
-            {unsure ? null : idle ? (
+            {unsure || busy ? null : idle ? (
               <p className="wk-field-note" data-testid="maintenance-idle">
                 Idle: no job is working now.{draining ? ' It’s safe to update or restart.' : ''}
               </p>

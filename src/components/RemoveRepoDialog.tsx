@@ -1,8 +1,9 @@
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { ApiError } from '../api/errors.js';
 import type { RepoEntry } from '../api/types.js';
 import { useModalEscape } from './Modal.js';
+import { useDialogFocus } from './sources/useDialogFocus.js';
 import { TechDetails } from './ui/index.js';
 
 /** Why crew kept a repository registered (`DELETE /repos/:id`, crew#1230), in words the dialog shows. */
@@ -44,6 +45,9 @@ export function RemoveRepoDialog({ repo, onClose, onRemoved, onOpenRun }: {
   const [refused, setRefused] = useState<RemoveRefusal | null>(null);
   // A removal on its way can't be dismissed: its answer belongs to this dialog.
   useModalEscape(() => { if (!busy) onClose(); });
+  // Focus moves in and Tab stays inside, so nothing behind the dialog can start another removal meanwhile.
+  const box = useRef<HTMLDivElement | null>(null);
+  useDialogFocus(box);
 
   const remove = async (): Promise<void> => {
     if (busy) return;
@@ -63,7 +67,7 @@ export function RemoveRepoDialog({ repo, onClose, onRemoved, onOpenRun }: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--scrim)' }}
       onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
-      <div role="dialog" aria-modal="true" aria-labelledby={titleId} data-testid="repo-remove-dialog" data-repo-id={repo.id}
+      <div ref={box} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} data-testid="repo-remove-dialog" data-repo-id={repo.id}
         className="flex flex-col gap-3 p-4"
         style={{
           width: 'min(420px, calc(100vw - 32px))',

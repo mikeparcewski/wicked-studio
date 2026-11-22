@@ -130,7 +130,7 @@ describe('Remove a repository', () => {
     expect((await screen.findByTestId('repo-remove-refused')).textContent).toMatch(/can’t remove a repository. Update wicked/);
   });
 
-  it('review r1: a removal empties the pickers\' repository cache, and a list read already out never refills it', async () => {
+  it('review r1/r2: a removal empties the pickers\' repository cache, and a list read already out hands its callers the list after it', async () => {
     await fetchReposCached();
     expect(getCachedRepos()?.map((r) => r.id)).toEqual(['billing', 'tiny-math']);
     let late: (v: unknown) => void = () => undefined;
@@ -142,9 +142,11 @@ describe('Remove a repository', () => {
     fireEvent.click(within(card('billing')).getByTestId('repo-row-remove'));
     fireEvent.click(screen.getByTestId('repo-remove-confirm'));
     await waitFor(() => expect(screen.queryByTestId('repo-remove-dialog')).toBeNull());
+    // The read that was out answers with the list from before; its callers get the list read after the removal.
+    listRepos.mockImplementationOnce(() => Promise.resolve({ repos: [GONE] }));
     late({ repos: [REPO_CLEAN, GONE] });
-    await out;
-    expect(getCachedRepos()).toBeNull();
+    expect((await out).map((r) => r.id)).toEqual(['tiny-math']);
+    expect(getCachedRepos()?.map((r) => r.id)).toEqual(['tiny-math']);
   });
 
   it('review r1: a removal on its way can\'t be dismissed with Escape', async () => {

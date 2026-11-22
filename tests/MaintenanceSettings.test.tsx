@@ -108,6 +108,18 @@ describe('review r1: reads and writes never undo each other', () => {
     fireEvent.click(screen.getByTestId('maintenance-reread'));
     await waitFor(() => expect(screen.queryByTestId('maintenance-unsure')).toBeNull());
     expect(screen.getByTestId('maintenance-drain-toggle')).toHaveAttribute('aria-checked', 'false');
+    // Reconciled: the "couldn't confirm" line goes too (review r2).
+    expect(screen.queryByTestId('maintenance-write-error')).toBeNull();
+  });
+
+  it('review r2: while turning drain off is on its way, no "safe to update" claim', async () => {
+    state = { draining: true, since: Date.now(), idle: true, active: [] };
+    render(<MaintenanceSettings navigate={vi.fn()} />);
+    await screen.findByTestId('maintenance-idle');
+    setMaintenance.mockImplementationOnce(() => new Promise(() => undefined));
+    fireEvent.click(screen.getByTestId('maintenance-drain-toggle'));
+    await waitFor(() => expect(screen.queryByTestId('maintenance-idle')).toBeNull());
+    expect(screen.getByTestId('maintenance-status').textContent).not.toMatch(/safe to update/);
   });
 
   it('a read slower than the poll: one read at a time, and its answer lands', async () => {

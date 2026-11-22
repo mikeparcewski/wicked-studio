@@ -655,7 +655,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
           )}
 
           {removing !== null && (
-            <RemoveRepoDialog repo={removing} onClose={() => setRemoving(null)} onRemoved={removed}
+            <RemoveRepoDialog key={removing.id} repo={removing} onClose={() => setRemoving(null)} onRemoved={removed}
               {...(onSelectRun !== undefined ? { onOpenRun: (runId: string) => { setRemoving(null); onSelectRun(runId); } } : {})} />
           )}
 
