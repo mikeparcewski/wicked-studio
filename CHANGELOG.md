@@ -12,6 +12,71 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.16.16] — 2026-11-22
+
+Patch release on the train-11 cut 7c5c2267, carrying 41 PRs since 0.16.15: #1217, #1218, #1219, #1220, #1221, #1222, #1224, #1226, #1228, #1229, #1230, #1231, #1232, #1233, #1234, #1235, #1236, #1237, #1238, #1240, #1241, #1245, #1246, #1249, #1250, #1251, #1254, #1264, #1266, #1267, #1268, #1269, #1270, #1271, #1272, #1275, #1277, #1281, #1283, #1284, #1285.
+
+### Added
+
+- Rebase and re-deliver a finished run's PR from the Delivery card (crew#1493, part 3 of 3). (#1234)
+- **MCP tools:** adding a stdio server takes its non-secret settings (`NAME=value` per line). The preview shows each name as an app setting or a runtime control before you approve it by saving, and an agent's attempt to change them says that only the operator can (wicked-crew#1558). (#1269)
+- **Gates:** the editor install consent says what each editor will ask to do, and that you allow each one later in Plugins (wicked-crew#1424). (#1272)
+
+### Changed
+
+- Deck editor: mark the Notes toggle data-wicked-reveal (refs #1214). (#1218)
+- e2e: `desk_plain_words` checks the repositories page after Retry once the reload has settled, not mid-reload (removes a CI flake on journeys desk 2/2). (#1222)
+- **Release CI only drafts the GitHub Release; coord publishes it after certification (#1189).** `release.yml` is now `publish -> registry -> github-release`: the registry job waits up to 15 min for npm to serve the version and fails (re-run failed jobs, never the publish) instead of warning; `github-release`, the only job with `contents: write`, creates the tag's Release as a draft with its CHANGELOG notes, never sets Latest and leaves an existing Release alone. Coord publishes it after JOURNEY CERTIFIED with `gh release edit v<X.Y.Z> --repo mikeparcewski/wicked-studio --draft=false --latest`. (#1231)
+- Seed the gate store in the two #1245 tests so main is green (#1265). (#1275)
+
+### Fixed
+
+- Schedules: a blocked schedule row now says it is blocked since when, shows how many runs were missed, and links to the run that holds it (#1195). (#1217)
+- **Agents:** "Use <seat> for new work" now saves to crew's `newWorkSeats` setting, so a seat you turn off is not proposed for new chats and jobs (studio's old browser-only default is gone). (crew#1587) Implemented by codex (gpt-6.1-sol); reviewed by the lane. (#1219)
+- Fixed: a Power checkpoint card no longer says "This change grew past its plan" when the pause came from the code graph or another reason; it names the engine's actual reason (#1169). (#1220)
+- Rule checks: a dispute that one arbiter settled now says so and names the arbiter and its footing ("settled by one arbiter: claude (distinct from every party)", "Arbiter's vote:"), instead of reading as an ordinary council tally (#1180). (#1221)
+- Power mode: the pause card's code-graph headline now tells a stale graph ("couldn't be matched to the run's base commit") from a missing or unreadable one ("is missing or couldn't be read"), and a bare `no graph:` reason is no longer shown as growth (#1223). Implemented by codex (gpt-6.1-sol); reviewed by the lane. (#1224)
+- A chat job's held plan now offers exactly the answers the engine lists: Approve, Change, Don't start or a named answer. An older daemon that sends no list still gets Approve and Change (studio#1177). (#1226)
+- Decision dock: the sticky action bar now sits on the card's bottom edge, so text scrolling under it no longer shows again in a strip below the button (#1227). Implemented by codex (gpt-6.1-sol); reviewed by the lane. (#1228)
+- **Gate answers follow the engine's note policy (studio#1177).** An answer the engine takes with or without words opens a box marked optional and sends empty. A listed Stop the engine takes without words no longer asks for a reason. A listed Reassign gets a note box, and the note rides the move. When a run's events can't be read, the engine's listed answers stay on the card beside the missing-evidence line and its Retry, with nothing preselected. Implemented by codex (gpt-6.1-sol); reviewed by the lane. (#1229)
+- Setup and sign-in messages say "Start Rancher Desktop" instead of suggesting Docker Desktop, whose Kubernetes can't set the pod process limit helpers need. (#1230)
+- The deliver card's Delivery details show who the push goes out as: "Pushes as: <login> (<where it is set>)" when crew pins a login, otherwise crew's own sentence (#1086). (#1232)
+- After you skip or re-check steering rules, the job card says what you did ("Skipped 13 rules … with your reason; the rule check runs again.") instead of "Approved", and the step the engine runs again is shown as the current step, not as "1 failed" (#1088). (#1232)
+- **The brand badge and the session banner count the same things** (#1091). Both read one source: crew's attention list on a crew with a system snapshot, otherwise the decisions and failures that need you. The banner shows this session's part of that list and no longer counts reviews the badge leaves out. (#1233)
+- **Gate choices are named by their visible label** (#1092, WCAG 2.5.3). Each choice's accessible name is its label. Its hints, refusal reason and "Recommended" are its description. Implemented by codex (gpt-6.1-sol); reviewed by the lane. (#1233)
+- The Details rail names a checking helper as "reviews" (never "built it" before the build ran), and Progress says "Waiting for your plan approval" at a plan gate. A job card's plan names floor-added Design and Architecture rows, not "Plan" twice. On a phone, the chat button no longer covers the end of a page (#1089, #1090, #1071). (#1235)
+- Gate cards: Send back prefills the reviewer's failing ITEM lines (and broken rules), never its RULE N/A / KEPT lines (#1081). The repeat ask says why the step stopped, not always "the budget is spent" (#1082). Deliver again says it re-runs the checks on the same tree (#1098). A floor check's flaky tests (passed on retry) are listed apart under More about this (#930). (#1236)
+- **Launch:** the deliver notice follows crew's preview on every daemon, so a job crew does not deliver says no PR before Send. The inline start row offers QE skip and force and checks a picked project's catalog. A job that asks "Requirements?" (Draft epics) lists the project's requirements to pick in the chat. New job opened from a repository says the job starts on it. (#1190, #990, #1054, #1053, #991) (#1237)
+- Apps: a card says "Loading preview" until the editors list answers, never "not installed" while it loads. On a phone an app opens with its panel minimised. Typing in an app's frame goes to its chat, and Escape from the Apps and Insights frames works like Escape on the page. (#1238)
+- Editors: a card action's status no longer replaces Undo. A restyle that changes nothing shows interactive's explanation. The editor test page samples insights editors and fits a phone. The video editor's chat says how a video changes. (#1238)
+- Studio no longer sends the retired `demo.requested` recorder event, and the knowledge wording on Apps follows what the project's summary offers. (#1238)
+- Apps: an app's action card is now read from crew's published card, so actions run against crew. Every app on the Apps page shows its preview once it scrolls into view. An inline edit committed by a quick click outside the app is no longer refused. The dashboard's card testid is `apps-tile`. (#1240)
+- **Gate cards stay true across a reconnect and answer only the gate you saw (#1023, #1121, #1114).** A reassign names the gate or step its card showed and needs crew#1676. A gate answered in another tab while this one was offline is re-read when the socket comes back. A decision is never sent to a gate other than the one its card showed, and a late answer never clears a newer gate. Skip-QE and redo-QE offers are read from the engine's own words, not from a quoted failure. The plan card offers Send back whenever the gate names it. (#1241)
+- Gate cards show what you decide on (#1244). A review FAIL and a capped review list the reviewer's failing items on the card. A team dispute shows each finding's claim and place, who raised it, each side's position, and how many council seats voted. A Land that skips open steering rules (wicked-core#1683) is drawn "Land, skipping …" and asks for your reason. At the triage gate of a failed tool check, "Approve as your own judgment" (wicked-core#1318) asks for your reason. The run, its receipts and the hand-over then say "tool check overridden by operator", with that reason. (#1245)
+- A chat job waiting at a gate reads its own question first, so a video or feature job's **Approve completion** shows at once on a busy machine instead of after every other waiting run; until it loads the job says "Reading the question…", and offers Retry if the read failed (#1242). An answered chat is no longer shown as an open decision in the Phase report (#1243). The waiting step's number is its position in the job. (#1246)
+- A chat's helpers can be set before its first message (the composer's helper row on a seeded chat). Generate it opens on the helpers you chose, and its job leaves out the ones you turned off. Try again on a failed job keeps its helpers. (#1080) (#1249)
+- Voice mode starts the microphone only after you answer Yes, and its header says "not listening yet" until then (#1147). A document at version 0 is sent as chat context (#950). A job sent from the composer never clears a draft you edited after a remount (#1038). Chat replies sit under the question they answer (#975). A decision line that is recorded after the reply shows up without a reload (#670). (#1250)
+- The run thread and its cards say what happened (#987, #995, #1076, #935, #1105, #894, #891, #874, #709). A QE or review bubble shows the verdict, never the worker's scratch. Your message shows only your words. A failed team-plan read is said in studio's words. A carried override is labelled as carried, not as yours. A power hand-off's checks read as overridden. A red base no longer reads as "tests this change broke". Spend says "partial" when seats are unmetered. Stop takes an optional reason, and "Why it stopped" shows it. The deliver card lists the checks deferred to the pull request. An escalation whose rework changed nothing says so. The run fold says the step count once, and long source lists fold. (#1251)
+- A stalled run now reads "No output for N min" in the run panel's pill and on Everything, not "Working". An orphaned run no longer shows the silent-step card or its watchdog promise (#932, #981). (#1254)
+- Jobs names the helper that built a job, not its reviewer (#988). (#1254)
+- Nerve Center: the slowing card shows its remedy, and a fresh daemon's slow first read is retried before "Can't reach crew" (#931). A benched helper is quiet (#1004). A "Rebuild seat images" button with live progress (#936). The disk row names the repo-checks floor cache and its cap (#1096). (#1254)
+- A home directory no longer shows in the decisions ledger, burn, the tech line, the gate's failing tests, the guided ask, power mode, the in-flight check, the run panel, the team roster, the run record, routing, assumptions, the governance audit, the delivery and stranded cards, or the source chips. It reads `~`, as it already did elsewhere, and a Windows path escaped inside JSON is now caught too (#1044). (#1264)
+- **Sources:** saving a REST or MCP source sends the reads you ticked as accepted Apps reads, so apps can query the new source (pairs with wicked-crew 0.219.0 api-types, crew#1295). (#1266)
+- **Editors:** an open editor, app or insights host re-reads its grants when crew announces a grant change, and drops them all when the editor is removed. A revoked permission is refused on the editor's next request without reopening it. Run-thread plugins lose a revoked topic at once (wicked-crew#1423). (#1267)
+- A boundary deny card names the path it refused and the rule (#1255). (#1268)
+- Fixed: a waiting gate shows its question and "Reading the choices…" while the run's events load, and the run block says when the question is still loading or failed to load (with Retry), never "needs you" with nothing under it (#1256). (#1270)
+- Fixed: voice mode's spoken summary and its Waiting widget use the Desk's need-you count and wait for it, instead of saying "nothing waiting" before the data loads (#1257). (#1270)
+- Fixed: voice mode calls a host with most of its cores busy "nearly full", not "calm", and keeps the first line of a new turn in view, including a reply filled in after "…" (#1258). (#1270)
+- Fixed: Enter on a typed `/` command while the workflows are still loading is sent once they load, instead of staying at "Reading the workflows…" (#1261). (#1271)
+- Fixed: when a job moves to a new chat on its repository, the chat it left is ended if it held nothing else, so one Enter leaves one chat (#1263). (#1271)
+- Added: "Which project?" offers New project, which creates the project, attaches the repository and moves the job there (#1260). (#1271)
+- Fixed: a deck's card and full-screen header show the deck's own title, not "presentation <id>" (#1262). (#1271)
+- A document thread finds its draft run after a reload when crew keys the draft folder by project and document (crew#1280). (#1277)
+- **gate:** the domain-map budget ask again shows its step's choices ("Map up to 20 more pages", "Lower the minimum to …% for <repo> and build the graph", "Stop here") with the step's recommendation marked, instead of the raw ids "continue" and "lower" beside an extra Approve (#1279, a regression from #1229). (#1281)
+- A seeded start whose chat was deleted starts fresh on the next try. (#1283)
+- Repositories follows the live run list. (#1284)
+- Tell the truth about tracker reads; one word for the data switches. (#1285)
+
 ## [0.16.15] — 2026-11-20
 
 Patch release on main fc451b69, carrying 15 PRs since 0.16.14: #1199, #1200, #1201, #1202, #1204, #1205, #1206, #1207, #1208, #1209, #1210, #1211, #1212, #1215, #1216.
