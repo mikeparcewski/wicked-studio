@@ -10,12 +10,14 @@ import {
 import { useModalEscape } from './Modal.js';
 import { isMcpRule, triggerIssue } from '../api/mcp.js';
 import { SteeringMcpBuilder } from './SteeringMcpBuilder.js';
+import { ENGINE_CHECKS, engineCheckConflict, engineChecksOf, otherObligations, withEngineChecks } from '../board/engineCheck.js';
 
 /**
  * The rule EDIT form — a MODAL opened from the drawer's Edit (the spreadsheet wave made this
  * EDIT-ONLY: adding is the GRID's draft row now), over the same SHIPPING upsert CRUD
  * (`POST /governance/rules`) as before: statement, severity, applies_to/excludes chips,
- * weight, and the ADVANCED optional effect+trigger the grid deliberately does not carry.
+ * weight, the ADVANCED optional effect+trigger the grid deliberately does not carry, and the
+ * rule's engine check (studio#1002: the obligation tokens the engine reads at the rule check).
  * The id/rule_type stay fixed and provenance rides through untouched — an edit never
  * rewrites where a rule came from.
  */
@@ -81,6 +83,8 @@ interface FormState {
   weight: string;
   effect: '' | SteeringEffect;
   triggerContains: string;
+  /** The engine checks (studio#1002) the rule carries: `check:test-fails-on-base`, `evidence:delivery`. */
+  checks: string[];
   /** Carried through an edit untouched — the form does not manage these. */
   base: SteeringRule;
 }
@@ -96,6 +100,7 @@ function formFromRule(rule: SteeringRule): FormState {
     weight: String(rule.weight ?? 1.0),
     effect: rule.effect ?? '',
     triggerContains: rule.trigger?.contains ?? '',
+    checks: engineChecksOf(rule),
     base: rule,
   };
 }
@@ -129,16 +134,20 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved, create 
   const scopeOk = form.effect === '' || form.applies_to.length > 0;
   // A trigger the engine's regex cannot compile is refused before it is saved.
   const triggerProblem = form.effect === '' ? null : triggerIssue(form.triggerContains.trim());
+  // The engine refuses an engine check on a rule held at plan compose (only plan steps there).
+  const checkConflict = engineCheckConflict({ effect: form.effect === '' ? undefined : form.effect, applies_to: form.applies_to }, form.checks);
+  const otherObl = otherObligations(form.base);
   const valid =
-    idOk && scopeOk && triggerProblem === null && form.statement.trim() !== '' && Number.isFinite(weightNum) && weightNum >= 0;
+    idOk && scopeOk && triggerProblem === null && checkConflict === null && form.statement.trim() !== '' && Number.isFinite(weightNum) && weightNum >= 0;
 
   const save = async (): Promise<void> => {
     if (!valid || busy) return;
     setBusy(true);
     setError(null);
     // Everything the form does not manage (confidence, targets, provenance, compliance,
-    // obligations, criteria) rides through from `base` untouched — an edit never rewrites
-    // where a rule came from.
+    // criteria, and every obligation that is not an engine check) rides through from `base`
+    // untouched — an edit never rewrites where a rule came from.
+    const obligations = withEngineChecks(form.base, form.checks);
     const rule: SteeringRule = {
       ...form.base,
       id: form.id.trim(),
@@ -149,6 +158,7 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved, create 
       applies_to: form.applies_to,
       excludes: form.excludes,
       weight: weightNum,
+      obligations,
       ...(form.effect !== '' ? { effect: form.effect } : {}),
       ...(form.effect !== '' && form.triggerContains.trim() !== ''
         ? { trigger: { contains: form.triggerContains.trim() } }
@@ -158,6 +168,7 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved, create 
       delete rule.effect;
       delete rule.trigger;
     }
+    if (obligations.length === 0) delete rule.obligations;
     try {
       await api.upsertConformanceRule(rule);
       onSaved(rule.id);
@@ -327,6 +338,35 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved, create 
             />
           </label>
         </div>
+
+        {/* studio#1002: the rule's engine check, the obligation tokens the engine reads at the rule check. */}
+        <fieldset data-testid="steering-form-engine-check" className="flex flex-col gap-1 rounded px-2 py-1.5 text-xs" style={{ border: '1px solid var(--border-strong)', color: 'var(--ink-muted)' }}>
+          <legend className="px-1">Engine check (optional — none = a helper judges the rule)</legend>
+          {ENGINE_CHECKS.map((c) => (
+            <label key={c.token} className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                data-testid="steering-form-engine-check-token"
+                data-token={c.token}
+                checked={form.checks.includes(c.token)}
+                onChange={(e) => onChange({ ...form, checks: e.target.checked ? [...form.checks, c.token] : form.checks.filter((t) => t !== c.token) })}
+                className="mt-0.5"
+              />
+              <span className="flex min-w-0 flex-col">
+                <span style={{ color: 'var(--ink-high)' }}>{c.label} <code className="font-mono" style={{ color: 'var(--ink-dim)' }}>{c.token}</code></span>
+                <span style={{ color: 'var(--ink-dim)' }}>{c.hint}</span>
+              </span>
+            </label>
+          ))}
+          {otherObl.length > 0 && (
+            <p data-testid="steering-form-other-obligations" className="m-0 break-words" style={{ color: 'var(--ink-dim)' }}>
+              Also carries <span className="font-mono">{otherObl.join(', ')}</span>, kept as is.
+            </p>
+          )}
+          {checkConflict !== null && (
+            <p data-testid="steering-form-engine-check-issue" role="alert" className="m-0" style={{ color: 'var(--status-fail)' }}>{checkConflict}</p>
+          )}
+        </fieldset>
 
         {error !== null && (
           <p data-testid="steering-form-error" className="rounded px-2 py-1 text-xs" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>

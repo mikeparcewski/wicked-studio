@@ -1,4 +1,5 @@
 import { steeringTypeOf, type SteeringRule } from '../api/steering.js';
+import { engineChecksOf } from './engineCheck.js';
 
 /**
  * "Hold work to it" (DES-WALKTHROUGH-PROOF-001 §3 scenes 29-30, §4.12 "held vs advisory"; slice WT-U2):
@@ -47,12 +48,31 @@ export function unknownObligations(tokens: readonly string[]): string[] {
   return tokens.filter((t) => !TOKENS.has(t));
 }
 
+/** The obligations the rule carries outside the Hold vocabulary (an engine check, anything else). */
+function nonStepObligations(rule: SteeringRule): string[] {
+  return (rule.obligations ?? []).filter((t) => !TOKENS.has(t));
+}
+
 /** The rule as HELD: the effect plus the obligations, everything else as it was. `null` when there is
- *  nothing to hold it to, or a token is not in the vocabulary. */
+ *  nothing to hold it to, or a token is not in the vocabulary. Every obligation the rule carries
+ *  outside the Hold vocabulary (an engine check, studio#1002, or anything else) is kept, never dropped
+ *  by a hold; the engine refuses them at plan compose, which {@link holdBlocked} says before the
+ *  switch is offered. */
 export function heldRule(rule: SteeringRule, obligations: readonly string[]): SteeringRule | null {
   const list = [...new Set(obligations)];
   if (list.length === 0 || unknownObligations(list).length > 0) return null;
-  return { ...rule, effect: HELD_EFFECT, obligations: list };
+  return { ...rule, effect: HELD_EFFECT, obligations: [...list, ...nonStepObligations(rule).filter((t) => !list.includes(t))] };
+}
+
+/** Why a hold cannot be written, or `null`: a rule that applies at plan compose and carries an
+ *  obligation outside the Hold vocabulary, since the engine holds work there only to plan steps
+ *  (wicked-governance `check_plan_compose_rule`). */
+export function holdBlocked(rule: SteeringRule): string | null {
+  const others = nonStepObligations(rule);
+  if (others.length === 0 || !(rule.applies_to ?? []).includes('plan.compose')) return null;
+  const checks = engineChecksOf(rule);
+  const fix = checks.length === others.length ? ' Edit the rule to clear its engine check first.' : '';
+  return `Hold is off: it carries ${others.join(', ')}, and the engine holds a plan compose rule only to plan steps.${fix}`;
 }
 
 /** The rule as ADVISORY: no effect; the trigger and obligations stay on it, inert. */
@@ -65,7 +85,10 @@ export function advisoryRule(rule: SteeringRule): SteeringRule {
 /** What the switch's state means, in words. */
 export function holdWords(rule: SteeringRule): string {
   if (isHeld(rule)) {
-    const what = (rule.obligations ?? []).map((t) => HOLD_VOCAB.find((v) => v.token === t)?.label ?? t);
+    // Only plan steps are something work GETS; an engine check or any other token the rule carries is not
+    // (it is listed under Obligations). Coord r1 on studio#1310.
+    const what = knownObligations(rule).map((t) => HOLD_VOCAB.find((v) => v.token === t)?.label ?? t);
+    if (what.length === 0) return 'Held, but it names no plan step, so nothing is inserted.';
     return `Held — when it fires, work gets ${joinWords(what)}; only your own plan can drop that.`;
   }
   return 'Advisory — helpers are told about it while planning; nothing is inserted.';

@@ -10,7 +10,7 @@ import { SteeringRetireModal } from './SteeringRetireModal.js';
 import { RuleOrigin } from './decisions/RuleOrigin.js';
 import { useProjectsStore } from '../store/projects.js';
 import { api } from '../api/client.js';
-import { advisoryRule, heldRule, HOLD_VOCAB, holdWords, isHeld, isHoldable, knownObligations } from '../board/holdRule.js';
+import { advisoryRule, heldRule, holdBlocked, HOLD_VOCAB, holdWords, isHeld, isHoldable, knownObligations } from '../board/holdRule.js';
 import { Tech } from './Tech.js';
 
 /**
@@ -81,6 +81,8 @@ function provenanceText(rule: SteeringRule): React.ReactNode {
 function HoldSwitch({ rule, onHeld }: { rule: SteeringRule; onHeld?: (rule: SteeringRule) => void }): React.ReactElement {
   const held = isHeld(rule);
   const known = knownObligations(rule);
+  // studio#1002: a hold the engine would refuse is not offered (turning one OFF always is).
+  const blocked = held ? null : holdBlocked(rule);
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState<string[]>(known);
   const [busy, setBusy] = useState(false);
@@ -99,7 +101,7 @@ function HoldSwitch({ rule, onHeld }: { rule: SteeringRule; onHeld?: (rule: Stee
     }
   };
   const toggle = (): void => {
-    if (busy) return;
+    if (busy || blocked !== null) return;
     if (held) { void write(advisoryRule(rule)); return; }
     const ready = heldRule(rule, known);
     if (ready !== null) { void write(ready); return; }
@@ -117,12 +119,13 @@ function HoldSwitch({ rule, onHeld }: { rule: SteeringRule; onHeld?: (rule: Stee
             data-testid="steering-rule-hold-switch"
             checked={held}
             aria-checked={held}
-            disabled={busy}
+            disabled={busy || blocked !== null}
             onChange={toggle}
           />
           <span data-testid="steering-rule-hold-words">{holdWords(rule)}</span>
         </label>
-        {picking && !held && (
+        {blocked !== null && <p data-testid="steering-rule-hold-blocked" className="m-0 pl-5" style={{ color: 'var(--ink-dim)' }}>{blocked}</p>}
+        {picking && !held && blocked === null && (
           <div data-testid="steering-rule-hold-pick" className="flex flex-col gap-1 pl-5">
             <p className="m-0">Hold it to what? When the rule fires, the plan gets:</p>
             {HOLD_VOCAB.map((v) => (
@@ -144,7 +147,7 @@ function HoldSwitch({ rule, onHeld }: { rule: SteeringRule; onHeld?: (rule: Stee
                 type="button"
                 data-testid="steering-rule-hold-confirm"
                 disabled={pick === null || busy}
-                onClick={() => { if (pick !== null) void write(pick); }}
+                onClick={() => { if (pick !== null && blocked === null) void write(pick); }}
                 className="rounded px-2 py-1 text-xs font-semibold"
                 style={{ background: 'var(--accent)', color: 'var(--on-accent)', opacity: pick === null || busy ? 0.5 : 1 }}
               >

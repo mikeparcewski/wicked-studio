@@ -23343,6 +23343,24 @@
       ]
     },
     {
+      "testId": "steering-form-engine-check",
+      "files": [
+        "src/components/SteeringRuleForm.tsx"
+      ]
+    },
+    {
+      "testId": "steering-form-engine-check-issue",
+      "files": [
+        "src/components/SteeringRuleForm.tsx"
+      ]
+    },
+    {
+      "testId": "steering-form-engine-check-token",
+      "files": [
+        "src/components/SteeringRuleForm.tsx"
+      ]
+    },
+    {
       "testId": "steering-form-error",
       "files": [
         "src/components/SteeringRuleForm.tsx"
@@ -23356,6 +23374,12 @@
     },
     {
       "testId": "steering-form-id",
+      "files": [
+        "src/components/SteeringRuleForm.tsx"
+      ]
+    },
+    {
+      "testId": "steering-form-other-obligations",
       "files": [
         "src/components/SteeringRuleForm.tsx"
       ]
@@ -23770,6 +23794,12 @@
     },
     {
       "testId": "steering-rule-hold",
+      "files": [
+        "src/components/SteeringRuleDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "steering-rule-hold-blocked",
       "files": [
         "src/components/SteeringRuleDrawer.tsx"
       ]
