@@ -207,22 +207,36 @@ export interface UnconfirmedAddress {
 }
 
 /**
- * The address a 409 `address_unconfirmed` names. crew's words to a human are
- * "`<host> (<address>)` is a private address, which a source reaches only when the person confirms a
- * range covering it …" (an IP literal host is written bare). `null` when the words say neither.
+ * The addresses a 409 `address_unconfirmed` asks about, read from its body's structured `addresses`
+ * (crew#1294, api-types 0.219.0: `{ error, code, addresses: [{ address, class }], suggest }`, written by crew's
+ * `api/mcp.ts` fail() from the dialer's `DialRefusedError.detail`). Every address the name resolved to that still
+ * needs confirming is there, in crew's order, so one refusal asks them all. crew's `suggest` is the whole private
+ * block (`10.0.0.0/8`); the sheet offers the narrow range instead (DES §5.2 mockup), which crew accepts as covering it.
+ * An entry studio can't read (an impossible address, another class) is skipped; none at all = `[]`.
  */
-export function unconfirmedAddress(words: string): UnconfirmedAddress | null {
-  const m = /(?:\(([0-9A-Fa-f.:]+)\)|(?<![\w.:])([0-9A-Fa-f.:]{2,}))\s+is a (private|loopback) address/.exec(words);
-  if (m === null) return null;
-  const address = (m[1] ?? m[2] ?? '').toLowerCase();
-  const cls = m[3] as 'private' | 'loopback';
+export function unconfirmedAddresses(body: unknown): UnconfirmedAddress[] {
+  const list = typeof body === 'object' && body !== null ? (body as { addresses?: unknown }).addresses : undefined;
+  if (!Array.isArray(list)) return [];
+  const out: UnconfirmedAddress[] = [];
+  for (const entry of list) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const { address: raw, class: cls } = entry as { address?: unknown; class?: unknown };
+    if (typeof raw !== 'string' || (cls !== 'private' && cls !== 'loopback')) continue;
+    const range = narrowRange(raw.toLowerCase(), cls);
+    if (range !== null && !out.some((u) => u.range === range)) out.push({ address: raw.toLowerCase(), cls, range });
+  }
+  return out;
+}
+
+/** The narrowest range the sheet offers for one address: a private IPv4 address's /24, else the address itself. */
+function narrowRange(address: string, cls: 'private' | 'loopback'): string | null {
   const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(address);
   if (v4 !== null) {
     if (v4.slice(1).some((o) => Number(o) > 255)) return null;
-    return { address, cls, range: cls === 'private' ? `${v4[1]}.${v4[2]}.${v4[3]}.0/24` : `${address}/32` };
+    return cls === 'private' ? `${v4[1]}.${v4[2]}.${v4[3]}.0/24` : `${address}/32`;
   }
-  if (!address.includes(':')) return null;
-  return { address, cls, range: `${address}/128` };
+  if (!/^[0-9a-f:.]+$/.test(address) || !address.includes(':')) return null;
+  return `${address}/128`;
 }
 
 // ── what the sheet says ──────────────────────────────────────────────────────────────────────

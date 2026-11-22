@@ -22725,6 +22725,42 @@
       ]
     },
     {
+      "testId": "source-read-accept",
+      "files": [
+        "src/components/sources/ReadAcceptance.tsx"
+      ]
+    },
+    {
+      "testId": "source-read-accept-away",
+      "files": [
+        "src/components/sources/ReadAcceptance.tsx"
+      ]
+    },
+    {
+      "testId": "source-read-accept-error",
+      "files": [
+        "src/components/sources/ReadAcceptance.tsx"
+      ]
+    },
+    {
+      "testId": "source-read-accept-tick",
+      "files": [
+        "src/components/sources/ReadAcceptance.tsx"
+      ]
+    },
+    {
+      "testId": "source-read-acceptance",
+      "files": [
+        "src/components/sources/ReadAcceptance.tsx"
+      ]
+    },
+    {
+      "testId": "source-read-acceptance-count",
+      "files": [
+        "src/components/sources/ReadAcceptance.tsx"
+      ]
+    },
+    {
       "testId": "source-rekey",
       "files": [
         "src/components/sources/SourceSheet.tsx"

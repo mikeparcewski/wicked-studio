@@ -6,7 +6,8 @@ vi.mock('../src/api/client.js', () => ({ apiFetch: (...a: unknown[]) => apiFetch
 
 import { ApiError } from '../src/api/errors.js';
 import { McpToolsPage, schemePrefix } from '../src/components/McpToolsPage.js';
-import { approvals, policies, preview, server, serversResponse } from './mcpFixtures.js';
+import { approvals, policies, preview, server, serversResponse, TOOLS } from './mcpFixtures.js';
+import { unconfirmedBody } from './sourcesFixtures.js';
 
 /**
  * MCP tools (`/mcp`, DES-MCP-TOOLS-001 §7, slice S6) over a mocked `/mcp/*` wire shaped exactly
@@ -378,7 +379,7 @@ describe('MCP tools: add an existing server', () => {
         bodies.push(body);
         if (body['address'] === undefined) return Promise.reject(new ApiError(409,
           '127.0.0.1 is a loopback address, which a source reaches only when the person confirms a range covering it.',
-          { code: 'address_unconfirmed' }));
+          unconfirmedBody([{ address: '127.0.0.1', class: 'loopback' }], '127.0.0.1 is a loopback address, which a source reaches only when the person confirms a range covering it.')));
       }
       return base(p, i);
     });
@@ -851,5 +852,28 @@ describe('MCP tools: remove, discovery, and an older daemon', () => {
     const row = await screen.findByTestId('mcp-server-row');
     expect(row.dataset['open']).toBe('true');
     expect(within(row).getAllByTestId('mcp-tool-row')).toHaveLength(3);
+  });
+});
+
+describe('crew#1295: a local stdio server\'s reads are accepted here (the Sources page doesn\'t list it)', () => {
+  it('the open server shows App reads; a tick PATCHes {readAccepted: true} and the servers are read again', async () => {
+    const tools = TOOLS.map((t) => ({ ...t, readAccepted: false }));
+    wire({ servers: () => Promise.resolve(serversResponse({ servers: [server({ tools })] })) });
+    const base = apiFetch.getMockImplementation() as (p: string, i?: RequestInit) => Promise<unknown>;
+    apiFetch.mockImplementation((p: string, i?: RequestInit) => {
+      if (p.startsWith('/mcp/tools/') && i?.method === 'PATCH') {
+        calls.push({ path: p, method: 'PATCH', body: JSON.parse(i.body as string) });
+        return Promise.resolve({ ...tools[0], readAccepted: true });
+      }
+      return base(p, i);
+    });
+    render(<McpToolsPage navigate={navigate} search="" />);
+    const row = await openServer();
+    const box = within(row).getByTestId('source-read-acceptance');
+    expect(within(box).getAllByTestId('source-read-accept').map((r) => r.getAttribute('data-tool'))).toEqual(['wt_echo']);
+    const lists = calls.filter((c) => c.path === '/mcp/servers' && c.method === 'GET').length;
+    fireEvent.click(within(box).getByTestId('source-read-accept-tick'));
+    await waitFor(() => expect(calls.filter((c) => c.method === 'PATCH')).toEqual([{ path: '/mcp/tools/mcp%3Afx%2Fwt_echo', method: 'PATCH', body: { readAccepted: true } }]));
+    await waitFor(() => expect(calls.filter((c) => c.path === '/mcp/servers' && c.method === 'GET').length).toBeGreaterThan(lists));
   });
 });

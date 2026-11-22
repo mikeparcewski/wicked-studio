@@ -43,7 +43,7 @@ import {
   SHEET_KINDS,
   sheetKindOf,
   targetKey,
-  unconfirmedAddress,
+  unconfirmedAddresses,
   type SheetKind,
   type SourceForm,
   type UnconfirmedAddress,
@@ -53,6 +53,7 @@ import {
   withRange,
 } from './sourceModel.js';
 import { TestCall } from './TestCall.js';
+import { ReadAcceptance } from './ReadAcceptance.js';
 import { TrackerBadge } from '../trackers/TrackerParts.js';
 import { focusRadio, radioKey } from './radioKeys.js';
 import { useDialogFocus } from './useDialogFocus.js';
@@ -209,10 +210,11 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
       if (!still()) return;
       const code = codeOf(e);
       const wire = e instanceof ApiError ? e.wire : words(e);
-      const u = code === 'address_unconfirmed' ? unconfirmedAddress(wire) : null;
-      if (u !== null) {
+      // (crew#1294) Every address still to confirm, from the refusal's structured fields: one refusal asks them all.
+      const us = code === 'address_unconfirmed' && e instanceof ApiError ? unconfirmedAddresses(e.body) : [];
+      if (us.length > 0) {
         const forTarget = targetKey(f);
-        setAsks((list) => (list.some((a) => a.forTarget === forTarget && a.range === u.range) ? list : [...list, { ...u, forTarget }]));
+        setAsks((list) => [...list, ...us.filter((u) => !list.some((a) => a.forTarget === forTarget && a.range === u.range)).map((u) => ({ ...u, forTarget }))]);
         return;
       }
       setError(code === 'plaintext_refused'
@@ -787,6 +789,10 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
                   kind={saved.kind === 'graphql' ? 'graphql' : saved.kind === 'rest' ? 'rest' : 'mcp'}
                   reads={saved.tools.filter((t) => t.status === 'registered' && t.class === 'read' && (saved.kind !== 'rest' || t.rest?.method === 'GET' || t.rest?.method === 'HEAD')).map((t) => t.name)}
                 />
+              )}
+              {/* (crew#1295) Each read of a saved REST or MCP source, accepted (or not) as a read an app may make. */}
+              {!isNew && saved !== null && (saved.kind === 'rest' || saved.kind === 'mcp-http') && (
+                <ReadAcceptance server={saved} onChanged={onReread} />
               )}
               {kind !== 'upload' || upload !== null ? (
                 <div className="wk-src-box" data-testid="source-agents-see">
