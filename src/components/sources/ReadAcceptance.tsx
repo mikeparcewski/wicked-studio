@@ -43,9 +43,11 @@ export function ReadAcceptance({ server, onChanged }: { server: McpServer; onCha
   const [answered, setAnswered] = useState<Readonly<Record<string, boolean>>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<{ subject: string; words: string } | null>(null);
+  /** Toggles whose answer was lost: crew may have made the change, so the row claims neither state (review r2). */
+  const [unknown, setUnknown] = useState<ReadonlySet<string>>(() => new Set());
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  useEffect(() => { setAnswered({}); }, [server]);
+  useEffect(() => { setAnswered({}); setUnknown(new Set()); }, [server]);
 
   const tools = acceptableReads(server);
   if (tools.length === 0) return null;
@@ -58,11 +60,16 @@ export function ReadAcceptance({ server, onChanged }: { server: McpServer; onCha
     setError(null);
     try {
       const tool = (await mcpApi.setTool(t.subject, { readAccepted: on })) as AcceptableTool;
-      if (alive.current) setAnswered((m) => ({ ...m, [t.subject]: tool.readAccepted === true }));
+      if (alive.current) {
+        setAnswered((m) => ({ ...m, [t.subject]: tool.readAccepted === true }));
+        setUnknown((u) => { const n = new Set(u); n.delete(t.subject); return n; });
+      }
     } catch (e) {
       if (alive.current) {
         const code = e instanceof ApiError ? (e.body as { code?: unknown } | undefined)?.code : undefined;
         setError({ subject: t.subject, words: typeof code === 'string' && Object.hasOwn(REFUSALS, code) ? REFUSALS[code]! : e instanceof Error ? e.message : String(e) });
+        // No answer from crew (not a refusal): the change may have been made.
+        if (!(e instanceof ApiError)) setUnknown((u) => new Set(u).add(t.subject));
       }
     } finally {
       if (alive.current) setBusy(null);
@@ -84,12 +91,13 @@ export function ReadAcceptance({ server, onChanged }: { server: McpServer; onCha
         {tools.map((t) => {
           const on = accepted(t);
           const away = statusWords(t);
+          const notKnown = unknown.has(t.subject);
           return (
             <li key={t.subject}>
-              <label className="wk-src-check-row" data-testid="source-read-accept" data-tool={t.name} data-accepted={on ? 'true' : 'false'}>
+              <label className="wk-src-check-row" data-testid="source-read-accept" data-tool={t.name} data-accepted={notKnown ? 'unknown' : on ? 'true' : 'false'}>
                 <input type="checkbox" checked={on} disabled={busy !== null || (away !== null && !on)} data-testid="source-read-accept-tick"
                   onChange={(e) => void toggle(t, e.target.checked)} />
-                <span className="wk-src-note"><code className="wk-src-mono">{t.name}</code>{busy === t.subject ? (on ? ' · withdrawing…' : ' · accepting…') : on ? ' · accepted as a read' : away !== null ? ' · withdrawn' : ' · not accepted: apps can’t query it'}{away !== null && <span data-testid="source-read-accept-away">{` (${away}${on ? ': you can withdraw it' : ''})`}</span>}</span>
+                <span className="wk-src-note"><code className="wk-src-mono">{t.name}</code>{busy === t.subject ? (on ? ' · withdrawing…' : ' · accepting…') : notKnown ? ' · not known: Studio couldn’t confirm that change' : on ? ' · accepted as a read' : away !== null ? ' · withdrawn' : ' · not accepted: apps can’t query it'}{away !== null && <span data-testid="source-read-accept-away">{` (${away}${on ? ': you can withdraw it' : ''})`}</span>}</span>
               </label>
               {error !== null && error.subject === t.subject && <p role="alert" className="wk-src-note wk-src-tone-warn" data-testid="source-read-accept-error">{error.words}</p>}
             </li>

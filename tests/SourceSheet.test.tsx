@@ -520,5 +520,9 @@ describe('crew#1295 review r1 folds', () => {
     fireEvent.click(screen.getByTestId('source-read-accept-tick'));
     await screen.findByTestId('source-read-accept-error');
     expect(onReread).toHaveBeenCalledTimes(1);
+    // Crew may have made it: the row claims neither "accepted" nor "apps can't query it" (review r2).
+    expect(screen.getByTestId('source-read-accept').getAttribute('data-accepted')).toBe('unknown');
+    expect(screen.getByTestId('source-read-accept').textContent).toMatch(/not known: Studio couldn’t confirm that change/);
+    expect(screen.getByTestId('source-read-accept').textContent).not.toMatch(/apps can’t query it/);
   });
 });
