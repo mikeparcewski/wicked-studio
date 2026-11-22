@@ -82,7 +82,9 @@ function AgentLine({ r, open }: { r: AgentRow; open: (key: string) => void }): R
             { k: 'Version', v: <CellWords c={r.version} testId="agents-version" /> },
             ...(r.account !== null ? [{ k: 'Account', v: r.account }] : []),
             { k: 'New work', v: r.optIn ? 'Only when you pick it' : r.picked ? 'Used for new work' : 'Not used for new work' },
-            { k: 'Reviews', v: r.reviews ? (r.alsoReviews ? 'Also reviews work' : 'Can review work') : 'Doesn’t review right now' },
+            // studio#856: the two roles apart, each with the service's reason when it is off.
+            { k: 'Reviews', v: <CellWords c={r.roles.reviews} testId="agents-role-reviews" /> },
+            { k: 'Work', v: <CellWords c={r.roles.work} testId="agents-role-work" /> },
             ...(fix !== null ? [{ k: 'To look at', v: `${fix.label}${notes > 0 && fix.tone !== 'quiet' ? ` · plus ${notes} ${notes === 1 ? 'note' : 'notes'}` : ''}` }] : []),
           ]} />
           <div className="wk-calm-row-acts">

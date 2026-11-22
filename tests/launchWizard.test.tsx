@@ -345,6 +345,18 @@ describe('the Lead agent (DES-TEAMING-002 §8.1)', () => {
     expect([...pick.options].map((o) => o.value)).toEqual(['', 'claude', 'pi']);
   });
 
+  it('studio#856: a reviewer-only helper joins the job but is not offered as the lead', async () => {
+    useCapabilities.setState({ launchPrimary: true });
+    const reviewer = { ...seat('codex'), auth: 'signed_in', council_eligible: true, work_eligible: false, work_ineligible_reason: 'seat not eligible for work' } as RosterSeat;
+    setCachedRoster([seat('claude'), reviewer, seat('pi')]);
+    await toOptions();
+    const chips = screen.getAllByTestId('launch-wizard-seat');
+    expect(Object.fromEntries(chips.map((c) => [c.dataset.key, c.getAttribute('aria-pressed')]))).toEqual({ claude: 'true', codex: 'true', pi: 'true' });
+    expect(chips.filter((c) => c.dataset.unusable === 'true')).toEqual([]);
+    const pick = screen.getByTestId('launch-wizard-lead') as HTMLSelectElement;
+    expect([...pick.options].map((o) => o.value)).toEqual(['', 'claude', 'pi']);
+  });
+
   it('a lead whose helper is turned off reads as Random again', () => {
     expect(launchLead('codex', [seat('claude'), seat('pi')], true)).toBeNull();
     expect(launchLead('pi', [seat('claude'), seat('pi')], true)).toBe('pi');

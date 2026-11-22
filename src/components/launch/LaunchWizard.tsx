@@ -10,7 +10,7 @@ import { QeOffNote } from '../QeOffNote.js';
 import { workflowItems } from '../../board/workflowCommand.js';
 import { sessionPath } from '../../board/sessionModel.js';
 import { seatLabel, userSeats } from '../../board/seatNames.js';
-import { seatCanCarry, seatStanding } from '../gateVerdictModel.js';
+import { seatCanCarry, seatJoinStanding } from '../gateVerdictModel.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from '../composerDefaults.js';
 import type { ConfirmMode } from '../ContextPopover.js';
 import { useModalEscape } from '../Modal.js';
@@ -246,9 +246,10 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   const eligible = useMemo(() => userSeats(roster).filter((s) => s.enabled_for_council), [roster]);
   // (PRODUCT-WORKS J4) Only a helper that can take work now is picked by default: one that is signed
   // out, benched (out of quota until its lift time) or refused work by this computer is shown greyed
-  // out with why, and joins the job only when the operator turns it on.
+  // out with why, and joins the job only when the operator turns it on. A reviewer-only seat joins: it votes and
+  // judges, and is never the lead (studio#856).
   const unusable = useMemo(() => new Map(eligible.flatMap((s) => {
-    const st = seatStanding(s);
+    const st = seatJoinStanding(s);
     return st.state === 'ready' || st.state === 'unknown' ? [] : [[s.key, st.state === 'signed-out' ? 'signed out' : st.note] as const];
   })), [eligible]);
   const isOff = (key: string): boolean => (unusable.has(key) ? !picked.includes(key) : seatOff(key, dropped, picked));
@@ -256,7 +257,7 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   const offerReduced = reducedCap && seats.length === 1;
   // The Lead agent (DES-TEAMING-002 §8.1): offered when the daemon takes it and there is a choice to
   // make; a pick whose helper was turned off reads as Random again (never a stale seat sent).
-  // Only a seat that can take work may lead: crew refuses a signed-out or benched lead by name.
+  // Only a seat that can take work may lead: crew refuses a signed-out, benched or not-work-eligible lead by name.
   const leadable = seats.filter((s) => s.signed_in !== false && seatCanCarry(s));
   const offerLead = leadCap && leadable.length > 1;
   // Power mode is a build posture: offered for a workflow launch on a daemon that runs it (not Draft epics, not a demo).

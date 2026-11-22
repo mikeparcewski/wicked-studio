@@ -929,7 +929,9 @@ export function seatStanding(seat: RosterSeat | undefined, now: number = Date.no
   const eligible = bag['council_eligible'];
   const auth = bag['auth'];
   const reason = bag['council_ineligible_reason'];
-  if (eligible === false) {
+  // studio#856: `council_eligible` is the BALLOT only. A daemon that says `work_eligible: true` seats it for work (a
+  // work-only seat); only a daemon before api-types 0.129.0, which sends no `work_eligible`, has council stand for both.
+  if (eligible === false && bag['work_eligible'] !== true) {
     return { state: 'ineligible', note: typeof reason === 'string' && reason !== '' ? reason : 'a council would not seat it' };
   }
   if (auth === 'not_required') {
@@ -941,6 +943,40 @@ export function seatStanding(seat: RosterSeat | undefined, now: number = Date.no
     return { state: 'signed-out', note: eligible === true ? 'no sign-in observed — still council-eligible' : 'no sign-in observed — may fail or be benched' };
   }
   return { state: 'unknown', note: '' };
+}
+
+/**
+ * A seat's two roles, read apart (studio#856, crew#916, api-types 0.129.0): `council` may cast a council ballot
+ * (`council_eligible`), `work` may be seated for work (`work_eligible`). A work-only seat reads council off and work
+ * on; a reviewer-only seat the reverse; the daemon benches a seat only when both are off. `reported` is false on a
+ * daemon before 0.129.0 (no `work_eligible`): there `council_eligible` stands for both, as it always did.
+ * Each `why` is the daemon's own reason when the role is off.
+ */
+export interface SeatRoles { council: boolean; councilWhy: string | null; work: boolean; workWhy: string | null; reported: boolean }
+
+export function seatRoles(seat: RosterSeat): SeatRoles {
+  const bag = seat as Record<string, unknown>;
+  const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
+  const council = bag['council_eligible'] !== false;
+  const reported = typeof bag['work_eligible'] === 'boolean';
+  const work = reported ? bag['work_eligible'] === true : council;
+  return {
+    council, councilWhy: council ? null : text(bag['council_ineligible_reason']),
+    work, workWhy: work ? null : text(reported ? bag['work_ineligible_reason'] : bag['council_ineligible_reason']),
+    reported,
+  };
+}
+
+/**
+ * Whether a seat JOINS a job's helpers by default (New job's and the composer's helper rows, PRODUCT-WORKS J4):
+ * {@link seatStanding}, except that a reviewer-only seat (`work_eligible: false`, `council_eligible: true`) joins — it
+ * votes and judges, and takes no unit (studio#856). It is still never a lead or a reassign target ({@link seatCanCarry}).
+ */
+export function seatJoinStanding(seat: RosterSeat | undefined, now: number = Date.now()): ReturnType<typeof seatStanding> {
+  const st = seatStanding(seat, now);
+  const bag = (seat ?? {}) as Record<string, unknown>;
+  if (st.state === 'ineligible' && bag['work_eligible'] === false && bag['council_eligible'] === true) return { state: 'ready', note: 'reviews only' };
+  return st;
 }
 
 /**
@@ -976,7 +1012,9 @@ export function noCarryingSeatReason(keys: Iterable<string>, roster: readonly Ro
     const seat = roster.find((s) => s.key === key);
     if (seat === undefined || seatCanCarry(seat)) return null;
     const { state, note } = seatStanding(seat);
-    reasons.push(`${key}: ${state === 'inactive' ? `benched — ${note.replace(/^inactive:?\s*/, '') || 'inactive'}` : `not council-eligible — ${note}`}`);
+    // studio#856: a seat refused WORK says so; the council words are for a daemon's council reading.
+    const workRefused = (seat as Record<string, unknown>)['work_eligible'] === false;
+    reasons.push(`${key}: ${state === 'inactive' ? `benched — ${note.replace(/^inactive:?\s*/, '') || 'inactive'}` : workRefused ? `not given work — ${note}` : `not council-eligible — ${note}`}`);
   }
   return reasons.length === 0 ? null : reasons.join(' · ');
 }
