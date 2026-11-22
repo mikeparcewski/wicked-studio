@@ -141,6 +141,42 @@ describe('T16: make a project while answering Which project?', () => {
     expect(posts.filter((p) => p.path === '/projects')).toHaveLength(1);
     expect(posts.filter((p) => p.path === '/projects/new-project/members')).toHaveLength(2);
   });
+  // studio#1273: whether a project needs the attach is the daemon's answer at the pick, not component memory.
+  it('a failed attach survives a remount: picking the made project then attaches the repository before the move', async () => {
+    projectList = [];
+    attachStatus = 503;
+    page();
+    fireEvent.click(await screen.findByRole('button', { name: 'New project' }));
+    await waitFor(() => expect((screen.getByRole('textbox', { name: 'Project name' }) as HTMLInputElement).value).toBe('Repository name'));
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await screen.findByText(/The repository was not attached/);
+    // The chat is reopened: the passage mounts afresh, and the daemon lists the made project (still without the repository).
+    cleanup();
+    projectList = [{ id: 'new-project', name: 'Domain work' }];
+    members = { 'new-project': [] };
+    attachStatus = 200;
+    posts.length = 0;
+    page();
+    await waitFor(() => expect(chips().map((c) => c.dataset['project'])).toEqual(['new-project']));
+    fireEvent.click(chips()[0]!);
+    await waitFor(() => expect(posts.some((p) => p.path === '/chats')).toBe(true));
+    expect(posts.slice(0, 2)).toMatchObject([
+      { path: '/projects/new-project/members', body: { kind: 'crew.repo', ref: 'rg1', attachedBy: 'studio' } },
+      { path: '/chats', body: { projectId: 'new-project', repoRefs: ['rg1'] } },
+    ]);
+  });
+  it('a project that already holds the repository is not attached again; a members read that fails moves nothing', async () => {
+    page();
+    await waitFor(() => expect(chips()).toHaveLength(1));
+    failMembers = new Set(['p1']);
+    fireEvent.click(chips()[0]!);
+    await screen.findByText(/The members of reqgraph could not be read/);
+    expect(posts).toEqual([]);
+    failMembers = new Set();
+    fireEvent.click(chips()[0]!);
+    await waitFor(() => expect(posts.some((p) => p.path === '/chats')).toBe(true));
+    expect(posts.some((p) => p.path.endsWith('/members'))).toBe(false);
+  });
   it('says when creation fails and sends no attachment or job', async () => {
     createStatus = 409;
     page();

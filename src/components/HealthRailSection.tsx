@@ -8,6 +8,7 @@ import type { SeatRecord } from '../api/seatRecord.js';
 import type { DiagnosticsGovernance, DiagnosticsGovernanceFinding, RosterSeat } from '../api/types.js';
 import { coachSeat, phaseWords, recordsByCli, seatWeekLine, type CoachMove } from '../board/seatCoaching.js';
 import { TechDetails } from './ui/index.js';
+import { seatRoles } from './gateVerdictModel.js';
 import { useSeatWeek, type MoveState, type SeatWeekRead } from '../hooks/useSeatWeek.js';
 import { useConnectionStore } from '../store/connection.js';
 import { setCachedRoster, subscribeRoster } from '../store/rosterCache.js';
@@ -142,13 +143,16 @@ export function seatStandingWord(seat: RosterSeat): SeatStanding {
   const bag = seat as Record<string, unknown>;
   const auth = typeof bag['auth'] === 'string' ? (bag['auth'] as string) : null;
   const eligible = bag['council_eligible'];
-  const reason = typeof bag['council_ineligible_reason'] === 'string' ? (bag['council_ineligible_reason'] as string) : '';
   const tier = typeof bag['free_tier'] === 'string' ? (bag['free_tier'] as string) : '';
-  // The daemon SAYS a council would not seat it — its reason, its words (crew#533).
-  if (eligible === false) {
+  // studio#1312: the ballot and work read apart (`seatRoles`, studio#856). The daemon leaves a seat out only when both
+  // are off; a work-only seat (`council_eligible: false`, `work_eligible: true`) is usable and reads by its sign-in.
+  // A daemon before api-types 0.129.0 (no `work_eligible`) has council stand for both, as before.
+  const roles = seatRoles(seat);
+  if (!roles.council && !roles.work) {
     // studio#724: plain words; the service's own reason ("not enabled for council") is the hover only.
-    const plain = reason.replace(/\bcouncils?\b/gi, 'checks').replace(/\bseats?\b/gi, 'helper');
-    return { kind: 'ineligible', detail: `not picked for checks${plain !== '' ? ` — ${plain}` : ''}`, title: plain !== '' ? `Studio's service: ${plain}` : 'Studio\'s service does not pick this helper for checks', auth };
+    const plain = (roles.workWhy ?? roles.councilWhy ?? '').replace(/\bcouncils?\b/gi, 'checks').replace(/\bseats?\b/gi, 'helper');
+    const word = roles.reported ? 'not given work or checks' : 'not picked for checks';
+    return { kind: 'ineligible', detail: `${word}${plain !== '' ? ` — ${plain}` : ''}`, title: plain !== '' ? `Studio's service: ${plain}` : roles.reported ? 'Studio\'s service gives this helper no work and no checks' : 'Studio\'s service does not pick this helper for checks', auth };
   }
   if (auth === 'not_required') {
     return { kind: 'no-sign-in-needed', detail: `no sign-in needed${tier !== '' ? ` (${tier})` : ''}`, title: tier !== '' ? `answers on its provider free tier: ${tier}` : null, auth };
@@ -605,9 +609,9 @@ export function useHealthRegistry(
   // green otherwise. It reads the same signals the registry already computes — no new data source.
   // F-2R2-009 (review): the sign-in HEURISTIC is said per row (the amber `!`), never folded into
   // the heart — on a default roster most seats read `signed_in:false`, and a healthy daemon must
-  // not wear a permanently degraded heart over a guess. Only a daemon-declared `council_eligible:
-  // false` (crew#533, api-types 0.35.0) degrades it, because that IS the daemon's own word.
-  const ineligible = (roster ?? []).some((s) => (s as Record<string, unknown>)['council_eligible'] === false && s.health?.status !== 'inactive');
+  // not wear a permanently degraded heart over a guess. Only a seat the daemon itself leaves out
+  // (crew#533; studio#1312: both roles off, `seatStandingWord`) degrades it, because that IS the daemon's own word.
+  const ineligible = (roster ?? []).some((s) => seatStandingWord(s).kind === 'ineligible' && s.health?.status !== 'inactive');
   const degraded =
     wsStatus === 'connecting' || healthError !== null || rosterError || govWarnings || ineligible || (health !== null && health.status !== 'ok');
   const heartState = sick ? 'unhealthy' : degraded ? 'degraded' : 'healthy';

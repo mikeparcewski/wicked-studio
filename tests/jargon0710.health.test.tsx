@@ -24,6 +24,19 @@ describe('Health in plain words', () => {
       expect(`${w.detail ?? ''} ${w.title ?? ''}`).not.toMatch(JARGON);
     }
   });
+  // studio#1312: the rail reads the two roles apart (`seatRoles`): a work-only helper is usable, so it wears the green
+  // check and its sign-in, never the amber "!" of a helper the daemon leaves out.
+  it('a work-only helper reads ready on the rail; one with both roles off reads left out', () => {
+    const workOnly = seat({ key: 'pi', display_name: 'Pi', binary: 'pi', enabled_for_council: true, auth: 'signed_in', council_eligible: false, council_ineligible_reason: 'not enabled for council', work_eligible: true });
+    expect(seatStandingWord(workOnly).kind).toBe('signed-in');
+    render(<SeatRow seat={workOnly} />);
+    const row = screen.getByTestId('rail-seat-row');
+    expect(row.dataset['standing']).toBe('signed-in');
+    expect(row.textContent).toContain('✓');
+    expect(screen.queryByTestId('rail-seat-why')).toBeNull();
+    const neither = seat({ key: 'pi', display_name: 'Pi', binary: 'pi', enabled_for_council: true, auth: 'signed_in', council_eligible: false, work_eligible: false, work_ineligible_reason: 'over its usage limit' });
+    expect(seatStandingWord(neither)).toMatchObject({ kind: 'ineligible', detail: 'not given work or checks — over its usage limit' });
+  });
   it('the week line says "skipped", not "benched"', () => {
     expect(seatWeekLine({ units: 2, firstPass: 1, firstPassOf: 2, rework: 0, stalls: 0, benched: 1, costUsd: null } as never)).not.toMatch(/bench/i);
   });
