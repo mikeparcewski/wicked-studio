@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EditorHost, notAppliedLine, threadLine, type HostLogEntry, type HostUi } from '../src/editors/host.js';
+import { EditorHost, NOT_APPLIED_CHARS, notAppliedLine, threadLine, type HostLogEntry, type HostUi } from '../src/editors/host.js';
 import { FakeDocAdapter, SAMPLE_PAGE } from '../src/editors/fakeAdapter.js';
 import { CHORD_TABLE, isForwardable, isOneGrapheme, judgeKey, judgeTyped } from '../src/editors/keys.js';
 import { builtinDefaults, changedBy, chipsFor, elementLabel, resolveKind } from '../src/editors/model.js';
@@ -198,6 +198,21 @@ describe('studio#1252: a write that landed only in part says what was not applie
     expect(notAppliedLine({ items: [{ selector: 'cta', reason: 'inv2-would-drop-wids:a,b' }], words }, inv)).toBe(`Part of this edit was not applied (“Book a room”): ${words}.`);
     expect(notAppliedLine({ items: [{ selector: 'cta', reason: 'x' }, { selector: 'gone', reason: 'selector-not-found' }, { selector: 'gone2', reason: 'stale' }], words: 'w' }, inv)).toBe('Part of this edit was not applied (“Book a room”, 2 more parts): w.');
     expect(notAppliedLine({ items: [{ selector: 'gone', reason: 'stale' }], words: 'w' }, inv)).toBe('Part of this edit was not applied (one part): w.');
+  });
+
+  it('xreview r1: many long parts never push the reasons out; the parts that do not fit are counted', () => {
+    const html = Array.from({ length: 8 }, (_, i) => `<p data-wid="p${i}">Paragraph ${i} holds a long sentence about the quarterly numbers</p>`).join('');
+    const inv = inventoryOf(html);
+    const words = 'it would remove 2 parts nested inside what you edited; the part you edited changed since you opened it';
+    const items = Array.from({ length: 8 }, (_, i) => ({ selector: `p${i}`, reason: i % 2 === 0 ? 'inv2-would-drop-wids:a,b' : 'stale' }));
+    const line = notAppliedLine({ items, words }, inv);
+    expect(line.length).toBeLessThanOrEqual(NOT_APPLIED_CHARS);
+    expect(line.endsWith(`: ${words}.`)).toBe(true);
+    expect(line).toMatch(/^Part of this edit was not applied \(“Paragraph 0 holds a long sent…”, .*, \d more parts\)/u);
+    // Even the reasons alone are bounded, and the count of parts stays.
+    const huge = notAppliedLine({ items, words: 'x'.repeat(500) }, inv);
+    expect(huge.length).toBeLessThanOrEqual(NOT_APPLIED_CHARS);
+    expect(huge).toMatch(/more parts\): x+…\.$/u);
   });
 
   it('the host keeps the written line (its Undo) and says beside it which parts were not applied; the plugin hears them', async () => {

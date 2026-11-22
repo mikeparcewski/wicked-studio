@@ -306,21 +306,36 @@ export function threadLine(firstParty: boolean, name: string, items: readonly Wi
   return `${firstParty ? 'You' : name} ${writeVerb(items)} ${summary} · Version ${version}`;
 }
 
+/** (studio#1252) The longest not-applied line the host draws: its own words, so not held to a plugin's status limit. */
+export const NOT_APPLIED_CHARS = 280;
+
 /**
  * (studio#1252) The host's line for a write that landed only in part: which parts were not applied (by their text in
- * the version the edit was made on, else counted), and the engine's reasons. Said beside the written line (its Undo
- * stays): the version is the part that landed.
+ * the version the edit was made on, as many as fit, the rest counted), and the engine's reasons. Said beside the
+ * written line (its Undo stays): the version is the part that landed. Bounded by {@link NOT_APPLIED_CHARS}; the reasons
+ * keep their room, so a long list never pushes them out.
  */
-export function notAppliedLine(n: NotApplied, inv: Inventory): string {
-  const names: string[] = [];
-  let unnamed = 0;
-  for (const sel of new Set(n.items.map((i) => i.selector))) {
+export function notAppliedLine(n: NotApplied, inv: Inventory, max = NOT_APPLIED_CHARS): string {
+  const parts = [...new Set(n.items.map((i) => i.selector))];
+  const labels = parts.flatMap((sel) => {
     const text = (inv.wids.get(sel)?.text ?? '').replace(/\s+/gu, ' ').trim();
-    if (text === '') unnamed += 1;
-    else names.push(`“${text.length > 40 ? `${text.slice(0, 39)}…` : text}”`);
+    return text === '' ? [] : [`“${text.length > 30 ? `${text.slice(0, 29)}…` : text}”`];
+  });
+  const head = 'Part of this edit was not applied (';
+  const words = n.words.length > max / 2 ? `${n.words.slice(0, Math.floor(max / 2) - 1)}…` : n.words;
+  const end = `): ${words}.`;
+  const what = (shown: readonly string[]): string => {
+    const rest = parts.length - shown.length;
+    if (shown.length === 0) return rest === 1 ? 'one part' : `${rest} parts`;
+    return rest === 0 ? shown.join(', ') : `${shown.join(', ')}, ${rest === 1 ? 'one more part' : `${rest} more parts`}`;
+  };
+  let shown: string[] = [];
+  for (const l of labels) {
+    const next = [...shown, l];
+    if (head.length + what(next).length + end.length > max) break;
+    shown = next;
   }
-  const what = [...names, ...(unnamed === 0 ? [] : [unnamed === 1 ? (names.length === 0 ? 'one part' : 'one more part') : `${unnamed} ${names.length === 0 ? '' : 'more '}parts`])].join(', ');
-  return `Part of this edit was not applied (${what}): ${n.words}.`;
+  return `${head}${what(shown)}${end}`;
 }
 
 /** How long after focus leaves an app's frame a spec op from it is still the person's (see `justInFrame`). */
@@ -734,7 +749,7 @@ export class EditorHost {
             // (studio#1252) A partly refused batch is never "done" for the whole edit: what was left out, and why.
             if (r.notApplied !== undefined && r.notApplied.items.length > 0) {
               this.log({ kind: 'refused', type: 'version.write', code: 'refused', why: `not applied: ${r.notApplied.items.map((i) => `${i.selector} (${i.reason})`).join(', ')}` });
-              this.o.ui.status(notAppliedLine(r.notApplied, inv.inv).slice(0, LIMITS.statusChars));
+              this.o.ui.status(notAppliedLine(r.notApplied, inv.inv));
             }
           }
           return r;
