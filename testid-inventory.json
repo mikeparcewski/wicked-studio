@@ -19875,6 +19875,12 @@
       ]
     },
     {
+      "testId": "session-gate-judgment-label",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-lead-act",
       "files": [
         "src/components/session/GateRow.tsx"
