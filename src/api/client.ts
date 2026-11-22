@@ -689,7 +689,7 @@ export const api = {
     }),
 
   /** Server-side requirements search: tokenized AND-match + risk/domain filters + pagination. */
-  listRequirements: (repoId: string, params: { q?: string; risk?: 'risk' | 'no-risk'; category?: 'functional' | 'config-data'; mismatch?: 'yes' | 'no'; domain?: string; offset?: number; limit?: number }, opts: { signal?: AbortSignal } = {}) => {
+  listRequirements: async (repoId: string, params: { q?: string; risk?: 'risk' | 'no-risk'; category?: 'functional' | 'config-data'; mismatch?: 'yes' | 'no'; domain?: string; offset?: number; limit?: number }, opts: { signal?: AbortSignal } = {}) => {
     const qs = new URLSearchParams();
     if (params.q) qs.set('q', params.q);
     if (params.mismatch) qs.set('mismatch', params.mismatch);
@@ -698,7 +698,15 @@ export const api = {
     if (params.domain) qs.set('domain', params.domain);
     qs.set('offset', String(params.offset ?? 0));
     qs.set('limit', String(params.limit ?? 50));
-    return apiFetch<import('./types.js').RequirementsPage>(`/repos/${encodeURIComponent(repoId)}/requirements?${qs.toString()}`, opts.signal !== undefined ? { signal: opts.signal } : undefined);
+    const body = await apiFetch<import('./types.js').RequirementsPage | { code?: unknown; error?: unknown }>(`/repos/${encodeURIComponent(repoId)}/requirements?${qs.toString()}`, opts.signal !== undefined ? { signal: opts.signal } : undefined);
+    // studio#986: crew answers "not generated yet" with a 200 (an older daemon with a 404) carrying the same typed
+    // body. Every caller reads that state off the refusal (`requirementsNotGenerated`, the document adapter's 404), so
+    // the 200 answer is raised as the very ApiError the older daemon's 404 produced: one shape for both daemons, and
+    // the browser no longer logs a 404 for every repository without requirements.
+    if (typeof body === 'object' && body !== null && 'code' in body && body.code === 'notGenerated') {
+      throw new ApiError(404, typeof body.error === 'string' ? body.error : 'No requirements graph yet for this repository', body);
+    }
+    return body as import('./types.js').RequirementsPage;
   },
   /** Set (1..100) or clear (`null`: the Settings minimum applies) a repository's own requirements minimum (crew
    *  api-types 0.197.0 `PUT /repos/:id/requirements/minimum`). */
