@@ -49,6 +49,48 @@ describe('the dock says when its card goes on under the sticky row (studio#1021)
     expect(surface.dataset['more']).toBeUndefined();
   });
 
+  it('measures on open and on resize, without a scroll: an overflowing gate shows the cue at once; growing content too', async () => {
+    // The surface's geometry from the start (jsdom has no layout), and a ResizeObserver the test can fire.
+    const g = { scrollHeight: 604, clientHeight: 420, scrollTop: 0 };
+    const proto = HTMLElement.prototype;
+    const saved = ['scrollHeight', 'clientHeight', 'scrollTop'].map((k) => [k, Object.getOwnPropertyDescriptor(proto, k)] as const);
+    const isSurface = (el: HTMLElement): boolean => el.classList.contains('wk-dock-surface');
+    for (const [k, d] of saved) {
+      Object.defineProperty(proto, k, {
+        configurable: true,
+        get(this: HTMLElement) { return isSurface(this) ? g[k as keyof typeof g] : (d?.get?.call(this) ?? 0); },
+        set(this: HTMLElement, v: number) { if (isSurface(this)) g[k as keyof typeof g] = v; else d?.set?.call(this, v); },
+      });
+    }
+    const observers: Array<{ cb: () => void; els: Element[] }> = [];
+    const RO = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class { private o: { cb: () => void; els: Element[] }; constructor(cb: () => void) { this.o = { cb, els: [] }; observers.push(this.o); }
+      observe(el: Element): void { this.o.els.push(el); } unobserve(): void {} disconnect(): void { this.o.els = []; } } as unknown as typeof ResizeObserver;
+    try {
+      render(<DecisionDockFrame items={[ITEM]}><div /></DecisionDockFrame>);
+      const surface = screen.getByTestId('decision-dock-surface');
+      await frames();
+      expect(surface.dataset['more']).toBe('below');
+      // Both the surface and its slot (the card's content) are watched.
+      const watched = observers.flatMap((o) => o.els);
+      expect(watched).toContain(surface);
+      expect(watched).toContain(screen.getByTestId('decision-dock-slot'));
+      // The content shrinks to fit (a reply folded it): a resize, no scroll, clears the cue.
+      g.scrollHeight = 400;
+      act(() => { for (const o of observers) if (o.els.length > 0) o.cb(); });
+      await frames();
+      expect(surface.dataset['more']).toBeUndefined();
+      // More choices arrive: the cue comes back on the resize alone.
+      g.scrollHeight = 700;
+      act(() => { for (const o of observers) if (o.els.length > 0) o.cb(); });
+      await frames();
+      expect(surface.dataset['more']).toBe('below');
+    } finally {
+      globalThis.ResizeObserver = RO;
+      for (const [k, d] of saved) { if (d !== undefined) Object.defineProperty(proto, k, d); else delete (proto as unknown as Record<string, unknown>)[k]; }
+    }
+  });
+
   it('the row draws a fade and "More below" while there is more, hidden from assistive tech; key moves clear the row', () => {
     const css = read('src/styles/sections/ask-card.css');
     const cue = body(css, '.wk-dock-surface[data-more="below"] .wk-ask--bare .wk-ask-go::before');
