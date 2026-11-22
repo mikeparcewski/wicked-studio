@@ -6,7 +6,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as client from '../src/api/client.js';
 import { ApiError } from '../src/api/errors.js';
-import { GATE_READ_DEADLINE_MS, GATE_READS_IN_FLIGHT, GATE_RETRY_BASE_MS, inGateSlot, resetGateSlotsForTest } from '../src/board/gateActions.js';
+import { GATE_READ_DEADLINE_MS, GATE_RETRY_BASE_MS, GATE_RETRY_READS_IN_FLIGHT, inGateRetrySlot, resetGateSlotsForTest } from '../src/board/gateActions.js';
 import { useGateSkipQe } from '../src/hooks/useGateSkipQe.js';
 
 const OFFER = { action: 'skip_qe', reasonRequired: true };
@@ -44,7 +44,7 @@ describe('useGateSkipQe retries a failed read (studio#1203)', () => {
     expect(get).toHaveBeenCalledTimes(1);
   });
 
-  it('never has more than the shared slots in flight when many cards retry (the read slots)', async () => {
+  it('never has more than the retry slots in flight when many cards retry (studio#1319: apart from the first reads)', async () => {
     let inFlight = 0;
     let peak = 0;
     const release: Array<() => void> = [];
@@ -56,9 +56,9 @@ describe('useGateSkipQe retries a failed read (studio#1203)', () => {
     });
     for (let i = 0; i < 12; i++) renderHook(() => useGateSkipQe(`r${i}`, 'i', 2, true));
     await vi.advanceTimersByTimeAsync(GATE_RETRY_BASE_MS + 1);
-    expect(inFlight).toBe(GATE_READS_IN_FLIGHT);
-    expect(peak).toBe(GATE_READS_IN_FLIGHT);
-    expect(release).toHaveLength(GATE_READS_IN_FLIGHT);
+    expect(inFlight).toBe(GATE_RETRY_READS_IN_FLIGHT);
+    expect(peak).toBe(GATE_RETRY_READS_IN_FLIGHT);
+    expect(release).toHaveLength(GATE_RETRY_READS_IN_FLIGHT);
   });
 
   describe('stalled retries release their slots', () => {
@@ -66,16 +66,16 @@ describe('useGateSkipQe retries a failed read (studio#1203)', () => {
     function stallRetries(): void {
       let calls = 0;
       vi.spyOn(client.api, 'getGate').mockImplementation((_id: string, signal?: AbortSignal) => {
-        if (calls++ < GATE_READS_IN_FLIGHT) return Promise.reject(new ApiError(503, 'x'));
+        if (calls++ < GATE_RETRY_READS_IN_FLIGHT) return Promise.reject(new ApiError(503, 'x'));
         return new Promise((_r, rej) => { signal?.addEventListener('abort', () => rej(new Error('aborted'))); });
       });
     }
     async function fillSlots(): Promise<{ unmount: () => void; started: () => boolean }> {
       stallRetries();
-      const mounted = Array.from({ length: GATE_READS_IN_FLIGHT }, (_, i) => renderHook(() => useGateSkipQe(`s${i}`, 'i', 2, true)));
+      const mounted = Array.from({ length: GATE_RETRY_READS_IN_FLIGHT }, (_, i) => renderHook(() => useGateSkipQe(`s${i}`, 'i', 2, true)));
       await vi.advanceTimersByTimeAsync(GATE_RETRY_BASE_MS + 1);
       let started = false;
-      void inGateSlot(async () => { started = true; });
+      void inGateRetrySlot(async () => { started = true; });
       await vi.advanceTimersByTimeAsync(0);
       expect(started).toBe(false);
       return { unmount: () => mounted.forEach((m) => m.unmount()), started: () => started };
