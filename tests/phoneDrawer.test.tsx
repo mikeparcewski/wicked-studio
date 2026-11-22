@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RailDrawer } from '../src/components/ui/RailDrawer.js';
 import { useLayerStore } from '../src/store/layers.js';
 
@@ -93,6 +93,48 @@ describe('phone rail drawer', () => {
     // Only the modal's own rung is left.
     expect(useLayerStore.getState().modalIds).toEqual([modalId]);
     act(() => useLayerStore.getState().popModal(modalId));
+  });
+  it('a drawer control that opens something outside it (Chat) closes it and hands focus there; other controls do not (studio#974)', async () => {
+    const opened: string[] = [];
+    render(
+      <div data-shell="desk">
+        <RailDrawer pathname="/" badge={null}>
+          <nav data-testid="session-rail">
+            <button type="button" data-testid="fold" onClick={() => opened.push('fold')}>Recent</button>
+            <button type="button" data-testid="chat" data-drawer-closes="#chat-box" onClick={() => opened.push('chat')}><svg data-testid="chat-icon" /></button>
+          </nav>
+        </RailDrawer>
+        <div id="main" tabIndex={-1} />
+        <textarea id="chat-box" data-testid="chat-box" />
+      </div>,
+    );
+    const t = screen.getByTestId('rail-drawer-toggle');
+    fireEvent.click(t);
+    // A control that stays inside the drawer (a fold, a toggle) leaves it open.
+    fireEvent.click(screen.getByTestId('fold'));
+    expect(screen.getByTestId('rail-drawer').getAttribute('data-open')).toBe('true');
+    // Chat: its own click runs, the drawer and its scrim go, the page is live again, and focus lands in what it
+    // opened (never the hidden drawer, never the menu button). A tap on the icon inside the button counts too.
+    fireEvent.click(screen.getByTestId('chat-icon'));
+    expect(opened).toEqual(['fold', 'chat']);
+    expect(screen.getByTestId('rail-drawer').getAttribute('data-open')).toBe('false');
+    expect(screen.queryByTestId('rail-drawer-scrim')).toBeNull();
+    expect(document.getElementById('main')!.hasAttribute('inert')).toBe(false);
+    expect(useLayerStore.getState().modalIds).toEqual([]);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('chat-box')));
+  });
+  it('a named focus target that never draws: focus falls back to the menu button, not the hidden drawer', async () => {
+    render(
+      <div data-shell="desk">
+        <RailDrawer pathname="/" badge={null}><nav data-testid="session-rail"><button type="button" data-testid="chat" data-drawer-closes="#nowhere">Chat</button></nav></RailDrawer>
+        <div id="main" tabIndex={-1} />
+      </div>,
+    );
+    const t = screen.getByTestId('rail-drawer-toggle');
+    fireEvent.click(t);
+    fireEvent.click(screen.getByTestId('chat'));
+    expect(screen.getByTestId('rail-drawer').getAttribute('data-open')).toBe('false');
+    await waitFor(() => expect(document.activeElement).toBe(t), { timeout: 2000 });
   });
   it('desktop: the rail renders as before, no top bar, no toggle', () => {
     phone = false;

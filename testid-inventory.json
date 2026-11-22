@@ -24838,7 +24838,31 @@
       ]
     },
     {
+      "testId": "topbar-brand",
+      "files": [
+        "src/components/ui/TopBar.tsx"
+      ]
+    },
+    {
+      "testId": "topbar-lettering",
+      "files": [
+        "src/components/ui/TopBar.tsx"
+      ]
+    },
+    {
       "testId": "topbar-lockup",
+      "files": [
+        "src/components/ui/TopBar.tsx"
+      ]
+    },
+    {
+      "testId": "topbar-logo",
+      "files": [
+        "src/components/ui/TopBar.tsx"
+      ]
+    },
+    {
+      "testId": "topbar-mark",
       "files": [
         "src/components/ui/TopBar.tsx"
       ]
@@ -24851,6 +24875,12 @@
     },
     {
       "testId": "topbar-search",
+      "files": [
+        "src/components/ui/TopBar.tsx"
+      ]
+    },
+    {
+      "testId": "topbar-site-name",
       "files": [
         "src/components/ui/TopBar.tsx"
       ]
@@ -27571,6 +27601,12 @@
       ]
     },
     {
+      "expression": "ids.name",
+      "files": [
+        "src/components/ui/SiteBrand.tsx"
+      ]
+    },
+    {
       "expression": "it.testId",
       "files": [
         "src/components/ui/OverflowMenu.tsx"
@@ -27702,6 +27738,7 @@
         "src/components/ui/Progress.tsx",
         "src/components/ui/QuietPage.tsx",
         "src/components/ui/Segmented.tsx",
+        "src/components/ui/SiteBrand.tsx",
         "src/components/ui/StatLine.tsx",
         "src/components/ui/StatTile.tsx",
         "src/components/ui/StateBanner.tsx",
