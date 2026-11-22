@@ -80,6 +80,8 @@ export function isArtifactProposal(p: unknown): p is ArtifactProposal {
   const touches = p['touches'];
   if (touches !== undefined && (!Array.isArray(touches) || !touches.every(str))) return false;
   // (A5) A refine's protected edits: each one the card can draw and the person can answer.
+  const allow = p['allow'];
+  if (allow !== undefined && (!Array.isArray(allow) || !allow.every(str))) return false;
   const kept = p['protected'];
   return kept === undefined || (Array.isArray(kept) && kept.every(isProtectedEdit));
 }
@@ -87,11 +89,16 @@ export function isArtifactProposal(p: unknown): p is ArtifactProposal {
 const filled = (v: unknown): v is string => str(v) && v.trim() !== '';
 const isOnboard = (o: unknown): boolean => isObj(o) && str(o['url']) && str(o['name']) && strOrNull(o['checkout'])
   && strOrNull(o['projectId']) && strOrNull(o['projectName'])
-  && (o['existing'] === null || (isObj(o['existing']) && filled(o['existing']['id']) && filled(o['existing']['name'])));
+  && (o['existing'] === null || (isObj(o['existing']) && filled(o['existing']['id']) && filled(o['existing']['name'])))
+  // (crew#1694) A project Go creates first: its name, and no existing project beside it.
+  && (o['createProject'] === undefined || o['createProject'] === null
+    || (isObj(o['createProject']) && filled(o['createProject']['name']) && o['projectId'] === null && o['projectName'] === null));
+/** The project an onboard card's Go creates first (crew#1694), or `null`. */
+export const onboardNewProject = (o: NonNullable<ArtifactProposal['onboard']>): string | null => o.createProject?.name ?? null;
 /** An onboard card Go can answer: the address and name, and either where it is cloned (a new one) or the project an
- *  already-registered one joins. */
+ *  already-registered one joins (an existing one, or one Go creates). */
 const onboardGoable = (o: Record<string, unknown>, filedIn: unknown): boolean => filled(o['url']) && filled(o['name'])
-  && (o['existing'] === null ? filled(o['checkout']) : filled(o['projectId']))
+  && (o['existing'] === null ? filled(o['checkout']) : filled(o['projectId']) || isObj(o['createProject']))
   // One destination, said the same everywhere: the project's id and name together (or neither), and the card's
   // "Project" row is that project.
   && (o['projectId'] === null ? o['projectName'] === null : filled(o['projectId']) && filled(o['projectName']))
@@ -239,8 +246,20 @@ const NOT_NOW_SUB: Readonly<Record<ArtifactProposalKind, string>> = {
 
 /** What Go on an onboard card does, said for its own facts (no project = registered unfiled). */
 function onboardConsequence(o: NonNullable<ArtifactProposal['onboard']>): string {
-  if (o.existing !== null) return `Studio adds ${o.existing.name} to ${o.projectName ?? 'the project'}. Nothing is cloned and no onboarding starts.`;
-  return `Studio clones the repository to this computer, registers it${o.projectName !== null ? `, adds it to ${o.projectName}` : ' (in no project)'} and starts onboarding (it builds the code map). Nothing happens until you choose.`;
+  const made = onboardNewProject(o);
+  if (o.existing !== null) {
+    return made !== null
+      ? `Studio creates the project ${made} and adds ${o.existing.name} to it. Nothing is cloned and no onboarding starts.`
+      : `Studio adds ${o.existing.name} to ${o.projectName ?? 'the project'}. Nothing is cloned and no onboarding starts.`;
+  }
+  const into = made !== null ? `, creates the project ${made}, adds it there` : o.projectName !== null ? `, adds it to ${o.projectName}` : ' (in no project)';
+  return `Studio clones the repository to this computer, registers it${into} and starts onboarding (it builds the code map). Nothing happens until you choose.`;
+}
+
+/** An onboard card's Project row: the project it joins, the one Go creates, or none. */
+export function onboardProjectWords(o: NonNullable<ArtifactProposal['onboard']>): string {
+  const made = onboardNewProject(o);
+  return made !== null ? `New project ${made} · created when you add it` : o.projectName ?? 'Not in a project';
 }
 
 /**
@@ -281,7 +300,7 @@ export function proposalAsk(e: ProposalEntry, o: { stub: boolean; themeRefused?:
     label: goWords(p),
     // The test configuration starts nothing, and the option says so too (never "Starts now" beside that notice).
     sub: o.stub ? 'Records your click; nothing starts' : isRetryProposal(p) && p.kind === 'refine' ? 'Revises the latest version; your edits are kept'
-      : p.kind === 'onboard' && p.onboard?.existing != null ? 'Adds it to the project; nothing is cloned' : GO_SUB[p.kind],
+      : p.kind === 'onboard' && p.onboard?.existing != null ? (onboardNewProject(p.onboard) !== null ? 'Creates the project and adds it; nothing is cloned' : 'Adds it to the project; nothing is cloned') : GO_SUB[p.kind],
     token: 'go',
     tone: 'primary',
     consequence: o.stub
@@ -343,9 +362,12 @@ export function proposalResultWords(e: ProposalEntry): string | null {
   if (e.proposal.kind === 'theme') return 'Saved to your studio settings · no job was started';
   const ob = e.proposal.onboard;
   if (e.proposal.kind === 'onboard' && ob !== undefined) {
+    // (crew#1694) A project Go created is named as made, by the name the card showed.
+    const made = onboardNewProject(ob);
+    const where = made !== null ? `the new project ${made}` : ob.projectName;
     return ob.existing !== null
-      ? `Added to ${ob.projectName ?? 'the project'} · nothing was started`
-      : `Added${ob.projectName !== null ? ` to ${ob.projectName}` : ''} · onboarding run ${e.result.runId.slice(0, 8)}`;
+      ? `Added to ${where ?? 'the project'} · nothing was started`
+      : `Added${where !== null ? ` to ${where}` : ''} · onboarding run ${e.result.runId.slice(0, 8)}`;
   }
   return `Started · run ${e.result.runId.slice(0, 8)}`;
 }
@@ -391,17 +413,21 @@ export function themeDisclosure(seatName: string): string {
   return `Proposed by ${seatName} · checked by the contrast check · no second agent reviewed it`;
 }
 
-/** A refusal of `POST /chats/:id/proposals/:pid` as the card says it: crew's own sentence, and its view when it sent one. */
-export function proposalRefusal(err: unknown): { words: string; code: string | null; view: ChatProposalView | null } {
+/** A refusal of `POST /chats/:id/proposals/:pid` as the card says it: crew's own sentence, its view when it sent one,
+ *  and (crew#1695) `acceptingAt`: the `at` of THIS Go's `proposal_accepting` record when the refusal came after crew
+ *  wrote it (502 `launch_failed`, a typed launch refusal, a `chat_gone` after it), so only that record reads as stopped;
+ *  `null` on a refusal before anything was recorded. */
+export function proposalRefusal(err: unknown): { words: string; code: string | null; view: ChatProposalView | null; acceptingAt: number | null } {
   if (err instanceof ApiError) {
-    const body = (err.body ?? {}) as { code?: unknown; view?: unknown };
+    const body = (err.body ?? {}) as { code?: unknown; view?: unknown; acceptingAt?: unknown };
     const code = typeof body.code === 'string' ? body.code : null;
     const view = isProposalView(body.view) ? body.view : null;
+    const acceptingAt = typeof body.acceptingAt === 'number' && Number.isFinite(body.acceptingAt) ? body.acceptingAt : null;
     // Crew's own sentence; only a bare 404 (an older daemon, a gone chat) gets studio's words.
     const words = err.status === 404 && code === null ? 'This proposal is no longer on Studio’s service.' : err.wire;
-    return { words, code, view };
+    return { words, code, view, acceptingAt };
   }
-  return { words: err instanceof Error ? err.message : String(err), code: null, view: null };
+  return { words: err instanceof Error ? err.message : String(err), code: null, view: null, acceptingAt: null };
 }
 
 /** "Time, cost" with the parts crew knows; `null` when it knows none. */
@@ -495,6 +521,14 @@ export function proposalFormEdits(p: ArtifactProposal, f: ProposalForm, projectL
 export function protectedGroups(p: ArtifactProposal): { touched: ProtectedEdit[]; rest: ProtectedEdit[] } {
   const all = p.kind === 'refine' ? p.protected ?? [] : [];
   return { touched: all.filter((e) => e.touched), rest: all.filter((e) => !e.touched) };
+}
+
+/** (crew#1406) A refine retry's preselection: the ids crew says the person let the failed attempt change (`allow`), only
+ *  those on this card. Every other row starts on Keep it; absent `allow` = all of them do. */
+export function refineAllowPreset(p: ArtifactProposal): ReadonlySet<string> {
+  if (p.kind !== 'refine' || p.allow === undefined) return new Set();
+  const shown = new Set((p.protected ?? []).map((e) => e.id));
+  return new Set(p.allow.filter((id) => shown.has(id)));
 }
 
 /** The edits a refine's Go carries: `allow` names exactly the edits the person let change (and only ones on the card);
