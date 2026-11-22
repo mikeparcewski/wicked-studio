@@ -43,9 +43,17 @@ export function isGhCliRefusal(code: string | null): boolean {
   return code !== null && Object.hasOwn(GH_CLI_REFUSALS, code);
 }
 
+/**
+ * (crew#1475, api-types 0.220.0) What studio adds to crew's 503 `maintenance_drain` sentence ("This daemon is draining
+ * for maintenance and is refusing new work."): the way on, in studio's terms. crew's own `hint` names its API route.
+ */
+export const DRAIN_WAY_ON = 'Wait for maintenance to finish, or turn off “Drain for maintenance” in Settings to admit work again.';
+
 /** Translate one wire refusal to its operator-facing sentence (EC33). `code` is the refusal body's named code, if any. */
 export function translateWireError(status: number, wire: string, code?: string | null): string {
   const detail = wire.trim();
+  // A launch, resume or gate answer refused while the daemon drains: crew's sentence, then the way on (no "refused" frame).
+  if (code === 'maintenance_drain') return `${detail === '' ? 'This daemon is draining for maintenance and is refusing new work.' : detail} ${DRAIN_WAY_ON}`;
   if (code != null && Object.hasOwn(GH_CLI_REFUSALS, code)) {
     const plain = GH_CLI_REFUSALS[code]!;
     return detail === '' ? plain : `${plain} — ${detail}`;
@@ -79,6 +87,13 @@ export class ApiError extends Error {
     this.wire = wire;
     this.body = body;
   }
+}
+
+/** A refusal because the daemon is draining for maintenance (503 `maintenance_drain`): its full words, else `null`.
+ *  Surfaces that say a generic line for a refusal ("Resume was refused.") say these instead. */
+export function drainRefusal(e: unknown): string | null {
+  if (!(e instanceof ApiError) || e.status !== 503 || typeof e.body !== 'object' || e.body === null) return null;
+  return (e.body as Record<string, unknown>)['code'] === 'maintenance_drain' ? e.message : null;
 }
 
 /** The `revision` a crew skills 409 body carries (`{error, revision}`), or `null`. */

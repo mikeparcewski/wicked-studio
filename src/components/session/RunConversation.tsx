@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client.js';
+import { drainRefusal } from '../../api/errors.js';
 import { RunPhaseRows, RunPluginJumpRows, WorkingDocSteerRows } from './RunThreadPlugin.js';
 import type { CoreEvent, SessionView as RunView } from '../../api/types.js';
 import { IDLE_GATE_ACTION, ensureGate, useGateActionStore, useGateReadStore } from '../../board/gateActions.js';
@@ -616,7 +617,9 @@ export function OrphanedRow({ view }: { view: RunView }): React.ReactElement | n
   const frames = useRunEvents(id, status === 'executing').events ?? undefined;
   const [sent, setSent] = useState<'idle' | 'sending' | 'asked' | 'failed'>('idle');
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { setSent('idle'); setError(null); }, [id]);
+  /** The refusal was the daemon draining for maintenance: its words replace the generic line. */
+  const [drained, setDrained] = useState<string | null>(null);
+  useEffect(() => { setSent('idle'); setError(null); setDrained(null); }, [id]);
   const orphan = orphanedOf(status, frames);
   if (orphan === null) return null;
   const resume = (): void => {
@@ -624,7 +627,7 @@ export function OrphanedRow({ view }: { view: RunView }): React.ReactElement | n
     api.resumeRun(id)
       .then(() => api.getRunEvents(id))
       .then(({ events }) => { useRunEventStore.getState().hydrate(id, events); setSent('asked'); })
-      .catch((e: unknown) => { setSent('failed'); setError(e instanceof Error ? e.message : String(e)); });
+      .catch((e: unknown) => { setSent('failed'); setDrained(drainRefusal(e)); setError(e instanceof Error ? e.message : String(e)); });
   };
   return (
     <p data-testid="session-orphaned" role="status" {...(orphan.ord !== null ? { 'data-ord': String(orphan.ord) } : {})} className="wk-session-grey wk-session-orphaned">
@@ -632,7 +635,7 @@ export function OrphanedRow({ view }: { view: RunView }): React.ReactElement | n
       {sent === 'asked'
         ? <span data-testid="session-orphaned-asked">Resume asked — waiting for the step to start again.</span>
         : <button type="button" data-testid="session-orphaned-resume" disabled={sent === 'sending'} onClick={resume} className="wk-btn wk-btn--secondary wk-btn--sm">{sent === 'sending' ? 'Resuming…' : 'Resume'}</button>}
-      {sent === 'failed' && <span data-testid="session-orphaned-error"> Resume didn’t go through.</span>}
+      {sent === 'failed' && <span data-testid="session-orphaned-error"> {drained ?? 'Resume didn’t go through.'}</span>}
       {sent === 'failed' && error !== null && <TechDetails data-testid="session-orphaned-error-detail" text={error} />}
     </p>
   );
@@ -649,7 +652,9 @@ export function RecoveryRow({ view, navigate }: { view: RunView; navigate?: Navi
   const status = view.session.status;
   const [sent, setSent] = useState<'idle' | 'sending' | 'asked' | 'failed'>('idle');
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { setSent('idle'); setError(null); }, [id, status]);
+  /** The refusal was the daemon draining for maintenance: its words replace the generic line. */
+  const [drained, setDrained] = useState<string | null>(null);
+  useEffect(() => { setSent('idle'); setError(null); setDrained(null); }, [id, status]);
   const canResume = status === 'failed' && view.session.archived_at == null;
   const canStartOver = navigate !== undefined && (status === 'failed' || status === 'cancelled');
   if (!canResume && !canStartOver) return null;
@@ -661,7 +666,7 @@ export function RecoveryRow({ view, navigate }: { view: RunView; navigate?: Navi
         setSent('asked');
         api.getRunEvents(id).then(({ events }) => useRunEventStore.getState().hydrate(id, events)).catch(() => {});
       },
-      (e: unknown) => { setSent('failed'); setError(e instanceof Error ? e.message : String(e)); },
+      (e: unknown) => { setSent('failed'); setDrained(drainRefusal(e)); setError(e instanceof Error ? e.message : String(e)); },
     );
   };
   return (
@@ -674,7 +679,7 @@ export function RecoveryRow({ view, navigate }: { view: RunView; navigate?: Navi
           <button type="button" data-testid="session-run-retry" onClick={() => startRetry(view, navigate)} className="wk-btn wk-btn--quiet wk-btn--sm" title="Open the launch form prefilled with this run's intent and settings; nothing starts until you send">Start over</button>
         )}
       </div>
-      {sent === 'failed' && <p data-testid="session-failed-resume-error" className="wk-session-grey">Resume was refused.</p>}
+      {sent === 'failed' && <p data-testid="session-failed-resume-error" className="wk-session-grey">{drained ?? 'Resume was refused.'}</p>}
       {sent === 'failed' && error !== null && <TechDetails data-testid="session-failed-resume-error-detail" text={error} />}
     </div>
   );
