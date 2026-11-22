@@ -57,6 +57,12 @@
 
 /* Readable markdown inside a turn: headings a step above body text, lists with air, code blocks with room. */
 .wk-chat-md, .wk-session-turn--helper .wk-session-text { overflow-wrap: anywhere; }
+/* (studio#846) A table keeps its words whole: `anywhere` let a long command cell squeeze a short header to "Exi" / "t".
+   Headers stay on one line, prose cells break only between words (break-word does not shrink a column's minimum),
+   and code in a cell (a command, a path) may still break anywhere. The table already scrolls sideways in its box. */
+:is(.wk-chat-md, .wk-session-turn--helper .wk-session-text) th { white-space: nowrap; overflow-wrap: normal; }
+:is(.wk-chat-md, .wk-session-turn--helper .wk-session-text) td { overflow-wrap: break-word; }
+:is(.wk-chat-md, .wk-session-turn--helper .wk-session-text) td code { overflow-wrap: anywhere; }
 .wk-chat-md h1, .wk-chat-md h2, .wk-chat-md h3,
 .wk-session-turn--helper .wk-session-text h1, .wk-session-turn--helper .wk-session-text h2, .wk-session-turn--helper .wk-session-text h3 {
   margin: 14px 0 6px; font-size: var(--text-md); font-weight: var(--weight-semi); color: var(--ink-high); line-height: 1.4;
@@ -207,6 +213,16 @@
   .wk-session-frame:has(> .wk-hpanel-handle--overlay) .wk-session-thread { padding-right: calc(28px + var(--space-2)); }
 }
 @media (prefers-reduced-motion: reduce) { .wk-jump-latest { transition: none; } }
+/* (studio#985) From 768 px up the button sits in the thread's right gutter, outside the reading column, so it never
+   covers a message's words or its chips: the gutter is the thread's inline padding (.wk-measure--thread, at least 48 px)
+   and the button, 36 px wide, is centred in it. With a count it stacks (arrow over count) and keeps the width. A phone
+   takes it out of the thread's way below. */
+@media (min-width: 768px) {
+  .wk-jump-latest {
+    left: auto; transform: none; flex-direction: column; gap: 2px; width: 36px; min-width: 0; height: auto; min-height: 36px; padding: 8px 0;
+    right: calc((max(var(--space-12), (100% - var(--thread-max)) / 2 + var(--space-12)) - 36px) / 2);
+  }
+}
 
 @media (max-width: 767px) {
   .wk-session-thread { gap: 18px; font-size: var(--text-md); }
@@ -214,6 +230,10 @@
   .wk-session-turn--you, .wk-chat-msg--you { max-width: 88%; }
   .wk-needs-trigger, .wk-hpanel-handle--overlay { min-height: var(--tap-min); }
   .wk-jump-latest { min-width: var(--tap-min); height: var(--tap-min); }
+  /* (studio#985) A phone's gutter (16 px) cannot hold the button, so it leaves the thread instead of floating over it:
+     in the body's flow under the thread, which gives up its height while the button shows. */
+  .wk-session-body { flex-direction: column; }
+  .wk-jump-latest { position: static; flex-shrink: 0; align-self: center; transform: none; margin: 6px 0; }
   .wk-chat-chip { min-height: var(--tap-min); }
 }
 
