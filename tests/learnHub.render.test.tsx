@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { fakeDaemon, type FakeDaemon } from './learnFakeDaemon.js';
@@ -250,6 +251,30 @@ describe('Learn: Style review', () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(screen.getByTestId('style-runline').textContent).toContain('Running as');
     expect(screen.getAllByTestId('style-station').map((x) => x.getAttribute('data-s'))[0]).toBe('run');
+  });
+
+  it('studio#1330 (review r1): a review decision made here is never undone by a mount read that answers after it', async () => {
+    // StrictMode replays the mount effect (two reads): one restores the record, the other answers after the decision.
+    const snapshot = { 'studio.learn.style': { jobs: [{ runId: 'rd', kind: 'rules', sources: ['CONTRIBUTING.md'] }], startedAt: 1 } };
+    const pending: Array<(v: unknown) => void> = [];
+    d.on('GET /settings', () => new Promise((r) => { pending.push(r); }));
+    d.on('GET /governance/rules', { rules: [] });
+    d.on('GET /runs/rd', { run: { session: { id: 'rd', status: 'awaiting_human', unit_ix: 2 }, units: [{ id: 'rd:analyze', ord: 1 }, { id: 'rd:propose', ord: 2 }] } });
+    d.on('GET /proposals', { proposals: [] });
+    d.on('GET /governance/steering/author/rd/draft', { runId: 'rd', ready: true, rules: [
+      { id: 'POL-0001', statement: 'Every PR links an issue.', severity: 'error', steering_type: 'development', rule_type: 'policy', confidence: 0.9, targets: {}, provenance: { source: 'chat', source_kinds: [] } },
+    ] });
+    d.on('POST /runs/rd/gate', { status: 'completed', landing: { outcome: 'landed', ruleIds: ['POL-0001'], declinedIds: [] } });
+    render(<StrictMode><LearnHub navigate={nav} search="" /></StrictMode>);
+    await waitFor(() => expect(pending.length).toBeGreaterThanOrEqual(2));
+    const last = pending.pop()!;
+    for (const r of pending.splice(0)) r({ settings: snapshot });
+    const rulesAsk = await screen.findByTestId('style-rules');
+    fireEvent.click(within(rulesAsk).getByTestId('ask-confirm'));
+    await waitFor(() => expect(screen.getByTestId('style-rules-record').textContent).toBe('You adopted 1 of 1 rules · now in Steering'));
+    last({ settings: snapshot });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.getByTestId('style-rules-record').textContent).toBe('You adopted 1 of 1 rules · now in Steering');
   });
 });
 

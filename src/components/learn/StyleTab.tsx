@@ -71,6 +71,12 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
   // studio#1330: the saved record is read once, at mount. A launch (or Start over) the person made before that read
   // answered is newer than it: the late read never replaces it (a slow daemon wiped the jobs, and Style stopped polling).
   const decidedHere = useRef(false);
+  /** Every change of the record made here (a launch, Start over, a review decision): it outranks the mount read. */
+  const keepHere = (r: StyleRecord | null): void => {
+    decidedHere.current = true;
+    setRecord(r);
+    void saveRecord(r).catch(() => undefined);
+  };
   useEffect(() => {
     api.listRepos().then((r) => setRepos(r.repos), () => setRepos([]));
     api.getAppearanceSettings().then((s) => { if (!decidedHere.current) setRecord(readRecord(s.settings)); }, () => undefined);
@@ -140,21 +146,14 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
       }
       if (failed.length > 0) setLaunchError(`Not started: ${failed.join('; ')}`);
       if (jobs.length > 0) {
-        const r: StyleRecord = { jobs, startedAt: Date.now() };
-        decidedHere.current = true;
-        setRecord(r);
-        void saveRecord(r).catch(() => undefined);
+        keepHere({ jobs, startedAt: Date.now() });
       }
     } finally {
       setLaunching(false);
     }
   };
 
-  const startOver = (): void => {
-    decidedHere.current = true;
-    setRecord(null);
-    void saveRecord(null).catch(() => undefined);
-  };
+  const startOver = (): void => keepHere(null);
 
   return (
     <div data-testid="learn-style">
@@ -205,7 +204,7 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
           <LearnTopics navigate={navigate} embedded />
         </div>
         <StylePipeline record={record} launching={launching} sourceCount={sources.length} onLearn={() => void launch()} onReset={startOver}
-          launchError={launchError} navigate={navigate} resultsEl={resultsEl} onDecided={(r) => { setRecord(r); void saveRecord(r).catch(() => undefined); }} />
+          launchError={launchError} navigate={navigate} resultsEl={resultsEl} onDecided={keepHere} />
       </div>
       <div ref={setResultsEl} className="wk-learn-results" />
     </div>
