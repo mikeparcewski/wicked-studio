@@ -153,7 +153,18 @@ describe('Hold never drops an engine check', () => {
     expect(holdBlocked(rule({ applies_to: ['plan.compose'], obligations: ['step:test'] }))).toBeNull();
   });
 
-  it('a plan compose rule carrying an engine check offers no hold the engine would refuse, and says why', () => {
+  it('an open Hold picker closes when the rule gains an engine check at plan compose (codex r2)', () => {
+    const before = rule({ id: 'TST-4000', applies_to: ['plan.compose'], obligations: [] });
+    const { rerender } = render(<SteeringRuleDrawer rule={before} evidence={null} onClose={vi.fn()} onEdit={vi.fn()} onRetired={vi.fn()} />);
+    fireEvent.click(screen.getByTestId('steering-rule-hold-switch'));
+    expect(screen.getByTestId('steering-rule-hold-pick')).toBeTruthy();
+    rerender(<SteeringRuleDrawer rule={{ ...before, obligations: ['check:test-fails-on-base'] }} evidence={null} onClose={vi.fn()} onEdit={vi.fn()} onRetired={vi.fn()} />);
+    expect(screen.queryByTestId('steering-rule-hold-pick')).toBeNull();
+    expect(screen.getByTestId('steering-rule-hold-blocked')).toBeTruthy();
+    expect(upsertConformanceRule).not.toHaveBeenCalled();
+  });
+
+    it('a plan compose rule carrying an engine check offers no hold the engine would refuse, and says why', () => {
     const r = rule({ id: 'TST-1002', applies_to: ['plan.compose'], obligations: ['step:test', 'check:test-fails-on-base'] });
     render(<SteeringRuleDrawer rule={r} evidence={null} onClose={vi.fn()} onEdit={vi.fn()} onRetired={vi.fn()} />);
     expect((screen.getByTestId('steering-rule-hold-switch') as HTMLInputElement).disabled).toBe(true);

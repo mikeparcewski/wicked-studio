@@ -125,7 +125,7 @@ function HoldSwitch({ rule, onHeld }: { rule: SteeringRule; onHeld?: (rule: Stee
           <span data-testid="steering-rule-hold-words">{holdWords(rule)}</span>
         </label>
         {blocked !== null && <p data-testid="steering-rule-hold-blocked" className="m-0 pl-5" style={{ color: 'var(--ink-dim)' }}>{blocked}</p>}
-        {picking && !held && (
+        {picking && !held && blocked === null && (
           <div data-testid="steering-rule-hold-pick" className="flex flex-col gap-1 pl-5">
             <p className="m-0">Hold it to what? When the rule fires, the plan gets:</p>
             {HOLD_VOCAB.map((v) => (
@@ -147,7 +147,7 @@ function HoldSwitch({ rule, onHeld }: { rule: SteeringRule; onHeld?: (rule: Stee
                 type="button"
                 data-testid="steering-rule-hold-confirm"
                 disabled={pick === null || busy}
-                onClick={() => { if (pick !== null) void write(pick); }}
+                onClick={() => { if (pick !== null && blocked === null) void write(pick); }}
                 className="rounded px-2 py-1 text-xs font-semibold"
                 style={{ background: 'var(--accent)', color: 'var(--on-accent)', opacity: pick === null || busy ? 0.5 : 1 }}
               >
