@@ -322,7 +322,7 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
           {navLink(BUILD_ITEM)}
         </div>
         <div className="wk-nc-dock" data-testid="rail-nerve-dock">
-          <NerveCenterTile navigate={navigate} pathname={pathname} waitingOnYou={count} compact />
+          <NerveCenterTile navigate={navigate} pathname={pathname} waitingOnYou={count} needs={settled.phase} compact />
         </div>
       </nav>
     );
@@ -525,7 +525,7 @@ export function SessionRail({ runs, needRows, navigate, pathname, runsKnown = tr
       {/* DES-SYSTEM-VIEW: Nerve Center, pinned last — the one way to the system dashboard. Its own dock
           so it stays on screen at the bottom of the phone drawer, which scrolls as one. */}
       <div className="wk-nc-dock" data-testid="rail-nerve-dock">
-        <NerveCenterTile navigate={navigate} pathname={pathname} waitingOnYou={count} />
+        <NerveCenterTile navigate={navigate} pathname={pathname} waitingOnYou={count} needs={settled.phase} />
       </div>
     </nav>
   );

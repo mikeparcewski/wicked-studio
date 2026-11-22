@@ -1,0 +1,11 @@
+# Python Playwright for the journeys, the one version CI installs (both jobs in .github/workflows/ci.yml).
+#
+# Pinned on purpose: an unpinned install moved CI to 1.65.0 on 2026-11-09 overnight, and five desk journeys went red
+# on Linux (studio#1078). That was not a Playwright bug. Each journey read a moment instead of waiting for a state
+# (a 10 ms yield whose timeout skipped a poll loop, a count taken before the panel mounted, chips read before they
+# followed the selection, a button read while a reload was in flight, a tone read before the needs count settled),
+# and the new version's timing on the CI runners lost those races. The journeys now wait on conditions
+# (studio#949, #1078, #1222).
+#
+# Move this pin in a PR of its own, so a version change gets one full CI run that says what it did.
+playwright==1.65.2

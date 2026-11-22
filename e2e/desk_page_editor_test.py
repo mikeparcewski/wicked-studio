@@ -190,6 +190,17 @@ def chips(page) -> list:
       .map(c => ({ kind: c.dataset.kind, key: c.dataset.key, text: c.innerText }))""")
 
 
+def wait_chips(page, ok, timeout_ms: int = 5000) -> list:
+    """The composer's chips once `ok(chips)` holds, or the last read. The chip follows a selection over the editor
+    protocol, a moment after the frame draws its selected box (studio#1078: read at once, it lost that race on CI)."""
+    deadline = time.time() + timeout_ms / 1000
+    last: list = chips(page)
+    while not ok(last) and time.time() < deadline:
+        page.wait_for_timeout(100)
+        last = chips(page)
+    return last
+
+
 with sync_playwright() as p:
     browser = p.chromium.launch()
     page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
@@ -256,7 +267,7 @@ with sync_playwright() as p:
     doc.locator('[data-wid="headline"]').click()
     plugin.locator('[data-testid="page-selected-box"]').wait_for(state="visible", timeout=5000)
     sel = plugin.locator('[data-testid="page-selected-box"]').get_attribute("data-wid")
-    c3 = chips(page)
+    c3 = wait_chips(page, lambda cs: any(c["key"] == f"el:{DOC}/headline" and "Q3 was a quarter" in c["text"] for c in cs))
     page.screenshot(path=str(SHOTS / "desk-page-editor-point.png"))
     check("point", sel == "headline" and any(c["key"] == f"el:{DOC}/headline" and "Q3 was a quarter" in c["text"] for c in c3), selected=sel, chips=c3)
 
@@ -312,7 +323,7 @@ with sync_playwright() as p:
     wait_pickable(page, 5)
     doc.locator('[data-wid="headline"]').click()
     plugin.locator('[data-testid="page-selected-box"]').wait_for(state="visible", timeout=5000)
-    rechips = chips(page)
+    rechips = wait_chips(page, lambda cs: len(cs) == 1 and cs[0]["key"] == f"el:{DOC}/headline" and "Q3, by the helper" in cs[0]["text"])
     check("chip-follows", len(rechips) == 1 and rechips[0]["key"] == f"el:{DOC}/headline" and "Q3, by the helper" in rechips[0]["text"], chips=rechips)
     pf = plugin_frame(page)
     pf.evaluate(HOLD_FRAMES)
