@@ -367,6 +367,9 @@ export class InteractiveDocAdapter implements HostAdapter {
     } finally {
       stop();
     }
+    // A refresh during the settle wait may already have moved the head past what the poll saw (a helper's version):
+    // versions only count up, so the head never goes back to the poll's snapshot (xreview r2).
+    if (landed !== null && 'version' in landed && this.head > landed.head) landed = { ...landed, head: this.head };
     if (landed === null) return { error: 'unavailable', message: 'The change was sent, but no new version appeared.' };
     if ('refused' in landed) return { error: 'refused', message: `${editRefusalWords(landed.refused)}.` };
     if ('other' in landed) {

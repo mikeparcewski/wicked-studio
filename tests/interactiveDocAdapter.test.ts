@@ -284,6 +284,24 @@ describe('InteractiveDocAdapter: the engine refused the edit (e2e-1105 P10)', ()
     expect(await writing).toMatchObject({ version: 2, notApplied: { items: [{ selector: 'slide-1-list-item-1' }, { selector: 'footer' }] } });
   });
 
+  it('xreview r2: a refresh that moves the head on during the settle wait is kept; the reply says the head moved', async () => {
+    const { publishCoreEvent } = await import('../src/hooks/eventTap.js');
+    const heads: number[] = [];
+    const a = new InteractiveDocAdapter('notes', 'plan', 'The plan', 'page', (h) => heads.push(h), { pollForMs: 20_000 });
+    api.manifests = [{ head: 1, versions: [entry(1, null)] }, { head: 1, versions: [entry(1, null)] }, { head: 2, versions: [entry(1, null), entry(2, 1, true)] }, { head: 3, versions: [entry(1, null), entry(2, 1, true), entry(3, 2)] }];
+    await a.refresh();
+    const writing = a.write(1, items);
+    // The poll has seen v2 (head 2); the card's own refresh then reads a helper's v3 while the write waits for its frame.
+    await vi.waitFor(() => expect(api.manifests).toHaveLength(1));
+    await new Promise((r) => setTimeout(r, 100));
+    await a.refresh();
+    expect(a.head).toBe(3);
+    publishCoreEvent(processed(partial) as never);
+    expect(await writing).toMatchObject({ version: 2, moved: { head: 3, kind: 'generated' } });
+    expect(a.head).toBe(3);
+    expect(heads.at(-1)).toBe(3);
+  });
+
   it('studio#1252: a batch that applied every item answers its version alone, without waiting out the settle window', async () => {
     const { publishCoreEvent } = await import('../src/hooks/eventTap.js');
     const a = new InteractiveDocAdapter('notes', 'plan', 'The plan', 'page', undefined, { pollForMs: 20_000, settleMs: 10_000 });
