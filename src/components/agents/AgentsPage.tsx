@@ -3,7 +3,7 @@ import { ChevronDown } from 'lucide-react';
 import { api } from '../../api/client.js';
 import { readErrorKind } from '../../api/errors.js';
 import { getCachedRoster, setCachedRoster } from '../../store/rosterCache.js';
-import { agentTiles, authOf, fixLabel, readyNote, type AgentRow, type Cell } from '../../board/agentsModel.js';
+import { agentTiles, authOf, fixLabel, newWorkWord, readyNote, type AgentRow, type Cell } from '../../board/agentsModel.js';
 import { agentStatus, agentsSentence, agentWeekLine } from '../../board/calmAgents.js';
 import { helperRuntimeDown, runtimeStart } from '../../board/agentsCopy.js';
 import { relTime } from '../../board/relTime.js';
@@ -46,7 +46,7 @@ function CellWords({ c, testId }: { c: Cell; testId: string }): React.ReactEleme
 
 /** The name's second line when there is no week to tell: the account kind, opt-in or left out of new work. */
 function agentSub(row: AgentRow): string | null {
-  const parts = [row.account, row.optIn ? 'opt-in' : row.picked ? null : 'not used for new work'].filter((x): x is string => x !== null);
+  const parts = [row.account, row.optIn ? 'opt-in' : row.picked && row.jobWork ? null : 'not used for new work'].filter((x): x is string => x !== null);
   return parts.length === 0 ? null : parts.join(' · ');
 }
 
@@ -81,7 +81,7 @@ function AgentLine({ r, open }: { r: AgentRow; open: (key: string) => void }): R
             { k: 'How it’s governed', v: <CellWords c={r.governed} testId="agents-governed" /> },
             { k: 'Version', v: <CellWords c={r.version} testId="agents-version" /> },
             ...(r.account !== null ? [{ k: 'Account', v: r.account }] : []),
-            { k: 'New work', v: r.optIn ? 'Only when you pick it' : r.picked ? 'Used for new work' : 'Not used for new work' },
+            { k: 'New work', v: newWorkWord(r) },
             // studio#856: the two roles apart, each with the service's reason when it is off.
             { k: 'Reviews', v: <CellWords c={r.roles.reviews} testId="agents-role-reviews" /> },
             { k: 'Work', v: <CellWords c={r.roles.work} testId="agents-role-work" /> },

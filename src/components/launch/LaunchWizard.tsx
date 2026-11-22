@@ -246,8 +246,8 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   const eligible = useMemo(() => userSeats(roster).filter((s) => s.enabled_for_council), [roster]);
   // (PRODUCT-WORKS J4) Only a helper that can take work now is picked by default: one that is signed
   // out, benched (out of quota until its lift time) or refused work by this computer is shown greyed
-  // out with why, and joins the job only when the operator turns it on. A reviewer-only seat joins: it votes and
-  // judges, and is never the lead (studio#856).
+  // out with why, and joins the job only when the operator turns it on. A reviewer-only seat joins: it votes (the
+  // agent judge is a work role), and is never the lead (studio#856).
   const unusable = useMemo(() => new Map(eligible.flatMap((s) => {
     const st = seatJoinStanding(s);
     return st.state === 'ready' || st.state === 'unknown' ? [] : [[s.key, st.state === 'signed-out' ? 'signed out' : st.note] as const];

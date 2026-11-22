@@ -970,7 +970,7 @@ export function seatRoles(seat: RosterSeat): SeatRoles {
 /**
  * Whether a seat JOINS a job's helpers by default (New job's and the composer's helper rows, PRODUCT-WORKS J4):
  * {@link seatStanding}, except that a reviewer-only seat (`work_eligible: false`, `council_eligible: true`) joins — it
- * votes and judges, and takes no unit (studio#856). It is still never a lead or a reassign target ({@link seatCanCarry}).
+ * votes, and takes no unit (studio#856; the agent judge is a work role). It is still never a lead or a reassign target ({@link seatCanCarry}).
  */
 export function seatJoinStanding(seat: RosterSeat | undefined, now: number = Date.now()): ReturnType<typeof seatStanding> {
   const st = seatStanding(seat, now);

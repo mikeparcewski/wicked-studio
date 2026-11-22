@@ -89,6 +89,10 @@ export interface AgentRow {
   /** Given repository work: seated for work (studio#856), no codex worktree bench and no repository refusal (first use
    *  reads this, not the words). */
   repoWork: boolean;
+  /** studio#856 (coord review F1): a studio job would give it work. It takes work (`work_eligible`, or council on an
+   *  older daemon) AND it is in the pool New job, the composer and crew's new-work list draw from
+   *  (`enabled_for_council`). A work-only seat outside that pool is not counted as a job's worker or second helper. */
+  jobWork: boolean;
   version: Cell;
   reviews: boolean;
   /** studio#856: the seat's two roles, each with the daemon's reason when it is off — reviews (the council ballot) and
@@ -519,10 +523,12 @@ function rowOf(seat: RosterSeat, alsoReviews: boolean, keys: string[], inp: Agen
 
   return {
     key: seat.key, keys, name, binary: seat.binary, seat, optIn, picked, alsoReviews,
-    ready, sign, safe, governed, account, usable, repoWork: roles.work && !benched && !refused, version, reviews, qe, bench, issues: sortIssues(issues),
+    ready, sign, safe, governed, account, usable, repoWork: roles.work && !benched && !refused,
+    jobWork: roles.work && seat.enabled_for_council !== false, version, reviews, qe, bench, issues: sortIssues(issues),
     roles: {
       reviews: reviews ? { word: alsoReviews ? 'Also reviews work' : 'Can review work', tone: 'ok', sub: null }
-        : { word: 'Doesn’t review right now', tone: 'quiet', sub: plainReason(roles.councilWhy) },
+        // Off by its settings reads as a standing fact; signed out or benched reads as for now (coord review on #1302).
+        : { word: roles.council ? 'Doesn’t review right now' : 'Doesn’t review', tone: 'quiet', sub: plainReason(roles.councilWhy) },
       work: roles.work ? { word: 'Takes work', tone: 'ok', sub: null }
         : { word: 'Takes no work', tone: roles.council ? 'quiet' : 'gate', sub: plainReason(roles.workWhy) },
     },
@@ -533,6 +539,18 @@ function rowOf(seat: RosterSeat, alsoReviews: boolean, keys: string[], inp: Agen
 }
 
 /** Every agent's row, in roster order (a reviewer-only seat with the same sign-in folds into its agent's row). */
+/** The helpers that can do a studio job's work now (the Desk's "second helper to review" count, coord F1 on #1302):
+ *  usable, and a studio job would give it work. */
+export function jobWorkers(rows: readonly AgentRow[]): AgentRow[] {
+  return rows.filter((r) => r.usable && r.jobWork);
+}
+
+/** The row's "New work" fact: picked AND a studio job would give it work (coord F3 on #1302: crew's new-work pool
+ *  draws from neither a work-only seat outside it nor a reviewer-only seat). */
+export function newWorkWord(r: AgentRow): string {
+  return r.optIn ? 'Only when you pick it' : r.picked && r.jobWork ? 'Used for new work' : 'Not used for new work';
+}
+
 export function agentRows(inp: AgentsInputs): AgentRow[] {
   return foldReviewers(displaySeats([...inp.roster])).map(({ seat, alsoReviews, keys }) =>
     rowOf(seat, alsoReviews, keys, inp, inp.roster.filter((s) => s.key !== seat.key && keys.includes(s.key))));
