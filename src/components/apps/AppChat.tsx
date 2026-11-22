@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppDetail, SessionView } from '../../api/types.js';
 import { sessionPath } from '../../board/sessionModel.js';
 import { busyText, changeLine, componentWords, endedLine, hasTurnLog, seatWord, sendTurn, suggestionsFor, turnsOf, type AppTurnRecord } from '../../editors/apps/appTurns.js';
+import { TurnRules } from './TurnRules.js';
 import { addAboutChip, chipsOf, removeAboutChip, useComposerChips } from '../../store/composerChips.js';
 import type { ComposerSuggestion } from '../session/Composer.js';
 import { knowledgeAddition } from '../../editors/apps/knowledgeSeeds.js';
@@ -134,6 +135,7 @@ function TurnReply({ t, view, detail, onUndo, navigate, now, latestLanded, frame
   return (
     <div className="wk-appchat-reply wk-appchat-reply--ended" data-testid="app-chat-refused" data-code={t.code ?? ''}>
       <p className="wk-appchat-why" data-testid="app-chat-reason">{endedLine(t)}</p>
+      <TurnRules rules={t.rules} navigate={navigate} />
       <p className="wk-appchat-meta">{t.code !== null && <span className="wk-appchat-code" data-testid="app-chat-code">{t.code}</span>} {t.endedAt !== null && <>{ago(t.endedAt, now)} · </>}{job}</p>
     </div>
   );

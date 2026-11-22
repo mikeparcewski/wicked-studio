@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppDetail, AppPublishBody, AppPublished, SessionView } from '../src/api/types.js';
-import { PublishSheet, publishOrigin } from '../src/components/apps/PublishSheet.js';
+import { PublishSheet, publishOrigin, suggestedRanges } from '../src/components/apps/PublishSheet.js';
 import { ShareSheet, dockerRun } from '../src/components/apps/ShareSheet.js';
 import { AppChat } from '../src/components/apps/AppChat.js';
 import { publishedOf } from '../src/editors/apps/appsDirectory.js';
@@ -132,6 +132,55 @@ describe('Publish settings and crew refusals', () => {
     fireEvent.change(screen.getByLabelText('Embed origins (comma separated)'), { target: { value: origin } }); start();
     expect(screen.getByRole('alert').textContent).toContain('HTTPS origin for every page'); expect(fetch).not.toHaveBeenCalled();
   });
+  // studio#1296: crew's 422 publish_refused body as crew sends it (apps/routes.ts:93 `{ code, error, ...extra }`, the
+  // finding from apps/publish/manifest.ts:168 wrapping run.ts discoveryRefusal; words as crew's
+  // tests/apps-publish-run.test.ts:340 asserts them).
+  const PRIVATE_WHY = "The issuer's discovery document could not be read: dex.corp.test resolves to a private-network address (10.1.2.3), which crew reaches only when the sign-in allows its range (identity.allowRanges, e.g. 10.1.2.3/32)";
+  const privateRefusal = { code: 'publish_refused', error: PRIVATE_WHY, findings: [{ code: 'identity', message: PRIVATE_WHY }] };
+
+  it('studio#1296: a private-network issuer is allowed by an explicit control, and the ranges are sent as identity.allowRanges', async () => {
+    const fetch = mockCrew(); const onStarted = vi.fn();
+    render(<PublishSheet detail={detail()} onClose={vi.fn()} onStarted={onStarted} />); signedIn();
+    expect(screen.queryByLabelText(/Private-network ranges/u)).toBeNull();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Allow a private-network issuer' }));
+    expect(screen.getByText(/For internal deployments and testing/u)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Private-network ranges/u), { target: { value: '10.1.2.3/32, fd00::/8' } });
+    start(); await waitFor(() => expect(onStarted).toHaveBeenCalledWith('publish-r'));
+    expect((JSON.parse(fetch.mock.calls[0]![1]!.body as string) as AppPublishBody).identity).toStrictEqual({ profile: 'oidc', issuer: 'https://login.test/issuer', clientId: 'desk-client', allowRanges: ['10.1.2.3/32', 'fd00::/8'] });
+  });
+
+  it('studio#1296: ranges that are missing or not CIDR are refused before posting', () => {
+    const fetch = mockCrew();
+    render(<PublishSheet detail={detail()} onClose={vi.fn()} onStarted={vi.fn()} />); signedIn();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Allow a private-network issuer' })); start();
+    expect(screen.getByRole('alert').textContent).toContain('Enter the private-network ranges as CIDR');
+    fireEvent.change(screen.getByLabelText(/Private-network ranges/u), { target: { value: 'dex.corp.test' } }); start();
+    expect(screen.getByRole('alert').textContent).toContain('Enter the private-network ranges as CIDR');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('studio#1296: crew\'s finding for a private-network issuer offers its range, which fills the control, and the retry sends it', async () => {
+    const fetch = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify(privateRefusal), { status: 422, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ runId: 'publish-r', manifestDigest: 'abc' }), { status: 202, headers: { 'Content-Type': 'application/json' } }));
+    const onStarted = vi.fn();
+    render(<PublishSheet detail={detail()} onClose={vi.fn()} onStarted={onStarted} />); signedIn(); start();
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('dex.corp.test resolves to a private-network address'));
+    expect((JSON.parse(fetch.mock.calls[0]![1]!.body as string) as AppPublishBody).identity).not.toHaveProperty('allowRanges');
+    fireEvent.click(screen.getByRole('button', { name: 'Allow 10.1.2.3/32' }));
+    expect((screen.getByRole('checkbox', { name: 'Allow a private-network issuer' }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText(/Private-network ranges/u) as HTMLInputElement).value).toBe('10.1.2.3/32');
+    start(); await waitFor(() => expect(onStarted).toHaveBeenCalledWith('publish-r'));
+    expect((JSON.parse(fetch.mock.calls[1]![1]!.body as string) as AppPublishBody).identity?.allowRanges).toStrictEqual(['10.1.2.3/32']);
+  });
+
+  it('studio#1296: the suggested ranges are read only from crew\'s allowRanges words', () => {
+    expect(suggestedRanges(PRIVATE_WHY)).toStrictEqual(['10.1.2.3/32']);
+    expect(suggestedRanges('x resolves to a loopback address on this machine (127.0.0.1, ::1), which crew reaches only when the sign-in allows its range (identity.allowRanges, e.g. 127.0.0.1/32, ::1/128)')).toStrictEqual(['127.0.0.1/32', '::1/128']);
+    expect(suggestedRanges('The sign-in issuer did not answer.')).toStrictEqual([]);
+    expect(suggestedRanges('(identity.allowRanges, e.g. not a range)')).toStrictEqual([]);
+  });
+
   it('allows HTTPS origins and the two local HTTP origins', () => {
     for (const origin of ['https://site.test', 'http://localhost:8080', 'http://127.0.0.1:8080']) expect(publishOrigin(origin)).toBe(origin);
     expect(publishOrigin('not a URL')).toBeNull();

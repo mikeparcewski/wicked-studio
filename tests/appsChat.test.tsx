@@ -66,6 +66,28 @@ describe('the app chat: crew\'s turn log, in words', () => {
     expect(old[1]!.summary).toBeNull();
   });
 
+  it('studio#1295: a refused turn carries the steering rules it broke (crew#1755), read defensively', () => {
+    // crew's record as its settlement writes it (crew apps/turns.ts:891-894; crew tests/apps-turns.test.ts:855-868).
+    const refused = turn({ runId: 'r5', state: 'refused', version: null, change: null, summary: null, code: 'review_refused', reason: "the evaluator's verdict is FAIL The chart has no text alternative. It breaks steering rule learn-accessible. Nothing landed.", rules: [{ id: 'learn-accessible', reason: 'charts/kpi.json:4 has no alt text' }, { id: 'team:learn-tests', reason: '' }, { id: 7 }, null, { id: 'learn-accessible', reason: 'dup' }] });
+    const [t] = turnsOf(detail({ turns: [refused] }));
+    expect(t!.rules).toStrictEqual([{ id: 'learn-accessible', reason: 'charts/kpi.json:4 has no alt text' }, { id: 'team:learn-tests', reason: '' }]);
+    // No rules: no field (a plain refusal, an older crew); a landed turn never shows any.
+    expect(turnsOf(detail({ turns: [turn({ runId: 'r6', state: 'refused', code: 'check_failed', reason: 'x', version: null })] }))[0]).not.toHaveProperty('rules');
+    expect(turnsOf(detail({ turns: [turn({ rules: [{ id: 'x', reason: '' }] })] }))[0]).not.toHaveProperty('rules');
+  });
+
+  it('studio#1295: the chat\'s refused turn links each rule to Steering', () => {
+    const navigate = vi.fn();
+    const refused = turn({ state: 'refused', version: null, change: null, summary: null, code: 'review_refused', reason: 'It breaks steering rules learn-accessible, team:learn-tests. Nothing landed.', rules: [{ id: 'learn-accessible', reason: 'charts/kpi.json:4 has no alt text' }, { id: 'team:learn-tests', reason: '' }] });
+    render(<AppChat slug="desk" detail={detail({ turns: [refused] })} runs={[]} framed={false} navigate={navigate} onSent={vi.fn()} onUndo={vi.fn()} />);
+    const links = screen.getAllByTestId('app-turn-rule-link');
+    expect(links.map((a) => a.getAttribute('href'))).toStrictEqual(['/rules/learn-accessible', '/rules/team%3Alearn-tests']);
+    expect(screen.getAllByTestId('app-turn-rule').map((li) => li.textContent)).toStrictEqual(['learn-accessible · charts/kpi.json:4 has no alt text', 'team:learn-tests']);
+    expect(screen.getByText('The steering rules it broke:')).toBeTruthy();
+    fireEvent.click(links[1]!);
+    expect(navigate).toHaveBeenCalledWith('/rules/team%3Alearn-tests');
+  });
+
   it('busy text names the step and its seat; a new app\'s slug comes from the message\'s own words', () => {
     const view = { session: { id: 'r', status: 'executing' }, units: [{ id: 'r:build', ord: 1, status: 'done', assigned_cli: 'claude' }, { id: 'r:check', ord: 2, status: 'done' }, { id: 'r:review', ord: 3, status: 'distributed', assigned_cli: 'codex' }] } as unknown as SessionView;
     expect(busyText(view)).toMatchObject({ line: 'Reviewing it · Codex…', step: 'review', ord: 3 });

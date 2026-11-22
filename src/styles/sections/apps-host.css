@@ -235,3 +235,6 @@
 .wk-publish-columns { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); margin-bottom: var(--space-3); }
 .wk-publish .wk-share-actions { justify-content: flex-end; margin-top: var(--space-3); }
 @media (max-width: 639px) { .wk-publish-columns { grid-template-columns: 1fr; } }
+/* (studio#1295) The steering rules a refused turn broke, as links to Steering. */
+.wk-appchat-rules { display: grid; gap: 2px; }
+.wk-pcard .wk-run-app-rules { margin: var(--space-2) var(--space-4) 0; }
