@@ -22461,6 +22461,12 @@
       ]
     },
     {
+      "testId": "source-read-accept-away",
+      "files": [
+        "src/components/sources/ReadAcceptance.tsx"
+      ]
+    },
+    {
       "testId": "source-read-accept-error",
       "files": [
         "src/components/sources/ReadAcceptance.tsx"
