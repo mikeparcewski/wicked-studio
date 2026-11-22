@@ -532,12 +532,18 @@ function setFailed(runId: string, n: number): void {
   });
 }
 
-/** F31: how many late-join gate reads are on their way at once (98 parked runs read one by one took ~28 s on the rig). */
-export const GATE_READS_IN_FLIGHT = 4;
+/**
+ * How many background gate reads (the late-join pass, skip-QE retries) are on their way at once. crew#1775: one. A
+ * browser opens at most six connections to the daemon, and four background reads behind a slow daemon held most of
+ * them, so the page's own reads (the shown run's gate, an editor's grants, `/health`) queued behind gates nobody was
+ * looking at. The shown run reads its own gate outside these slots (`useOwnGateRead`). F31 chose four when 98 parked
+ * runs read one by one took ~28 s; with crew#1775's one-run read a gate read costs tens of milliseconds.
+ */
+export const GATE_READS_IN_FLIGHT = 1;
 
 /**
  * F31: the late-join passes' shared read slots. At most `GATE_READS_IN_FLIGHT` reads are on their way across every
- * pass (a refresh that replaces a pass does not add four more). A slot is held until its read ends; a hydration read
+ * pass (a refresh that replaces a pass does not add more). A slot is held until its read ends; a hydration read
  * ends by its deadline at the latest (`GATE_READ_DEADLINE_MS`), so a hung request cannot stall the passes after it.
  */
 let slotsBusy = 0;

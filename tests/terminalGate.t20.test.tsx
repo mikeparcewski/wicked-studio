@@ -9,7 +9,6 @@ import { flushDecisionsForTest, queueDecision, resetDecisionsForTest, setUndoWin
 import { JobPassage } from '../src/components/session/JobPassage.js';
 import { resetGateActionReadsForTest } from '../src/hooks/useGateActions.js';
 import { resetJobLocal } from '../src/hooks/useJobStream.js';
-import { useOwnGateRead } from '../src/hooks/useOwnGateRead.js';
 import { useRuns } from '../src/hooks/useRuns.js';
 import { useAskThreadStore } from '../src/store/askThread.js';
 import { useCapabilities } from '../src/store/capabilities.js';
@@ -180,16 +179,21 @@ describe('terminal gates in the job passage', () => {
   });
 });
 
-it('the runs list reads no gate; the run on screen reads its own, and a parked chat turn is read by nothing (crew#1775)', async () => {
+it('the late-join pass reads real decisions before parked chat turns, and still records both turn gates', async () => {
   const asks = [fresh(), fresh()].map((id) => makeView({ id, status: 'awaiting_human', unit_ix: 0, chat_id: `chat-${id}`, ask_turn: true } as never,
     [makeUnit({ id: `${id}:u1`, session_id: id, ord: 1, phase_ref: 'answer-1', description: 'answer-1 — hello', status: 'done' })]));
   const real = job('feature');
   vi.spyOn(api, 'listRuns').mockResolvedValue({ runs: [...asks, real] });
-  const getGate = vi.spyOn(api, 'getGate').mockImplementation(async () => terminal(real));
-  const { result } = renderHook(() => useRuns());
-  await waitFor(() => expect(result.current.loaded).toBe(true));
-  expect(getGate).not.toHaveBeenCalled();
-  renderHook(() => useOwnGateRead(real.session.id, 'awaiting_human'));
-  await waitFor(() => expect(useGateStore.getState().gates[real.session.id]).toMatchObject({ gateKind: 'terminal' }));
-  expect(getGate.mock.calls.map(([id]) => id)).toEqual([real.session.id]);
+  const byId = new Map([...asks, real].map((r) => [r.session.id, r]));
+  const getGate = vi.spyOn(api, 'getGate').mockImplementation(async (id) => terminal(byId.get(id)!));
+  renderHook(() => useRuns());
+  await waitFor(() => expect(getGate).toHaveBeenCalledTimes(3));
+  expect(getGate.mock.calls.map(([id]) => id)).toEqual([real.session.id, ...asks.map((r) => r.session.id)]);
+  await waitFor(() => {
+    for (const ask of asks) {
+      expect(useAskThreadStore.getState().turnGates[ask.session.id]).toMatchObject({ ord: 1 });
+      expect(useGateStore.getState().gates[ask.session.id]).toBeUndefined();
+    }
+  });
+  expect(useGateStore.getState().gates[real.session.id]).toMatchObject({ gateKind: 'terminal' });
 });

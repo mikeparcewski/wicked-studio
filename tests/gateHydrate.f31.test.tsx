@@ -3,21 +3,21 @@
  * `GET /runs/:id/gate` one run at a time, oldest first, over every parked run (98 on the rig), and the run's own
  * thread never read its gate. These pin:
  *  - a waiting run's thread reads its own gate when it opens, so the plan card shows without the runs list's pass;
- *  - the shared slots keep at most GATE_READS_IN_FLIGHT reads on their way; a hung read ends at its deadline (crew#1775:
- *    the runs list no longer reads gates; a list that shows waiting runs reads theirs, `gateReadsShown.1775.test.tsx`);
+ *  - the pass reads in the list's order, at most GATE_READS_IN_FLIGHT across passes; a hung read ends at its deadline;
  *  - a gate read that overlapped an answer, a live frame (gateDecided included), a prune or a reconnect never brings
  *    the old gate back; of two reads the later one wins, whichever lands first;
  *  - one read per run and generation while it is on its way.
  */
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { useCapabilities } from '../src/store/capabilities.js';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import * as client from '../src/api/client.js';
 import { ApiError } from '../src/api/errors.js';
-import type { CoreEvent, GateInfo } from '../src/api/types.js';
+import type { CoreEvent, GateInfo, SessionView } from '../src/api/types.js';
 import { teamPlanApi } from '../src/api/teamPlan.js';
-import { GATE_READS_IN_FLIGHT, GATE_READ_DEADLINE_MS, IDLE_GATE_ACTION, ensureGate, inGateSlot, reconcileGateRetries, refreshGate, resetGateSlotsForTest, useGateActionStore, useGateReadStore } from '../src/board/gateActions.js';
+import { GATE_READ_DEADLINE_MS, IDLE_GATE_ACTION, ensureGate, reconcileGateRetries, refreshGate, resetGateSlotsForTest, useGateActionStore, useGateReadStore } from '../src/board/gateActions.js';
 import { RunBlock } from '../src/components/session/RunConversation.js';
+import { GATE_READS_IN_FLIGHT, inGateSlot, useRuns } from '../src/hooks/useRuns.js';
 import { useConnectionStore } from '../src/store/connection.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useElicitationStore } from '../src/store/elicitations.js';
@@ -339,7 +339,7 @@ describe('one read per run, no re-read storm', () => {
   });
 });
 
-describe('the shared gate read slots', () => {
+describe('the runs list’s late-join pass', () => {
   it('the shared slots keep at most GATE_READS_IN_FLIGHT on their way across callers, first in first served', async () => {
     let open = 0;
     let peak = 0;
@@ -347,7 +347,7 @@ describe('the shared gate read slots', () => {
     const gates = Array.from({ length: 9 }, () => deferred<void>());
     const all = gates.map((g, i) => inGateSlot(async () => { started.push(i); open += 1; peak = Math.max(peak, open); await g.promise; open -= 1; }));
     await new Promise((r) => setTimeout(r, 0));
-    expect(started).toStrictEqual([0, 1, 2, 3]);
+    expect(started).toStrictEqual(Array.from({ length: GATE_READS_IN_FLIGHT }, (_, i) => i));
     for (const g of gates) { g.resolve(); await new Promise((r) => setTimeout(r, 0)); }
     await Promise.all(all);
     expect(started).toStrictEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
@@ -378,4 +378,51 @@ describe('the shared gate read slots', () => {
     }
   });
 
+  it('reads parked runs in the list’s order, at most GATE_READS_IN_FLIGHT at once even when a refresh replaces the pass, and every gate lands', async () => {
+    // The daemon lists the oldest first, as the rig did (98 parked; the run just launched was last). The run a person is
+    // looking at reads its own gate (RunBlock); the pass keeps main's order, one at a time (crew#1775).
+    let views: SessionView[] = Array.from({ length: 10 }, (_, i) =>
+      makeView({ id: `p${i + 1}`, status: 'awaiting_human', created_at: 1_000 + i } as never));
+    const pending = new Map<string, () => void>();
+    const asked: string[] = [];
+    let open = 0;
+    let peak = 0;
+    useConnectionStore.setState({ status: 'connected' } as never);
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (path === '/runs') return ok({ runs: views });
+      const m = /^\/runs\/([^/]+)\/gate$/.exec(path);
+      if (m !== null) {
+        const id = m[1]!;
+        asked.push(id);
+        open += 1; peak = Math.max(peak, open);
+        return new Promise<Response>((res) => {
+          pending.set(id, () => { open -= 1; res(okSync(planInfo(id))); });
+        });
+      }
+      return Promise.resolve(new Response('{}', { status: 404, headers: { 'content-type': 'application/json' } }));
+    }));
+    const { result } = renderHook(() => useRuns());
+    await waitFor(() => expect(asked.length).toBe(GATE_READS_IN_FLIGHT));
+    expect(asked).toStrictEqual(['p1', 'p2', 'p3', 'p4'].slice(0, GATE_READS_IN_FLIGHT));
+    // Four more runs park and a refresh replaces the pass while the first reads are still on their way.
+    views = [...views, ...Array.from({ length: 4 }, (_, i) => makeView({ id: `q${i + 1}`, status: 'awaiting_human', created_at: 2_000 + i } as never))];
+    act(() => { result.current.refresh(); });
+    await new Promise((r) => setTimeout(r, 600));
+    expect(asked).toHaveLength(GATE_READS_IN_FLIGHT);
+    // Settle reads as they come until every run's gate is in.
+    await waitFor(() => {
+      for (const [id, settle] of [...pending]) { pending.delete(id); settle(); }
+      expect(Object.keys(useGateStore.getState().gates).length).toBe(14);
+    }, { timeout: 4000 });
+    expect(peak).toBe(GATE_READS_IN_FLIGHT);
+    expect(asked).toHaveLength(14); // no run read twice
+  });
 });
+
+function okSync(body: unknown): Response {
+  return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+}
+function ok(body: unknown): Promise<Response> {
+  return Promise.resolve(okSync(body));
+}

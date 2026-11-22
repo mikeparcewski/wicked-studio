@@ -20,8 +20,21 @@ describe('Helpers step 5 names the helpers new work will use (crew#1568 D05)', (
       row('opencode', 'OpenCode', { picked: false, optIn: true }),
       row('gemini', 'Reviewer seat', { jobWork: false }),
     ];
-    const { using, off } = newWorkHelpers(rows);
+    const { using, off } = newWorkHelpers(rows, true);
     expect(using.map((r) => r.name)).toStrictEqual(['Claude Code', 'Codex']);
     expect(off.map((r) => r.name)).toStrictEqual(['OpenCode']);
+  });
+
+  it('the default rule uses an opt-in helper when it is the only ready one; a saved pick, even an empty one, stands', () => {
+    const rows = [
+      row('claude', 'Claude Code', { usable: false }),
+      row('codex', 'Codex', { usable: false }),
+      row('opencode', 'OpenCode', { picked: false, optIn: true }),
+    ];
+    expect(newWorkHelpers(rows, true).using.map((r) => r.name)).toStrictEqual(['OpenCode']);
+    expect(newWorkHelpers(rows, true).off).toStrictEqual([]);
+    const none = rows.map((r) => ({ ...r, picked: false }));
+    expect(newWorkHelpers(none, false).using).toStrictEqual([]);
+    expect(newWorkHelpers(none, false).off.map((r) => r.name)).toStrictEqual(['OpenCode']);
   });
 });

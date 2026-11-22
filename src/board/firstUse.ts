@@ -109,10 +109,15 @@ export function setupAgents(rows: readonly AgentRow[]): AgentRow[] {
  * crew#1568 D05: Helpers step 5's names. `using`: the helpers new work uses now: picked, signed in (or needing no
  * sign-in) and given job work, since crew's new-work pool draws only from helpers that can work. `off`: the ready
  * helpers left out until picked. A helper that is not installed or not signed in is in neither list.
+ * `defaultPick`: no pick is saved (`newWorkSeats` unset), so crew's default rule applies, which leaves opt-in helpers
+ * out unless one is all that can work: then it uses them (crew `defaultLaunchRoster`). A saved pick, even an empty
+ * one, is used as it stands.
  */
-export function newWorkHelpers(rows: readonly AgentRow[]): { using: AgentRow[]; off: AgentRow[] } {
+export function newWorkHelpers(rows: readonly AgentRow[], defaultPick: boolean): { using: AgentRow[]; off: AgentRow[] } {
   const ready = rows.filter((r) => r.usable && r.jobWork);
-  return { using: ready.filter((r) => r.picked), off: ready.filter((r) => !r.picked) };
+  const using = ready.filter((r) => r.picked);
+  if (defaultPick && using.length === 0) return { using: ready.filter((r) => r.optIn), off: ready.filter((r) => !r.optIn) };
+  return { using, off: ready.filter((r) => !r.picked) };
 }
 
 /** Projects that count: the synthesized "Unfiled" default (`id: 'default'`) never does. */

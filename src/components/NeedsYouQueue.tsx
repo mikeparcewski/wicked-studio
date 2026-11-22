@@ -22,7 +22,6 @@ import { keysOfKind, useUndoQueue } from '../board/undoQueue.js';
 import { BATCH_KEY } from '../board/batchGates.js';
 import { gateKeyOf } from '../board/gateActions.js';
 import { MEMORY_ACCEPT_KEY } from '../hooks/useAcceptMemory.js';
-import { useNeedRowGateReads } from '../hooks/useOwnGateRead.js';
 
 /**
  * THE NEEDS-YOU QUEUE (DES-HOME-COMMAND-CENTER §3) — the home page's spine.
@@ -111,8 +110,6 @@ export function NeedsYouQueue({ queue, runs, navigate, now, inbox, partial = fal
   now?: number;
 }): React.ReactElement {
   const at = now ?? Date.now();
-  // crew#1775: the queue shows these waiting runs' questions, so it reads their gates (nothing else reads them).
-  useNeedRowGateReads(queue.rows);
   const sectionEl = useRef<HTMLElement | null>(null);
   // "See why" on a failed job (DES-frontdoor §4 requirement 3): which rows have their reason open.
   const [whyOpen, setWhyOpen] = useState<ReadonlySet<string>>(() => new Set());

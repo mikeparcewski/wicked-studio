@@ -4,7 +4,7 @@ import { api } from '../src/api/client.js';
 import type { GateInfo } from '../src/api/types.js';
 import { commitGateDecision, reconcileGateRetries, resetGateSlotsForTest } from '../src/board/gateActions.js';
 import { flushDecisionsForTest, resetDecisionsForTest, setUndoWindowForTest } from '../src/board/undoQueue.js';
-import { useOwnGateRead } from '../src/hooks/useOwnGateRead.js';
+import { useRuns } from '../src/hooks/useRuns.js';
 import { useConnectionStore } from '../src/store/connection.js';
 import { useGateStore } from '../src/store/gates.js';
 import { makeView } from './factories.js';
@@ -21,8 +21,6 @@ beforeEach(() => {
   vi.spyOn(api, 'getElicitation').mockResolvedValue(null);
 });
 afterEach(() => { cleanup(); resetDecisionsForTest(); reconcileGateRetries([]); resetGateSlotsForTest(); vi.restoreAllMocks(); });
-/** The run on screen reads its own gate (crew#1775: the runs list reads none). */
-const shown = (): ReturnType<typeof renderHook> => renderHook(() => useOwnGateRead(R, 'awaiting_human'));
 function reconnect(): void {
   act(() => { useConnectionStore.setState({ status: 'disconnected' }); });
   act(() => { useConnectionStore.setState({ status: 'connected' }); });
@@ -30,13 +28,13 @@ function reconnect(): void {
 it('A: reconnect rechecks a cached gate and reads a never-cached run once', async () => {
   useGateStore.getState().setGate(gate);
   const get = vi.spyOn(api, 'getGate').mockResolvedValue(info(3));
-  shown();
+  renderHook(() => useRuns());
   reconnect();
   await waitFor(() => expect(useGateStore.getState().gates[R]?.ord).toBe(3));
   expect(get).toHaveBeenCalledTimes(1);
   cleanup();
   useGateStore.getState().clearGate(R);
-  shown();
+  renderHook(() => useRuns());
   await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
 });
 it('A: same gate recheck preserves receivedAt, refreshes fields and sends the queued decision', async () => {
@@ -45,7 +43,7 @@ it('A: same gate recheck preserves receivedAt, refreshes fields and sends the qu
   const post = vi.spyOn(api, 'confirmGate').mockResolvedValue({ status: 'ok' } as never);
   const decision = commitGateDecision(R, { approve: true });
   const get = vi.spyOn(api, 'getGate').mockResolvedValue({ ...info(), choices: ['approve', 'reject'], recommended: 1 });
-  shown();
+  renderHook(() => useRuns());
   reconnect();
   await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(useGateStore.getState().gates[R]?.recommended).toBe(1));
@@ -54,19 +52,30 @@ it('A: same gate recheck preserves receivedAt, refreshes fields and sends the qu
   await expect(decision).resolves.toBe('sent');
   expect(post).toHaveBeenCalledTimes(1);
 });
-it('C: a 404 is read once until a frame or reconnect changes the generation', async () => {
-  const { ApiError } = await import('../src/api/errors.js');
-  const get = vi.spyOn(api, 'getGate').mockRejectedValue(new ApiError(404, 'no gate'));
-  shown();
+it('A: failed recheck is retried next pass and a landed recheck is not repeated', async () => {
+  useGateStore.getState().setGate(gate);
+  const get = vi.spyOn(api, 'getGate').mockRejectedValueOnce(new Error('network')).mockResolvedValue(info(3));
+  const { result } = renderHook(() => useRuns());
   reconnect();
   await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
-  cleanup();
-  shown(); // the page shown again: the answer stands
-  await new Promise((r) => setTimeout(r, 20));
+  act(() => result.current.refresh());
+  await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(useGateStore.getState().gates[R]?.ord).toBe(3));
+  act(() => result.current.refresh());
+  await waitFor(() => expect(api.listRuns).toHaveBeenCalledTimes(3));
+  expect(get).toHaveBeenCalledTimes(2);
+});
+it('C: a 404 is read once across runs passes until a frame or reconnect changes the generation', async () => {
+  const { ApiError } = await import('../src/api/errors.js');
+  const get = vi.spyOn(api, 'getGate').mockRejectedValue(new ApiError(404, 'no gate'));
+  const { result } = renderHook(() => useRuns());
+  reconnect();
+  await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
+  act(() => result.current.refresh());
+  await waitFor(() => expect(api.listRuns).toHaveBeenCalledTimes(2));
   expect(get).toHaveBeenCalledTimes(1);
-  cleanup();
   act(() => { useGateStore.getState().ingest({ type: 'awaitingHuman', session: R } as never); });
-  shown();
+  act(() => result.current.refresh());
   await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
   reconnect();
   await waitFor(() => expect(get).toHaveBeenCalledTimes(3));

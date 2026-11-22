@@ -65,7 +65,7 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
   const reading = f.state === 'idle' || f.state === 'loading';
 
   // crew#1568 D05: only the helpers new work will use (ready and picked), and the ready ones left off.
-  const { using: picked, off } = newWorkHelpers(rows);
+  const { using: picked, off } = newWorkHelpers(rows, newWorkSeats.seats === null);
   const skip = (): void => { void f.save({ skippedAt: Date.now() }); navigate('/'); };
 
   return (
