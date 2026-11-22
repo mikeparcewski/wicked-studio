@@ -20,6 +20,8 @@ const { RUN_TAB, useHostChrome, useHostPanel } = await import('../src/editors/ho
 const { resetArtifactSizes } = await import('../src/store/artifactSizes.js');
 const { useAdvisoryNotes, useEditors, useOptionsOverFull } = await import('../src/store/editors.js');
 const { ArtifactAddressProvider } = await import('../src/components/session/ArtifactAddress.js');
+const { useCapabilities } = await import('../src/store/capabilities.js');
+const { artifactContext, inViewAnywhere, resetInView } = await import('../src/store/artifactInView.js');
 import type { ArtifactBinding } from '../src/editors/hostApi.js';
 
 /**
@@ -288,9 +290,44 @@ it.each(['demo', 'interactive-doc'] as const)('full-screen chat explains video e
   await openCard(true, { ...BINDING, source });
   fireEvent.click(screen.getByTestId('plugin-card-full'));
   act(() => useHostChrome.getState().setChatOpen(true));
-  const words = "This chat can't change the video. Change it here by hand (rename, trims, captions), or use Record it again.";
+  // A run's recording (no document yet) changes only through its gate verbs (studio#1140).
+  const words = "This chat can't change the video. Edit the cut makes a copy you can change by hand; at the review gate, Record it again records a new take.";
   if (source === 'demo') expect(screen.getByText(words)).toBeTruthy();
   else expect(screen.queryByText(words)).toBeNull();
+});
+
+describe('studio#1140: an edited cut is in view for the chat beside it only where crew reads a cut as one it cannot change', () => {
+  afterEach(() => { useCapabilities.setState({ chatCutInView: false }); resetInView(); });
+  const CUT: ArtifactBinding = { ...BINDING, artifactKey: 'demo-cut-1', title: 'Sign-in demo', kind: 'demo-video', source: 'demo', projectId: 'p1', docId: 'demo-8e0ffbece431' };
+
+  it('crew says cutInView: the cut in full screen is what the floating chat is about, and the drawer line stays', async () => {
+    useCapabilities.setState({ chatCutInView: true });
+    await openCard(true, CUT);
+    fireEvent.click(screen.getByTestId('plugin-card-full'));
+    act(() => useHostChrome.getState().setChatOpen(true));
+    expect(inViewAnywhere()?.ref).toBe('p1/demo-8e0ffbece431');
+    // The send names the version the cut shows (the fake's head), never a version it has not read.
+    await expect(artifactContext('p1/demo-8e0ffbece431', [], null, 50)).resolves.toEqual({ ref: 'p1/demo-8e0ffbece431', version: 1 });
+    // The drawer names the cut's real hand edits: caption WORDS have none yet, and Record it again is not offered on a cut.
+    expect(screen.getByTestId('host-video-chat-note').textContent).toBe("This chat can't change the video. Change it here by hand in Options: Chapters (rename, move, trim), Captions and Theme. Caption words can't be edited yet; for new words, make a new demo video.");
+  });
+
+  it('an older crew (no cutInView) is never sent the cut: it would read it as a page a refine may change', async () => {
+    useCapabilities.setState({ chatCutInView: false });
+    await openCard(true, CUT);
+    fireEvent.click(screen.getByTestId('plugin-card-full'));
+    act(() => useHostChrome.getState().setChatOpen(true));
+    expect(inViewAnywhere()).toBeNull();
+    expect(screen.getByTestId('host-video-chat-note')).toBeTruthy();
+  });
+
+  it('a run recording that was never cut (no document) is not in view', async () => {
+    useCapabilities.setState({ chatCutInView: true });
+    const recording: ArtifactBinding = { artifactKey: CUT.artifactKey, title: CUT.title, kind: CUT.kind, source: 'demo', projectId: 'p1', composerKey: CUT.composerKey };
+    await openCard(true, recording);
+    fireEvent.click(screen.getByTestId('plugin-card-full'));
+    expect(inViewAnywhere()).toBeNull();
+  });
 });
 
 it('an action writes a version then reports status beside Undo', async () => {

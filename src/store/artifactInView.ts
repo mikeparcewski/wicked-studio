@@ -71,7 +71,9 @@ export function placementEntry(p: PlacementSource): InViewEntry {
     surface: p.surface,
     shown: () => {
       const { head, read } = p.adapter.artifact();
-      return p.lens() ?? writtenVersion(p.ref) ?? p.groupShown() ?? (read !== false && head >= 0 ? head : null);
+      // What the group shows counts only once THIS adapter has read: a card rebound to another document under the same
+      // placement (a run's recording becoming its cut, studio#1140) keeps the old group's version until then.
+      return p.lens() ?? writtenVersion(p.ref) ?? (read === false ? null : p.groupShown() ?? (head >= 0 ? head : null));
     },
     flush: async () => {
       const before = p.adapter.artifact().head;

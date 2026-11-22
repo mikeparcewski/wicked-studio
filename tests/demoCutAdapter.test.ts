@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DemoCutAdapter } from '../src/editors/demoCutAdapter.js';
+import { placementEntry } from '../src/store/artifactInView.js';
 import { DemoCutSurfaceAdapter } from '../src/editors/adapters/recording.js';
 import { demoCut4 } from '../src/editors/fixtures/demoCut4.js';
 import { chapterInventoryOf, checkOps } from '../src/editors/ops.js';
@@ -12,6 +13,29 @@ const chapters = demoCut4.chapters.map(({ id, title, take, inSec, outSec }) => (
 const binding: ArtifactBinding = { artifactKey: 'demo', title: 'Demo', kind: 'demo-video', source: 'demo', projectId: 'p', composerKey: 'run', docId: 'team demo' };
 afterEach(() => vi.unstubAllGlobals());
 describe('demo cut adapter over the E1 proxy', () => {
+  it('studio#1140: says it has read no version until its cut is loaded (a chat send never names version 0 of a cut at v7)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(json({ ...demoCut4, rev: 3, version: 7 })));
+    const a = new DemoCutAdapter('p', 'team demo', 'Team demo');
+    expect(a.artifact()).toMatchObject({ head: 0, read: false });
+    // What a chat send reads from the cut's placement: no version before the cut is loaded, then the one it shows.
+    const entry = placementEntry({ key: 'cut', ref: 'p/team-demo', title: 'Team demo', composerKey: 'run', surface: () => 'full', lens: () => null, groupShown: () => null, adapter: a, host: () => null });
+    expect(entry.shown()).toBeNull();
+    await a.refresh();
+    expect(a.artifact()).toMatchObject({ head: 7, read: true });
+    expect(entry.shown()).toBe(7);
+  });
+
+  it('studio#1140: a recording rebound as its cut never sends the recording group\'s version before the cut is read', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(json({ ...demoCut4, rev: 3, version: 7 })));
+    const a = new DemoCutAdapter('p', 'team demo', 'Team demo');
+    // Same placement key and group: the plugin read version 4 of the recording before "Edit the cut" bound the document.
+    let group: number | null = 4;
+    const entry = placementEntry({ key: 'cut', ref: 'p/team-demo', title: 'Team demo', composerKey: 'run', surface: () => 'full', lens: () => null, groupShown: () => group, adapter: a, host: () => null });
+    expect(entry.shown()).toBeNull();
+    await a.refresh();
+    group = 7;
+    expect(entry.shown()).toBe(7);
+  });
   it.each<ChapterOp>([
     { op: 'chapter-move', chapter: 'open-the-scope', after: 'add-a-seat' },
     { op: 'chapter-rename', chapter: 'open-the-scope', title: 'Open it' },
