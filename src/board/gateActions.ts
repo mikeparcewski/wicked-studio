@@ -537,7 +537,9 @@ function setFailed(runId: string, n: number): void {
  * browser opens at most six connections to the daemon, and four background reads behind a slow daemon held most of
  * them, so the page's own reads (the shown run's gate, an editor's grants, `/health`) queued behind gates nobody was
  * looking at. The shown run reads its own gate outside these slots (`useOwnGateRead`). F31 chose four when 98 parked
- * runs read one by one took ~28 s; with crew#1775's one-run read a gate read costs tens of milliseconds.
+ * runs read one by one took ~28 s. crew#1775's one-run read stops the per-read whole-store fold, but a read still
+ * costs ~90 ms on a 4k-run store and seconds when the engine is busy, so the k-th waiting run's gate lands after about
+ * k reads (wicked-studio#1319 tracks the slot a slow gate's retry holds).
  */
 export const GATE_READS_IN_FLIGHT = 1;
 
@@ -672,13 +674,14 @@ export function ensureGate(runId: string): Promise<void> {
 
 /**
  * The late-join pass's read of one waiting run (crew#1775): its gate when none is cached, a re-read when a reconnect
- * made the cached one doubtful (studio#1023). A run whose read is on its way, or failed and waits on its retry, is
- * left to that read: with one background slot, a run whose read keeps hanging would otherwise hold the slot again on
- * every pass and the runs after it would never be read.
+ * made the cached one doubtful (studio#1023). A run whose current read is on its way, or failed and waits on its
+ * retry, is left to that read: with one background slot, a run whose read keeps hanging would otherwise hold the slot
+ * again on every pass and the runs after it would never be read. A read begun before a write is obsolete (it will be
+ * dropped), so it does not count and the run gets a new read.
  */
 export function hydrateGate(runId: string): Promise<void> {
   if (useGateStore.getState().gates[runId] !== undefined) return needsRecheck(runId) ? refreshGate(runId) : Promise.resolve();
-  if (gateReads.has(runId) || retryTimers.has(runId)) return Promise.resolve();
+  if (gateReads.get(runId)?.ticket.gen === gateGen(runId) || retryTimers.has(runId)) return Promise.resolve();
   return ensureGate(runId);
 }
 

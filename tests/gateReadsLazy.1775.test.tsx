@@ -10,11 +10,11 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../src/api/client.js';
 import type { GateInfo } from '../src/api/types.js';
-import { reconcileGateRetries, resetGateSlotsForTest } from '../src/board/gateActions.js';
+import { ensureGate, hydrateGate, reconcileGateRetries, resetGateSlotsForTest } from '../src/board/gateActions.js';
 import { useOwnGateRead } from '../src/hooks/useOwnGateRead.js';
 import { useRuns } from '../src/hooks/useRuns.js';
 import { useConnectionStore } from '../src/store/connection.js';
-import { useGateStore } from '../src/store/gates.js';
+import { invalidateGateReads, useGateStore } from '../src/store/gates.js';
 import { makeView } from './factories.js';
 
 const info = (runId: string): GateInfo => ({ runId, ord: 2, prompt: 'Proceed?', lifecycle: 'open', receivedAt: new Date(200).toISOString() });
@@ -54,6 +54,22 @@ describe('the late-join gate pass is lazy (crew#1775)', () => {
     });
     expect(peak).toBe(1);
     expect(asked).toStrictEqual(ids);
+  });
+
+  it('the pass leaves a current read on its way alone, but starts a new read when the one on its way is obsolete', async () => {
+    const id = fresh('stale');
+    const asked: string[] = [];
+    vi.spyOn(api, 'getGate').mockImplementation((runId: string) => {
+      asked.push(runId);
+      return asked.length === 1 ? new Promise<GateInfo>(() => undefined) : Promise.resolve(info(runId));
+    });
+    void ensureGate(id);
+    await hydrateGate(id);
+    expect(asked).toHaveLength(1); // current: the read on its way stands
+    invalidateGateReads(); // the socket dropped: that read will be dropped when it lands
+    await hydrateGate(id);
+    expect(asked).toHaveLength(2);
+    expect(useGateStore.getState().gates[id]?.ord).toBe(2);
   });
 
   it('the run on screen reads its own gate while the pass holds its slot', async () => {
