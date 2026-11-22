@@ -8847,19 +8847,7 @@
       ]
     },
     {
-      "testId": "job-passage-repo-picked",
-      "files": [
-        "src/components/session/JobRepoChoices.tsx"
-      ]
-    },
-    {
       "testId": "job-passage-repos",
-      "files": [
-        "src/components/session/JobRepoChoices.tsx"
-      ]
-    },
-    {
-      "testId": "job-passage-repos-back",
       "files": [
         "src/components/session/JobRepoChoices.tsx"
       ]
