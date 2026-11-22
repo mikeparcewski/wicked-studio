@@ -39,7 +39,7 @@ import { CaptureDrop } from '../CaptureDrop.js';
 import { AgentModal } from '../agents/AgentModal.js';
 import { StandingOrdersPanel } from '../StandingOrdersPanel.js';
 import { liveRows } from '../../board/deskInsights.js';
-import { agentTiles, readyNote } from '../../board/agentsModel.js';
+import { agentTiles, jobWorkers, readyNote } from '../../board/agentsModel.js';
 import { useAgentRows } from '../agents/useAgentRows.js';
 import { useWindowSpend } from '../../hooks/useWindowSpend.js';
 import { Segmented, StateBanner } from '../ui/index.js';
@@ -252,7 +252,7 @@ export function DeskV2({ runs: rawRuns, runsLoaded, runsError = null, onRetryRun
   // Studio's own setup (operator 2026-10-17): live items from the agents and the memory read, the Desk only.
   const memory = useMemoryReading(projectId === undefined, tab);
   const setup = useMemo(() => (projectId !== undefined ? [] : setupChores(
-    { known: agentsView.hasRoster, usable: agentsView.rows.filter((r) => r.usable), total: agentsView.rows.length },
+    { known: agentsView.hasRoster, usable: jobWorkers(agentsView.rows), total: agentsView.rows.length },
     memory,
     { agents: deskTabPath('agents', `${AGENTS_PATH}?setup=1`), memory: deskTabPath('repositories'), proposals: '/memory?view=proposals' },
   )), [projectId, agentsView.hasRoster, agentsView.rows, memory]);

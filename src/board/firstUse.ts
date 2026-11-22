@@ -101,7 +101,8 @@ export function withRowRuntime(checks: SetupChecks, rows: readonly AgentRow[]): 
  * Reviews are a separate capability, so `council_eligible` alone never decides it.
  */
 export function setupAgents(rows: readonly AgentRow[]): AgentRow[] {
-  return rows.filter((r) => r.picked && !r.optIn && r.usable && r.repoWork && boundaryHolds(r.seat, 'scoped_bound'));
+  // studio#856: `jobWork`, so a work-only seat no studio job draws from never completes setup (coord F1 on #1302).
+  return rows.filter((r) => r.picked && !r.optIn && r.usable && r.jobWork && r.repoWork && boundaryHolds(r.seat, 'scoped_bound'));
 }
 
 /** Projects that count: the synthesized "Unfiled" default (`id: 'default'`) never does. */
@@ -140,6 +141,6 @@ export function setupMove(r: AgentRow, counted: readonly AgentRow[]): { kind: 's
   if (helperNotInstalled(r)) return { kind: 'fix', label: `Fix ${r.name}` };
   // The top issue decides (issues are sorted): a sign-in offered first only when signing in is the next move (codex #759 r1).
   if (r.issues[0]?.code === 'signed_out') return { kind: 'sign-in', label: `Sign in ${r.name}` };
-  if (!r.picked && r.usable && r.issues.every((i) => i.severity === 'note')) return { kind: 'use', label: `Use ${r.name} for new work` };
+  if (!r.picked && r.usable && r.jobWork && r.issues.every((i) => i.severity === 'note')) return { kind: 'use', label: `Use ${r.name} for new work` };
   return { kind: 'fix', label: `Fix ${r.name}` };
 }

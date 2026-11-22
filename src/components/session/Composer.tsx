@@ -24,7 +24,7 @@ import {
 import { gateInstance } from '../../board/proposalCard.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { seatLabel, userSeats } from '../../board/seatNames.js';
-import { seatStanding } from '../gateVerdictModel.js';
+import { NO_WORKER_PICKED, onlyReviewersChosen, seatJoinStanding } from '../gateVerdictModel.js';
 import { defaultSelection } from '../../board/chatOpen.js';
 import { chosenSeats, NO_SEAT_PICKED, seatOff, useComposerSeats, useLaunchSeats } from '../../store/composerSeats.js';
 import { loadCatalog, loadPresets, usePlanCatalog } from '../../store/planCatalog.js';
@@ -457,7 +457,7 @@ export function Composer({
   // A job's helpers (New job's J4 rule, codex r1 on #982): one that cannot take work now (signed out, benched) is off
   // unless turned on by hand, and the row shows exactly what the launch sends.
   const unusable = useMemo(() => new Set(wfChip === null ? [] : (roster ?? []).flatMap((s) => {
-    const st = seatStanding(s);
+    const st = seatJoinStanding(s);
     return st.state === 'ready' || st.state === 'unknown' ? [] : [s.key];
   })), [wfChip, roster]);
   const isOffSeat = (key: string): boolean => (unusable.has(key) ? !picked.includes(key) : seatOff(key, dropped, picked));
@@ -473,6 +473,8 @@ export function Composer({
   // for when a helper COULD be turned on but every one was dropped.
   const seatRefusal = !seatsApply || refusal !== null ? null
     : sendSeats.length === 0 ? NO_SEAT_PICKED
+      // A job needs a helper that takes steps; a reviewer-only seat joins one but cannot be its only helper (codex r1 on #1302).
+      : wfChip !== null && onlyReviewersChosen(sendSeats.map((k) => (roster ?? []).find((s) => s.key === k))) ? NO_WORKER_PICKED
       : namedDropped ? `${namedHelper?.label ?? 'The helper you named'} is named to answer but is left out of the helpers row — turn it on, or remove the chip.`
         : null;
   const [jobBusy, setJobBusy] = useState(false);

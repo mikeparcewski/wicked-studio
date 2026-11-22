@@ -9,6 +9,7 @@ import { hookOffers, SignInNotCompleted, useAgentLogin, useAuthOps } from './age
 import { holdInert, useLoginCover } from './inertHold.js';
 import type { RosterSeat } from '../../api/types.js';
 import { getCachedRoster, setCachedRoster } from '../../store/rosterCache.js';
+import { seatRoles } from '../gateVerdictModel.js';
 
 import { useModalEscape } from '../Modal.js';
 import { Skeleton } from '../ui/StateBanner.js';
@@ -146,10 +147,12 @@ function outcomeOf(fresh: readonly RosterSeat[], key: string, answer: 'probed' |
   // After a sign-out, signed out is the success (codex S4 r10), not "still signed out".
   if (auth === 'signed_out') return { kind: after === 'sign-out' ? 'out-done' : 'still' };
   // "It answered a request" only from THIS check's fresh answer (codex S4 r1): an old reading proves nothing new.
-  if (auth === 'signed_in' && check === 'live' && answer === 'probed') return { kind: mine.council_eligible === false || mine.recent_bench !== undefined ? 'failed' : 'in' };
+  // studio#856: a seat turned out of work AND reviews (or benched) did not come back; one with either role did.
+  const idle = (): boolean => { const r = seatRoles(mine); return (!r.council && !r.work) || mine.recent_bench !== undefined; };
+  if (auth === 'signed_in' && check === 'live' && answer === 'probed') return { kind: idle() ? 'failed' : 'in' };
   // A container sign-in (crew#1006): the reading is crew's credential broker's, not the CLI's own check.
   if (auth === 'signed_in' && mine.sign_in === 'container' && answer === 'probed') {
-    return { kind: mine.council_eligible === false || mine.recent_bench !== undefined ? 'failed' : 'container-in' };
+    return { kind: idle() ? 'failed' : 'container-in' };
   }
   if (auth === 'signed_in' && check === 'status' && answer === 'probed') return { kind: 'status-only' };
   // An agent with no status command (pi, copilot) is never re-probed: the answer is the reading.

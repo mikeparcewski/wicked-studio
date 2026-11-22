@@ -1,7 +1,7 @@
 import type { DiagnosticsGovernance, LaunchBodyWithDeliver, RosterSeat, SessionView } from '../api/types.js';
 import type { GovernanceReplayOutcome } from '../api/governanceReplay.js';
 import { ONBOARDING_WORKFLOW_ID } from './repoStats.js';
-import { noCarryingSeatReason, seatCanCarry } from '../components/gateVerdictModel.js';
+import { noCarryingSeatReason, seatCanCarry, seatJoinStanding } from '../components/gateVerdictModel.js';
 
 /**
  * Repair moves (studio Wave A, ideas 3 and 5): a number or a pile of alike rows that signals
@@ -101,8 +101,10 @@ export function retryLaunchOf(v: SessionView, roster: readonly RosterSeat[] | nu
     return { via: 'onboard', repoId: s.repo_ref };
   }
   const body: LaunchBodyWithDeliver = { problem: s.problem, retryOf: s.id };
-  // studio#315: a seat the roster says cannot take work (benched, not council-eligible) does not ride.
-  const seats = (roster ?? []).filter((seat) => s.clis.includes(seat.key) && seatCanCarry(seat));
+  // studio#315: a seat the roster says cannot take work (benched, not council-eligible) does not ride. studio#856: a
+  // reviewer-only seat still rides as the job's reviewer (it joined the original); `retryBlocker` refuses a pool with
+  // no seat that can take a step.
+  const seats = (roster ?? []).filter((seat) => s.clis.includes(seat.key) && (seatCanCarry(seat) || seatJoinStanding(seat).state === 'ready'));
   if (seats.length > 0) body.clisJson = JSON.stringify(seats);
   if (s.entity_mode !== undefined) body.entityMode = s.entity_mode;
   const hc = confirmWire(s.human_confirm);
