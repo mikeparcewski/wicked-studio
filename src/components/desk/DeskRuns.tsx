@@ -1,3 +1,4 @@
+import { useSystemLiveness } from '../../store/systemSnapshot.js';
 import { useCallback, useId, useMemo, useState } from 'react';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
 import type { SessionView } from '../../api/types.js';
@@ -65,8 +66,10 @@ export function DeskRuns({ start, runs, runsShown, refine, refineBar, now, navig
   const toolsId = useId();
   // An unfiled job is "No project" on this page, in its line, its picker and its search alike.
   const nameOf = useCallback((id: string): string => projectWord(id, projectName), [projectName]);
-  const view = useMemo(() => runsView(runs, refine, { group, status, query, now, title, names: { project: nameOf, agent: agentName }, allTime, ...(holds !== undefined ? { holds } : {}) }),
-    [runs, refine, group, status, query, now, title, nameOf, agentName, allTime, holds]);
+  // studio#1368: crew's liveness per run, so a silent job never reads "Working".
+  const liveness = useSystemLiveness();
+  const view = useMemo(() => runsView(runs, refine, { group, status, query, now, title, names: { project: nameOf, agent: agentName }, allTime, liveness, ...(holds !== undefined ? { holds } : {}) }),
+    [runs, refine, group, status, query, now, title, nameOf, agentName, allTime, holds, liveness]);
   // The picker's counts: the list as shown, over every project.
   const picking = showProject && onProject !== undefined;
   const everyProject = useMemo(() => (picking ? runsView(runs, { ...refine, project: null }, { group, status, query, now, title, names: { project: nameOf, agent: agentName }, allTime, ...(holds !== undefined ? { holds } : {}) }).rows : null),
@@ -186,7 +189,7 @@ export function DeskRuns({ start, runs, runsShown, refine, refineBar, now, navig
                           <span className="wk-jr-row-title">{r.title}</span>
                           <span className="wk-jr-row-sub" data-testid="desk-runs-line">{jobLine(r, { agentName, projectName, showProject, ago })}</span>
                         </span>
-                        <span className="wk-jr-word" data-tone={r.tone} data-testid="desk-runs-word">{r.word}</span>
+                        <span className="wk-jr-word" data-tone={r.silent !== null ? 'gate' : r.tone} data-testid="desk-runs-word" data-silent={r.silent !== null}>{r.silent ?? r.word}</span>
                       </a>
                       {acts.length > 0 && <OverflowMenu label={`More actions for ${r.title}`} items={acts} data-testid="desk-runs-row-menu" />}
                     </div>

@@ -2,6 +2,7 @@ import { planRefusalWords } from '../api/planRefusal.js';
 import { create } from 'zustand';
 import { isFiller } from './narration.js';
 import type { CoreEvent } from '../api/types.js';
+import { isHeartbeatFrame } from '../board/heartbeatFrame.js';
 
 /** Cap per (run, unit) output buffer so a chatty CLI can't grow memory unbounded. */
 const OUTPUT_CAP = 200_000;
@@ -348,8 +349,10 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
         };
       }
 
-      // Heartbeats would flood the log and carry no run detail.
-      if (event.type === 'heartbeat') return { seq };
+      // Heartbeats (the engine's, and a quiet seat's 15 s `toolActivity` `working` frame) would flood the log and carry no
+      // run detail. Every stall clock reads this log's newest `ts`, so a frame here would reset it (studio#1368): the
+      // live activity row reads the working frame off the run's event store instead.
+      if (isHeartbeatFrame(event)) return { seq };
 
       // assumptionRecorded → per-run assumptions list (+ the normal log entry below
       // is skipped: the panel is the surface, a log line would just duplicate it).

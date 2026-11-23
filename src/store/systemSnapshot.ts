@@ -1,8 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { create } from 'zustand';
 import { api } from '../api/client.js';
 import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js';
-import { getSystem, isSystemUnsupported, type SystemSnapshot } from '../api/system.js';
+import { getSystem, isSystemUnsupported, type SystemRun, type SystemSnapshot } from '../api/system.js';
 import type { DiagnosticsGovernance } from '../api/types.js';
 import { useConnectionStore } from './connection.js';
 
@@ -178,6 +178,14 @@ export function useSystemPoll(): void {
       if (subscribers === 0 && stop !== null) { stop(); stop = null; }
     };
   }, []);
+}
+
+/** Crew's `/system` runs by id (studio#1368: the Desk, a project's home and Jobs say a silent run's silence in crew's
+ *  words). Reads the app's one poll (App mounts it through the needs count); empty until crew answers, or on an older
+ *  crew without `/system`. */
+export function useSystemLiveness(): ReadonlyMap<string, SystemRun> {
+  const runs = useSystemStore((s) => (s.mode === 'system' ? s.snapshot?.runs : undefined));
+  return useMemo(() => new Map((runs ?? []).map((r) => [r.runId, r])), [runs]);
 }
 
 /** Tests: forget every answer. */

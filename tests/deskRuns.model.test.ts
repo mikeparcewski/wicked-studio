@@ -15,7 +15,7 @@ describe('Jobs model', () => {
     const run = deskRun('r1', { repo_ref: 'wicked-core' });
     run.units.push(makeUnit({ assigned_cli: 'claude', status: 'done' }));
     expect(view([run]).rows).toEqual([{
-      id: 'r1', title: 'Fix r1', outcome: 'Finished', word: 'Finished', tone: 'ok', group: 'finished',
+      id: 'r1', title: 'Fix r1', outcome: 'Finished', word: 'Finished', silent: null, tone: 'ok', group: 'finished',
       project: 'studio', repo: 'wicked-core', workflow: 'Fix bug',
       agents: ['claude', 'codex'], agent: 'claude', stepsDone: 2, steps: 3,
       startedAt: NOW - DAY, endedAt: NOW - DAY + 120_000,

@@ -18,6 +18,7 @@ import { useGateStore, type OpenGate } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useProjectsStore } from '../store/projects.js';
 import { activityEvidence, stalledRuns } from '../board/stalls.js';
+import { lastActivityAt } from '../board/silentStep.js';
 import { HOME_FRESH_MS, useNeedsSources } from '../store/needsSources.js';
 import { useRuntimeStore } from '../store/runtime.js';
 
@@ -434,8 +435,9 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
       void Promise.resolve()
         .then(() => api.getRunEvents(id))
         .then(({ events }) => {
-          const ts = events[events.length - 1]?.ts;
-          if (typeof ts === 'number') useActivityClocks.getState().merge({ [id]: ts });
+          // The newest frame that did something: a quiet seat's persisted heartbeats are not activity (studio#1368).
+          const ts = lastActivityAt(events);
+          if (ts !== null) useActivityClocks.getState().merge({ [id]: ts });
         })
         .catch(() => { /* no durable log — no evidence, no stall claim */ });
     }

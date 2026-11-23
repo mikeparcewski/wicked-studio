@@ -6,7 +6,7 @@ import type { SessionView } from '../../api/types.js';
 import type { SystemAttention, SystemSnapshot } from '../../api/system.js';
 import { actionPath } from '../../board/rankedNeeds.js';
 import { toResolveWords } from '../../board/nerveCenter.js';
-import { HEALTH_RECHECKED } from '../../store/systemSnapshot.js';
+import { HEALTH_RECHECKED, useSystemLiveness } from '../../store/systemSnapshot.js';
 import { BATCH_KEY, batchFailureWords, runBatchDecision, useBatchGateStore } from '../../board/batchGates.js';
 import { InlineUndo } from '../InlineUndo.js';
 import { TechDetails } from '../ui/TechDetails.js';
@@ -118,7 +118,9 @@ export function DeskHome({
   const moreWaiting = Math.max(0, waiting - (shownNeed !== null || shownRanked !== null ? 1 : 0));
   const resolveCount = ranked?.unresolved?.length ?? 0;
 
-  const progress = useMemo(() => progressRows(runs, { max: PROGRESS_MAX, agentName }), [runs, agentName]);
+  // studio#1368: crew's liveness per run, so a silent job never reads "Working".
+  const liveness = useSystemLiveness();
+  const progress = useMemo(() => progressRows(runs, { max: PROGRESS_MAX, agentName, liveness }), [runs, agentName, liveness]);
   const allJobs = everythingPath({ tab: 'sessions' });
 
   const start = (e: React.FormEvent): void => {
@@ -213,7 +215,7 @@ export function DeskHome({
                     <a href={path} onClick={go(path)} className="wk-home-job" data-testid="desk-progress-row" data-run-id={r.runId} data-tone={r.tone}>
                       <span className="wk-home-job-top">
                         <span className="wk-home-job-title">{r.title}</span>
-                        <span className="wk-home-job-word" data-tone={r.tone}>{r.word}</span>
+                        <span className="wk-home-job-word" data-tone={r.silent !== null ? 'gate' : r.tone} data-testid="desk-progress-word" data-silent={r.silent !== null}>{r.silent ?? r.word}</span>
                       </span>
                       <span className="wk-home-bar" aria-hidden><span className="wk-home-bar-fill" data-tone={r.tone} style={{ width: `${pct}%` }} /></span>
                       <span className="wk-home-job-line">{r.line}</span>

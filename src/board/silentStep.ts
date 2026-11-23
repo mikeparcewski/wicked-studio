@@ -2,6 +2,7 @@ import { orphanedOf } from './sessionModel.js';
 import type { SystemRun } from '../api/system.js';
 import { isPowerPaused } from './heldRuns.js';
 import { runningFloor } from './floorRun.js';
+import { isHeartbeatFrame } from './heartbeatFrame.js';
 import type { CoreEvent, SessionView } from '../api/types.js';
 
 /**
@@ -31,7 +32,8 @@ export interface SilentStep {
 export function lastActivityAt(events: readonly CoreEvent[]): number | null {
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i]!;
-    if (NOT_ACTIVITY.has(e.type)) continue;
+    // A heartbeat proves the seat is alive, not that it did anything (studio#1368).
+    if (NOT_ACTIVITY.has(e.type) || isHeartbeatFrame(e)) continue;
     if (typeof e.ts === 'number') return e.ts;
   }
   return null;
@@ -69,4 +71,12 @@ export function silentWords(s: SilentStep): string {
 export function snapshotSilence(run: SystemRun | undefined): SilentStep | null {
   if (run === undefined || (run.liveness !== 'quiet' && run.liveness !== 'stalled') || run.quietForMs == null || run.quietForMs < SILENT_AFTER_MS) return null;
   return { minutes: Math.floor(run.quietForMs / 60_000), ord: null, cli: null };
+}
+
+/** studio#1368: a live run's silence in crew's words for a list row ("No output for 21 min"), from crew's `/system`
+ *  liveness, or null while crew says it works (or crew has not said). The Desk, a project's In progress and Jobs say
+ *  this instead of "Working", as Everything and the run header do. */
+export function snapshotSilentWords(liveness: ReadonlyMap<string, SystemRun> | undefined, runId: string): string | null {
+  const s = snapshotSilence(liveness?.get(runId));
+  return s === null ? null : silentWords(s);
 }
