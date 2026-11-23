@@ -41,7 +41,13 @@ export interface ArtifactBinding {
   repoId?: string | null;
   /** Who produced the version shown ("Claude Code", "You", "crew"), drawn on the turn above the card. */
   producedBy?: string | null;
+  /** crew#1745: how the run that makes this artifact stands, when a run makes it (absent: no run is known). */
+  attempt?: ArtifactAttempt;
 }
+
+/** crew#1745: the run making an artifact. `failed` carries crew's reason (the run's `landing_failed.reason`);
+ *  `stopped` is a run that ended (cancelled or failed) with no reason recorded. */
+export type ArtifactAttempt = { state: 'working' } | { state: 'stopped' } | { state: 'failed'; why: string };
 
 // ── adapters (one per data plane) ───────────────────────────────────────────────────────────────────
 
@@ -54,7 +60,8 @@ export type ExportOutcome = { ok: true; text: string; href: string; file: string
  *  earlier session survives a reload. */
 export interface ExportedFile { format: string; label: string; name: string; href: string }
 /** A host status pill on the card ("Version 3", "2 changed", "Ready to watch"). Host words, from adapter state. */
-export interface StatusPill { id: string; text: string; tone: 'neutral' | 'good' | 'warn' | 'bad' }
+/** `why` (crew#1745): one line the card shows under its title, e.g. the reason a document was not made. */
+export interface StatusPill { id: string; text: string; tone: 'neutral' | 'good' | 'warn' | 'bad'; why?: string }
 /** A reviewable part (slide, chapter, section): what the host review capability approves (§7.4). */
 export interface ArtifactPart { id: string; label: string; state: 'pending' | 'approved' | 'changed' }
 
@@ -66,7 +73,8 @@ export interface SurfaceAdapter extends HostAdapter {
   capabilities(): readonly AdapterCapability[];
   /** Formats offered by Export (replaces ArtifactMorph's per-kind EXPORTS table). Needs `export`. */
   exports?(): readonly ExportOption[];
-  pills?(): readonly StatusPill[];
+  /** `attempt` is the binding's as it is now (the adapter is made once per card, from the first binding). */
+  pills?(attempt?: ArtifactAttempt): readonly StatusPill[];
   /** Needs `parts`. */
   parts?(): Promise<readonly ArtifactPart[]>;
   /** Re-read the head; a moved head is posted to every instance as `artifact.changed`. Polled at idle (5 s). */
