@@ -9741,6 +9741,12 @@
       ]
     },
     {
+      "testId": "launch-standin",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
       "testId": "launch-started",
       "files": [
         "src/components/ChatInput.tsx"
@@ -10168,6 +10174,12 @@
     },
     {
       "testId": "launch-wizard-skip-toggle",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-standin",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]
@@ -27016,6 +27028,18 @@
   ],
   "dynamic": [
     {
+      "pattern": "*-*",
+      "files": [
+        "src/components/StandInChoice.tsx"
+      ]
+    },
+    {
+      "pattern": "*-*-next",
+      "files": [
+        "src/components/StandInChoice.tsx"
+      ]
+    },
+    {
       "pattern": "*-active",
       "files": [
         "src/components/FacetAutocomplete.tsx"
@@ -27176,6 +27200,7 @@
     {
       "pattern": "*-error",
       "files": [
+        "src/components/StandInChoice.tsx",
         "src/components/sources/AgentAccess.tsx",
         "src/components/sources/AllowWritesSwitch.tsx",
         "src/components/sources/AskData.tsx",
@@ -27278,6 +27303,12 @@
       "pattern": "*-list",
       "files": [
         "src/components/ui/OverflowMenu.tsx"
+      ]
+    },
+    {
+      "pattern": "*-meaning",
+      "files": [
+        "src/components/StandInChoice.tsx"
       ]
     },
     {
@@ -27419,6 +27450,12 @@
       "pattern": "*-recent-unknown",
       "files": [
         "src/components/sources/AgentAccess.tsx"
+      ]
+    },
+    {
+      "pattern": "*-record",
+      "files": [
+        "src/components/StandInChoice.tsx"
       ]
     },
     {
@@ -27652,6 +27689,12 @@
       ]
     },
     {
+      "pattern": "*-title",
+      "files": [
+        "src/components/StandInChoice.tsx"
+      ]
+    },
+    {
       "pattern": "*-toggle",
       "files": [
         "src/components/session/AssuranceReceipt.tsx"
@@ -27704,6 +27747,12 @@
       "pattern": "*-who",
       "files": [
         "src/components/trackers/TrackerActions.tsx"
+      ]
+    },
+    {
+      "pattern": "*-why",
+      "files": [
+        "src/components/StandInChoice.tsx"
       ]
     },
     {
@@ -28248,6 +28297,7 @@
         "src/components/SkillChips.tsx",
         "src/components/SkillFindings.tsx",
         "src/components/SkillsPage.tsx",
+        "src/components/StandInChoice.tsx",
         "src/components/Tech.tsx",
         "src/components/WhatWhere.tsx",
         "src/components/agents/AgentsPage.tsx",

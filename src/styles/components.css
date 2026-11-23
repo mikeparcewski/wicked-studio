@@ -1278,6 +1278,15 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-qe-warning-link { color: color-mix(in oklab, var(--accent) 60%, var(--ink-high)); font-weight: var(--weight-semi); text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
 .wk-qe-warning-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
 .wk-qe-warning .wk-tech-details { margin-top: 4px; }
+/* DES-STANDIN-001 S0: the stand-in choice a short launch asks before anything starts. */
+.wk-standin-choice { margin: 8px 0; padding: 12px 14px; border-radius: var(--radius-md); background: var(--surface-card); box-shadow: var(--shadow-card); border-left: 3px solid var(--status-warn); font-size: var(--text-xs); color: var(--ink-body); min-width: 0; overflow-wrap: anywhere; }
+.wk-standin-choice-title { margin: 0; color: var(--ink-high); font-size: var(--text-sm); font-weight: var(--weight-semi); }
+.wk-standin-choice-text { margin: 6px 0 0; line-height: 1.45; }
+.wk-standin-choice-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.wk-standin-choice-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.wk-standin-choice-row .wk-btn { flex: 0 0 auto; min-width: 13.5rem; justify-content: center; }
+.wk-standin-choice-next { flex: 1 1 14rem; min-width: 0; color: var(--ink-dim); }
+.wk-standin-choice-error { color: var(--status-bad, var(--ink-high)); font-weight: var(--weight-semi); }
 .wk-qe-offer { color: var(--ink-body); font-family: var(--font-sans); }
 /* Settings: the QE acceptance switch, when a warning's link lands on it. */
 .wk-setting-target { margin: 8px -10px; padding: 6px 10px; border-radius: var(--radius-md); outline: 2px solid transparent; outline-offset: 0; transition: outline-color 200ms ease; }
