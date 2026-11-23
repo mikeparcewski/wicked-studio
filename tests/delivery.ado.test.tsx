@@ -64,6 +64,9 @@ describe('studio#1357 the Azure DevOps PR url', () => {
     ['the create form', 'https://dev.azure.com/mikeparcewski/wicked/_git/wicked/pullrequestcreate?sourceRef=x'],
     ['no number', 'https://dev.azure.com/mikeparcewski/wicked/_git/wicked/pullrequest/'],
     ['javascript:', 'javascript:alert(1)//dev.azure.com/o/p/_git/r/pullrequest/1'],
+    ['another port', ADO_PR.replace('dev.azure.com', 'dev.azure.com:8443')],
+    ['GitHub with userinfo', 'https://github.com@evil.example/acme/studio/pull/42'],
+    ['the GitHub create form', 'https://github.com/acme/studio/pull/new/pull/5'],
   ])('refuses %s', (_name, url) => {
     expect(isPrUrl(url)).toBe(false);
     expect(prNumberOf(url)).toBeNull();
@@ -71,6 +74,16 @@ describe('studio#1357 the Azure DevOps PR url', () => {
 
   it('is the delivery the deliver transcript names (crew\'s last-line URL)', () => {
     expect(prUrlFrom(DELIVER_TAIL)).toBe(ADO_PR);
+  });
+
+  it('an organisation called `pull` is still an Azure DevOps organisation', () => {
+    expect(prNumberOf('https://dev.azure.com/pull/new/_git/repo/pullrequest/3')).toBe(3);
+  });
+
+  it('a transcript never turns a longer token into a PR: the digits end the number', () => {
+    expect(prUrlFrom(`${ADO_PR}garbage\n`)).toBeNull();
+    expect(prUrlFrom('https://github.com/o/r/pull/12x\n')).toBeNull();
+    expect(prUrlFrom(`see ${ADO_PR}.\n`)).toBe(ADO_PR);
   });
 
   it('the run record\'s deliverUrl is the delivery: a PR link, and "Pull request #1"', () => {
