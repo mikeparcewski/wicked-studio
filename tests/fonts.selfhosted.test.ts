@@ -22,6 +22,38 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
+/**
+ * The selector of each rule whose block reads `needle`, comments dropped. One pass of indexOf: the regex this
+ * replaces, /([^{}]+)\{[^}]*var\(--font-display\)/, retried every start position of each brace-free run, which
+ * cost about 1.2 s on the 885K characters of src/styles and ran past 5 s on a loaded runner (studio#1354).
+ */
+function rulesUsing(css: string, needle: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<number>();
+  for (let at = css.indexOf(needle); at >= 0; at = css.indexOf(needle, at + needle.length)) {
+    const open = css.lastIndexOf('{', at);
+    if (open < 0 || css.lastIndexOf('}', at) > open || seen.has(open)) continue;
+    seen.add(open);
+    const start = Math.max(css.lastIndexOf('{', open - 1), css.lastIndexOf('}', open - 1)) + 1;
+    out.push(css.slice(start, open).replace(/\/\*[\s\S]*?\*\//gu, '').trim());
+  }
+  return out;
+}
+
+describe('rulesUsing (studio#1354)', () => {
+  it('names the rule that reads the variable, once per block, through comments and nesting', () => {
+    const css = '/* head */ .a { color: red }\n/* brand */ .wk-wordmark { font-family: var(--font-display); x: var(--font-display) }\n'
+      + '@media (min-width: 1px) { .b { font: 1em var(--font-display) } }';
+    expect(rulesUsing(css, 'var(--font-display)')).toEqual(['.wk-wordmark', '.b']);
+    expect(rulesUsing('.a { color: red }', 'var(--font-display)')).toEqual([]);
+  });
+
+  it('stays one pass on a long brace-free run (the old regex took about 7 s on this input)', () => {
+    const css = `.a${' '.repeat(120_000)}{ color: red }\n.wk-wordmark { font-family: var(--font-display); }`;
+    expect(rulesUsing(css, 'var(--font-display)')).toEqual(['.wk-wordmark']);
+  });
+});
+
 describe('fonts are self-hosted', () => {
   it('index.html and every source file name no font CDN', () => {
     const files = [join(REPO, 'index.html'), ...walk(join(REPO, 'src')).filter((f) => /\.(css|tsx?|html)$/.test(f))];
@@ -81,8 +113,7 @@ describe('fonts are self-hosted', () => {
     // Only the wordmark reads --font-display, and the rail's catch-all text-face rule leaves it alone (round 4).
     const all = readdirSync(join(REPO, 'src', 'styles'), { recursive: true }).filter((p) => String(p).endsWith('.css'))
       .map((p) => readFileSync(join(REPO, 'src', 'styles', String(p)), 'utf8')).join('\n');
-    const uses = [...all.matchAll(/([^{}]+)\{[^}]*var\(--font-display\)/gu)].map((m) => m[1]!.replace(/\/\*[\s\S]*?\*\//gu, '').trim());
-    expect(uses).toEqual(['.wk-wordmark']);
+    expect(rulesUsing(all, 'var(--font-display)')).toEqual(['.wk-wordmark']);
     expect(all).toMatch(/\[data-testid="desk"\]\) :not\([^)]*\.wk-wordmark, \.wk-wordmark \*\)/u);
   });
 
