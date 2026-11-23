@@ -4,7 +4,7 @@ import { FileText, GitBranch, PenLine, X } from 'lucide-react';
 import { api, apiFetch } from '../../api/client.js';
 import { postCapture } from '../../api/capture.js';
 import { getSteeringDraft, keepDraftedRules, type SteeringDraftResponse } from '../../api/learn.js';
-import { approveProposal, listProposals, memoryPayload, policyPayload, proposalKind, rejectProposal, type Proposal } from '../../api/proposals.js';
+import { approveProposal, landingFailure, listProposals, memoryPayload, policyPayload, proposalKind, rejectProposal, type Proposal } from '../../api/proposals.js';
 import { authorSteeringRules } from '../../api/steering.js';
 import type { Ask, AskAnswer } from '../../api/ask.js';
 import type { RepoEntry, SessionView } from '../../api/types.js';
@@ -285,6 +285,7 @@ function StylePipeline({ record, launching, sourceCount, onLearn, onReset, launc
     try {
       let kept = 0;
       let of = 0;
+      const notLanded: string[] = [];
       if (which === 'memories') {
         of = memories.length;
         for (const m of memories) { if (keep.has(m.id)) { await approveProposal(m.id); kept += 1; } else await rejectProposal(m.id); }
@@ -297,11 +298,20 @@ function StylePipeline({ record, launching, sourceCount, onLearn, onReset, launc
           if (res.landing?.outcome === 'failed') throw new Error(res.landing.error ?? 'the rules could not be landed');
           kept += ids.length;
         }
-        for (const p of policies) { if (keep.has(p.id)) { await approveProposal(p.id); kept += 1; } else await rejectProposal(p.id); }
+        for (const p of policies) {
+          if (!keep.has(p.id)) { await rejectProposal(p.id); continue; }
+          // studio#1337: a rule crew could not land is not adopted; it stays proposed in Steering, where its card says why.
+          const failed = landingFailure(await approveProposal(p.id));
+          if (failed === null) kept += 1;
+          else notLanded.push(failed);
+        }
       }
       if (kept > 0) void useFirstRun.getState().markLearnUsed();
       const line = which === 'memories' ? `You kept ${kept} of ${of} memories · saved to Memory` : `You adopted ${kept} of ${of} rules · now in Steering`;
       onDecided({ ...record, decided: { ...decided, [which]: line } });
+      if (notLanded.length > 0) {
+        setFail(`${notLanded.length === 1 ? '1 rule' : `${notLanded.length} rules`} did not land and ${notLanded.length === 1 ? 'is' : 'are'} still proposed in Steering: ${notLanded[0]}`);
+      }
       void poll();
     } catch (e) {
       setFail(e instanceof Error ? e.message : String(e));

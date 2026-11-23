@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   approveProposal,
   isProposalsUnsupported,
+  landingFailure,
   listProposals,
   memoryPayload,
   policyPayload,
@@ -43,7 +44,10 @@ export function ProposalsSection({ kind, heading, onDecision, onSettled, editabl
   const [decidingIds, setDecidingIds] = useState<ReadonlySet<string>>(new Set<string>());
   /** The post-decision note (approved / rejected / a failed decision), in-band. */
   const [note, setNote] = useState<string | null>(null);
-  const [decisionError, setDecisionError] = useState<{ kind: 'offline' | 'error'; message: string; id: string; verb: 'approve' | 'reject'; content?: string } | null>(null);
+  const [decisionError, setDecisionError] = useState<{ kind: 'offline' | 'error'; message: string; id: string; verb: 'approve' | 'reject'; content?: string; reach?: 'operator' } | null>(null);
+  /** (studio#1337) Policy proposals crew answered with a failed landing: no rule was added and each is still pending.
+   *  Its card says why (crew's words) and offers what crew names: Reject, or approve it for every project. */
+  const [notLanded, setNotLanded] = useState<ReadonlyMap<string, string>>(new Map<string, string>());
   const [errorKind, setErrorKind] = useState<'offline' | 'error'>('error');
 
   const loadProposals = useCallback(async (): Promise<void> => {
@@ -75,16 +79,34 @@ export function ProposalsSection({ kind, heading, onDecision, onSettled, editabl
     [proposals, kind, runId],
   );
 
-  const decide = useCallback((id: string, verb: 'approve' | 'reject', content?: string): void => {
+  const decide = useCallback((id: string, verb: 'approve' | 'reject', content?: string, reach?: 'operator'): void => {
     setNote(null);
     setDecisionError(null);
     const proposal = proposals.find((p) => p.id === id);
     const title = content !== undefined ? shortContent(content) : proposal === undefined ? 'Proposal' : shortContent(memoryPayload(proposal).content ?? policyPayload(proposal).rule ?? 'Proposal');
     setDecidingIds((cur) => new Set(cur).add(id));
-    // An approve with an edit: crew files the edited copy, approves it and rejects the original.
-    const call = verb === 'reject' ? rejectProposal(id) : content !== undefined ? approveProposal(id, { content }) : approveProposal(id);
+    // An approve with an edit: crew files the edited copy, approves it and rejects the original. A policy approved for
+    // every project sends crew's `reach: "operator"` (the way forward a failed project landing names).
+    const call = verb === 'reject' ? rejectProposal(id)
+      : content !== undefined ? approveProposal(id, { content })
+        : reach !== undefined ? approveProposal(id, { reach }) : approveProposal(id);
     void call
       .then((out) => {
+        // studio#1337: crew answered 200 but the rule did not land. Nothing was approved: the card stays, says why and
+        // offers the ways forward; the queue is read again (crew may have approved it without a rule, which it says).
+        const failed = verb === 'approve' ? landingFailure(out) : null;
+        setNotLanded((cur) => {
+          if (failed === null && !cur.has(id)) return cur;
+          const next = new Map(cur);
+          if (failed === null) next.delete(id);
+          else next.set(id, failed);
+          return next;
+        });
+        if (failed !== null) {
+          setNote(`Not approved, its rule did not land: ${title}`);
+          void loadProposals();
+          return;
+        }
         // The row leaves the queue optimistically; a background reload reconciles with the
         // server's state (another reviewer may have decided others in the meantime).
         setProposals((cur) => cur.filter((p) => p.id !== id));
@@ -98,7 +120,7 @@ export function ProposalsSection({ kind, heading, onDecision, onSettled, editabl
         void loadProposals();
       })
       .catch((e: unknown) => {
-        setDecisionError({ kind: readErrorKind(e), message: e instanceof Error ? e.message : String(e), id, verb, ...(content !== undefined ? { content } : {}) });
+        setDecisionError({ kind: readErrorKind(e), message: e instanceof Error ? e.message : String(e), id, verb, ...(content !== undefined ? { content } : {}), ...(reach !== undefined ? { reach } : {}) });
       })
       .finally(() => {
         onSettled?.();
@@ -111,6 +133,7 @@ export function ProposalsSection({ kind, heading, onDecision, onSettled, editabl
   }, [loadProposals, onDecision, onSettled, proposals]);
 
   const onApprove = useCallback((id: string, content?: string) => decide(id, 'approve', content), [decide]);
+  const onApproveEverywhere = useCallback((id: string) => decide(id, 'approve', undefined, 'operator'), [decide]);
   const onReject = useCallback((id: string) => decide(id, 'reject'), [decide]);
 
   return (
@@ -132,13 +155,13 @@ export function ProposalsSection({ kind, heading, onDecision, onSettled, editabl
       {decisionError !== null && (
         <div data-testid="proposals-section-note">
           <p className="wk-gk-muted">Could not {decisionError.verb} this proposal.</p>
-          <StateBanner kind={decisionError.kind} what="the decision result" error={decisionError.message} onRetry={() => decide(decisionError.id, decisionError.verb, decisionError.content)} />
+          <StateBanner kind={decisionError.kind} what="the decision result" error={decisionError.message} onRetry={() => decide(decisionError.id, decisionError.verb, decisionError.content, decisionError.reach)} />
         </div>
       )}
       {unsupported ? (
         <EmptyState data-testid="proposals-section-unsupported" title="Studio's service does not support proposal review yet." />
       ) : (
-        <ProposalsList editable={editable} proposals={visible} loading={loading} error={error} errorKind={errorKind} decidingIds={decidingIds} onApprove={onApprove} onReject={onReject} onRetry={() => void loadProposals()} />
+        <ProposalsList editable={editable} proposals={visible} loading={loading} error={error} errorKind={errorKind} decidingIds={decidingIds} notLanded={notLanded} onApprove={onApprove} onApproveEverywhere={onApproveEverywhere} onReject={onReject} onRetry={() => void loadProposals()} />
       )}
     </section>
   );

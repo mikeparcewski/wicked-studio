@@ -209,6 +209,24 @@ describe('Learn: Style review', () => {
     await waitFor(() => expect(typeof useFirstRun.getState().state.learnUsedAt).toBe('number'));
   });
 
+  it('studio#1337: a rule proposal whose landing failed is not counted as adopted, and the page says why', async () => {
+    settings['studio.learn.style'] = { jobs: [{ runId: 'rr', kind: 'repo', sources: ['tiny-math-cert'] }], startedAt: 1 };
+    d.on('GET /governance/rules', { rules: [] });
+    d.on('GET /runs/rr', { run: { session: { id: 'rr', status: 'completed', unit_ix: 3 }, units: [{}, {}, {}] } });
+    d.on('GET /proposals', { proposals: [
+      { id: 'p1', kind_type: 'policy:conformance', payload: { reach: 'project', rule: 'Keep sum tested.', severity: 'error' }, facets: { project: 'tiny-math' }, provenance: { run_id: 'rr' }, state: 'pending', created_at: 1 },
+      { id: 'p2', kind_type: 'policy:development', payload: { rule: 'Commits are imperative.', severity: 'warn' }, facets: {}, provenance: { run_id: 'rr' }, state: 'pending', created_at: 1 },
+    ] });
+    // crew's in-band failure (crew routes.ts `landFailed`, the POST /proposals/:id/approve route): 200, nothing approved.
+    d.on('POST /proposals/p1/approve', { outcome: 'handed_off', payload: { rule: 'Keep sum tested.' }, landing: { outcome: 'failed', error: 'it names no known project (the proposal is still pending)' } });
+    d.on('POST /proposals/p2/approve', { outcome: 'handed_off', payload: { rule: 'Commits are imperative.' }, landing: { outcome: 'landed', ruleId: 'proposal:p2' } });
+    render(<LearnHub navigate={nav} search="" />);
+    const rulesAsk = await screen.findByTestId('style-rules');
+    fireEvent.click(within(rulesAsk).getByTestId('ask-confirm'));
+    await waitFor(() => expect(screen.getByTestId('style-rules-record').textContent).toBe('You adopted 1 of 2 rules · now in Steering'));
+    expect(screen.getByTestId('style-decide-error').textContent).toBe('1 rule did not land and is still proposed in Steering: it names no known project (the proposal is still pending)');
+  });
+
   it('a source list launches one job per kind: team docs to steering-author, a repo to capture-learnings', async () => {
     d.on('GET /governance/rules', { rules: [] });
     d.on('POST /governance/steering/author', { runId: 'rd' });

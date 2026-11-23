@@ -16117,6 +16117,12 @@
       ]
     },
     {
+      "testId": "proposal-approve-everywhere",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
       "testId": "proposal-card",
       "files": [
         "src/components/ProposalsList.tsx"
@@ -16190,6 +16196,12 @@
     },
     {
       "testId": "proposal-memory-tier",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-not-landed",
       "files": [
         "src/components/ProposalsList.tsx"
       ]

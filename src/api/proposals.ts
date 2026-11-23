@@ -24,15 +24,24 @@ import { ApiError, isRouteAbsent } from './errors.js';
 
 // ── The proposal (from the contract package) ─────────────────────────────────────────────────
 
-/** Approve returns the engine's outcome — its exact shape is not in api-types yet, so it is
- *  read permissively (a stored item id, an ok flag). */
-import type { ApproveProposalBody, ProposalState, Proposal, FileProposalBody } from 'wicked-crew-api-types';
+import type { ApproveProposalBody, ApproveProposalResponse, ProposalState, Proposal, FileProposalBody } from 'wicked-crew-api-types';
 export type { ApproveProposalBody, ProposalState, Proposal, FileProposalBody };
 
-export interface ProposalApproveOutcome {
-  ok?: boolean;
-  id?: string;
-  [k: string]: unknown;
+/** What `POST /proposals/:id/approve` answers (crew's `ApproveProposalResponse`): a memory is `promoted`; a policy is
+ *  `handed_off` with the `landing` of its steering rule. */
+export type ProposalApproveOutcome = ApproveProposalResponse;
+
+/**
+ * (studio#1337) Why an approved POLICY proposal's rule did NOT land, or null when it did (or the outcome is not a policy
+ * landing). crew answers 200 either way: a failed landing is in-band (`landing.outcome: "failed"`, its loud `error`),
+ * and the proposal stays pending, so a page must never say "Approved" for it.
+ */
+export function landingFailure(out: unknown): string | null {
+  if (typeof out !== 'object' || out === null) return null;
+  const o = out as { outcome?: unknown; landing?: { outcome?: unknown; error?: unknown } | null };
+  if (o.outcome !== 'handed_off' || typeof o.landing !== 'object' || o.landing === null || o.landing.outcome !== 'failed') return null;
+  const error = typeof o.landing.error === 'string' ? o.landing.error.trim() : '';
+  return error === '' ? 'crew could not land the rule' : error;
 }
 
 // ── The kind a proposal is ───────────────────────────────────────────────────────────────────

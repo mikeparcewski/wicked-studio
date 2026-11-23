@@ -99,6 +99,21 @@ interface CapabilitiesStore {
 
 let inflight: Promise<void> | null = null;
 
+/** (studio#1332) How long after a `ping: "busy"` health answer the capabilities are read once more. crew answers
+ *  `/health` without waiting on a booting engine (crew#1767), so a page opened then reads `chatWorkflows: []`. */
+export const BUSY_REREAD_MS = 3000;
+
+type Caps = Omit<CapabilitiesStore, 'load'>;
+
+/** The capabilities a `GET /health` answer carries (absent ones are false). */
+function capsOf(h: unknown): Caps {
+  const caps = ((h as { capabilities?: Record<string, unknown> }).capabilities) ?? {};
+  return { loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true, askPath: caps['askPath'] === true, chatIdOnLaunch: caps['chatIdOnLaunch'] === true, deliverGate: caps['deliverGate'] === true, reducedAssurance: caps['reducedAssurance'] === true, launchPrimary: caps['launchPrimary'] === true, chatList: caps['chatList'] === true, chatAttachments: caps['chatAttachments'] === true, chatWorkflows: Array.isArray(caps['chatWorkflows']) ? (caps['chatWorkflows'] as unknown[]).filter((w): w is string => typeof w === 'string') : [], powerMode: caps['powerMode'] === true, gateActions: caps['gateActions'] === true, voice: caps['voice'] === true, chatContext: (caps['chatArtifacts'] as { context?: unknown } | undefined)?.context === true, chatProposals: (caps['chatArtifacts'] as { proposals?: unknown } | undefined)?.proposals === true, chatArtifactsStub: (caps['chatArtifacts'] as { stub?: unknown } | undefined)?.stub === true, chatOnboard: (caps['chatArtifacts'] as { onboard?: unknown } | undefined)?.onboard === true, chatArtifactsStubOps: stubOpsOf(caps['chatArtifacts']), chatCutInView: (caps['chatArtifacts'] as { cutInView?: unknown } | undefined)?.cutInView === true, dataSources: (caps['apps'] as { uploads?: unknown } | undefined)?.uploads === true, trackerLinks: caps['trackerLinks'] === true, planGateNote: caps['planGateNote'] === true, chatJobProposals: caps['chatJobProposals'] === true, reshapeRun: caps['reshapeRun'] === true, chatJobPower: caps['chatJobPower'] === true, workflowCatalogV2: caps['workflowCatalogV2'] === true };
+}
+
+/** Every capability off: a failed read (an older or unreachable daemon). */
+const NO_CAPS: Caps = { loaded: true, gateActions: false, runChatId: false, walkthroughRoots: false, askPath: false, chatIdOnLaunch: false, deliverGate: false, reducedAssurance: false, launchPrimary: false, chatList: false, chatAttachments: false, chatWorkflows: [], powerMode: false, voice: false, chatContext: false, chatProposals: false, chatArtifactsStub: false, chatOnboard: false, chatArtifactsStubOps: null, chatCutInView: false, dataSources: false, trackerLinks: false, planGateNote: false, chatJobProposals: false, reshapeRun: false, chatJobPower: false, workflowCatalogV2: false };
+
 export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
   loaded: false,
   runChatId: false,
@@ -133,10 +148,16 @@ export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
     // import this module, and a store must not pull the client into every importer's module graph.
     inflight ??= import('../api/client.js').then(({ api }) => api.getHealth())
       .then((h) => {
-        const caps = ((h as unknown as { capabilities?: Record<string, unknown> }).capabilities) ?? {};
-        set({ loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true, askPath: caps['askPath'] === true, chatIdOnLaunch: caps['chatIdOnLaunch'] === true, deliverGate: caps['deliverGate'] === true, reducedAssurance: caps['reducedAssurance'] === true, launchPrimary: caps['launchPrimary'] === true, chatList: caps['chatList'] === true, chatAttachments: caps['chatAttachments'] === true, chatWorkflows: Array.isArray(caps['chatWorkflows']) ? (caps['chatWorkflows'] as unknown[]).filter((w): w is string => typeof w === 'string') : [], powerMode: caps['powerMode'] === true, gateActions: caps['gateActions'] === true, voice: caps['voice'] === true, chatContext: (caps['chatArtifacts'] as { context?: unknown } | undefined)?.context === true, chatProposals: (caps['chatArtifacts'] as { proposals?: unknown } | undefined)?.proposals === true, chatArtifactsStub: (caps['chatArtifacts'] as { stub?: unknown } | undefined)?.stub === true, chatOnboard: (caps['chatArtifacts'] as { onboard?: unknown } | undefined)?.onboard === true, chatArtifactsStubOps: stubOpsOf(caps['chatArtifacts']), chatCutInView: (caps['chatArtifacts'] as { cutInView?: unknown } | undefined)?.cutInView === true, dataSources: (caps['apps'] as { uploads?: unknown } | undefined)?.uploads === true, trackerLinks: caps['trackerLinks'] === true, planGateNote: caps['planGateNote'] === true, chatJobProposals: caps['chatJobProposals'] === true, reshapeRun: caps['reshapeRun'] === true, chatJobPower: caps['chatJobPower'] === true, workflowCatalogV2: caps['workflowCatalogV2'] === true });
+        set(capsOf(h));
+        // studio#1332: the engine was still busy (booting), so what depends on it may be missing (`chatWorkflows`).
+        // Read once more after a short wait; that answer, if it arrives, is what the page keeps.
+        if ((h as { ping?: unknown }).ping === 'busy') {
+          setTimeout(() => {
+            void import('../api/client.js').then(({ api }) => api.getHealth()).then((again) => set(capsOf(again)), () => undefined);
+          }, BUSY_REREAD_MS);
+        }
       })
-      .catch(() => { set({ loaded: true, runChatId: false, walkthroughRoots: false, askPath: false, chatIdOnLaunch: false, deliverGate: false, reducedAssurance: false, launchPrimary: false, chatList: false, chatAttachments: false, chatWorkflows: [], powerMode: false, voice: false, chatContext: false, chatProposals: false, chatArtifactsStub: false, chatOnboard: false, chatArtifactsStubOps: null, chatCutInView: false, dataSources: false, trackerLinks: false, planGateNote: false, chatJobProposals: false, reshapeRun: false, chatJobPower: false, workflowCatalogV2: false }); })
+      .catch(() => { set(NO_CAPS); })
       .finally(() => { inflight = null; });
     return inflight;
   },
