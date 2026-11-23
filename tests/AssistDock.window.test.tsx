@@ -73,7 +73,7 @@ const ROSTER = [
   { key: 'codex', display_name: 'Codex', binary: 'codex' },
 ] as unknown as RosterSeat[];
 
-function windowDock(v: AssistVerbs, extra: { resumeChatId?: string; loadHistory?: ChatHistoryLoader } = {}): void {
+function windowDock(v: AssistVerbs, extra: { resumeChatId?: string; loadHistory?: ChatHistoryLoader; onStatus?: (s: 'ready' | 'thinking' | 'answered') => void } = {}): void {
   render(
     <AssistDock
       context={{ surface: 'ask', title: 'Chat', contextLabel: 'Everything', placeholder: 'Ask…' }}
@@ -375,5 +375,81 @@ describe('studio#1369 — a verdict that lands before a resumed chat\'s history 
     });
     await waitFor(() => expect(screen.getAllByTestId('assist-chat-msg')).toHaveLength(2));
     expect(within(seatBubbles()[0]!).getByTestId('citation-mark')).toHaveAttribute('data-status', 'unverified');
+  });
+});
+
+describe('studio#1370 — the turn a stop belongs to (review r2)', () => {
+  const pendingCount = (): number => screen.queryAllByTestId('assist-chat-msg').filter((m) => m.getAttribute('data-pending') === 'true').length;
+  const twoTurns = (): AssistVerbs => ({ send: vi.fn().mockResolvedValueOnce({ chatId: 'chat-1', turnId: 't1' }).mockResolvedValueOnce({ chatId: 'chat-1', turnId: 't2' }) });
+  const secondQuestion = async (): Promise<void> => {
+    await ask('q2');
+    await waitFor(() => expect(screen.getAllByTestId('assist-chat-msg').filter((m) => m.getAttribute('data-agent') === 'you')).toHaveLength(1));
+  };
+
+  it('a re-pick before the helper typed in this turn leaves an older turn\'s failure alone and retires it from this turn', async () => {
+    windowDock(twoTurns());
+    await ask('q1');
+    await settle();
+    emit({ type: 'chatReply', chat: 'chat-1', cliKey: 'claude', text: 'The helper could not finish.', ok: false, turn_id: 't1' });
+    await secondQuestion();
+    emit(repick(90, 'run-1', 'claude', 'codex', 'timed_out'));
+    emit({ type: 'chatDelta', chat: 'chat-1', cliKey: 'claude', text: 'late', turn_id: 't2' });
+    expect(pendingCount()).toBe(0);
+    expect(seatBubbles().map((m) => [m.getAttribute('data-agent'), m.textContent?.includes('could not finish')])).toEqual([['claude', true]]);
+    expect(screen.getAllByTestId('assist-seat-line')).toHaveLength(1);
+  });
+
+  it('a failed session and the re-pick that follows make one line', async () => {
+    windowDock({ send: vi.fn().mockResolvedValue({ chatId: 'chat-1', turnId: 't1' }) });
+    await ask('q');
+    await settle();
+    emit({ type: 'chatDelta', chat: 'chat-1', cliKey: 'claude', text: 'Hm', turn_id: 't1' });
+    emit({ type: 'chatSessionFailed', chat: 'chat-1', cliKey: 'claude', reason: 'session died' });
+    emit(repick(91, 'run-1', 'claude', 'codex', 'failed'));
+    expect(screen.getAllByTestId('assist-seat-line').map((l) => l.textContent)).toEqual(['· Claude Code could not answer: it stopped with an error. Codex answers instead.']);
+  });
+
+  it('when the answer that replaces a helper began first, the line still sits above it', async () => {
+    windowDock({ send: vi.fn().mockResolvedValue({ chatId: 'chat-1', turnId: 't1' }) });
+    await ask('q');
+    await settle();
+    emit({ type: 'chatDelta', chat: 'chat-1', cliKey: 'codex', text: 'Looking', turn_id: 't1' });
+    emit(repick(92, 'run-1', 'opencode', 'codex', 'not_logged_in'));
+    const block = screen.getByTestId('assist-chat');
+    expect([...block.querySelectorAll('[data-testid="assist-seat-line"], [data-testid="assist-chat-msg"]')].map((e) => e.getAttribute('data-testid'))).toEqual(['assist-seat-line', 'assist-chat-msg']);
+  });
+
+  it('a late frame from a helper re-picked away does not move the tray off "answer ready"', async () => {
+    const onStatus = vi.fn();
+    windowDock({ send: vi.fn().mockResolvedValue({ chatId: 'chat-1', turnId: 't1' }) }, { onStatus });
+    await ask('q');
+    await settle();
+    emit({ type: 'chatDelta', chat: 'chat-1', cliKey: 'opencode', text: 'Hm', turn_id: 't1' });
+    emit(repick(93, 'run-1', 'opencode', 'codex', 'timed_out'));
+    emit({ type: 'chatReply', chat: 'chat-1', cliKey: 'codex', text: 'The answer.', ok: true, turn_id: 't1' });
+    expect(onStatus).toHaveBeenLastCalledWith('answered');
+    emit({ type: 'chatDelta', chat: 'chat-1', cliKey: 'opencode', text: ' late', turn_id: 't1' });
+    emit({ type: 'chatReply', chat: 'chat-1', cliKey: 'opencode', text: 'late', ok: false, turn_id: 't1' });
+    expect(onStatus).toHaveBeenLastCalledWith('answered');
+  });
+
+  it('a re-pick that lands while a resumed chat\'s history loads does not silence the helper in later turns', async () => {
+    let land: (v: { records: readonly unknown[]; closed: boolean }) => void = () => undefined;
+    const loadHistory: ChatHistoryLoader = () => new Promise((r) => { land = r; });
+    const send = vi.fn().mockResolvedValue({ chatId: 'chat-1', turnId: 't2' });
+    windowDock({ send }, { resumeChatId: 'chat-1', loadHistory });
+    await settle();
+    emit(repick(94, 'run-1', 'opencode', 'codex', 'timed_out'));
+    await act(async () => {
+      land({ closed: false, records: [
+        { at: 1, turnId: 't1', kind: 'user', text: 'q1', seats: ['opencode'] },
+        { at: 2, turnId: 't1', kind: 'seat', cliKey: 'codex', text: 'First answer.', ok: true, usage: null },
+      ] });
+    });
+    await waitFor(() => expect(seatBubbles()).toHaveLength(1));
+    await ask('q2');
+    await waitFor(() => expect(send).toHaveBeenCalled());
+    emit({ type: 'chatReply', chat: 'chat-1', cliKey: 'opencode', text: 'Second answer.', ok: true, turn_id: 't2' });
+    expect(seatBubbles().map((m) => m.getAttribute('data-agent'))).toEqual(['codex', 'opencode']);
   });
 });
