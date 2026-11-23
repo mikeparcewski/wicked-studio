@@ -804,7 +804,8 @@ export function assuranceKind(r: AssuranceReceipt): AssuranceKind {
  */
 export function passedWord(r: AssuranceReceipt | null): string {
   if (r === null) return 'Passed';
-  if (assuranceKind(r) === 'unchecked') return 'Nothing verified';
+  // What ran, not the kind: a skipped distinct evaluator alone reads `same-seat` with nothing run (codex r1 on #1350).
+  if (r.ran.length === 0) return 'Nothing verified';
   const judgeSkips = r.skipped.filter((s) => s.instrument === 'judge');
   if (judgeSkips.some((s) => s.reason === 'reduced_assurance')) return 'Judge skipped (reduced assurance)';
   const operatorJudged = (r.operatorJudges ?? []).some((j) => j.floorOverride === undefined);

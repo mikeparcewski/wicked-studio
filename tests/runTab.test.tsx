@@ -261,6 +261,7 @@ describe('RunTab', () => {
 
   it.each([
     ['nothing ran', { ran: [], skipped: [] }, 'Nothing verified'],
+    ['nothing ran and the distinct evaluator was skipped', { ran: [], skipped: [{ instrument: 'distinct_evaluator', reason: 'no_distinct_seat', detail: null }] }, 'Nothing verified'],
     ['the judge was skipped under reduced assurance', { mode: 'reduced', ran: ['repo_checks'], skipped: [{ instrument: 'judge', reason: 'reduced_assurance', detail: null }] }, 'Judge skipped (reduced assurance)'],
     ['no distinct judge seat', { ran: ['repo_checks'], skipped: [{ instrument: 'judge', reason: 'no_distinct_seat', detail: null }] }, 'No judge ran'],
     ['a judge on another seat ran', { ran: ['judge'], skipped: [], judge: 'codex' }, 'Passed'],

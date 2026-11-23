@@ -422,10 +422,11 @@ export function PowerPauseCard({ view, power }: { view: SessionView; power: Powe
             reportDecision('sent', `${PAUSE_CHOICES[c].label}: sent.`, { keys: [`power:${id}`] });
           } catch (e) {
             setError(errorWords(e));
-            // (crew#1739) The pause changed before this answer landed: nothing was answered. The card shows the pause
-            // open now (crew's state, read again), and the old one is not recorded as answered.
+            // (crew#1739) The pause changed before this answer landed: this page answered nothing. The card shows the
+            // pause open now (crew's state, read again). The one it showed is no longer open (crew says so), so it is kept
+            // closed (studio#945's guard): a stale session read or frame never shows it again (codex r1 on #1350).
             if (e instanceof ApiError && e.status === 409 && (e.body as { error?: unknown } | null)?.error === PAUSE_CHANGED) {
-              void powerApi.get(id).then((now) => rememberPower(id, now), () => undefined);
+              void powerApi.get(id).then((now) => rememberPower(id, now, shown), () => undefined);
             }
             reportDecision('failed', `Not sent: ${errorWords(e)}`, { keys: [`power:${id}`] });
           } finally { setBusy(null); setQueued(null); }

@@ -472,6 +472,23 @@ describe('Table layout — round-1 review (codex on #1340)', () => {
     await waitFor(() => expect(order()).toEqual(['PAT-001', 'PAT-003', 'PAT-002']));
   });
 
+  it('studio#1344 (codex r1): a Refresh sorts the answer it brings, a server-side change and a new rule included', async () => {
+    const user = userEvent.setup();
+    const rows = [rule({ id: 'PAT-001', severity: 'critical' }), rule({ id: 'PAT-002', severity: 'warn' }), rule({ id: 'PAT-003', severity: 'info' })];
+    // Another client raised PAT-003 and added a critical PAT-004 while this page was open.
+    const later = [rows[0]!, rows[1]!, { ...rows[2]!, severity: 'critical' as const }, rule({ id: 'PAT-004', severity: 'critical' })];
+    const refresh = deferred<{ rules: SteeringRule[] }>();
+    listConformanceRules.mockResolvedValueOnce({ rules: rows }).mockReturnValueOnce(refresh.promise).mockResolvedValue({ rules: later });
+    page();
+    await screen.findAllByTestId('steering-grid-row');
+    const order = (): string[] => screen.getAllByTestId('steering-grid-row').map((tr) => tr.getAttribute('data-rule-id') ?? '');
+    await user.click(screen.getByTestId('steer-more-button'));
+    await user.click(screen.getByTestId('steer-refresh'));
+    expect(order()).toEqual(['PAT-001', 'PAT-002', 'PAT-003']);
+    refresh.resolve({ rules: later });
+    await waitFor(() => expect(order()).toEqual(['PAT-001', 'PAT-003', 'PAT-004', 'PAT-002']));
+  });
+
   it('a late refusal reverts only its own edit, never a newer accepted one', async () => {
     const user = userEvent.setup();
     const r = rule();

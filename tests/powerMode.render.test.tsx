@@ -11,7 +11,7 @@ import type { WorkUnit } from '../src/api/types.js';
 import { resetDecisionsForTest, setUndoWindowForTest } from '../src/board/undoQueue.js';
 import { PowerPauseCard, PowerSwitchButton, RigorChipButton } from '../src/components/session/PowerMode.js';
 import { RunBlock, resetStepOutputs } from '../src/components/session/RunConversation.js';
-import { usePowerLocal } from '../src/hooks/usePower.js';
+import { usePower, usePowerLocal } from '../src/hooks/usePower.js';
 import { resetRunCoverage } from '../src/hooks/useRunCoverage.js';
 import { useCapabilities } from '../src/store/capabilities.js';
 import { useRunEventStore } from '../src/store/events.js';
@@ -275,7 +275,7 @@ describe('studio#1347 (crew#1739): a pause answer names the pause the card showe
     await waitFor(() => expect(usePowerLocal.getState().answeredByRun[RUN]).toEqual({ checkpoint: 3, at: shown.at }));
   });
 
-  it('a 409 Pause changed records nothing as answered and shows the pause open now', async () => {
+  it('a 409 Pause changed answers nothing, shows the pause open now, and keeps the shown one closed', async () => {
     const open = { at: at(25), checkpoint: 4, reasons: ['A new dependency in a sensitive area'], recommended: 'split' as const };
     // crew's 409 body, as the route writes it: {error: 'Pause changed', reason, open}.
     answer = () => ({ status: 409, body: { error: 'Pause changed', reason: 'This answer was for an earlier pause; the run is now paused at checkpoint 4. Read the pause again. Nothing was changed.', open: { checkpoint: 4, at: open.at } } });
@@ -293,6 +293,36 @@ describe('studio#1347 (crew#1739): a pause answer names the pause the card showe
     expect((await screen.findByTestId('power-pause-error')).textContent).toMatch(/now paused at checkpoint 4/);
     await waitFor(() => expect(reads).toEqual([`/runs/${RUN}/power`]));
     await waitFor(() => expect(usePowerLocal.getState().byRun[RUN]?.pause?.checkpoint).toBe(4));
-    expect(usePowerLocal.getState().answeredByRun[RUN]).toBeUndefined();
+    // The shown pause is closed (crew says it is not open), so the guard keeps it shut; checkpoint 4 stays open.
+    expect(usePowerLocal.getState().answeredByRun[RUN]).toEqual({ checkpoint: 3, at: shown.at });
+  });
+
+  it('codex r1: a pause already answered elsewhere (409, none open) is not shown again from the stale session read', async () => {
+    answer = () => ({ status: 409, body: { error: 'Pause changed', reason: 'This pause was already answered, and the run is not paused now. Nothing was changed.', open: null } });
+    const posted = vi.mocked(globalThis.fetch).getMockImplementation()!;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if ((init?.method ?? 'GET') === 'GET' && path === `/runs/${RUN}/power`) {
+        return Promise.resolve(new Response(JSON.stringify({ runId: RUN, ...state({ pause: null }) }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      }
+      return posted(url, init);
+    }));
+    // The session read still carries checkpoint 3 (it predates the other answer).
+    const stale = view({ power: state({ pause: shown }) });
+    function Probe(): React.ReactElement { return <output data-testid="probe">{usePower(stale)?.pause?.checkpoint ?? 'none'}</output>; }
+    render(<><PowerPauseCard view={stale} power={state({ pause: shown })} /><Probe /></>);
+    expect(screen.getByTestId('probe').textContent).toBe('3');
+    await act(async () => { fireEvent.click(screen.getByTestId('power-pause-confirm')); await new Promise((r) => setTimeout(r, 5)); });
+    await waitFor(() => expect(screen.getByTestId('probe').textContent).toBe('none'));
+  });
+
+  it('codex r1: an answer queued behind the undo window names the pause shown when it was chosen', async () => {
+    setUndoWindowForTest(60);
+    answer = () => ({ status: 200, body: { runId: RUN, ...state({ pause: null }), answered: { checkpoint: 3, at: shown.at } } });
+    const { rerender } = render(<PowerPauseCard view={view()} power={state({ pause: shown })} />);
+    await act(async () => { fireEvent.click(screen.getByTestId('power-pause-confirm')); });
+    // A newer pause arrives while the answer waits in its undo window.
+    rerender(<PowerPauseCard view={view()} power={state({ pause: { ...shown, checkpoint: 4, at: at(25) } })} />);
+    await waitFor(() => expect(posts.filter((p) => p.path === `/runs/${RUN}/power/pause`).map((p) => p.body)).toEqual([{ decision: 'continue_high', checkpoint: 3, at: shown.at }]));
   });
 });
