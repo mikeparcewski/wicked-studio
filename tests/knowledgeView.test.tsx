@@ -562,5 +562,64 @@ describe('crew#1697 (studio#1248): Forget a piece of document knowledge', () => 
     await pick(user, DOC);
     expect(screen.queryByTestId('knowledge-forget')).toBeNull();
     expect(screen.queryByTestId('knowledge-forget-live')).toBeNull();
+    expect(screen.queryByTestId('knowledge-forget-source')).toBeNull();
+  });
+
+  // studio#1248: everything one file or web address taught. The answer is crew's own body (wicked-crew
+  // `packages/crew/src/api/routes.ts` POST /knowledge/forget: `{ forgotten, skipped_live_source }`), estate counting
+  // the live-source structure a source target leaves in place (wicked-estate `knowledge/src/engine.rs` forget_in_batch).
+  const forgetSource = async (user: ReturnType<typeof userEvent.setup>, source: string): Promise<void> => {
+    const box = screen.getByTestId('knowledge-forget-source');
+    await user.clear(within(box).getByTestId('knowledge-forget-source-input'));
+    await user.type(within(box).getByTestId('knowledge-forget-source-input'), source);
+    await user.click(within(box).getByTestId('knowledge-forget-source-ask'));
+    expect(screen.getByTestId('knowledge-forget-source-confirm')).toHaveTextContent(`Forget everything learned from “${source.trim()}”?`);
+    expect(screen.getByTestId('knowledge-forget-source-confirm')).toHaveTextContent('This can’t be undone.');
+    await user.click(screen.getByTestId('knowledge-forget-source-go'));
+  };
+
+  it('forgets everything from one source after a confirm: sends {source}, says how many went and reads the map again', async () => {
+    answer = () => Promise.resolve({ forgotten: 12, skipped_live_source: 0 });
+    await renderWith(true);
+    const user = userEvent.setup();
+    expect(screen.getByTestId('knowledge-forget-source-ask')).toBeDisabled();
+    const reads = calls.filter((c) => c === 'GET /knowledge/map').length;
+    await forgetSource(user, '  runbooks/escalation.md ');
+    expect(await screen.findByTestId('knowledge-forget-source-note')).toHaveTextContent('Forgot 12 pieces of knowledge learned from “runbooks/escalation.md”. Agents no longer recall them.');
+    expect(forgets).toEqual([{ source: 'runbooks/escalation.md' }]);
+    await waitFor(() => expect(calls.filter((c) => c === 'GET /knowledge/map').length).toBe(reads + 1));
+    expect(screen.getByTestId('knowledge-forget-source-input')).toHaveValue('');
+  });
+
+  it('says the live data source structure it left, and that a source nothing came from deleted nothing', async () => {
+    answer = () => Promise.resolve({ forgotten: 1, skipped_live_source: 3 });
+    await renderWith(true);
+    const user = userEvent.setup();
+    await forgetSource(user, 'https://example.com/guide');
+    expect(await screen.findByTestId('knowledge-forget-source-note')).toHaveTextContent('Forgot 1 piece of knowledge learned from “https://example.com/guide”. Agents no longer recall it. 3 pieces from it are a live data source’s structure: they are refreshed through that source on the Data sources page, not forgotten.');
+    answer = () => Promise.resolve({ forgotten: 0, skipped_live_source: 1 });
+    await forgetSource(user, 'source-structure');
+    await waitFor(() => expect(screen.getByTestId('knowledge-forget-source-note')).toHaveTextContent('Nothing was deleted. 1 piece from it is a live data source’s structure: it is refreshed through that source on the Data sources page, not forgotten.'));
+    answer = () => Promise.resolve({ forgotten: 0, skipped_live_source: 0 });
+    await forgetSource(user, 'docs/typo.md');
+    await waitFor(() => expect(screen.getByTestId('knowledge-forget-source-note')).toHaveTextContent('Nothing in the knowledge store came from “docs/typo.md”, so nothing was deleted. Type the source exactly as it was added: the same file path or web address.'));
+    // Nothing went, so what was typed stays to correct.
+    expect(screen.getByTestId('knowledge-forget-source-input')).toHaveValue('docs/typo.md');
+  });
+
+  it('a refusal (409) or an old estate (501) says nothing was deleted; Cancel sends nothing', async () => {
+    answer = () => Promise.reject(new ApiError(409, 'knowledge.forget refused'));
+    await renderWith(true);
+    const user = userEvent.setup();
+    await forgetSource(user, 'catalog');
+    expect(await screen.findByTestId('knowledge-forget-source-note')).toHaveTextContent('refreshed through its source, not forgotten. Nothing was deleted.');
+    answer = () => Promise.reject(new ApiError(501, 'estate_upgrade_required'));
+    await forgetSource(user, 'catalog');
+    await waitFor(() => expect(screen.getByTestId('knowledge-forget-source-note')).toHaveTextContent('can’t forget yet, so nothing was deleted'));
+    forgets.length = 0;
+    await user.click(screen.getByTestId('knowledge-forget-source-ask'));
+    await user.click(screen.getByTestId('knowledge-forget-source-cancel'));
+    expect(screen.queryByTestId('knowledge-forget-source-confirm')).toBeNull();
+    expect(forgets).toEqual([]);
   });
 });

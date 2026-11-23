@@ -23,7 +23,8 @@ export interface ForgetKnowledgeResponse {
   skipped_live_source: number;
 }
 
-/** `POST /knowledge/forget` — exactly one target (studio sends `id` only). */
+/** `POST /knowledge/forget` — exactly one target: studio sends `{id}` (one map node) or `{source}` (everything one file
+ *  or web address added), never `scope_prefix`. */
 export function forgetKnowledge(body: ForgetKnowledgeBody): Promise<ForgetKnowledgeResponse> {
   return apiFetch<ForgetKnowledgeResponse>('/knowledge/forget', { method: 'POST', body: JSON.stringify(body) });
 }
@@ -46,4 +47,19 @@ export function forgetFailureWords(e: unknown): string {
   if (e instanceof ApiError && e.status === 501) return 'This daemon’s knowledge store can’t forget yet, so nothing was deleted.';
   if (e instanceof ApiError && e.status === 404) return 'The knowledge store no longer holds this, so nothing was deleted.';
   return `Couldn’t forget it: ${e instanceof Error ? e.message : String(e)}`;
+}
+
+const pieces = (n: number): string => (n === 1 ? '1 piece of knowledge' : `${n} pieces of knowledge`);
+
+/**
+ * What forgetting everything from one source did (crew#1697 `{source}`, estate matches the source exactly as it was
+ * added): how many pieces went, and how many were a live data source's structure, which a source forget leaves in place.
+ */
+export function forgetSourceWords(source: string, out: ForgetKnowledgeResponse): { tone: 'ok' | 'fail'; text: string } {
+  const live = out.skipped_live_source;
+  const liveWords = live === 0 ? ''
+    : ` ${live === 1 ? '1 piece from it is' : `${live} pieces from it are`} a live data source’s structure: ${live === 1 ? 'it is' : 'they are'} refreshed through that source on the Data sources page, not forgotten.`;
+  if (out.forgotten > 0) return { tone: 'ok', text: `Forgot ${pieces(out.forgotten)} learned from “${source}”. Agents no longer recall ${out.forgotten === 1 ? 'it' : 'them'}.${liveWords}` };
+  if (live > 0) return { tone: 'ok', text: `Nothing was deleted.${liveWords}` };
+  return { tone: 'fail', text: `Nothing in the knowledge store came from “${source}”, so nothing was deleted. Type the source exactly as it was added: the same file path or web address.` };
 }
