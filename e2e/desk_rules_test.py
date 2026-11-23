@@ -162,7 +162,7 @@ with sync_playwright() as p:
         page.screenshot(path=str(SHOTS / "desk-rules-page-missing.png"))
         fail("rule-page", f"the rule drawer did not open from the row: {e}")
     sentence = drawer.get_by_test_id("rule-sentence").inner_text()
-    check("rule-page", sentence == "A Development rule for upload-endpoint — helpers are told about it when it applies; it never blocks."
+    check("rule-page", sentence == "A Development rule for upload-endpoint — helpers are told about it when it applies, and review checks work against it: a breach can hold a gate."
           and drawer.get_by_test_id("steering-rule-statement").inner_text() == "Always check the payment provider’s records, not just our database",
           sentence=sentence)
 

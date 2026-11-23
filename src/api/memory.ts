@@ -122,15 +122,50 @@ export function retireMemory(body: { scope_prefix: string }): Promise<{ erased: 
 }
 
 /**
- * `POST /memory/retire-item` (studio#206; crew api-types 0.59.0) — erase exactly ONE memory by its
- * id. 404 = no memory with that id; 501 with `code: "estate_upgrade_required"` = the daemon's estate
- * cannot erase by id yet (nothing was deleted — see {@link isEraseByIdUnsupported}).
+ * `POST /memory/retire-item` (studio#206; crew api-types 0.59.0) — retire exactly ONE memory by its id. On a crew that
+ * advertises `capabilities.memoryRestore` (crew#1697; `useCapabilities().memoryRestore`) this is a SOFT retire: the memory is hidden from every recall and
+ * from `GET /memory`, kept with its id, listed by {@link listRetiredMemories} and restored by {@link unretireMemory};
+ * it answers `{ retired: 1 }`. On an older crew it ERASES the memory and answers `{ erased: 1 }`. 404 = no live memory
+ * with that id; 501 with `code: "estate_upgrade_required"` = the daemon's estate cannot do it yet (nothing was
+ * changed — see {@link isEraseByIdUnsupported}).
  */
-export function retireMemoryItem(body: { memory_id: string }): Promise<{ erased: number }> {
-  return apiFetch<{ erased: number }>('/memory/retire-item', {
+export function retireMemoryItem(body: { memory_id: string }): Promise<RetireMemoryItemResponse> {
+  return apiFetch<RetireMemoryItemResponse>('/memory/retire-item', {
     method: 'POST',
     body: JSON.stringify(body),
   });
+}
+
+// ── Soft retire, restore, delete for good (crew#1697) ─────────────────────────────────────────
+// Mirrored from crew's contract (`RetireMemoryItemResponse`, `UnretireMemoryBody`/`Response`, `EraseMemoryItemBody`,
+// `MemoryItem.retired_at`, `ListMemoriesQuery.retired`) until the wicked-crew-api-types release that carries them.
+
+/** `POST /memory/retire-item` → 200: `retired` on a crew with soft retire, `erased` on an older one. */
+export interface RetireMemoryItemResponse { retired?: number; erased?: number }
+
+/** A row of `GET /memory?retired=1`: a soft-retired memory, with when it was retired (Unix SECONDS). */
+export type RetiredMemoryItem = MemoryItem & { retired_at?: number };
+
+/**
+ * `GET /memory?retired=1` — the soft-retired memories (each with `retired_at`), newest retired first. The browse
+ * filters apply as they do to the live list. 501 `estate_upgrade_required` when the estate cannot list them.
+ */
+export function listRetiredMemories(query: MemoryBrowseQuery = {}): Promise<RetiredMemoryItem[]> {
+  const params = memoryBrowseParams(query);
+  params.set('retired', '1');
+  return apiFetch<{ memories?: RetiredMemoryItem[] } | RetiredMemoryItem[]>(`/memory?${params.toString()}`).then((r) =>
+    [...(Array.isArray(r) ? r : r.memories ?? [])].sort((a, b) => (b.retired_at ?? 0) - (a.retired_at ?? 0) || a.id.localeCompare(b.id)),
+  );
+}
+
+/** `POST /memory/unretire` — restore ONE soft-retired memory with the same id. 404 = no retired memory with that id. */
+export function unretireMemory(body: { memory_id: string }): Promise<{ restored: number }> {
+  return apiFetch<{ restored: number }>('/memory/unretire', { method: 'POST', body: JSON.stringify(body) });
+}
+
+/** `POST /memory/erase-item` — delete ONE memory for good, live or retired. 404 = no memory with that id. */
+export function eraseMemoryItem(body: { memory_id: string }): Promise<{ erased: number }> {
+  return apiFetch<{ erased: number }>('/memory/erase-item', { method: 'POST', body: JSON.stringify(body) });
 }
 
 /**
