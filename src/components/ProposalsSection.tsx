@@ -45,8 +45,8 @@ export function ProposalsSection({ kind, heading, onDecision, onSettled, editabl
   /** The post-decision note (approved / rejected / a failed decision), in-band. */
   const [note, setNote] = useState<string | null>(null);
   const [decisionError, setDecisionError] = useState<{ kind: 'offline' | 'error'; message: string; id: string; verb: 'approve' | 'reject'; content?: string; reach?: 'operator' } | null>(null);
-  /** (studio#1337) Policy proposals crew answered with a failed landing: no rule was added and each is still pending.
-   *  Its card says why (crew's words) and offers what crew names: Reject, or approve it for every project. */
+  /** (studio#1337) Policy approvals whose landing crew did not confirm, with crew's reason. Such a card stays and says
+   *  why; it offers Reject, approving it for every project (what crew names) and a retry at its own reach. */
   const [notLanded, setNotLanded] = useState<ReadonlyMap<string, string>>(new Map<string, string>());
   const [errorKind, setErrorKind] = useState<'offline' | 'error'>('error');
 
@@ -92,9 +92,10 @@ export function ProposalsSection({ kind, heading, onDecision, onSettled, editabl
         : reach !== undefined ? approveProposal(id, { reach }) : approveProposal(id);
     void call
       .then((out) => {
-        // studio#1337: crew answered 200 but the rule did not land. Nothing was approved: the card stays, says why and
-        // offers the ways forward; the queue is read again (crew may have approved it without a rule, which it says).
-        const failed = verb === 'approve' && proposal !== undefined && proposalKind(proposal) === 'policy' ? landingFailure(out) : null;
+        // studio#1337: crew answered 200 but did not confirm the rule landed. Never "Approved": the card says why and
+        // offers the ways forward; the queue is read again for crew's state. This section's own kind decides (a retry
+        // can be made after the list was cleared), never a row that may be gone.
+        const failed = verb === 'approve' && kind === 'policy' ? landingFailure(out) : null;
         setNotLanded((cur) => {
           if (failed === null && !cur.has(id)) return cur;
           const next = new Map(cur);
@@ -130,7 +131,7 @@ export function ProposalsSection({ kind, heading, onDecision, onSettled, editabl
           return next;
         });
       });
-  }, [loadProposals, onDecision, onSettled, proposals]);
+  }, [kind, loadProposals, onDecision, onSettled, proposals]);
 
   const onApprove = useCallback((id: string, content?: string) => decide(id, 'approve', content), [decide]);
   const onApproveEverywhere = useCallback((id: string) => decide(id, 'approve', undefined, 'operator'), [decide]);

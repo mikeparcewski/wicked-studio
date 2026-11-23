@@ -105,6 +105,28 @@ describe('Steering > Proposed: a policy whose rule did not land (studio#1337)', 
     expect(screen.getByTestId('proposal-card')).toBeInTheDocument();
   });
 
+  it('a decision retried after the queue read failed is still checked for its landing (codex r1 delta)', async () => {
+    let approves = 0;
+    let listFails = false;
+    apiFetch.mockImplementation((path: unknown) => {
+      const s = String(path);
+      if (s.endsWith('/approve')) { approves += 1; return approves === 1 ? Promise.reject(new Error('network down')) : Promise.resolve(FAILED); }
+      return listFails ? Promise.reject(new Error('network down')) : Promise.resolve({ proposals: [POL] });
+    });
+    const onDecision = vi.fn();
+    render(<ProposalsSection kind="policy" heading="Rule proposals" onDecision={onDecision} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByTestId('proposal-approve'));
+    await screen.findByText('Could not approve this proposal.');
+    listFails = true;
+    await user.click(screen.getByTestId('proposals-section-refresh'));
+    await waitFor(() => expect(screen.queryByTestId('proposal-card')).toBeNull());
+    await user.click(within(screen.getAllByTestId('proposals-section-note')[0]!).getByRole('button', { name: /try again|retry/i }));
+    await waitFor(() => expect(approves).toBe(2));
+    await waitFor(() => expect(screen.getByTestId('proposals-section-note')).toHaveTextContent(/^Not approved, its rule did not land as asked/));
+    expect(onDecision).not.toHaveBeenCalled();
+  });
+
   it('a memory approve is never read as a landing', async () => {
     const MEM = { ...POL, id: 'm-1', kind_type: 'memory', payload: { content: 'Tests sit beside the code.', tier: 'semantic' } };
     apiFetch.mockImplementation((path: unknown) => Promise.resolve(String(path).endsWith('/approve') ? { outcome: 'promoted', active_id: 'a-1' } : { proposals: [MEM] }));

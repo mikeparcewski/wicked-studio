@@ -282,10 +282,14 @@ function StylePipeline({ record, launching, sourceCount, onLearn, onReset, launc
     setBusy(which);
     setFail(null);
     const keep = new Set(a.options ?? []);
+    // studio#1337: each kept rule crew could not land, with its reason: never counted as adopted, and said with the
+    // saved result (so it survives a remount and a later memory decision), or with a later request's failure.
+    const notLanded: string[] = [];
+    const notLandedLine = (): string => notLanded.length === 0 ? ''
+      : `${notLanded.length === 1 ? '1 rule did' : `${notLanded.length} rules did`} not land as asked and ${notLanded.length === 1 ? 'is' : 'are'} still under Steering\u2019s Proposed rules: ${notLanded.join(' ')}`;
     try {
       let kept = 0;
       let of = 0;
-      const notLanded: string[] = [];
       if (which === 'memories') {
         of = memories.length;
         for (const m of memories) { if (keep.has(m.id)) { await approveProposal(m.id); kept += 1; } else await rejectProposal(m.id); }
@@ -307,14 +311,12 @@ function StylePipeline({ record, launching, sourceCount, onLearn, onReset, launc
         }
       }
       if (kept > 0) void useFirstRun.getState().markLearnUsed();
-      const line = which === 'memories' ? `You kept ${kept} of ${of} memories · saved to Memory` : `You adopted ${kept} of ${of} rules · now in Steering`;
+      const line = which === 'memories' ? `You kept ${kept} of ${of} memories · saved to Memory`
+        : `You adopted ${kept} of ${of} rules · now in Steering${notLanded.length > 0 ? ` · ${notLandedLine()}` : ''}`;
       onDecided({ ...record, decided: { ...decided, [which]: line } });
-      if (notLanded.length > 0) {
-        setFail(`${notLanded.length === 1 ? '1 rule' : `${notLanded.length} rules`} did not land as asked; see Steering\u2019s Proposed rules. ${notLanded.join(' ')}`);
-      }
       void poll();
     } catch (e) {
-      setFail(e instanceof Error ? e.message : String(e));
+      setFail(`${e instanceof Error ? e.message : String(e)}${notLanded.length > 0 ? `. ${notLandedLine()}` : ''}`);
     } finally {
       setBusy(null);
     }
