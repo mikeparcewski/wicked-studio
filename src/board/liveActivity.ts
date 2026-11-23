@@ -33,6 +33,9 @@ export interface LiveRow {
   /** A quiet seat's "still working" row (core#1207: `toolActivity` state `working`, one per 15 s of silence, the same
    *  id each time): the seat's key, and when it last printed (unix ms), so the row can count the silence up live. */
   working?: { seat: string; quietSince: number | null };
+  /** studio#935 item 5: the seat that made the call, the frame's `cli` (core#1790, the launch's seat key: a QE step's
+   *  executor and its reviewer share one `ord`). Absent from an older core's frames and on power mode's git reads. */
+  cli?: string;
 }
 
 type Ev = CoreEvent & Record<string, unknown>;
@@ -206,6 +209,7 @@ export function activityRows(events: readonly CoreEvent[] | null | undefined, or
         key: `w:${str(e.id) ?? 'working'}`, at, kind: 'working', running: true, ok: null, doneAt: null,
         text: workingWords(seatWord(seat), null, 0, str(e.target)),
         working: { seat, quietSince: at !== null && silence !== null ? at - silence : null },
+        cli: str(e.cli) ?? seat,
       };
       continue;
     }
@@ -224,7 +228,8 @@ export function activityRows(events: readonly CoreEvent[] | null | undefined, or
       const running = e.state === 'started';
       const ok = typeof e.ok === 'boolean' ? e.ok : null;
       const id = str(e.id);
-      const row: LiveRow = { key: id !== null ? `t:${id}` : `t#${n}`, at: timeOf(e), kind, text: rowWords(kind, shown, running, ok, tool), running, ok, doneAt: running ? null : timeOf(e) };
+      const cli = str(e.cli);
+      const row: LiveRow = { key: id !== null ? `t:${id}` : `t#${n}`, at: timeOf(e), kind, text: rowWords(kind, shown, running, ok, tool), running, ok, doneAt: running ? null : timeOf(e), ...(cli !== null ? { cli } : {}) };
       const at = id !== null ? byCall.get(id) : undefined;
       if (at !== undefined) out[at] = { ...row, at: out[at]!.at };
       else { if (id !== null) byCall.set(id, out.length); out.push(row); }
@@ -243,6 +248,25 @@ export function activityRows(events: readonly CoreEvent[] | null | undefined, or
   // The seat is quiet only while nothing came after its newest "working" frame.
   if (quiet !== null && workingN > otherN) out.push(quiet);
   return out;
+}
+
+/**
+ * studio#935 item 5: the rows filed by the seat that made them, so a QE step's reviewer (pi) is not read as its
+ * executor (codex). A row with no seat (an older core, a power edit) belongs to `lead`, the step's own seat. When every
+ * row is the lead's, or names none, it is one group with no seat (`cli: null`) and the list reads as before; otherwise a
+ * group per seat, in the order each first appears.
+ */
+export function rowsBySeat(rows: readonly LiveRow[], lead: string | null): Array<{ cli: string | null; rows: LiveRow[] }> {
+  const groups = new Map<string | null, LiveRow[]>();
+  for (const r of rows) {
+    const k = r.cli ?? lead;
+    const g = groups.get(k);
+    if (g !== undefined) g.push(r);
+    else groups.set(k, [r]);
+  }
+  const named = [...groups.keys()].filter((k): k is string => k !== null);
+  if (named.length === 0 || (named.length === 1 && (lead === null || named[0] === lead))) return [{ cli: null, rows: [...rows] }];
+  return [...groups.entries()].map(([cli, g]) => ({ cli, rows: g }));
 }
 
 /** The orchestrator's turn running now at this unit (the newest started turn), or null for a step with no turns: the

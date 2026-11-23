@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { displayText } from '../../board/homePath.js';
 import { BookOpen, CircleCheck, CircleX, GitCommitHorizontal, Loader, Pencil, Search, Sparkles, Terminal, Users } from 'lucide-react';
-import { activityRows, activitySummary, currentTurn, narration, turnEndedAt, visibleRows, workingWords, type ActivityKind, type LiveRow, type TurnRef } from '../../board/liveActivity.js';
+import { activityRows, activitySummary, currentTurn, narration, rowsBySeat, turnEndedAt, visibleRows, workingWords, type ActivityKind, type LiveRow, type TurnRef } from '../../board/liveActivity.js';
 import { seatLabel } from '../../board/seatNames.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { api } from '../../api/client.js';
@@ -73,6 +73,24 @@ export function LiveActivity({ runId, ord, kind = 'step', seat = null, label }: 
     return workingWords(seatLabel(seat ?? { key: r.working.seat }), r.working.quietSince, now);
   };
   const earlier = rows.length - shown.length;
+  // studio#935 item 5: a step two seats work in (a QE step's executor and its reviewer) files each row under the seat
+  // that made it, by its name; a step one seat works in reads as one list.
+  const groups = rowsBySeat(shown, seatKey);
+  const nameOf = (cli: string): string => {
+    const r = roster ?? [];
+    const seat = r.find((s) => s.key === cli) ?? r.find((s) => s.key === cli.split('#')[0]);
+    return seatLabel(seat ?? { key: cli.split('#')[0] ?? cli });
+  };
+  const rowItem = (r: LiveRow): React.ReactElement => {
+    const Icon = r.running ? Loader : r.ok === false ? CircleX : ICON[r.kind];
+    return (
+      <li key={r.key} data-testid="live-activity-row" data-kind={r.kind} data-running={r.running ? 'true' : 'false'} className={`wk-live-row${r.running ? ' wk-live-row--running' : ''}${r.ok === false ? ' wk-live-row--fail' : ''}`}>
+        <Icon size={13} aria-hidden className="wk-live-icon" />
+        <span className="wk-live-text">{displayText(textOf(r))}</span>
+        {r.kind !== 'working' && ago(r.at, now) !== null && <span className="wk-live-ago">{ago(r.at, now)}</span>}
+      </li>
+    );
+  };
   return (
     <div data-testid="live-activity" data-ord={ord} data-count={rows.length} data-kind={kind} className="wk-live" aria-live="polite" aria-label="What it is doing now">
       {meterLine !== '' && (
@@ -82,18 +100,14 @@ export function LiveActivity({ runId, ord, kind = 'step', seat = null, label }: 
       )}
       {summary !== null && <p data-testid="live-rolling" className="wk-live-rolling">{displayText(summary)}</p>}
       {earlier > 0 && <p data-testid="live-activity-earlier" className="wk-live-earlier">{earlier} earlier</p>}
-      <ul className="wk-live-list">
-        {shown.map((r) => {
-          const Icon = r.running ? Loader : r.ok === false ? CircleX : ICON[r.kind];
-          return (
-            <li key={r.key} data-testid="live-activity-row" data-kind={r.kind} data-running={r.running ? 'true' : 'false'} className={`wk-live-row${r.running ? ' wk-live-row--running' : ''}${r.ok === false ? ' wk-live-row--fail' : ''}`}>
-              <Icon size={13} aria-hidden className="wk-live-icon" />
-              <span className="wk-live-text">{displayText(textOf(r))}</span>
-              {r.kind !== 'working' && ago(r.at, now) !== null && <span className="wk-live-ago">{ago(r.at, now)}</span>}
-            </li>
-          );
-        })}
-      </ul>
+      {groups.length === 1 && groups[0]!.cli === null ? (
+        <ul className="wk-live-list">{shown.map(rowItem)}</ul>
+      ) : groups.map((g) => (
+        <div key={g.cli ?? ''} data-testid="live-activity-group" data-cli={g.cli ?? ''} className="wk-live-group">
+          {g.cli !== null && <p data-testid="live-activity-who" className="wk-live-who">{nameOf(g.cli)}</p>}
+          <ul className="wk-live-list" aria-label={g.cli !== null ? `What ${nameOf(g.cli)} is doing` : undefined}>{g.rows.map(rowItem)}</ul>
+        </div>
+      ))}
       {said !== null && <p data-testid="live-activity-said" className="wk-live-said">“{displayText(said)}”</p>}
       {endedAt === null && start !== null && start.at !== null && (
         <InflightCheck runId={runId} ord={ord} attempt={start.attempt} kind={kind} startedAt={start.at} now={now}

@@ -154,6 +154,19 @@ export interface PowerView extends PowerState {
   runId: string;
 }
 
+/** (crew#1739, api-types `PowerPauseIdentity`) A pause as the card showed it: its checkpoint and when it opened. */
+export type PowerPauseIdentity = Pick<PowerPause, 'checkpoint' | 'at'>;
+
+/** (crew#1739, api-types `PowerPauseAnswer`) `POST /runs/:id/power/pause` 200: the pause crew read open just before
+ *  it answered (`null`: none was open). Studio pins an older api-types, so it is typed here. */
+export interface PowerPauseAnswer extends PowerView {
+  answered: PowerPauseIdentity | null;
+}
+
+/** (crew#1739, api-types `PowerPauseChanged`) The 409 when the answer names a pause that is no longer the open one:
+ *  `open` is the pause open now (`null`: none). Nothing was changed. */
+export const PAUSE_CHANGED = 'Pause changed';
+
 // ── /ws frames (also in the run's recorded trail) ──────────────────────────────────────────────────────
 
 export interface PowerIntakePlannedEvent { type: 'powerIntakePlanned'; session: string; ord: number; plan: RigorPlan; ts?: number }
@@ -231,7 +244,11 @@ export const powerApi = {
   raise: (runId: string, atLeast: Rigor, reason: string) =>
     apiFetch<PowerView>(`/runs/${encodeURIComponent(runId)}/rigor`, { method: 'POST', body: JSON.stringify({ atLeast, reason }) }),
   get: (runId: string) => apiFetch<PowerView>(`/runs/${encodeURIComponent(runId)}/power`),
-  /** `POST /runs/:id/power/pause`: answer a checkpoint pause (409 when the run is not paused). */
-  pause: (runId: string, decision: PauseDecision, note?: string) =>
-    apiFetch<PowerView>(`/runs/${encodeURIComponent(runId)}/power/pause`, { method: 'POST', body: JSON.stringify(note !== undefined && note !== '' ? { decision, note } : { decision }) }),
+  /** `POST /runs/:id/power/pause`: answer the checkpoint pause `shown` (crew#1739: 409 {@link PAUSE_CHANGED} when it is
+   *  no longer the open one, or the run is not paused). */
+  pause: (runId: string, decision: PauseDecision, shown: PowerPauseIdentity, note?: string) =>
+    apiFetch<PowerPauseAnswer>(`/runs/${encodeURIComponent(runId)}/power/pause`, {
+      method: 'POST',
+      body: JSON.stringify({ decision, ...(note !== undefined && note !== '' ? { note } : {}), checkpoint: shown.checkpoint, at: shown.at }),
+    }),
 };

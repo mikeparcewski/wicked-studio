@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   DEFAULT_STEERING_TYPE,
   nextRuleId,
@@ -14,7 +14,6 @@ import {
 /** The grid's page scope: one of the seven types, or `all` — the Policies view's `All` filter,
  *  which shows every rule (the type still shows per-row via the type cell). */
 export type GridScope = SteeringType | 'all';
-import { FilterStrip } from './dashboardKit.js';
 import { SteeringRetireModal } from './SteeringRetireModal.js';
 
 /**
@@ -39,9 +38,10 @@ import { SteeringRetireModal } from './SteeringRetireModal.js';
  *    render struck/dimmed and read-only, toggled by the include_retired facet. Un-retire is
  *    deliberately absent — no wire supports it (see SteeringRetireModal).
  *
- * Facets stay client-side over the one rules fetch (FilterStrip: search · severity · retired),
- * page-local, reset by the shell's per-type remount. NOT virtualized on purpose: rule corpora
- * are tens-to-hundreds of rows; virtualize only if row count ever demands it.
+ * The grid is the Table layout of the one Steer page (studio#689 ruling b): the page's own filters
+ * (type, MCP, unused, search, tag, Active or Retired) choose the rows through `idFilter`, so the grid
+ * keeps no filter of its own. NOT virtualized on purpose: rule corpora are tens-to-hundreds of rows;
+ * virtualize only if row count ever demands it.
  */
 
 export interface GridFacets {
@@ -328,6 +328,9 @@ export function ChipsCell({ testid, label, values, disabled, onCommit }: {
 
 // ── The draft (add) row ───────────────────────────────────────────────────────────────────────
 
+/** The draft (add) row's state; a host may hold it (`draftStore`) so it outlives the grid. */
+export type GridDraft = DraftState;
+
 interface DraftState {
   id: string;
   steering_type: SteeringType;
@@ -381,7 +384,7 @@ export function draftRule(d: Pick<DraftState, 'id' | 'steering_type' | 'severity
 const TYPE_OPTIONS = STEERING_TYPES.map((t) => ({ value: t, label: STEERING_TYPE_LABELS[t] }));
 const SEVERITY_OPTIONS = SEVERITIES.map((s) => ({ value: s, label: SEVERITY_WORD[s] }));
 
-export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect, onCommit, onCreate, onRetired, addRequestTick = 0, idFilter = null, unseeded = false }: {
+export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect, onCommit, onCreate, onRetired, addRequestTick = 0, idFilter = null, unseeded = false, draftStore }: {
   /** The FULL store — this grid applies the page scope itself, one predicate everywhere. */
   rules: SteeringRule[];
   /** The page scope: one of the seven types, or `all` (the Policies `All` filter — every rule). */
@@ -407,27 +410,25 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
    *  visual — suppress the grid's own "No steering rules in the store." paragraph to avoid
    *  two conflicting "nothing here" signals. The FilterStrip and draft row are unaffected. */
   unseeded?: boolean;
+  /** The draft row's state held by the host (its `useState` pair), so switching away and back keeps it. Absent: the
+   *  grid holds it. */
+  draftStore?: [DraftState | null, Dispatch<SetStateAction<DraftState | null>>];
 }): React.ReactElement {
-  const [facets, setFacets] = useState<GridFacets>(GRID_FACETS_DEFAULT);
-  const [draft, setDraft] = useState<DraftState | null>(null);
+  const ownDraft = useState<DraftState | null>(null);
+  const [draft, setDraft] = draftStore ?? ownDraft;
   const [retiring, setRetiring] = useState<SteeringRule | null>(null);
 
   const visible = useMemo(() => {
-    const faceted = filterSteeringRules(rules, type, facets);
-    if (idFilter === null) return faceted;
-    const allowed = new Set(idFilter);
-    return faceted.filter((r) => allowed.has(r.id));
-  }, [rules, type, facets, idFilter]);
+    const scoped = filterSteeringRules(rules, type, GRID_FACETS_DEFAULT);
+    if (idFilter === null) return scoped;
+    // The page's order (its list's) wins: the grid shows the same rules in the same order.
+    const at = new Map(idFilter.map((id, i) => [id, i]));
+    return scoped.filter((r) => at.has(r.id)).sort((a, b) => at.get(a.id)! - at.get(b.id)!);
+  }, [rules, type, idFilter]);
   const typeRules = useMemo(
     () => (type === 'all' ? rules : rules.filter((r) => steeringTypeOf(r) === type)),
     [rules, type],
   );
-  const severityCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: typeRules.length };
-    for (const s of SEVERITIES) counts[s] = typeRules.filter((r) => r.severity === s).length;
-    return counts;
-  }, [typeRules]);
-
   // The Add ▾ menu's "Add row" — an external open-draft request.
   const lastTick = useRef(addRequestTick);
   useEffect(() => {
@@ -435,7 +436,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
       lastTick.current = addRequestTick;
       setDraft((cur) => cur ?? freshDraft(rules, type));
     }
-  }, [addRequestTick, rules, type]);
+  }, [addRequestTick, rules, type, setDraft]);
 
   const commitField = (rule: SteeringRule, patch: Partial<SteeringRule>): void => {
     onCommit({ ...rule, ...patch }, rule);
@@ -487,12 +488,12 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
       );
     }
     return (
-      <div className="wk-steer-gridwrap overflow-x-auto rounded" style={{ border: '1px solid var(--surface-raised)' }}>
+      <div className="wk-steer-gridwrap">
         {/* table-fixed + explicit column widths: auto layout would hand a LONG statement the
             whole table and squeeze every select to min-content (measured live). The statement
             column takes the slack and truncates; minWidth keeps every column legible — the
             wrapping container scrolls horizontally instead (the page never does). */}
-        <table data-testid="steering-grid" className="wk-steer-grid w-full table-fixed border-collapse" style={{ minWidth: '60rem' }}>
+        <table data-testid="steering-grid" className="wk-steer-grid">
           <colgroup>
             <col style={{ width: '8rem' }} />
             <col style={{ width: '7.5rem' }} />
@@ -501,16 +502,15 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
             <col style={{ width: '3.75rem' }} />
             <col style={{ width: '9rem' }} />
             <col style={{ width: '6.5rem' }} />
-            <col style={{ width: '7rem' }} />
+            <col style={{ width: '9rem' }} />
           </colgroup>
           <thead>
-            <tr style={{ background: 'var(--surface-rail)' }}>
+            <tr>
               {['ID', 'Type', 'Severity', 'Statement', 'Weight', 'Applies to', 'Excludes', 'Status'].map((h) => (
                 <th
                   key={h}
                   scope="col"
-                  className="px-1.5 py-1.5 text-left text-xs font-semibold"
-                  style={{ color: 'var(--ink-dim)', borderBottom: '1px solid var(--surface-raised)' }}
+                  className="wk-steer-th"
                 >
                   {h}
                 </th>
@@ -528,7 +528,6 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                   data-retired={retired ? 'true' : 'false'}
                   className="align-top"
                   style={{
-                    borderBottom: '1px solid var(--surface-raised)',
                     opacity: retired ? 0.55 : 1,
                     outline: selectedId === r.id ? '1px solid var(--accent)' : 'none',
                     outlineOffset: '-1px',
@@ -622,7 +621,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                         Retired
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5">
+                      <span className="inline-flex flex-wrap items-center gap-1.5">
                         <span className="wk-tag wk-tag--ok">Active</span>
                         <button
                           type="button"
@@ -642,7 +641,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
             })}
 
             {draft !== null && (
-              <tr data-testid="steering-grid-draft" className="align-top" style={{ background: 'var(--surface-rail)' }}>
+              <tr data-testid="steering-grid-draft" className="align-top wk-steer-draft">
                 <td className="px-0.5 py-0.5">
                   <input
                     data-testid="steering-draft-id"
@@ -731,7 +730,7 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
                   />
                 </td>
                 <td className="px-1.5 py-1">
-                  <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-flex flex-wrap items-center gap-1.5">
                     <button
                       type="button"
                       data-testid="steering-draft-save"
@@ -763,31 +762,6 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
 
   return (
     <div data-testid="steering-rule-grid" className="flex min-w-0 flex-col gap-2">
-      <FilterStrip
-        testId="steering-grid-filter"
-        query={facets.query}
-        onQuery={(q) => setFacets((f) => ({ ...f, query: q }))}
-        placeholder="Search id or statement…"
-        chips={[
-          { id: 'all', label: 'All', count: severityCounts.all ?? 0 },
-          ...SEVERITIES.filter((s) => (severityCounts[s] ?? 0) > 0 || facets.severity === s)
-            .map((s) => ({ id: s, label: SEVERITY_WORD[s], count: severityCounts[s] ?? 0 })),
-        ]}
-        active={facets.severity}
-        onChip={(id) => setFacets((f) => ({ ...f, severity: id }))}
-      >
-        <button
-          type="button"
-          data-testid="steering-filter-retired"
-          aria-pressed={facets.includeRetired}
-          title="Retired rules stay listed, struck through; retiring never deletes"
-          onClick={() => setFacets((f) => ({ ...f, includeRetired: !f.includeRetired }))}
-          className="wk-chip"
-        >
-          {facets.includeRetired ? 'Hide retired' : 'Show retired'}
-        </button>
-      </FilterStrip>
-
       {body()}
 
       {(draftIssue !== null || draftCollision) && draft !== null && (

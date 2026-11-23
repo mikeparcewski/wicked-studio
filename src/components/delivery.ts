@@ -126,7 +126,9 @@ const NOTHING_TO_DELIVER = /nothing to deliver/i;
  * same as crew's `tail -1`.
  */
 export function prUrlFrom(text: string): string | null {
-  const matches = text.match(/https:\/\/\S+\/pull\/\d+/g);
+  // studio#1357: an Azure DevOps delivery prints `…/_git/<repo>/pullrequest/<n>` (crew's ADO helper) as its last line.
+  // The digits end the number: `…/pullrequest/1garbage` is no PR #1 (xreview of studio#1358).
+  const matches = text.match(/https:\/\/\S+\/(?:pull|pullrequest)\/\d+(?![\w-])/g);
   const last = matches === null ? null : (matches[matches.length - 1] ?? null);
   return last === null ? null : (isPrUrl(last) ? last : null);
 }
@@ -165,8 +167,8 @@ export function isPrUrl(candidate: string): boolean {
   // `/pull/new/` is REJECTED outright, not merely out-shaped (Copilot on #125). The end-anchored
   // test alone lets a crafted path through — `…/pull/new/pull/5` ends in `/pull/5` and would be
   // rendered as "PR open" with a link to a create-PR form. That form is the exact trap the
-  // operator hit first in the raw transcript, so it is refused by name rather than by shape.
-  if (parsed.pathname.includes('/pull/new/')) return false;
+  // operator hit first in the raw transcript, so it is refused by name rather than by shape (in the GitHub arm
+  // below: an Azure DevOps organisation may be called `pull`, xreview of studio#1358).
   // No query, no fragment (Copilot on #125). EC55 pins the rendered href as
   // `^https://\S+/pull/\d+$`, and a url ending `…/pull/121?diff=split` satisfies the pathname
   // test while violating that contract — the validator would admit a link the slice's own
@@ -174,7 +176,27 @@ export function isPrUrl(candidate: string): boolean {
   // `https://[^[:space:]]+/pull/[0-9]+`, which stops at the digits. Refusing is honest;
   // silently stripping would alter what crew actually reported.
   if (parsed.search !== '' || parsed.hash !== '') return false;
-  return parsed.protocol === 'https:' && /\/pull\/\d+$/.test(parsed.pathname);
+  if (parsed.protocol !== 'https:') return false;
+  // No userinfo on either forge: `https://github.com@evil.example/o/r/pull/42` is evil.example's page
+  // (xreview of studio#1358). crew never writes a URL with one.
+  if (parsed.username !== '' || parsed.password !== '') return false;
+  if (/\/pull\/\d+$/.test(parsed.pathname)) return !parsed.pathname.includes('/pull/new/');
+  // studio#1357: an Azure DevOps pull request, in the one form crew writes (its deliver helper's `ADOWEB` +
+  // `/pullrequest/<id>`, always the canonical `https://dev.azure.com` origin, no port, no userinfo):
+  // `https://dev.azure.com/<org>/<project>/_git/<repo>/pullrequest/<n>`.
+  return parsed.origin === 'https://dev.azure.com'
+    && /^\/[^/]+\/[^/]+\/_git\/[^/]+\/pullrequest\/\d+$/.test(parsed.pathname);
+}
+
+/**
+ * The number of a pull request url {@link isPrUrl} admits — GitHub's `…/pull/<n>` or Azure DevOps's
+ * `…/_git/<repo>/pullrequest/<n>` (studio#1357) — else `null`. Every "PR #n" studio shows, and the
+ * `revisesPr` a Revise this PR sends, reads it here.
+ */
+export function prNumberOf(url: string): number | null {
+  if (!isPrUrl(url)) return null;
+  const m = /\/(?:pull|pullrequest)\/(\d+)$/.exec(new URL(url).pathname);
+  return m === null ? null : parseInt(m[1]!, 10);
 }
 
 /**

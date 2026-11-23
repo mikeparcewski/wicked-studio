@@ -3795,6 +3795,12 @@
       ]
     },
     {
+      "testId": "composer-seat-role",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
       "testId": "composer-seats",
       "files": [
         "src/components/session/ChatHelpers.tsx",
@@ -6909,6 +6915,42 @@
       ]
     },
     {
+      "testId": "evaluate-memory",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-memory-coverage",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-memory-nostore",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-memory-summary",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-memory-unsurfaced",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-memory-unsurfaced-row",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
       "testId": "evaluate-options",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
@@ -8391,6 +8433,48 @@
       ]
     },
     {
+      "testId": "insights-resolve",
+      "files": [
+        "src/components/insights/InsightsDecide.tsx"
+      ]
+    },
+    {
+      "testId": "insights-resolve-archive",
+      "files": [
+        "src/components/insights/InsightsDecide.tsx"
+      ]
+    },
+    {
+      "testId": "insights-resolve-archive-confirm",
+      "files": [
+        "src/components/insights/InsightsDecide.tsx"
+      ]
+    },
+    {
+      "testId": "insights-resolve-note",
+      "files": [
+        "src/components/insights/InsightsDecide.tsx"
+      ]
+    },
+    {
+      "testId": "insights-resolve-retry",
+      "files": [
+        "src/components/insights/InsightsDecide.tsx"
+      ]
+    },
+    {
+      "testId": "insights-resolve-run",
+      "files": [
+        "src/components/insights/InsightsDecide.tsx"
+      ]
+    },
+    {
+      "testId": "insights-resolve-said",
+      "files": [
+        "src/components/insights/InsightsDecide.tsx"
+      ]
+    },
+    {
       "testId": "insights-review",
       "files": [
         "src/plugins/wicked-insights/plugin.ts"
@@ -8536,6 +8620,12 @@
     },
     {
       "testId": "job-passage-checks-why",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-choices-more",
       "files": [
         "src/components/session/JobPassage.tsx"
       ]
@@ -8710,6 +8800,12 @@
     },
     {
       "testId": "job-passage-plan-changed",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-plan-controls",
       "files": [
         "src/components/session/JobPassage.tsx"
       ]
@@ -9064,6 +9160,42 @@
     },
     {
       "testId": "knowledge-connections-empty",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-forget",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-forget-cancel",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-forget-confirm",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-forget-go",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-forget-live",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-forget-note",
       "files": [
         "src/components/desk/KnowledgeView.tsx"
       ]
@@ -9999,6 +10131,12 @@
       ]
     },
     {
+      "testId": "launch-wizard-seat-role",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
       "testId": "launch-wizard-shape",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
@@ -10048,6 +10186,12 @@
     },
     {
       "testId": "launch-wizard-unusable-note",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-workonly-note",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]
@@ -10395,6 +10539,12 @@
       ]
     },
     {
+      "testId": "live-activity-group",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
+      ]
+    },
+    {
       "testId": "live-activity-row",
       "files": [
         "src/components/session/LiveActivity.tsx"
@@ -10402,6 +10552,12 @@
     },
     {
       "testId": "live-activity-said",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
+      ]
+    },
+    {
+      "testId": "live-activity-who",
       "files": [
         "src/components/session/LiveActivity.tsx"
       ]
@@ -11819,6 +11975,36 @@
       ]
     },
     {
+      "testId": "memory-erase",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-erase-cancel",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-erase-confirm",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-erase-content",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-erase-dialog",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
       "testId": "memory-full",
       "files": [
         "src/components/memory/MemoryPage.tsx"
@@ -11951,13 +12137,97 @@
       ]
     },
     {
+      "testId": "memory-retired-erase",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
       "testId": "memory-retired-erased",
       "files": [
         "src/components/memory/MemoryAdd.tsx"
       ]
     },
     {
+      "testId": "memory-retired-kept",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-list-fail",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-memories",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-memory",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-more",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-more-line",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-none",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-restore",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-restore-fail",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-restored",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-restored-note",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
       "testId": "memory-retired-row",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-unknown",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-unsupported",
       "files": [
         "src/components/memory/MemoryAdd.tsx"
       ]
@@ -14074,6 +14344,12 @@
       ]
     },
     {
+      "testId": "plugin-card-pill-why",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
       "testId": "plugin-card-tag",
       "files": [
         "src/components/editorHost/PluginCard.tsx"
@@ -15295,6 +15571,12 @@
       ]
     },
     {
+      "testId": "project-draft-epics-note",
+      "files": [
+        "src/components/product/ProjectRequirementsSection.tsx"
+      ]
+    },
+    {
       "testId": "project-field",
       "files": [
         "src/components/ProjectSwitcher.tsx"
@@ -16117,6 +16399,12 @@
       ]
     },
     {
+      "testId": "proposal-approve-everywhere",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
       "testId": "proposal-card",
       "files": [
         "src/components/ProposalsList.tsx"
@@ -16190,6 +16478,12 @@
     },
     {
       "testId": "proposal-memory-tier",
+      "files": [
+        "src/components/ProposalsList.tsx"
+      ]
+    },
+    {
+      "testId": "proposal-not-landed",
       "files": [
         "src/components/ProposalsList.tsx"
       ]
@@ -16711,6 +17005,18 @@
       ]
     },
     {
+      "testId": "repo-capture",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-capture-after",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repo-capture-error",
       "files": [
         "src/components/RepoDetailPage.tsx"
@@ -16720,6 +17026,18 @@
       "testId": "repo-capture-learnings",
       "files": [
         "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-capture-note",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-capture-off",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
       ]
     },
     {
@@ -20433,6 +20751,54 @@
       ]
     },
     {
+      "testId": "session-launch-notice",
+      "files": [
+        "src/components/session/LaunchAssuranceNote.tsx"
+      ]
+    },
+    {
+      "testId": "session-launch-notice-cancel",
+      "files": [
+        "src/components/session/LaunchAssuranceNote.tsx"
+      ]
+    },
+    {
+      "testId": "session-launch-notice-confirm",
+      "files": [
+        "src/components/session/LaunchAssuranceNote.tsx"
+      ]
+    },
+    {
+      "testId": "session-launch-notice-dismiss",
+      "files": [
+        "src/components/session/LaunchAssuranceNote.tsx"
+      ]
+    },
+    {
+      "testId": "session-launch-notice-error",
+      "files": [
+        "src/components/session/LaunchAssuranceNote.tsx"
+      ]
+    },
+    {
+      "testId": "session-launch-notice-message",
+      "files": [
+        "src/components/session/LaunchAssuranceNote.tsx"
+      ]
+    },
+    {
+      "testId": "session-launch-notice-reduced",
+      "files": [
+        "src/components/session/LaunchAssuranceNote.tsx"
+      ]
+    },
+    {
+      "testId": "session-launch-notice-relaunch",
+      "files": [
+        "src/components/session/LaunchAssuranceNote.tsx"
+      ]
+    },
+    {
       "testId": "session-loading",
       "files": [
         "src/components/session/SessionView.tsx"
@@ -23229,6 +23595,24 @@
       ]
     },
     {
+      "testId": "steer-layout",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-layout-list",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
+      "testId": "steer-layout-table",
+      "files": [
+        "src/components/steer/SteerSurface.tsx"
+      ]
+    },
+    {
       "testId": "steer-mcp-clear",
       "files": [
         "src/components/steer/SteerSurface.tsx"
@@ -23343,12 +23727,6 @@
       ]
     },
     {
-      "testId": "steer-table",
-      "files": [
-        "src/components/steer/SteerSurface.tsx"
-      ]
-    },
-    {
       "testId": "steer-type-pick",
       "files": [
         "src/components/steer/SteerSurface.tsx"
@@ -23388,18 +23766,6 @@
       "testId": "steering-add-mcp",
       "files": [
         "src/components/steer/SteerSurface.tsx"
-      ]
-    },
-    {
-      "testId": "steering-add-menu",
-      "files": [
-        "src/components/SteeringAddMenu.tsx"
-      ]
-    },
-    {
-      "testId": "steering-add-menu-list",
-      "files": [
-        "src/components/SteeringAddMenu.tsx"
       ]
     },
     {
@@ -23493,12 +23859,6 @@
       ]
     },
     {
-      "testId": "steering-commit-error",
-      "files": [
-        "src/components/SteeringPage.tsx"
-      ]
-    },
-    {
       "testId": "steering-diagnostics",
       "files": [
         "src/components/SteeringHealth.tsx"
@@ -23508,18 +23868,6 @@
       "testId": "steering-diagnostics-toggle",
       "files": [
         "src/components/SteeringHealth.tsx"
-      ]
-    },
-    {
-      "testId": "steering-dock-open",
-      "files": [
-        "src/components/SteeringPage.tsx"
-      ]
-    },
-    {
-      "testId": "steering-dock-sheet",
-      "files": [
-        "src/components/SteeringPage.tsx"
       ]
     },
     {
@@ -23610,12 +23958,6 @@
       "testId": "steering-entry",
       "files": [
         "src/components/SteeringTimeline.tsx"
-      ]
-    },
-    {
-      "testId": "steering-filter-retired",
-      "files": [
-        "src/components/SteeringGrid.tsx"
       ]
     },
     {
@@ -23745,12 +24087,6 @@
       ]
     },
     {
-      "testId": "steering-grid-filter",
-      "files": [
-        "src/components/SteeringGrid.tsx"
-      ]
-    },
-    {
       "testId": "steering-grid-id",
       "files": [
         "src/components/SteeringGrid.tsx"
@@ -23766,30 +24102,6 @@
       "testId": "steering-grid-row",
       "files": [
         "src/components/SteeringGrid.tsx"
-      ]
-    },
-    {
-      "testId": "steering-health",
-      "files": [
-        "src/components/SteeringHealth.tsx"
-      ]
-    },
-    {
-      "testId": "steering-health-error",
-      "files": [
-        "src/components/SteeringHealth.tsx"
-      ]
-    },
-    {
-      "testId": "steering-health-loading",
-      "files": [
-        "src/components/SteeringHealth.tsx"
-      ]
-    },
-    {
-      "testId": "steering-health-unsupported",
-      "files": [
-        "src/components/SteeringHealth.tsx"
       ]
     },
     {
@@ -23814,12 +24126,6 @@
       "testId": "steering-mcp-builder",
       "files": [
         "src/components/SteeringMcpBuilder.tsx"
-      ]
-    },
-    {
-      "testId": "steering-mcp-chip",
-      "files": [
-        "src/components/SteeringTypeFilter.tsx"
       ]
     },
     {
@@ -23892,12 +24198,6 @@
       "testId": "steering-mcp-when-seats",
       "files": [
         "src/components/SteeringMcpBuilder.tsx"
-      ]
-    },
-    {
-      "testId": "steering-page",
-      "files": [
-        "src/components/SteeringPage.tsx"
       ]
     },
     {
@@ -24012,12 +24312,6 @@
       "testId": "steering-retire-reason",
       "files": [
         "src/components/SteeringRetireModal.tsx"
-      ]
-    },
-    {
-      "testId": "steering-retired-note",
-      "files": [
-        "src/components/SteeringPage.tsx"
       ]
     },
     {
@@ -24203,21 +24497,18 @@
     {
       "testId": "steering-rules-error",
       "files": [
-        "src/components/SteeringGrid.tsx",
-        "src/components/SteeringPage.tsx"
+        "src/components/SteeringGrid.tsx"
       ]
     },
     {
       "testId": "steering-rules-loading",
       "files": [
-        "src/components/SteeringGrid.tsx",
-        "src/components/SteeringPage.tsx"
+        "src/components/SteeringGrid.tsx"
       ]
     },
     {
       "testId": "steering-saved-note",
       "files": [
-        "src/components/SteeringPage.tsx",
         "src/components/steer/SteerSurface.tsx"
       ]
     },
@@ -24225,12 +24516,6 @@
       "testId": "steering-scope-note",
       "files": [
         "src/components/SteeringTimeline.tsx"
-      ]
-    },
-    {
-      "testId": "steering-seed-command",
-      "files": [
-        "src/components/SteeringPage.tsx"
       ]
     },
     {
@@ -24247,12 +24532,6 @@
     },
     {
       "testId": "steering-stat-rules",
-      "files": [
-        "src/components/SteeringHealth.tsx"
-      ]
-    },
-    {
-      "testId": "steering-stat-rules-type",
       "files": [
         "src/components/SteeringHealth.tsx"
       ]
@@ -24276,90 +24555,21 @@
       ]
     },
     {
-      "testId": "steering-type-chip",
-      "files": [
-        "src/components/SteeringTypeFilter.tsx"
-      ]
-    },
-    {
-      "testId": "steering-type-filter",
-      "files": [
-        "src/components/SteeringTypeFilter.tsx"
-      ]
-    },
-    {
       "testId": "steering-unseeded",
       "files": [
-        "src/components/SteeringPage.tsx",
         "src/components/steer/SteerSurface.tsx"
-      ]
-    },
-    {
-      "testId": "steering-usage",
-      "files": [
-        "src/components/SteeringUsageBand.tsx"
-      ]
-    },
-    {
-      "testId": "steering-usage-claims-note",
-      "files": [
-        "src/components/SteeringUsageBand.tsx"
-      ]
-    },
-    {
-      "testId": "steering-usage-delta",
-      "files": [
-        "src/components/SteeringUsageBand.tsx"
-      ]
-    },
-    {
-      "testId": "steering-usage-eval",
-      "files": [
-        "src/components/SteeringUsageBand.tsx"
       ]
     },
     {
       "testId": "steering-usage-filter-clear",
       "files": [
-        "src/components/SteeringPage.tsx",
         "src/components/steer/SteerSurface.tsx"
       ]
     },
     {
       "testId": "steering-usage-filter-note",
       "files": [
-        "src/components/SteeringPage.tsx",
         "src/components/steer/SteerSurface.tsx"
-      ]
-    },
-    {
-      "testId": "steering-usage-governed",
-      "files": [
-        "src/components/SteeringUsageBand.tsx"
-      ]
-    },
-    {
-      "testId": "steering-usage-rules",
-      "files": [
-        "src/components/SteeringUsageBand.tsx"
-      ]
-    },
-    {
-      "testId": "steering-usage-rules-note",
-      "files": [
-        "src/components/SteeringUsageBand.tsx"
-      ]
-    },
-    {
-      "testId": "steering-usage-runs",
-      "files": [
-        "src/components/SteeringUsageBand.tsx"
-      ]
-    },
-    {
-      "testId": "steering-usage-top",
-      "files": [
-        "src/components/SteeringUsageBand.tsx"
       ]
     },
     {
@@ -24755,6 +24965,12 @@
     },
     {
       "testId": "testing-evals-gap-toggle",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals-memory",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
       ]
@@ -28255,7 +28471,6 @@
         "src/components/McpToolsPage.tsx",
         "src/components/McpUsage.tsx",
         "src/components/ProposalChips.tsx",
-        "src/components/SteeringAddMenu.tsx",
         "src/components/SteeringGrid.tsx",
         "src/components/SteeringHealth.tsx",
         "src/components/SteeringRuleDrawer.tsx",

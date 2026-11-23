@@ -153,6 +153,18 @@
 .wk-stop-btn--confirm:hover:not(:disabled) { background: color-mix(in oklab, var(--status-fail) 85%, var(--ink-high)); }
 
 /* ── "N needs you" (operator 2026-10-18): a banner below the header, in the flow — the thread reflows under it ── */
+/* studio#1239: crew's launch assurance notice on the job's session, with its confirmed relaunch. */
+.wk-launch-notice-wrap { flex-shrink: 0; padding-block: 0 8px; }
+.wk-launch-notice {
+  display: flex; flex-direction: column; gap: 6px; padding: 8px 12px;
+  border: 1px solid var(--border); border-left: 3px solid var(--spark); border-radius: var(--radius-md);
+  background: var(--surface-card); font-size: var(--text-sm); color: var(--ink-body);
+}
+.wk-launch-notice-title { margin: 0; font-weight: var(--weight-semi); }
+.wk-launch-notice-body { margin: 0; color: var(--ink-muted); overflow-wrap: anywhere; }
+.wk-launch-notice-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.wk-launch-notice-acts > p { flex-basis: 100%; }
+.wk-launch-notice-error { color: var(--status-fail); }
 .wk-needs-banner-wrap { flex-shrink: 0; padding-block: 0 6px; }
 .wk-needs-banner {
   position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; padding: 6px 12px;

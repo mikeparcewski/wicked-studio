@@ -48,13 +48,17 @@ function KnowledgeText({ proposal }: { proposal: Proposal }): React.ReactElement
   );
 }
 
-function ProposalCard({ proposal, deciding, onApprove, onReject, editable }: {
+function ProposalCard({ proposal, deciding, onApprove, onApproveEverywhere, onReject, editable, notLanded }: {
   proposal: Proposal;
   deciding: boolean;
   /** `content`: approve a memory proposal with these words instead of its own. */
   onApprove: (id: string, content?: string) => void;
+  /** Approve a policy proposal for every project (crew's `reach: "operator"`). */
+  onApproveEverywhere: ((id: string) => void) | undefined;
   onReject: (id: string) => void;
   editable: boolean;
+  /** (studio#1337) Why crew could not land this policy's rule on its last approve, or null. */
+  notLanded: string | null;
 }): React.ReactElement {
   const kind = proposalKind(proposal);
   const [draft, setDraft] = useState<string | null>(null);
@@ -110,11 +114,21 @@ function ProposalCard({ proposal, deciding, onApprove, onReject, editable }: {
         {fromRun !== undefined && fromRun !== '' && <> · <a data-testid="proposal-source-run" className="wk-link" href={sessionPath(`run:${fromRun}`)}>Open its run</a></>}
       </p>
       <div data-testid="proposal-facets"><TechDetails text={details} /></div>
+      {notLanded !== null && (
+        <p data-testid="proposal-not-landed" role="alert" className="wk-gk-note">
+          Not approved: crew could not land this rule as asked. Why: {notLanded}
+        </p>
+      )}
       <div className="wk-gk-actions">
         {draft === null ? <>
           <button data-testid="proposal-reject" type="button" disabled={deciding} onClick={() => onReject(proposal.id)} className="wk-btn wk-btn--secondary">Reject</button>
           {canEdit && <button data-testid="proposal-edit" type="button" disabled={deciding} onClick={() => setDraft(original)} className="wk-btn wk-btn--secondary">Edit</button>}
-          <button data-testid="proposal-approve" type="button" disabled={deciding} onClick={() => onApprove(proposal.id)} className="wk-btn wk-btn--primary">Approve</button>
+          {/* studio#1337: after a failed landing, Try again keeps the proposal's own reach (a failure may be passing);
+              approving it for every project is the separate, explicit choice crew names. */}
+          {notLanded !== null && kind === 'policy' && onApproveEverywhere !== undefined && (
+            <button data-testid="proposal-approve-everywhere" type="button" disabled={deciding} onClick={() => onApproveEverywhere(proposal.id)} className="wk-btn wk-btn--secondary">Approve for every project</button>
+          )}
+          <button data-testid="proposal-approve" type="button" disabled={deciding} onClick={() => onApprove(proposal.id)} className="wk-btn wk-btn--primary">{notLanded !== null ? 'Try again' : 'Approve'}</button>
         </> : <>
           <button data-testid="proposal-edit-cancel" type="button" disabled={deciding} onClick={() => setDraft(null)} className="wk-btn wk-btn--secondary">Cancel</button>
           <button data-testid="proposal-approve-edited" type="button" disabled={deciding || !edited}
@@ -126,12 +140,16 @@ function ProposalCard({ proposal, deciding, onApprove, onReject, editable }: {
   );
 }
 
-export function ProposalsList({ proposals, loading, error, decidingIds, onApprove, onReject, onRetry, errorKind, editable = false }: {
+export function ProposalsList({ proposals, loading, error, decidingIds, onApprove, onApproveEverywhere, onReject, onRetry, errorKind, editable = false, notLanded }: {
   proposals: Proposal[];
   loading: boolean;
   error: string | null;
   decidingIds: ReadonlySet<string>;
   onApprove: (id: string, content?: string) => void;
+  /** (studio#1337) A policy whose rule did not land: approve it for every project instead. */
+  onApproveEverywhere?: (id: string) => void;
+  /** (studio#1337) Policy proposals whose last approve did not land their rule, with crew's reason. */
+  notLanded?: ReadonlyMap<string, string>;
   editable?: boolean;
   onReject: (id: string) => void;
   onRetry?: () => void;
@@ -146,7 +164,7 @@ export function ProposalsList({ proposals, loading, error, decidingIds, onApprov
   return (
     <ul data-testid="proposals-list" className="wk-gk-list">
       {proposals.map((proposal) => (
-        <ProposalCard key={proposal.id} editable={editable} proposal={proposal} deciding={decidingIds.has(proposal.id)} onApprove={onApprove} onReject={onReject} />
+        <ProposalCard key={proposal.id} editable={editable} proposal={proposal} deciding={decidingIds.has(proposal.id)} onApprove={onApprove} onApproveEverywhere={onApproveEverywhere} onReject={onReject} notLanded={notLanded?.get(proposal.id) ?? null} />
       ))}
     </ul>
   );

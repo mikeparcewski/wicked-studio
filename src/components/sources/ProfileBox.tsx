@@ -5,7 +5,7 @@ import { KNOWLEDGE_VIEW_PATH, ProfileWireError, profileSource, type SourceProfil
 
 /** What profiling does, said before the person starts it (DES-KNOWLEDGE-DATA-001 §10.2). */
 export const PROFILE_MEANS =
-  'crew counts rows, nulls, distinct values and key overlap through the data gate. It keeps bands, never a value, and files what it learns as data shapes for you to review.';
+  'crew counts rows, nulls, distinct values and key overlap through the data gate. It keeps bands, never a value, and writes what it learns into knowledge as data shapes. Profiling again replaces them.';
 
 const codeOf = (e: unknown): string | null => {
   const c = e instanceof ApiError ? (e.body as { code?: unknown } | undefined)?.code : undefined;
@@ -36,16 +36,20 @@ export function profileRefusal(e: unknown): string {
   }
 }
 
-/** What a profile did, in words: what was read, what was filed, what was already in the queue, what was left out. */
+/** What a profile did, in words: what was read, what it wrote into knowledge, what it left or replaced, what was left out. */
 export function profileWords(p: SourceProfileResponse): string {
   const read = p.relations.filter((r) => r.rows !== null).length;
   const unread = p.relations.length - read;
   const n = (k: number, one: string, many: string): string => `${k} ${k === 1 ? one : many}`;
+  const written = p.written?.length ?? 0;
+  const unchanged = p.unchanged ?? 0;
+  const replaced = p.replaced ?? 0;
   const parts = [
     `Profiled ${n(read, 'table', 'tables')}${p.joins.length > 0 ? `, found ${n(p.joins.length, 'join', 'joins')}` : ''}${p.describes.length > 0 ? `, and ${n(p.describes.length, 'code entity', 'code entities')} named like a table` : ''}.`,
-    p.proposed.length > 0 ? `${n(p.proposed.length, 'data shape is', 'data shapes are')} waiting for your review.` : '',
-    p.alreadyProposed > 0 ? `${n(p.alreadyProposed, 'shape was', 'shapes were')} already in the review queue, unchanged.` : '',
-    p.proposed.length === 0 && p.alreadyProposed === 0 ? 'No data shape was filed.' : '',
+    written > 0 ? `Wrote ${n(written, 'data shape', 'data shapes')} into knowledge.` : '',
+    unchanged > 0 ? `${n(unchanged, 'shape was', 'shapes were')} already in knowledge, unchanged.` : '',
+    replaced > 0 ? `Replaced ${n(replaced, 'older shape', 'older shapes')}.` : '',
+    written === 0 && unchanged === 0 ? 'No data shape was written.' : '',
     unread > 0 ? `${n(unread, 'table', 'tables')} could not be read.` : '',
     (p.notInKnowledge ?? 0) > 0 ? `${n(p.notInKnowledge!, 'table', 'tables')} that knowledge holds are not in crew's catalog and were not profiled.` : '',
     (p.notListed ?? 0) > 0 || p.catalogTruncated === true ? 'The source has more tables than one profile reads; the rest were not profiled.' : '',
@@ -65,8 +69,8 @@ export function relationLine(p: SourceProfileResponse, key: string): string {
 
 /**
  * THE PROFILE BOX of a saved Postgres source (DES-KNOWLEDGE-DATA-001 §10.2, §19 B4): the person starts the value-free
- * profile here; crew answers what it found, in bands, and the data shapes it filed for review, with the way to the
- * review (Understand → Knowledge). Nothing becomes knowledge until the person approves a shape there.
+ * profile here; crew answers what it found, in bands, and the data shapes it wrote into knowledge (crew#1625: the person
+ * started it, so it is their decision and skips the review queue), with the way to them (Understand → Knowledge map).
  */
 export function ProfileBox({ source }: { source: string }): React.ReactElement {
   const [running, setRunning] = useState(false);
@@ -119,7 +123,7 @@ export function ProfileBox({ source }: { source: string }): React.ReactElement {
           <ul className="wk-src-profile-rows" data-testid="source-profile-rows">
             {result.relations.map((r) => <li key={r.key}>{relationLine(result, r.key)}</li>)}
           </ul>
-          <p className="wk-src-note"><a className="wk-link wk-src-profile-link" href={KNOWLEDGE_VIEW_PATH} data-testid="source-profile-review">Review them in Understand → Knowledge map</a></p>
+          <p className="wk-src-note"><a className="wk-link wk-src-profile-link" href={KNOWLEDGE_VIEW_PATH} data-testid="source-profile-review">See them in Understand → Knowledge map</a></p>
         </div>
       )}
     </div>

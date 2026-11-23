@@ -17,6 +17,23 @@ export function asksForRepo(p: Pick<ArtifactProposal, 'question' | 'needs'>): bo
   return missing !== undefined && missing.id === 'repo';
 }
 
+/**
+ * (studio#1335) Which of crew's "Which repository?" choices an asking card shows before "N more", by their index: the
+ * same rule as these chips, every one the words (and their corrections) name plus the first others in crew's order to
+ * fill {@link CHOICES_MAX}. `null` when every choice shows. crew sends every repository in the chat's scope (crew#1791).
+ */
+export function askingChoicesShown(p: Pick<ArtifactProposal, 'question' | 'words' | 'details'>): ReadonlySet<number> | null {
+  const choices = p.question?.choices ?? [];
+  if (choices.length <= CHOICES_MAX) return null;
+  const repos = choices.map((c, i) => {
+    const ref = (c.edit as { repoRef?: unknown } | undefined)?.repoRef;
+    return { i, id: typeof ref === 'string' ? ref : '', name: typeof ref === 'string' ? c.label : '' };
+  });
+  const shown = new Set(reposNamedIn(jobWords(p), repos.filter((r) => r.id !== '')).map((r) => r.i));
+  for (const r of repos) { if (shown.size >= CHOICES_MAX) break; shown.add(r.i); }
+  return shown.size >= choices.length ? null : shown;
+}
+
 /** The repositories offered: those the words name first (in registry order), then the rest by name. */
 export function repoChoices<R extends Pick<RepoEntry, 'id' | 'name'>>(words: string, repos: readonly R[]): { named: R[]; list: R[] } {
   const named = reposNamedIn(words, repos);

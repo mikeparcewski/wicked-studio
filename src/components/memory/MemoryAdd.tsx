@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import { postCapture, toCaptureFile } from '../../api/capture.js';
-import { addMemory, editMemory, isMemoryEditUnsupported, type MemoryItem } from '../../api/memory.js';
+import { addMemory, editMemory, isMemoryEditUnsupported, isMemoryUnsupported, listRetiredMemories, unretireMemory, type MemoryItem, type RetiredMemoryItem } from '../../api/memory.js';
+import { ApiError } from '../../api/errors.js';
 import { approveProposal, listProposals, memoryPayload, proposalKind, rejectProposal, type Proposal } from '../../api/proposals.js';
 import type { Ask, AskAnswer } from '../../api/ask.js';
 import { AskCard, AskRecord } from '../ask/AskCard.js';
@@ -14,8 +15,8 @@ import { AskCard, AskRecord } from '../ask/AskCard.js';
  *                     (`POST /projects/:id/capture`, a read-only run that files proposals), and ends in a
  *                     pick-several of the memories it would keep (kept = approved, unticked = rejected).
  *   MemoryTable       Edit as a table: change many memories' words at once (`POST /memory/edit` each).
- *   MemoryRetired     Show retired: estate erases a retired memory (nothing to list or bring back), so this
- *                     says so, and lists the suggestions you said no to, each of which can be brought back.
+ *   MemoryRetired     Show retired: the retired memories with Restore and Delete for good (crew#1697 soft retire;
+ *                     an older crew erased them, and it says so), then the suggestions you said no to.
  */
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
@@ -261,8 +262,28 @@ export function MemoryTable({ memories, onSaved, onClose }: { memories: readonly
   );
 }
 
-/** Show retired: what estate keeps (nothing of a retired memory) and the suggestions you said no to. */
-export function MemoryRetired({ onClose, onBrought }: { onClose: () => void; onBrought: () => void }): React.ReactElement {
+/** Retired memories shown per page in Show retired. */
+const RETIRED_PAGE = 100;
+
+/**
+ * Show retired. On a crew with soft retire (`soft`, crew#1697 `capabilities.memoryRestore`) it lists the retired
+ * memories (`GET /memory?retired=1`, with when each was retired); Restore brings one back with the same id
+ * (`POST /memory/unretire`) and Delete for good opens the page's delete dialog (`onErase`). On an older crew a retire
+ * erased the memory, so there is nothing to list, and it says so. When the page doesn't know which (`soft === null`:
+ * health pending or unreadable) it lists nothing and says why: an older crew's `GET /memory` ignores `retired=1` and
+ * would answer the LIVE memories. Below each: the suggestions you said no to, each of which can be kept now.
+ *
+ * Every fresh read of the retired list is the truth: a local "Restored" mark lasts only until the next read
+ * (the page bumps `revision` on every change to the retired set and on Refresh).
+ */
+export function MemoryRetired({ soft, revision = 0, onClose, onBrought, onErase }: {
+  soft: boolean | null;
+  /** Bumped by the page on every change to the retired set and on Refresh, so the retired list reads again. */
+  revision?: number;
+  onClose: () => void;
+  onBrought: () => void;
+  onErase: (m: RetiredMemoryItem) => void;
+}): React.ReactElement {
   const [rows, setRows] = useState<Proposal[] | null>(null);
   const [fail, setFail] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -270,6 +291,41 @@ export function MemoryRetired({ onClose, onBrought }: { onClose: () => void; onB
   useEffect(() => {
     listProposals({ state: 'rejected' }).then((ps) => setRows(ps.filter((p) => proposalKind(p) === 'memory').sort((a, b) => b.created_at - a.created_at)), (e: unknown) => setFail(e instanceof Error ? e.message : String(e)));
   }, []);
+  type RetiredRead = { kind: 'loading' } | { kind: 'ok'; rows: RetiredMemoryItem[] } | { kind: 'unsupported' } | { kind: 'failed'; message: string };
+  const [retired, setRetired] = useState<RetiredRead>({ kind: 'loading' });
+  const [restored, setRestored] = useState<string[]>([]);
+  const [restoreFail, setRestoreFail] = useState<string | null>(null);
+  /** What the last Restore brought back: the row leaves the list on the next read, so the words stay here. */
+  const [restoredNote, setRestoredNote] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
+  /** How many retired memories are shown; Show more adds a page (a long inventory stays reachable). */
+  const [shownRetired, setShownRetired] = useState(RETIRED_PAGE);
+  useEffect(() => {
+    if (soft !== true) return undefined;
+    let alive = true;
+    listRetiredMemories().then(
+      (rs) => { if (alive) { setRetired({ kind: 'ok', rows: rs }); setRestored([]); } },
+      (e: unknown) => { if (alive) setRetired(isMemoryUnsupported(e) ? { kind: 'unsupported' } : { kind: 'failed', message: e instanceof Error ? e.message : String(e) }); },
+    );
+    return () => { alive = false; };
+  }, [soft, revision, tick]);
+  const restore = async (m: RetiredMemoryItem): Promise<void> => {
+    if (busy !== null) return;
+    setBusy(m.id);
+    setRestoreFail(null);
+    try {
+      await unretireMemory({ memory_id: m.id });
+      setRestored((r) => [...r, m.id]);
+      setRestoredNote(`Restored: ${m.content.length > 80 ? `${m.content.slice(0, 79)}…` : m.content}. It is back in your memories.`);
+      onBrought();
+    } catch (e) {
+      setRestoreFail(isMemoryUnsupported(e) ? 'This daemon’s memory store can’t restore a memory yet, so nothing changed.'
+        : e instanceof ApiError && e.status === 404 ? 'That memory is no longer retired (it may have been restored or deleted already). Nothing changed.'
+        : `Couldn’t restore it: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBusy(null);
+    }
+  };
   const bring = async (p: Proposal): Promise<void> => {
     const content = memoryPayload(p).content;
     if (busy !== null || content === null) return;
@@ -290,7 +346,51 @@ export function MemoryRetired({ onClose, onBrought }: { onClose: () => void; onB
         <b>Retired</b>
         <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="memory-retired-close" onClick={onClose}>Back to memories</button>
       </div>
-      <p className="wk-learn-quiet" data-testid="memory-retired-erased">A retired memory is erased: the memory store keeps no copy, so it can’t be listed or brought back. Below are the suggestions you said no to; you can keep any of them now.</p>
+      {soft === true ? (
+        <>
+          <p className="wk-learn-quiet" data-testid="memory-retired-kept">A retired memory is hidden from helpers and kept. Restore brings it back as it was; Delete for good erases it.</p>
+          {restoreFail !== null && <p className="wk-learn-quiet wk-learn-bad" role="alert" data-testid="memory-retired-restore-fail">{restoreFail}</p>}
+          {restoredNote !== null && <p className="wk-learn-quiet" role="status" data-testid="memory-retired-restored-note">{restoredNote}</p>}
+          {retired.kind === 'loading' && <p className="wk-learn-quiet">Reading…</p>}
+          {retired.kind === 'unsupported' && <p className="wk-learn-quiet" data-testid="memory-retired-unsupported">This daemon’s memory store can’t list retired memories yet (it needs a newer wicked-estate).</p>}
+          {retired.kind === 'failed' && (
+            <p className="wk-learn-quiet wk-learn-bad" role="alert" data-testid="memory-retired-list-fail">
+              Couldn’t read the retired memories: {retired.message} <button type="button" className="wk-link wk-se-linkbtn" onClick={() => setTick((t) => t + 1)}>Try again</button>
+            </p>
+          )}
+          {retired.kind === 'ok' && retired.rows.length === 0 && <p className="wk-learn-quiet" data-testid="memory-retired-none">No memory is retired.</p>}
+          {retired.kind === 'ok' && retired.rows.length > 0 && (
+            <ul className="wk-learn-rules" data-testid="memory-retired-memories">
+              {retired.rows.slice(0, shownRetired).map((m) => (
+                <li key={m.id} className="wk-learn-rule wk-mem-retired-row" data-testid="memory-retired-memory" data-memory-id={m.id}>
+                  <span className="wk-learn-dot wk-learn-dot--off" aria-hidden />
+                  <span>
+                    <span className="wk-learn-rule-t">{m.content}</span>
+                    <span className="wk-learn-rule-s">{typeof m.retired_at === 'number' ? `retired ${new Date(m.retired_at * 1000).toLocaleDateString()}` : 'retired'}</span>
+                  </span>
+                  {restored.includes(m.id) ? <span className="wk-learn-quiet" data-testid="memory-retired-restored">Restored</span> : (
+                    <span className="wk-learn-row wk-mem-retired-acts">
+                      <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="memory-retired-restore" disabled={busy !== null} onClick={() => void restore(m)}>{busy === m.id ? 'Restoring…' : 'Restore'}</button>
+                      <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="memory-retired-erase" disabled={busy !== null} onClick={() => onErase(m)}>Delete for good…</button>
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {retired.kind === 'ok' && retired.rows.length > shownRetired && (
+            <p className="wk-learn-quiet" data-testid="memory-retired-more-line">
+              Showing {shownRetired} of {retired.rows.length} retired memories.{' '}
+              <button type="button" className="wk-link wk-se-linkbtn" data-testid="memory-retired-more" onClick={() => setShownRetired((k) => k + RETIRED_PAGE)}>Show more</button>
+            </p>
+          )}
+          <p className="wk-learn-quiet"><b>Suggestions you said no to</b> · you can keep any of them now.</p>
+        </>
+      ) : soft === null ? (
+        <p className="wk-learn-quiet" data-testid="memory-retired-unknown">Studio couldn’t read what this daemon supports, so it can’t tell whether retired memories are kept. Refresh the page to try again. Below are the suggestions you said no to; you can keep any of them now.</p>
+      ) : (
+        <p className="wk-learn-quiet" data-testid="memory-retired-erased">A retired memory is erased: the memory store keeps no copy, so it can’t be listed or brought back. Below are the suggestions you said no to; you can keep any of them now.</p>
+      )}
       {fail !== null && <p className="wk-learn-quiet wk-learn-bad" role="alert">{fail}</p>}
       {rows === null && fail === null && <p className="wk-learn-quiet">Reading…</p>}
       {rows !== null && rows.length === 0 && <p className="wk-learn-quiet" data-testid="memory-retired-empty">No suggestion has been said no to.</p>}

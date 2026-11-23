@@ -81,7 +81,8 @@ const OVERLAPS = new Set(['empty', 'none', 'some', 'most', 'all']);
 /** A profile as crew answered it, checked field by field; the lists it needs must be there, the rest is dropped. */
 export function readSourceProfile(raw: unknown): SourceProfileResponse {
   const r = isObj(raw) ? raw : null;
-  if (r === null || str(r['name']) === null || !Array.isArray(r['relations']) || !Array.isArray(r['proposed'])) {
+  // (crew#1625) A crew that still files a profile for review answers no `written`: it is not read as an empty profile.
+  if (r === null || str(r['name']) === null || !Array.isArray(r['relations']) || !Array.isArray(r['written'])) {
     throw new ProfileWireError('crew answered the profile in a form this studio does not read: update studio or crew');
   }
   const relations = (r['relations'] as unknown[]).flatMap((x): SourceProfileResponse['relations'] => {
@@ -105,7 +106,8 @@ export function readSourceProfile(raw: unknown): SourceProfileResponse {
     return [{ from: str(j['from'])!, to: str(j['to'])!, columns: strs(j['columns']), references: strs(j['references']), basis: j['basis'] === 'fk' ? 'fk' : 'name_type', overlap: typeof j['overlap'] === 'string' && OVERLAPS.has(j['overlap']) ? (j['overlap'] as SourceProfileJoin['overlap']) : null }];
   });
   const describes = (Array.isArray(r['describes']) ? r['describes'] : []).flatMap((d): SourceProfileResponse['describes'] => (isObj(d) && str(d['relation']) !== null && str(d['name']) !== null ? [{ relation: str(d['relation'])!, repo: str(d['repo']) ?? '', name: str(d['name'])!, kind: str(d['kind']) ?? '', file: str(d['file']) ?? '' }] : []));
-  const proposed = (r['proposed'] as unknown[]).flatMap((p): SourceProfileResponse['proposed'] => (isObj(p) && str(p['id']) !== null ? [{ id: str(p['id'])!, relation: str(p['relation']) ?? '' }] : []));
+  const written = (r['written'] as unknown[]).flatMap((p): NonNullable<SourceProfileResponse['written']> => (isObj(p) && str(p['id']) !== null ? [{ id: str(p['id'])!, relation: str(p['relation']) ?? '' }] : []));
+  const count = (v: unknown): number => (typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : 0);
   const cs = isObj(r['codeSearch']) ? r['codeSearch'] : {};
   const n = (v: unknown): number | undefined => (typeof v === 'number' && v > 0 ? v : undefined);
   return {
@@ -115,8 +117,11 @@ export function readSourceProfile(raw: unknown): SourceProfileResponse {
     relations,
     joins,
     describes,
-    proposed,
-    alreadyProposed: typeof r['alreadyProposed'] === 'number' ? r['alreadyProposed'] : 0,
+    written,
+    unchanged: count(r['unchanged']),
+    replaced: count(r['replaced']),
+    proposed: [],
+    alreadyProposed: 0,
     codeSearch: { searched: strs(cs['searched']), notSearched: strs(cs['notSearched']) },
     ...(n(r['notInKnowledge']) !== undefined ? { notInKnowledge: n(r['notInKnowledge'])! } : {}),
     ...(n(r['notListed']) !== undefined ? { notListed: n(r['notListed'])! } : {}),

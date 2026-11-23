@@ -6,7 +6,7 @@ vi.mock('../src/api/client.js', () => ({ apiFetch: (...a: unknown[]) => apiFetch
 
 import { ApiError } from '../src/api/errors.js';
 import { SourceSheet } from '../src/components/sources/SourceSheet.js';
-import { CATALOG, pgPreview, pgServer, restPreview, restServer, UNCONFIRMED_WORDS, unconfirmedBody, WRITER } from './sourcesFixtures.js';
+import { CATALOG, pgPreview, pgServer, restPreview, restServer, savedHash, UNCONFIRMED_WORDS, unconfirmedBody, WRITER } from './sourcesFixtures.js';
 
 /**
  * "Add a data source" (DES-APPS-001 §5, mockup state A; K3 acceptance) over a mocked crew wire:
@@ -444,7 +444,8 @@ describe('crew#1295: a saved REST source\'s reads are accepted, or withdrawn, on
     fireEvent.click(screen.getByTestId('source-read-accept-tick'));
     await waitFor(() => expect(screen.getByTestId('source-read-accept').getAttribute('data-accepted')).toBe('true'));
     const patch = calls.filter((c) => c.method === 'PATCH');
-    expect(patch).toEqual([expect.objectContaining({ path: '/mcp/tools/mcp%3Atickets-api%2Flist_tickets', body: { readAccepted: true } })]);
+    // crew#1788: the accept names the saved schema the row showed.
+    expect(patch).toEqual([expect.objectContaining({ path: '/mcp/tools/mcp%3Atickets-api%2Flist_tickets', body: { readAccepted: true, expectedSchemaHash: savedHash('list_tickets') } })]);
     expect(screen.getByTestId('source-read-acceptance-count').textContent).toBe('1 of 1 accepted');
     expect(onReread).toHaveBeenCalledTimes(1);
   });
@@ -464,6 +465,17 @@ describe('crew#1295: a saved REST source\'s reads are accepted, or withdrawn, on
     fireEvent.click(screen.getByTestId('source-read-accept-tick'));
     expect((await screen.findByTestId('source-read-accept-error')).textContent).toMatch(/test and save the source again/);
     expect(screen.getByTestId('source-read-accept').getAttribute('data-accepted')).toBe('false');
+  });
+
+  it('crew#1788: a schema saved since the row was shown is refused, said so, and the source is read again', async () => {
+    const onReread = vi.fn();
+    // crew's answer (`mcp/registry.ts` patchTool, `api/mcp.ts` fail()): 409 {error, code: 'schema_changed'}, nothing changed.
+    wire((subject) => Promise.reject(new ApiError(409, `${subject}'s saved schema changed since it was shown: read the tool again and review the new schema`, { error: 'x', code: 'schema_changed' })));
+    savedRest(restServer(false), onReread);
+    fireEvent.click(screen.getByTestId('source-read-accept-tick'));
+    expect((await screen.findByTestId('source-read-accept-error')).textContent).toMatch(/saved schema changed since it was shown here, so nothing was accepted/);
+    expect(screen.getByTestId('source-read-accept').getAttribute('data-accepted')).toBe('false');
+    expect(onReread).toHaveBeenCalledTimes(1);
   });
 
   it('an older crew that sends no readAccepted gets no box', () => {

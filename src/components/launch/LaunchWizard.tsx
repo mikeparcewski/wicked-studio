@@ -13,7 +13,7 @@ import { QeOffNote } from '../QeOffNote.js';
 import { workflowItems } from '../../board/workflowCommand.js';
 import { sessionPath } from '../../board/sessionModel.js';
 import { seatLabel, userSeats } from '../../board/seatNames.js';
-import { NO_WORKER_PICKED, onlyReviewersChosen, seatCanCarry, seatJoinStanding } from '../gateVerdictModel.js';
+import { NO_WORKER_PICKED, onlyReviewersChosen, REVIEWS_ONLY_WORDS, reviewsOnly, seatCanCarry, seatJoinStanding, WORKS_ONLY_NOTE, WORKS_ONLY_WORDS, worksOnly } from '../gateVerdictModel.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from '../composerDefaults.js';
 import type { ConfirmMode } from '../ContextPopover.js';
 import { useModalEscape } from '../Modal.js';
@@ -250,7 +250,9 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   const projectName = filedProject === null ? null : (projects.find((p) => p.id === filedProject)?.name ?? null);
 
   // Options: the helpers a workflow launch convenes (council-enabled, addressable), minus the dropped.
-  const eligible = useMemo(() => userSeats(roster).filter((s) => s.enabled_for_council), [roster]);
+  // studio#1311: a work-only helper (council off, seated for work) is listed too, off until the person turns it on.
+  const eligible = useMemo(() => userSeats(roster).filter((s) => s.enabled_for_council || worksOnly(s)), [roster]);
+  const workOnly = useMemo(() => new Set(eligible.filter((s) => worksOnly(s)).map((s) => s.key)), [eligible]);
   // (PRODUCT-WORKS J4) Only a helper that can take work now is picked by default: one that is signed
   // out, benched (out of quota until its lift time) or refused work by this computer is shown greyed
   // out with why, and joins the job only when the operator turns it on. A reviewer-only seat joins: it votes (the
@@ -259,7 +261,8 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
     const st = seatJoinStanding(s);
     return st.state === 'ready' || st.state === 'unknown' ? [] : [[s.key, st.state === 'signed-out' ? 'signed out' : st.note] as const];
   })), [eligible]);
-  const isOff = (key: string): boolean => (unusable.has(key) ? !picked.includes(key) : seatOff(key, dropped, picked));
+  const offUnlessPicked = (key: string): boolean => unusable.has(key) || workOnly.has(key);
+  const isOff = (key: string): boolean => (offUnlessPicked(key) ? !picked.includes(key) : seatOff(key, dropped, picked));
   const seats = eligible.filter((s) => !isOff(s.key));
   const offerReduced = reducedCap && seats.length === 1;
   // The Lead agent (DES-TEAMING-002 §8.1): offered when the daemon takes it and there is a choice to
@@ -726,9 +729,11 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
                           aria-describedby={why !== undefined ? 'launch-wizard-unusable-note' : isOptInKey(s.key) ? 'launch-wizard-optin-note' : undefined}
                           title={why !== undefined ? `${seatLabel(s)} cannot take work now: ${why}` : undefined}
                           className={`wk-composer-chip wk-composer-seat${on ? '' : ' wk-composer-seat--off'}${why !== undefined ? ' wk-composer-seat--unusable' : ''}`}
-                          onClick={() => toggleSeat(s.key, why !== undefined)}
+                          onClick={() => toggleSeat(s.key, offUnlessPicked(s.key))}
                         >
-                          {seatLabel(s)}
+                          <span className="wk-composer-seat-name">{seatLabel(s)}</span>
+                          {reviewsOnly(s) && <span className="wk-composer-seat-role" data-testid="launch-wizard-seat-role"> · {REVIEWS_ONLY_WORDS}</span>}
+                          {workOnly.has(s.key) && <span className="wk-composer-seat-role" data-testid="launch-wizard-seat-role"> · {WORKS_ONLY_WORDS}</span>}
                         </button>
                       );
                     })}
@@ -746,6 +751,11 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
                     </span>
                   )}
                   <span className="wk-field-note">Who plans, builds and checks the work. Different helpers check each other’s work.</span>
+                  {workOnly.size > 0 && (
+                    <span className="wk-field-note" data-testid="launch-wizard-workonly-note">
+                      {eligible.filter((s) => workOnly.has(s.key)).map(seatLabel).join(', ')}: {WORKS_ONLY_NOTE}.
+                    </span>
+                  )}
                   {eligible.some((s) => isOptInKey(s.key)) && (
                     <span id="launch-wizard-optin-note" className="wk-field-note" data-testid="launch-wizard-optin-note">
                       {eligible.filter((s) => isOptInKey(s.key)).map(seatLabel).join(', ')}: {OPT_IN_NOTE}

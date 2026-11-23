@@ -2,6 +2,7 @@
  * Wire fixtures for the Apps source sheet and data panel, shaped exactly like crew's K1 answers
  * (api-types 0.175.0; crew e9eab43 `src/sources/routes.ts`, `api/mcp.ts`).
  */
+import { createHash } from 'node:crypto';
 import type {
   McpPreviewResponse,
   McpServer,
@@ -105,6 +106,11 @@ export function restPreview(hash: string, egress: McpPreviewResponse['egress'] =
   };
 }
 
+/** A saved tool's schema hash as crew writes it: 64 lowercase hex characters (sha256). */
+export function savedHash(name: string): string {
+  return createHash('sha256').update(`schema:${name}`).digest('hex');
+}
+
 /**
  * A saved REST source with one read and one write, each tool as crew's `toolView` writes it (`mcp/registry.ts`: the
  * saved schema, its class, and `readAccepted: effectiveReadAccepted(t)`, api-types 0.219.0). `accepted` = the read's
@@ -114,7 +120,8 @@ export function restServer(accepted: boolean | null = false): McpServer {
   const tool = (name: string, cls: 'read' | 'write') => ({
     name, rest: null, subject: `mcp:tickets-api/${name}`, description: null, annotations: null, inputSchema: null,
     derivedClass: cls, classOverride: null, class: cls, enabled: cls === 'read', status: 'registered' as const,
-    schemaHash: `h-${name}`, observedSchemaHash: `h-${name}`, disclosure: null,
+    // crew's saved-schema hash is sha256 hex (`mcp/registry.ts` hashOf), the shape PATCH's expectedSchemaHash must match.
+    schemaHash: savedHash(name), observedSchemaHash: savedHash(name), disclosure: null,
     ...(accepted === null ? {} : { readAccepted: cls === 'read' ? accepted : false }),
   });
   // A REST record carries no `sql` or `address` (crew writes neither for it).

@@ -7,7 +7,7 @@ import { ArtifactVersions, lensVersion, useVersionList, VersionLens } from './Ar
 import { NoEditorPage, PluginArtifact } from './PluginArtifact.js';
 import { useEditorFor, useEditors } from '../../store/editors.js';
 import { OpenWith, PluginCard } from '../editorHost/PluginCard.js';
-import { hasAdapter, type AdapterSource } from '../../editors/hostApi.js';
+import { hasAdapter, type AdapterSource, type ArtifactAttempt } from '../../editors/hostApi.js';
 // The adapters register on import; the routing above asks which exist.
 import '../../editors/adapters/index.js';
 
@@ -46,6 +46,8 @@ type ArtifactMorphProps = {
   slot?: ArtifactSlot;
   /** Who produced the version shown (H3 passes the seat), for the card's turn line. */
   producedBy?: string | null;
+  /** crew#1745: how the run making it stands (RunArtifacts passes its run's), for the card's pill. */
+  attempt?: ArtifactAttempt;
 };
 
 /**
@@ -79,7 +81,7 @@ export function ArtifactMorph(props: ArtifactMorphProps): React.ReactElement {
         {props.slot === undefined && <OpenWith kind={kind} current={editor} />}
         <PluginCard
           key={editor.id}
-          binding={{ artifactKey: props.artifactKey, title: props.title, kind, source, projectId: props.projectId, docId: props.docId, ...(runId !== undefined ? { runId } : {}), composerKey: props.composerKey, repoId: props.repoId ?? null, producedBy: props.producedBy ?? null }}
+          binding={{ artifactKey: props.artifactKey, title: props.title, kind, source, projectId: props.projectId, docId: props.docId, ...(runId !== undefined ? { runId } : {}), composerKey: props.composerKey, repoId: props.repoId ?? null, producedBy: props.producedBy ?? null, ...(props.attempt !== undefined ? { attempt: props.attempt } : {}) }}
           editor={editor}
         />
       </>

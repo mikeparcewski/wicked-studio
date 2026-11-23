@@ -18,12 +18,13 @@ import { useComposerPrefsStore } from '../store/composerPrefs.js';
 import { useGateStore } from '../store/gates.js';
 import { anyModalOpen, useLayerStore } from '../store/layers.js';
 import { useProvenanceStore } from '../store/provenance.js';
+import { useLaunchNotices } from '../store/launchNotices.js';
 import { clearRetryPrefill, confirmModeOf, peekRetryPrefill, type RetryPrefill } from '../store/retryPrefill.js';
 import { clearSteerPrefill, peekSteerPrefill } from '../store/steerPrefill.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { seatStandingWord } from './HealthRailSection.js';
 import { noCarryingSeatReason } from './gateVerdictModel.js';
-import { baseSkillRefusalOf, describeBaseSkill, gatePostureWord, LAUNCH_PROBE_AFTER_SECS, launchNeedsRepo, launchSubmit, newLaunchId, readyLead } from '../board/launchModel.js';
+import { assuranceNoticeOf, baseSkillRefusalOf, describeBaseSkill, gatePostureWord, LAUNCH_PROBE_AFTER_SECS, launchNeedsRepo, launchSubmit, newLaunchId, readyLead } from '../board/launchModel.js';
 import { isSystemWorkflowIn, setCachedWorkflows } from '../store/workflowCache.js';
 import { loadPresets, presetSystemFlag, usePlanCatalog } from '../store/planCatalog.js';
 import { menuToken, dropToken } from '../board/planDraft.js';
@@ -920,6 +921,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
 
     try {
       let launched;
+      /** The body crew accepted (the retry without `deliver` when that was it): a relaunch sends the same. */
+      let sent = body;
       try {
         launched = await api.launchRun(body);
       } catch (err) {
@@ -939,6 +942,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           const withoutDeliver = { ...body };
           delete withoutDeliver.deliver;
           launched = await api.launchRun(withoutDeliver);
+          sent = withoutDeliver;
         } else {
           throw err;
         }
@@ -947,6 +951,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       // The studio witnessed this launch — the provenance line's honest
       // 'via studio' channel derives from exactly this record (§3.3).
       useProvenanceStore.getState().markLaunchedHere(newRunId);
+      // studio#1239: crew started it with no seat that can judge another's work; the job's session says so, with the
+      // confirmed relaunch in reduced assurance (the same body as sent, merged with crew's `retryWith`).
+      const notice = assuranceNoticeOf(launched);
+      if (notice !== null) useLaunchNotices.getState().put({ runId: newRunId, notice, body: sent }, sent.chatId ?? null);
       setProblem('');
       // Opened early from the "your run started" offer: the operator is already there.
       if (openedEarly.current !== newRunId) onLaunched(newRunId);

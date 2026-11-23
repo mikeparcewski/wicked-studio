@@ -361,14 +361,23 @@ def post(path: str, body: dict, now0: int):
             return 404, {"error": "unknown run"}
         with _lock:
             POSTS.append({"runId": rid, "route": "pause", "body": body})
-        if c["run"]["session"]["power"]["pause"] is None:
+        # crew's route (crew#1739, `api/routes.ts` POST /runs/:id/power/pause): an answer naming a pause that is not the
+        # open one is refused 409 'Pause changed' with the pause open now; a 200 carries `answered`, the pause read open.
+        pause = c["run"]["session"]["power"]["pause"]  # the corpus folds the routes' changes (`_over`) in
+        open_ = None if pause is None else {"checkpoint": pause["checkpoint"], "at": pause["at"]}
+        named = "checkpoint" in body or "at" in body
+        if named and (open_ is None or body.get("checkpoint", open_["checkpoint"]) != open_["checkpoint"] or body.get("at", open_["at"]) != open_["at"]):
+            reason = ("This pause was already answered, and the run is not paused now. Nothing was changed." if open_ is None
+                      else f"This answer was for an earlier pause; the run is now paused at checkpoint {open_['checkpoint']}. Read the pause again. Nothing was changed.")
+            return 409, {"error": "Pause changed", "reason": reason, "open": open_}
+        if open_ is None:
             return 409, {"error": "not paused", "reason": "this job is not paused"}
         with _lock:
             ov = _over.setdefault(rid, {})
             ov["pause"] = None
             if body.get("decision") == "switch_phased":
                 ov["on"] = False
-        return 200, _view(now0, rid)
+        return 200, {**_view(now0, rid), "answered": open_}
     if len(parts) != 6 or parts[3] != "runs" or not parts[4].startswith("r-pm-"):
         return None
     rid, leaf = parts[4], parts[5]

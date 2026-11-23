@@ -185,6 +185,35 @@ describe('the receipt model', () => {
     expect(assuranceKind(receiptOf(wire({ ran: ['judge'], creator: null, judge: null }))!)).toBe('floor-only');
   });
 
+  it('core#1799: a gate where no judge was due does not make a judged run partly independent before the lift', () => {
+    const view = makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS);
+    const notDue = { instrument: 'judge', reason: 'not_applicable', detail: 'a scripted step: no seat\'s work for a judge to review' };
+    // The build judged on a distinct seat, then a scripted test step: the engine's delivery_receipt keeps its label.
+    const judged = deliveryReceiptOf(view, [
+      { type: 'gateEvaluated', ord: 1, assurance: wire({ ran: ['repo_checks', 'judge'], creator: 'claude', judge: 'codex' }) },
+      { type: 'gateEvaluated', ord: 2, assurance: wire({ ran: ['repo_checks'], creator: 'claude', skipped: [notDue] }) },
+    ] as unknown as CoreEvent[])!;
+    expect(judged.skipped).toEqual([]);
+    expect(assuranceKind(judged)).toBe('independent');
+    expect(receiptWords(judged, true).label).toBe('Independently accepted');
+    // No gate ran a judge: the not-due skip speaks for the delivery.
+    const none = deliveryReceiptOf(view, [
+      { type: 'gateEvaluated', ord: 1, assurance: wire({ ran: ['repo_checks', 'distinct_evaluator'], creator: 'claude', evaluator: 'codex', skipped: [notDue] }) },
+      { type: 'gateEvaluated', ord: 2, assurance: wire({ ran: ['repo_checks'], creator: 'claude', skipped: [notDue] }) },
+    ] as unknown as CoreEvent[])!;
+    expect(none.skipped).toEqual([notDue]);
+    expect(assuranceKind(none)).toBe('partial');
+    // A not-due gate never displaces another gate's real judge skip, even when it comes first.
+    const err = { instrument: 'judge', reason: 'error', detail: null };
+    const mixed = deliveryReceiptOf(view, [
+      { type: 'gateEvaluated', ord: 1, assurance: wire({ ran: ['repo_checks'], creator: 'claude', skipped: [notDue] }) },
+      { type: 'gateEvaluated', ord: 2, assurance: wire({ ran: ['judge'], creator: 'claude', judge: 'codex' }) },
+      { type: 'gateEvaluated', ord: 3, assurance: wire({ ran: ['repo_checks'], creator: 'claude', skipped: [err] }) },
+    ] as unknown as CoreEvent[])!;
+    expect(mixed.skipped).toEqual([err]);
+    expect(assuranceKind(mixed)).toBe('partial');
+  });
+
   it('codex r1: a re-dispatch voids the previous attempt\'s receipt (gate and lift)', () => {
     const view = makeView({ id: RUN, status: 'awaiting_human', verified_tree: 'cafe00' } as never, UNITS);
     const log = [

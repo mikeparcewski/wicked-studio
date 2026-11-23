@@ -42,7 +42,7 @@ import { RunQuestions } from './ThreadQuestions.js';
 import { OrphanedRow } from './RunConversation.js';
 import { RunArtifacts } from './RunArtifacts.js';
 import { asksForProject, JobProjectChoices } from './JobProjectChoices.js';
-import { asksForRepo, JobRepoChoices } from './JobRepoChoices.js';
+import { askingChoicesShown, asksForRepo, JobRepoChoices } from './JobRepoChoices.js';
 import { asksForRequirements, JobRequirementsChoices } from './JobRequirementsChoices.js';
 import { movedFrom, useJobMoves } from '../../store/jobMoves.js';
 import { openChat } from '../../store/chatFlow.js';
@@ -139,6 +139,17 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   /** The run the open "Stop the job?" confirm was made for: it never stops another run. */
   const [confirmStop, setConfirmStop] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  /** (studio#1335) The proposal target whose every question choice is shown ("N more" pressed); another target folds. */
+  const [allChoicesFor, setAllChoicesFor] = useState<string | null>(null);
+  /** The first choice "N more" revealed: it takes the focus once drawn. */
+  const revealFrom = useRef<string | null>(null);
+  const repliesBox = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const id = revealFrom.current;
+    if (id === null || allChoicesFor === null) return;
+    revealFrom.current = null;
+    repliesBox.current?.querySelector<HTMLButtonElement>(`[data-reply="${CSS.escape(id)}"]`)?.focus();
+  }, [allChoicesFor]);
   const [openSwap, setOpenSwap] = useState<string | null>(null);
   const [explain, setExplain] = useState(false);
   const head = lineage.head;
@@ -554,7 +565,13 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   const repoJob = (v.proposal.launch === 'run' || v.proposal.launch === 'compose') && ((v.proposal.repoRefs ?? v.proposal.repos).length > 0);
   const tone = v.needsYou ? ' wk-pass--needs' : v.phase === 'delivered' ? ' wk-pass--ok' : v.phase === 'failed' || v.phase === 'stopped' ? ' wk-pass--bad'
     : v.phase === 'revising' || v.phase === 'swapPending' || v.phase === 'planning' || v.phase === 'replanning' || v.phase === 'starting' ? ' wk-pass--busy' : '';
-  const replies = v.replies;
+  // studio#1335: crew sends every repository in scope as a choice; the card shows the named ones and enough to fill the
+  // chips' count, then "N more" (JobRepoChoices' rule). The others stay replies (a typed answer can still bind one).
+  const shownChoices = v.phase === 'asking' && allChoicesFor !== pt ? askingChoicesShown(head.proposal) : null;
+  const replies = shownChoices === null ? v.replies : v.replies.filter((r) => !r.id.startsWith('choice:') || shownChoices.has(Number(r.id.slice('choice:'.length))));
+  const moreChoices = v.replies.length - replies.length;
+  // "N more" follows the last choice shown; pressing it moves focus to the first choice it reveals (it unmounts itself).
+  const lastShownChoice = moreChoices > 0 ? replies.filter((r) => r.id.startsWith('choice:')).at(-1)?.id ?? null : null;
   const progress = v.progress;
   const headQuestion = head.proposal.question ?? null;
   const requirementsQuestion = asksForRequirements(head.proposal);
@@ -705,6 +722,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
                   {s.asks === 'if-fails' && <em className="wk-pass-asks"> asks you if its check fails</em>}
                   {s.asks === 'maybe' && <em className="wk-pass-asks"> may ask you</em>}
                   {s.floor && <em className="wk-pass-floor"> added for this risk</em>}
+                  {s.controls.length > 0 && <span data-testid="job-passage-plan-controls" className="wk-pass-ctl"> · {s.controls.join(' · ')}</span>}
                   {s.added && <span className="wk-visually-hidden"> (new in this version)</span>}
                 </span>
               </li>
@@ -841,7 +859,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       {runId !== null && <InlineUndo host="job-passage" keys={[gateKeyOf(runId), `stop:${runId}`]} />}
 
       {replies.length > 0 && confirmStop === null && (
-        <div role="group" aria-label={`Replies to the job, ${v.versionLabel}`} data-testid="job-passage-replies" className="wk-pass-acts">
+        <div ref={repliesBox} role="group" aria-label={`Replies to the job, ${v.versionLabel}`} data-testid="job-passage-replies" className="wk-pass-acts">
           {replies.map((r, i) => {
             const binds = bound !== null && bound.replyKey === `${lineage.lineage}:${r.id}`;
             return (
@@ -852,6 +870,13 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
                   {r.label}{r.id === 'start' && r.enabled ? ' →' : ''}{binds ? ' · answering' : ''}
                 </button>
                 {!r.enabled && r.held !== undefined && <span data-testid="job-passage-held" className="wk-pass-why">{r.held}</span>}
+                {r.id === lastShownChoice && <>
+                  <span aria-hidden className="wk-pass-dot">·</span>
+                  <button type="button" data-testid="job-passage-choices-more" className="wk-pass-act wk-pass-act--quiet"
+                    onClick={() => { revealFrom.current = v.replies.find((x) => x.id.startsWith('choice:') && !replies.includes(x))?.id ?? null; setAllChoicesFor(pt); }}>
+                    {moreChoices} more
+                  </button>
+                </>}
               </Fragment>
             );
           })}

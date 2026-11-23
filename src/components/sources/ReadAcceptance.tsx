@@ -13,6 +13,7 @@ const REFUSALS: Readonly<Record<string, string>> = {
   read_accept_human_only: 'Only a person signed in to studio can accept or withdraw a read.',
   not_a_read: 'crew doesn’t class this operation as a read, so it can’t be accepted as one.',
   not_registered: 'This operation changed since the source was saved: test and save the source again, then accept it.',
+  schema_changed: 'This operation’s saved schema changed since it was shown here, so nothing was accepted. Studio read the source again: review the operation, then accept it.',
 };
 
 /**
@@ -59,7 +60,9 @@ export function ReadAcceptance({ server, onChanged }: { server: McpServer; onCha
     setBusy(t.subject);
     setError(null);
     try {
-      const tool = (await mcpApi.setTool(t.subject, { readAccepted: on })) as AcceptableTool;
+      // (crew#1788) An accept names the saved schema this row showed: one saved since then is refused, never accepted unseen.
+      const seen = on && t.schemaHash !== null ? { expectedSchemaHash: t.schemaHash } : {};
+      const tool = (await mcpApi.setTool(t.subject, { readAccepted: on, ...seen })) as AcceptableTool;
       if (alive.current) {
         setAnswered((m) => ({ ...m, [t.subject]: tool.readAccepted === true }));
         setUnknown((u) => { const n = new Set(u); n.delete(t.subject); return n; });

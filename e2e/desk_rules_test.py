@@ -162,7 +162,7 @@ with sync_playwright() as p:
         page.screenshot(path=str(SHOTS / "desk-rules-page-missing.png"))
         fail("rule-page", f"the rule drawer did not open from the row: {e}")
     sentence = drawer.get_by_test_id("rule-sentence").inner_text()
-    check("rule-page", sentence == "A Development rule for upload-endpoint — helpers are told about it when it applies; it never blocks."
+    check("rule-page", sentence == "A Development rule for upload-endpoint — helpers are told about it when it applies, and review checks work against it: a breach can hold a gate."
           and drawer.get_by_test_id("steering-rule-statement").inner_text() == "Always check the payment provider’s records, not just our database",
           sentence=sentence)
 
@@ -231,16 +231,18 @@ with sync_playwright() as p:
         pass
     check("rules-close", page.get_by_test_id("steering-rule-drawer").count() == 0 and page.get_by_test_id("rules-row").count() == 3,
           drawers=page.get_by_test_id("steering-rule-drawer").count(), rows=page.get_by_test_id("rules-row").count())
-    # "Edit as a table" reaches the steering grid (DES-steer-eval §2.2); Back returns to the Steer surface.
-    # Behind the header's ⋯ menu since the calm page (2026-10-26; no header button since 2026-11-01).
-    page.get_by_test_id("steer-more-button").click()
-    page.get_by_test_id("steer-table").click()
-    page.wait_for_function("() => " + ADDR + ".pathname === '/steering/policies' && " + ADDR + ".searchParams.get('view') === 'table'", timeout=8000)
+    # The Table layout is a toggle on the one Steer page (studio#689 ruling b): same heading, the grid in place of the
+    # list; Back returns to the list.
+    page.get_by_test_id("steer-layout-table").click()
+    page.wait_for_function("() => " + ADDR + ".pathname === '/rules' && " + ADDR + ".searchParams.get('view') === 'table'", timeout=8000)
     try:
-        page.get_by_test_id("steering-page").wait_for(state="visible", timeout=15000)
+        page.get_by_test_id("steering-rule-grid").wait_for(state="visible", timeout=15000)
     except Exception as e:  # noqa: BLE001
         page.screenshot(path=str(SHOTS / "desk-rules-all-missing.png"))
-        fail("rules-all", f"'Edit as a table' did not reach the steering grid: {e}")
+        fail("rules-all", f"the Table toggle did not show the steering grid: {e}")
+    check("rules-table-one-page", page.get_by_test_id("steer-surface").count() == 1 and page.get_by_test_id("steering-page").count() == 0
+          and page.get_by_test_id("steer-surface").locator("h1").all_inner_texts() == ["Steering"],
+          h1=page.get_by_test_id("steer-surface").locator("h1").all_inner_texts())
     page.go_back()
     # Back remounts the page in its loading state: wait for the rows the read restores, not just the address.
     page.wait_for_function("() => " + ADDR + ".pathname === '/rules' && document.querySelectorAll('[data-testid=\"rules-row\"]').length === 3", timeout=15000)

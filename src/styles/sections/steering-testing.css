@@ -78,17 +78,17 @@
 .wk-test-board-brief summary::-webkit-details-marker { display: none; }
 .wk-test-board-brief p { margin: var(--space-1) 0 0; white-space: pre-wrap; color: var(--ink-body); max-height: 240px; overflow: auto; }
 
-/* steering policies page (S5; studio#689 rows 45, 46; phone dock) */
-.wk-steer-main { padding: var(--space-6); }
-.wk-steer-head { margin-bottom: 0; }
-.wk-steer-dock-sheet {
-  position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; top: var(--topbar-h);
-  display: flex; background: var(--surface-rail); box-shadow: var(--shadow-overlay);
-  padding-bottom: var(--fab-clear); /* the Ask bubble never covers the assistant's send button */
-}
-@media (max-width: 767px) {
-  .wk-steer-main { padding: var(--space-4); }
-}
+/* The Steer page's Table layout (studio#689 ruling b, studio#892): the spreadsheet under the page's one heading, on
+   the UI contract's tokens. The calm column widens so eight columns fit at 1440; narrower, the container query below
+   turns each row into a card. */
+.wk-calm-col.wk-calm-col--table { max-width: 1180px; }
+.wk-steer-gridwrap { overflow-x: auto; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-card); }
+.wk-steer-grid { width: 100%; border-collapse: collapse; table-layout: fixed; min-width: 60rem; }
+.wk-steer-grid .wk-steer-th { padding: var(--space-2) var(--space-2); text-align: left; font-size: var(--text-xs); font-weight: var(--weight-semi); }
+.wk-steer-grid tbody tr { border-bottom: 1px solid var(--border-subtle); }
+.wk-steer-grid tbody tr:last-child { border-bottom: 0; }
+.wk-steer-grid td { padding: var(--space-1) var(--space-1); vertical-align: top; }
+.wk-steer-grid .wk-steer-draft { background: var(--surface-rail); }
 /* The grid is editable in place, but at rest a type/severity cell reads as a tag, not a field
    (row 45): no input edge until hover or focus, then the chevron + edge say "pick". */
 .wk-steer-grid select.wk-steer-cellselect {
@@ -136,9 +136,6 @@
 .wk-steer-stat-label { font-size: var(--text-xs); color: var(--ink-muted); }
 .wk-steer-stat-value { font-size: var(--text-md); font-weight: var(--weight-semi); color: var(--ink-high); }
 .wk-steer-stat-sub { font-size: var(--text-xs); color: var(--ink-dim); overflow-wrap: anywhere; }
-.wk-steer-typechip[aria-checked="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-wash); }
-.wk-steer-typechip-count { color: var(--ink-dim); font-variant-numeric: tabular-nums; }
-.wk-steer-typechip-sep { align-self: stretch; margin: 0 var(--space-1); border-left: 1px solid var(--border); }
 
 /* steering dashboard + memories (S5) */
 .wk-gk-page { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-5) var(--space-6); overflow-y: auto; color: var(--ink-body); font-family: var(--font-sans); font-size: var(--text-caption); }
@@ -221,7 +218,6 @@
   .wk-steer-grid td:nth-child(8) { order: 9 !important; grid-column: 2 / -1; }
 }
 /* Every S5 page can scroll its last row clear of the Ask bubble. */
-.wk-gk-page, .wk-test-page .wk-page, .wk-steer-main, .wk-rules .wk-rules-body, [data-testid="testing-evals-frame"] { padding-bottom: var(--fab-clear); }
+.wk-gk-page, .wk-test-page .wk-page, .wk-rules .wk-rules-body, [data-testid="testing-evals-frame"] { padding-bottom: var(--fab-clear); }
 .wk-test-card-sets > [data-testid="campaign-card-testset"] { padding-top: var(--space-2); border-top: 1px solid var(--border-subtle); }
-.wk-steer-dock-sheet[hidden] { display: none; }
 .wk-evals-history-members { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-2); }

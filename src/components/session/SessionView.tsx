@@ -64,6 +64,7 @@ import { useAskAnswers } from '../../hooks/useAskAnswers.js';
 import { useAskThreadStore } from '../../store/askThread.js';
 import { useTeamFold } from '../../hooks/useTeamFold.js';
 import { AskLineView, AskTyping } from './AskThread.js';
+import { LaunchAssuranceNote } from './LaunchAssuranceNote.js';
 import { Skeleton, StateBanner, TechDetails } from '../ui/index.js';
 import { readErrorKind } from '../../api/errors.js';
 import { splitToolFailures } from '../../board/askThread.js';
@@ -1327,6 +1328,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       {/* domain-graph-3: a job that keeps going says where it got to, on its own line under the header (the header row
           stays one line at desk widths). */}
       {progressLine !== null && <p data-testid="session-progress-line" className="wk-session-progress wk-measure wk-measure--thread">{progressLine}</p>}
+      {/* studio#1239: crew started this session's job with no seat that can judge another's work (`assuranceNotice`). */}
+      <LaunchAssuranceNote sessionId={sessionId} navigate={navigate} />
       {/* (DES-PM-001 §3.2) A chat in a project: the trackers its answers may read, crew's tracker set for that project. */}
       {chatProjectId !== null && trackerLinks && (
         <details className="wk-trk-chat wk-measure wk-measure--thread" data-testid="session-chat-trackers">

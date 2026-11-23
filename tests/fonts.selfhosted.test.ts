@@ -22,6 +22,47 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
+/**
+ * The selector of each rule whose own block reads `needle`, once per block. Comments go first (a mention is not a
+ * read), then one split on braces: the text before each `{` is a selector and the text after it, up to the next
+ * brace, is that block's own body. The regex this replaces, /([^{}]+)\{[^}]*var\(--font-display\)/, retried every
+ * start position of each brace-free run: about 1.2 s on the 885K characters of src/styles, past 5 s on a loaded
+ * runner (studio#1354).
+ */
+function rulesUsing(css: string, needle: string): string[] {
+  const parts = css.replace(/\/\*[\s\S]*?\*\//gu, '').split(/([{}])/u);
+  const out: string[] = [];
+  for (let k = 2; k < parts.length; k += 2) {
+    if (parts[k - 1] === '{' && parts[k]!.includes(needle)) out.push(parts[k - 2]!.trim());
+  }
+  return out;
+}
+
+describe('rulesUsing (studio#1354)', () => {
+  it('names the rule that reads the variable, once per block, through comments and nesting', () => {
+    const css = '/* head */ .a { color: red }\n/* brand */ .wk-wordmark { font-family: var(--font-display); x: var(--font-display) }\n'
+      + '@media (min-width: 1px) { .b { font: 1em var(--font-display) } }';
+    expect(rulesUsing(css, 'var(--font-display)')).toEqual(['.wk-wordmark', '.b']);
+    expect(rulesUsing('.a { color: red }', 'var(--font-display)')).toEqual([]);
+  });
+
+  it('a comment that mentions the variable is not a read and hides no later rule', () => {
+    const css = ".wk-wordmark { font-family: var(--font-display); }\n/* This heading uses var(--font-display). */\n"
+      + '.other-heading { font-family: var(--font-display); }\n.c { /* var(--font-display) */ color: red }';
+    expect(rulesUsing(css, 'var(--font-display)')).toEqual(['.wk-wordmark', '.other-heading']);
+  });
+
+  it('stays one pass on a long brace-free run (the old regex took about 7 s on this input)', () => {
+    const css = `.a${' '.repeat(120_000)}{ color: red }\n.wk-wordmark { font-family: var(--font-display); }`;
+    expect(rulesUsing(css, 'var(--font-display)')).toEqual(['.wk-wordmark']);
+  });
+
+  it('stays one pass when one block reads the variable many times', () => {
+    const css = `.a { color: red }\n.wk-wordmark { ${'x: var(--font-display); '.repeat(40_000)}}`;
+    expect(rulesUsing(css, 'var(--font-display)')).toEqual(['.wk-wordmark']);
+  });
+});
+
 describe('fonts are self-hosted', () => {
   it('index.html and every source file name no font CDN', () => {
     const files = [join(REPO, 'index.html'), ...walk(join(REPO, 'src')).filter((f) => /\.(css|tsx?|html)$/.test(f))];
@@ -81,8 +122,7 @@ describe('fonts are self-hosted', () => {
     // Only the wordmark reads --font-display, and the rail's catch-all text-face rule leaves it alone (round 4).
     const all = readdirSync(join(REPO, 'src', 'styles'), { recursive: true }).filter((p) => String(p).endsWith('.css'))
       .map((p) => readFileSync(join(REPO, 'src', 'styles', String(p)), 'utf8')).join('\n');
-    const uses = [...all.matchAll(/([^{}]+)\{[^}]*var\(--font-display\)/gu)].map((m) => m[1]!.replace(/\/\*[\s\S]*?\*\//gu, '').trim());
-    expect(uses).toEqual(['.wk-wordmark']);
+    expect(rulesUsing(all, 'var(--font-display)')).toEqual(['.wk-wordmark']);
     expect(all).toMatch(/\[data-testid="desk"\]\) :not\([^)]*\.wk-wordmark, \.wk-wordmark \*\)/u);
   });
 

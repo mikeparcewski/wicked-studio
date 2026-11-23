@@ -14,6 +14,10 @@
 .wk-composer-seat { border: 1px solid transparent; cursor: pointer; padding: 2px 10px; font: inherit; font-size: var(--text-xs); }
 .wk-composer-seat:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
 .wk-composer-seat--off { background: transparent; border-color: var(--border); color: var(--ink-muted); text-decoration: line-through; }
+/* studio#1311: a chip's role words ("reviews only", "works only") read as words, never struck through with an off chip. */
+.wk-composer-seat-role { white-space: pre; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-composer-seat--off:has(.wk-composer-seat-role) { text-decoration: none; }
+.wk-composer-seat--off:has(.wk-composer-seat-role) .wk-composer-seat-name { text-decoration: line-through; }
 
 /* Phone (UI contract §2 --tap-min): every composer and launch-form target is at least 44 px. */
 @media (max-width: 767px) {

@@ -76,7 +76,8 @@ export function ProjectRequirementsSection({ projectId, navigate, onIssue, archi
                 onClick={() => openLaunchWizard({ workflowId: DRAFT_EPICS_ID, projectId, composerKey: 'desk' })}>
                 Draft epics
               </button>
-              <span className="wk-field-note">Turns chosen requirements into a draft plan you review before anything is published.</span>
+              {/* crew#372: Draft epics drafts only; no publish step exists, so the note promises none. */}
+              <span data-testid="project-draft-epics-note" className="wk-field-note">Turns chosen requirements into draft epics and stories for you to review. Nothing is published.</span>
             </div>
           )}
         </>

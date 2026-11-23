@@ -262,6 +262,28 @@ describe('wicked’s passage (the held plan)', () => {
     expect(screen.getByTestId('job-passage-plan-changed').textContent).toBe('Plan v2: added Design, Architecture, Security check.');
   });
 
+  it('wicked-core#1259: each plan step says the controls the plan set on it, from the plan.proposed step', async () => {
+    // The steps as the engine's plan events carry them (wicked-core `src/plan_gate.rs` wire_step, its test
+    // plan_events_carry_each_steps_controls): each control omitted when unset.
+    const steps = [
+      { catalog: 'build', id: 'build', pool: 1, executes_code: true, required_deliverables: ['docs/api.md'] },
+      { catalog: 'understand', id: 'answer', answer_only: true, writes_nothing: true, validator_pin: 'evidence-floor' },
+      { catalog: 'review', id: 'review' },
+    ];
+    team = { teamed: true, units: [], planRev: 2, rows: [
+      { event_id: 1, event_type: 'wicked.team.plan.proposed', payload: { steps } },
+      { event_id: 3, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g2', ord: 1, plan_rev: 2 } },
+    ] };
+    page([run()]);
+    await waitFor(() => expect(screen.getAllByTestId('job-passage-plan-step')).toHaveLength(3));
+    const controls = screen.getAllByTestId('job-passage-plan-step').map((r) => [r.querySelector('b')!.textContent, r.querySelector('[data-testid="job-passage-plan-controls"]')?.textContent ?? null]);
+    expect(controls).toEqual([
+      ['Build', ' · code work: code checks apply · must produce docs/api.md · one helper'],
+      [expect.any(String), " · no file changes in the run's tree · answer only: checked only that it replies · pinned check: evidence-floor"],
+      ['Review', null],
+    ]);
+  });
+
   it('Undo in the receipt sends nothing and reopens the plan', async () => {
     page([run()]);
     await waitFor(() => expect(reply('approve').disabled).toBe(false));

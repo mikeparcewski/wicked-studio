@@ -348,6 +348,33 @@ export interface JobPlanStep {
   floor: boolean;
   /** New in this revision (not in the revision before it): washed, "what changed". */
   added: boolean;
+  /** (wicked-core#1259) The controls the plan set on the step, in words ({@link planStepControls}); empty when none. */
+  controls: string[];
+}
+
+/**
+ * (wicked-core#1259, api-types `TeamPlanStep`) The controls a plan set on a step, as the plan events carry them (each
+ * omitted when unset), in words: what raises or lowers the checks on that step, so two steps that read the same are
+ * told apart. Display only: the engine composes from the plan itself.
+ */
+export function planStepControls(rec: Readonly<Record<string, unknown>> | undefined): string[] {
+  if (rec === undefined) return [];
+  const out: string[] = [];
+  // Each phrase says what the declaration does, never more (codex r1 on #1352): `executes_code` makes it code work (its
+  // code checks apply; `false` forbids nothing, so it says nothing); `writes_nothing` is about the run's own tree; the
+  // answer-only substance check asks only for a non-empty reply.
+  if (rec['executes_code'] === true) out.push('code work: code checks apply');
+  if (rec['writes_nothing'] === true) out.push("no file changes in the run's tree");
+  if (rec['answer_only'] === true) out.push('answer only: checked only that it replies');
+  const pin = strOf(rec['validator_pin']);
+  if (pin !== null) out.push(`pinned check: ${pin}`);
+  const due = Array.isArray(rec['required_deliverables']) ? rec['required_deliverables'].filter((d): d is string => typeof d === 'string' && d.trim() !== '') : [];
+  if (due.length > 0) out.push(`must produce ${due.join(', ')}`);
+  if (rec['verified_evidence'] === true) out.push('its output is acceptance evidence');
+  if (rec['requires_capture_report'] === true) out.push('ends with a capture report');
+  const pool = rec['pool'];
+  if (typeof pool === 'number' && Number.isInteger(pool) && pool > 0) out.push(pool === 1 ? 'one helper' : `up to ${pool} helpers`);
+  return out;
 }
 
 type Row = { event_id: number; event_type: string; payload: Record<string, unknown>; emitted_at?: number };
@@ -376,7 +403,7 @@ export function enrichPlan(steps: ReadonlyArray<{ id: string | null; catalog: st
     .sort((a, b) => a.event_id - b.event_id).pop();
   const refused = new Set(rows.filter((r) => r.event_type === 'wicked.team.plan.refused').map((r) => String(r.payload['proposal_id'])));
   // No gate on record for this revision yet (the team record lags the plan read): nothing describes it but its names.
-  if (gateRow === undefined) return { steps: steps.map((s) => ({ id: s.id, label: s.label, detail: null, asks: null, floor: false, added: false })), changed: null };
+  if (gateRow === undefined) return { steps: steps.map((s) => ({ id: s.id, label: s.label, detail: null, asks: null, floor: false, added: false, controls: [] })), changed: null };
   const proposed = rows.filter((r) => r.event_type === 'wicked.team.plan.proposed' && r.event_id < gateRow.event_id
     && !(typeof r.payload['proposal_id'] === 'string' && refused.has(r.payload['proposal_id']))).sort((a, b) => a.event_id - b.event_id);
   const stepsOf = (r: Row | undefined): Array<Record<string, unknown>> => (Array.isArray(r?.payload['steps']) ? (r!.payload['steps'] as unknown[]).filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null) : []);
@@ -395,6 +422,7 @@ export function enrichPlan(steps: ReadonlyArray<{ id: string | null; catalog: st
       asks: asksOf(rec?.['gate']),
       floor: rec?.['added_by'] === 'floor' || (s.catalog !== null && floorAdded.includes(s.catalog) && rec === undefined),
       added: prevIds !== null && planRev > 1 && s.id !== null && !prevIds.has(s.id),
+      controls: planStepControls(rec),
     };
   });
   const added = out.filter((s) => s.added).map((s) => s.label);

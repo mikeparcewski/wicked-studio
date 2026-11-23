@@ -1,6 +1,6 @@
 import { executingOrd } from '../api/run-state.js';
 import type { CoreEvent, SessionView, WorkUnit } from '../api/types.js';
-import { deliverUnit, deliveryOf, hasDeliveredRef, resolveDelivery } from '../components/delivery.js';
+import { deliverUnit, deliveryOf, hasDeliveredRef, prNumberOf, resolveDelivery } from '../components/delivery.js';
 import { deliverRefusalOf, deliverTargetOf, isDeliverGate } from '../components/gateMoveModel.js';
 import type { OpenGate } from '../store/gates.js';
 import type { GateActionState } from './gateActions.js';
@@ -186,7 +186,7 @@ export function outcomeLine(view: SessionView): string {
  */
 export function deliverySummary(view: SessionView): string | null {
   const d = deliveryOf(view);
-  const pr = d.url === null ? null : (/\/pull\/(\d+)/.exec(d.url)?.[1] ?? null);
+  const pr = d.url === null ? null : prNumberOf(d.url);
   if (pr !== null) return `Pull request #${pr}`;
   if (d.state === 'none' || d.state === 'in-flight') return null;
   if (view.session.status !== 'completed') return 'Not delivered';

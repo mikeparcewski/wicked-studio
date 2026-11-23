@@ -140,11 +140,21 @@ describe('voice machine load words', () => {
     ['ok', 0.3, 'calm'],
     ['ok', 0.75, 'nearly full'],
     ['ok', 0.95, 'nearly full'],
-    ['degraded', 1.2, 'busy'],
+    ['degraded', 1.2, 'overloaded'],
     ['down', 6, 'saturated'],
     ['unknown', 0, 'not read'],
   ] as const)('calls %s at %s per core %s', (state, ratio, word) => {
     expect(loadWord({ state, load: { load1: ratio * 14, cores: 14 } })).toBe(word);
+  });
+
+  it('studio#1274: the words rank with the load: a degraded host never reads calmer than an ok host near full', () => {
+    const SCALE = ['calm', 'nearly full', 'overloaded', 'saturated'];
+    const rank = (state: string, ratio: number): number => SCALE.indexOf(loadWord({ state, load: { load1: ratio * 14, cores: 14 } } as never));
+    expect(rank('ok', 0.95)).toBeGreaterThanOrEqual(0);
+    expect(rank('degraded', 1.2)).toBeGreaterThan(rank('ok', 0.95));
+    // Whatever its ratio, degraded ranks above every ok reading and below down.
+    for (const r of [0, 0.5, 0.75, 0.99]) expect(rank('degraded', r)).toBeGreaterThan(rank('ok', r));
+    expect(rank('down', 6)).toBeGreaterThan(rank('degraded', 1.2));
   });
 
   it('calls an absent load row not read', () => {

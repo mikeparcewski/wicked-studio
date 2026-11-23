@@ -4,7 +4,7 @@ import { FileText, GitBranch, PenLine, X } from 'lucide-react';
 import { api, apiFetch } from '../../api/client.js';
 import { postCapture } from '../../api/capture.js';
 import { getSteeringDraft, keepDraftedRules, type SteeringDraftResponse } from '../../api/learn.js';
-import { approveProposal, listProposals, memoryPayload, policyPayload, proposalKind, rejectProposal, type Proposal } from '../../api/proposals.js';
+import { approveProposal, landingFailure, listProposals, memoryPayload, policyPayload, proposalKind, rejectProposal, type Proposal } from '../../api/proposals.js';
 import { authorSteeringRules } from '../../api/steering.js';
 import type { Ask, AskAnswer } from '../../api/ask.js';
 import type { RepoEntry, SessionView } from '../../api/types.js';
@@ -68,9 +68,18 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
   // The review sits full width under the sources and the pipeline (mockup c), rendered into this slot.
   const [resultsEl, setResultsEl] = useState<HTMLDivElement | null>(null);
 
+  // studio#1330: the saved record is read once, at mount. A launch (or Start over) the person made before that read
+  // answered is newer than it: the late read never replaces it (a slow daemon wiped the jobs, and Style stopped polling).
+  const decidedHere = useRef(false);
+  /** Every change of the record made here (a launch, Start over, a review decision): it outranks the mount read. */
+  const keepHere = (r: StyleRecord | null): void => {
+    decidedHere.current = true;
+    setRecord(r);
+    void saveRecord(r).catch(() => undefined);
+  };
   useEffect(() => {
     api.listRepos().then((r) => setRepos(r.repos), () => setRepos([]));
-    api.getAppearanceSettings().then((s) => setRecord(readRecord(s.settings)), () => undefined);
+    api.getAppearanceSettings().then((s) => { if (!decidedHere.current) setRecord(readRecord(s.settings)); }, () => undefined);
   }, []);
 
   const add = (): void => {
@@ -137,19 +146,14 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
       }
       if (failed.length > 0) setLaunchError(`Not started: ${failed.join('; ')}`);
       if (jobs.length > 0) {
-        const r: StyleRecord = { jobs, startedAt: Date.now() };
-        setRecord(r);
-        void saveRecord(r).catch(() => undefined);
+        keepHere({ jobs, startedAt: Date.now() });
       }
     } finally {
       setLaunching(false);
     }
   };
 
-  const startOver = (): void => {
-    setRecord(null);
-    void saveRecord(null).catch(() => undefined);
-  };
+  const startOver = (): void => keepHere(null);
 
   return (
     <div data-testid="learn-style">
@@ -200,7 +204,7 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
           <LearnTopics navigate={navigate} embedded />
         </div>
         <StylePipeline record={record} launching={launching} sourceCount={sources.length} onLearn={() => void launch()} onReset={startOver}
-          launchError={launchError} navigate={navigate} resultsEl={resultsEl} onDecided={(r) => { setRecord(r); void saveRecord(r).catch(() => undefined); }} />
+          launchError={launchError} navigate={navigate} resultsEl={resultsEl} onDecided={keepHere} />
       </div>
       <div ref={setResultsEl} className="wk-learn-results" />
     </div>
@@ -278,6 +282,11 @@ function StylePipeline({ record, launching, sourceCount, onLearn, onReset, launc
     setBusy(which);
     setFail(null);
     const keep = new Set(a.options ?? []);
+    // studio#1337: each kept rule crew could not land, with its reason: never counted as adopted, and said with the
+    // saved result (so it survives a remount and a later memory decision), or with a later request's failure.
+    const notLanded: string[] = [];
+    const notLandedLine = (): string => notLanded.length === 0 ? ''
+      : `${notLanded.length === 1 ? '1 rule did' : `${notLanded.length} rules did`} not land as asked and ${notLanded.length === 1 ? 'is' : 'are'} still under Steering\u2019s Proposed rules: ${notLanded.join(' ')}`;
     try {
       let kept = 0;
       let of = 0;
@@ -293,14 +302,21 @@ function StylePipeline({ record, launching, sourceCount, onLearn, onReset, launc
           if (res.landing?.outcome === 'failed') throw new Error(res.landing.error ?? 'the rules could not be landed');
           kept += ids.length;
         }
-        for (const p of policies) { if (keep.has(p.id)) { await approveProposal(p.id); kept += 1; } else await rejectProposal(p.id); }
+        for (const p of policies) {
+          if (!keep.has(p.id)) { await rejectProposal(p.id); continue; }
+          // studio#1337: a rule crew could not land is not adopted; it stays proposed in Steering, where its card says why.
+          const failed = landingFailure(await approveProposal(p.id));
+          if (failed === null) kept += 1;
+          else notLanded.push(`\u201c${policyPayload(p).rule ?? p.id}\u201d: ${failed}`);
+        }
       }
       if (kept > 0) void useFirstRun.getState().markLearnUsed();
-      const line = which === 'memories' ? `You kept ${kept} of ${of} memories · saved to Memory` : `You adopted ${kept} of ${of} rules · now in Steering`;
+      const line = which === 'memories' ? `You kept ${kept} of ${of} memories · saved to Memory`
+        : `You adopted ${kept} of ${of} rules · now in Steering${notLanded.length > 0 ? ` · ${notLandedLine()}` : ''}`;
       onDecided({ ...record, decided: { ...decided, [which]: line } });
       void poll();
     } catch (e) {
-      setFail(e instanceof Error ? e.message : String(e));
+      setFail(`${e instanceof Error ? e.message : String(e)}${notLanded.length > 0 ? `. ${notLandedLine()}` : ''}`);
     } finally {
       setBusy(null);
     }

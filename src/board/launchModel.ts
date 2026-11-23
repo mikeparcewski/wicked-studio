@@ -294,11 +294,13 @@ export function assuranceNoticeOf(answer: unknown): LaunchAssuranceNotice | null
   };
 }
 
-/** The relaunch an assurance notice offers: the same body, merged with its `retryWith`, in a run of its own (no chat
- *  binding: the first run keeps its chat). */
+/** The relaunch an assurance notice offers: the same body, merged with its `retryWith`, in a run of its own: no chat
+ *  binding (the first run keeps its chat) and not the first launch's client-minted `sessionId` (the composer's, studio#404),
+ *  which crew would refuse as the first run's id. */
 export function reducedRelaunchBody(body: LaunchBodyWithDeliver, notice: LaunchAssuranceNotice): LaunchBodyWithDeliver {
-  const { chatId: _chat, ...rest } = body as LaunchBodyWithDeliver & { chatId?: string };
+  const { chatId: _chat, sessionId: _id, ...rest } = body as LaunchBodyWithDeliver & { chatId?: string; sessionId?: string };
   void _chat;
+  void _id;
   return { ...rest, ...notice.retryWith } as LaunchBodyWithDeliver;
 }
 

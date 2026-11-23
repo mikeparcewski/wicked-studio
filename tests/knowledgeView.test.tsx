@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import { act, StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -24,7 +24,7 @@ vi.mock('../src/components/desk/KnowledgeGraph.js', () => ({
 }));
 
 const { KnowledgeView, edgeWords } = await import('../src/components/desk/KnowledgeView.js');
-const { ProfileBox, profileRefusal, profileWords } = await import('../src/components/sources/ProfileBox.js');
+const { PROFILE_MEANS, ProfileBox, profileRefusal, profileWords } = await import('../src/components/sources/ProfileBox.js');
 const { readKnowledgeMap, readSourceProfile, knowledgePayload, KNOWLEDGE_VIEW_PATH, ProfileWireError } = await import('../src/api/knowledgeShapes.js');
 const { ProposalsList } = await import('../src/components/ProposalsList.js');
 const { proposalConsequence, proposalConsequenceLine } = await import('../src/board/proposalTriage.js');
@@ -162,7 +162,7 @@ describe('Understand → Knowledge', () => {
       'support.tickets joins support.regions on region_id = id (a foreign key)',
       'support.tickets describes Ticket in escalations (named alike)',
     ]);
-    expect(screen.getByTestId('knowledge-map-summary').textContent).toBe('1 data source · 3 tables · 1 approved shape · 2 connections');
+    expect(screen.getByTestId('knowledge-map-summary').textContent).toBe('1 data source · 3 tables · 1 data shape · 2 connections');
   });
 
   it('NEGATIVE CONTROL: a pending or declined shape is never drawn (no node, no edge, no line); approved, it is', async () => {
@@ -230,6 +230,16 @@ describe('Understand → Knowledge', () => {
     expect(screen.getByTestId('knowledge-graph-stub').getAttribute('data-nodes')).not.toContain('support.tickets shape');
   });
 
+  it('crew#1625: a profiled shape that connects nothing is not sent to an approval that does not exist', async () => {
+    const lone = { ...structuredClone(MAP), edges: MAP.edges.filter((e) => e.rel === 'contains' || e.rel === 'derived_from') };
+    apiFetch.mockImplementation((path: unknown) => (String(path) === '/knowledge/map' ? Promise.resolve(lone) : Promise.resolve({ proposals: [] })));
+    render(<KnowledgeView />);
+    const empty = await screen.findByTestId('knowledge-connections-empty');
+    expect(empty.textContent).toContain('When a profile finds what a table joins');
+    expect(empty.textContent).not.toContain('Approve a data shape above');
+    expect(screen.getByTestId('knowledge-map-summary').textContent).toBe('1 data source · 3 tables · 1 data shape · 0 connections');
+  });
+
   it('says what crew noted even when the map is empty, and how many approved shapes it could not draw', async () => {
     apiFetch.mockImplementation((path: unknown) => (String(path) === '/knowledge/map' ? Promise.resolve({ nodes: [], edges: [], sources: [], shapes: 0, skipped: 2, truncated: true, notes: ["pg's tables could not be read from estate just now"] }) : Promise.resolve({ proposals: [] })));
     render(<KnowledgeView />);
@@ -273,7 +283,7 @@ describe('Understand → Knowledge', () => {
   });
 
   it('a profile field of the wrong type is narrowed, never coerced', () => {
-    const p = readSourceProfile({ name: 'pg', relations: [{ key: 's.t', rows: '1-99', columns: [{ name: 'c', cardinality: ['unique'] }, { name: 'd', cardinality: { toString: null } }] }], proposed: [], joins: [{ from: 's.t', to: 's.u', overlap: ['all'] }, { from: 's.t', to: 's.v', overlap: { toString: null } }] });
+    const p = readSourceProfile({ name: 'pg', relations: [{ key: 's.t', rows: '1-99', columns: [{ name: 'c', cardinality: ['unique'] }, { name: 'd', cardinality: { toString: null } }] }], written: [], joins: [{ from: 's.t', to: 's.u', overlap: ['all'] }, { from: 's.t', to: 's.v', overlap: { toString: null } }] });
     expect(p.relations[0]!.columns.map((c) => c.cardinality)).toEqual(['unknown', 'unknown']);
     expect(p.joins.map((j) => j.overlap)).toEqual([null, null]);
   });
@@ -335,30 +345,50 @@ const PROFILE = {
   ],
   joins: [{ from: 'support.tickets', columns: ['region_id'], to: 'support.regions', references: ['id'], basis: 'fk', overlap: 'all' }],
   describes: [],
-  proposed: [{ id: 'p1', relation: 'support.tickets' }, { id: 'p2', relation: 'support.audit_log' }],
+  // crew's route body since crew#1625 (wicked-crew packages/crew/src/knowledge/shapes/routes.ts, the SourceProfileResponse it answers).
+  written: [{ id: 'p1', relation: 'support.tickets' }, { id: 'p2', relation: 'support.audit_log' }],
+  unchanged: 0,
+  replaced: 0,
+  proposed: [],
   alreadyProposed: 0,
   codeSearch: { searched: [], notSearched: [] },
 };
 
 describe('the source sheet\'s Profile box', () => {
-  it('profiles on a click, says what it found in bands, and links to the review', async () => {
+  it('profiles on a click, says what it found in bands and wrote into knowledge, and links to the map', async () => {
     const user = userEvent.setup();
     render(<ProfileBox source="support-pg" />);
     await user.click(screen.getByTestId('source-profile-run'));
     const out = await screen.findByTestId('source-profile-result');
     expect(calls).toEqual(['POST /sources/support-pg/profile']);
-    expect(out.textContent).toContain('Profiled 1 table, found 1 join. 2 data shapes are waiting for your review. 1 table could not be read.');
+    expect(out.textContent).toContain('Profiled 1 table, found 1 join. Wrote 2 data shapes into knowledge. 1 table could not be read.');
+    expect(out.textContent).not.toContain('review');
     expect(within(out).getByTestId('source-profile-rows').textContent).toBe('support.tickets: 100-9,999 rows · key id · joins support.regionssupport.audit_log: not read (timeout)');
     expect(within(out).getByTestId('source-profile-review').getAttribute('href')).toBe(KNOWLEDGE_VIEW_PATH);
     expect(screen.getByTestId('source-profile-run').textContent).toBe('Profile again');
   });
 
+  it('a re-profile says what it wrote, left unchanged and replaced, read through the parser', async () => {
+    const user = userEvent.setup();
+    apiFetch.mockImplementation(() => Promise.resolve({ ...PROFILE, written: [{ id: 'p3', relation: 'support.tickets' }], unchanged: 1, replaced: 1 }));
+    render(<ProfileBox source="support-pg" />);
+    await user.click(screen.getByTestId('source-profile-run'));
+    const out = await screen.findByTestId('source-profile-result');
+    expect(out.textContent).toContain('Wrote 1 data shape into knowledge. 1 shape was already in knowledge, unchanged. Replaced 1 older shape.');
+  });
+
   it('reads a profile defensively: a malformed answer is an error the box says, never a crash', async () => {
     expect(() => readSourceProfile({ name: 'support-pg' })).toThrow(ProfileWireError);
-    const p = readSourceProfile({ name: 'pg', relations: [{ key: 's.t', rows: 'lots', columns: [{ name: 'c', cardinality: 'weird' }, 7] }, 'x'], proposed: [{ id: 'p1' }, null], joins: [{ from: 's.t' }], alreadyProposed: 'x' });
+    const p = readSourceProfile({ name: 'pg', relations: [{ key: 's.t', rows: 'lots', columns: [{ name: 'c', cardinality: 'weird' }, 7] }, 'x'], written: [{ id: 'p1' }, null], joins: [{ from: 's.t' }], unchanged: 'x', replaced: -1 });
     expect(p.relations).toEqual([{ key: 's.t', rows: null, error: 'unreadable', columns: [{ name: 'c', type: '', nullPct: null, hasNulls: false, cardinality: 'unknown', keyCandidate: false }] }]);
     expect(p.joins).toEqual([]);
-    expect(p.alreadyProposed).toBe(0);
+    expect(p.written).toEqual([{ id: 'p1', relation: '' }]);
+    expect([p.unchanged, p.replaced]).toEqual([0, 0]);
+    // Counts are narrowed, never coerced: a numeric string or a fraction is 0; a count crew sent is kept.
+    expect(readSourceProfile({ name: 'pg', relations: [], written: [], unchanged: '2', replaced: 1.5 })).toMatchObject({ unchanged: 0, replaced: 0 });
+    expect(readSourceProfile({ name: 'pg', relations: [], written: [], unchanged: 3, replaced: 1 })).toMatchObject({ unchanged: 3, replaced: 1 });
+    // crew#1625: a crew that still files the profile for review (no `written`) is said, never shown as nothing written.
+    expect(() => readSourceProfile({ name: 'pg', relations: [], proposed: [{ id: 'p1', relation: 's.t' }], alreadyProposed: 0 })).toThrow(ProfileWireError);
     const user = userEvent.setup();
     apiFetch.mockImplementation(() => Promise.resolve({ name: 'support-pg' }));
     render(<ProfileBox source="support-pg" />);
@@ -366,14 +396,16 @@ describe('the source sheet\'s Profile box', () => {
     expect((await screen.findByTestId('source-profile-error')).textContent).toContain('does not read');
   });
 
-  it('says what a profile did: filed, already queued, unread, left out', () => {
+  it('says what a profile did: written, unchanged, replaced, unread, left out', () => {
     const base = PROFILE as unknown as import('../src/api/knowledgeShapes.js').SourceProfileResponse;
-    expect(profileWords({ ...base, proposed: [], alreadyProposed: 2 })).toContain('2 shapes were already in the review queue, unchanged.');
-    const none = profileWords({ ...base, proposed: [], alreadyProposed: 0, notInKnowledge: 3, catalogTruncated: true });
-    expect(none).toContain('No data shape was filed.');
+    expect(profileWords({ ...base, written: [], unchanged: 2 })).toContain('2 shapes were already in knowledge, unchanged.');
+    expect(profileWords({ ...base, written: [{ id: 'p3', relation: 'support.tickets' }], unchanged: 1, replaced: 1 })).toContain('Wrote 1 data shape into knowledge. 1 shape was already in knowledge, unchanged. Replaced 1 older shape.');
+    const none = profileWords({ ...base, written: [], unchanged: 0, notInKnowledge: 3, catalogTruncated: true });
+    expect(none).toContain('No data shape was written.');
     expect(none).toContain('3 tables that knowledge holds are not in crew');
     expect(none).toContain('more tables than one profile reads');
-    expect(profileWords(base)).toContain('Profiled 1 table, found 1 join. 2 data shapes are waiting for your review. 1 table could not be read.');
+    expect(profileWords(base)).toContain('Profiled 1 table, found 1 join. Wrote 2 data shapes into knowledge. 1 table could not be read.');
+    expect(PROFILE_MEANS).not.toContain('review');
   });
 
   it('never throws on a payload whose fields are not strings', () => {
@@ -433,5 +465,102 @@ describe('DES-PM-001: trackers and projects on the map', () => {
     expect(screen.getByTestId('knowledge-graph-stub').dataset.rels).not.toContain('tracked_in');
     expect(screen.queryByTestId('knowledge-map-trackers')).toBeNull();
     expect(screen.getAllByTestId('knowledge-connection').map((c) => c.textContent)).not.toContain('BILL · Jira tracked in Billing');
+  });
+});
+
+describe('crew#1697 (studio#1248): Forget a piece of document knowledge', () => {
+  // A document node as crew's map draws it (crew `knowledge/shapes/map.ts`: `nodeKey(store, id)` = `knowledge:<id>`,
+  // kind `knowledge` for a non-table node reached through an approved shape's neighbourhood).
+  const DOC_ID = 'kdoc synthetic ingest:runbooks/escalation.md:';
+  const DOC = `knowledge:${DOC_ID}`;
+  const DOC_MAP = { ...MAP, nodes: [...MAP.nodes, { key: DOC, kind: 'knowledge', label: 'Escalation runbook' }], edges: [...MAP.edges, { rel: 'describes', from: DOC, to: T, confidence: 0.8, evidence: null, owner: 'kconcept synthetic proposal:p-ok:' }] };
+  const forgets: unknown[] = [];
+  let answer: () => Promise<unknown> = () => Promise.resolve({ forgotten: 1, skipped_live_source: 0 });
+  afterEach(() => useCapabilities.setState({ knowledgeForget: false }));
+  const renderWith = async (on: boolean, map: typeof DOC_MAP = DOC_MAP): Promise<void> => {
+    forgets.length = 0;
+    useCapabilities.setState({ loaded: true, knowledgeForget: on });
+    apiFetch.mockImplementation((path: unknown, init?: { method?: string; body?: string }) => {
+      const s = String(path);
+      calls.push(`${init?.method ?? 'GET'} ${s}`);
+      if (s === '/knowledge/map') return Promise.resolve(structuredClone(map));
+      if (s === '/knowledge/forget') { forgets.push(JSON.parse(init?.body ?? '{}')); return answer(); }
+      if (s.startsWith('/proposals')) return Promise.resolve({ proposals: [] });
+      return Promise.reject(new Error(`unexpected ${s}`));
+    });
+    render(<KnowledgeView />);
+    await screen.findByTestId('knowledge-graph-stub');
+  };
+  const pick = async (user: ReturnType<typeof userEvent.setup>, key: string): Promise<void> => {
+    await user.click((await screen.findAllByTestId('graph-stub-node')).find((b) => b.getAttribute('data-key') === key)!);
+  };
+
+  it('forgets a document by its estate id after a confirm, says so and reads the map again', async () => {
+    answer = () => Promise.resolve({ forgotten: 1, skipped_live_source: 0 });
+    await renderWith(true);
+    const user = userEvent.setup();
+    await pick(user, DOC);
+    await user.click(within(screen.getByTestId('knowledge-selected')).getByTestId('knowledge-forget'));
+    expect(forgets).toEqual([]);
+    expect(screen.getByTestId('knowledge-forget-confirm')).toHaveTextContent('This can’t be undone.');
+    const reads = calls.filter((c) => c === 'GET /knowledge/map').length;
+    await user.click(screen.getByTestId('knowledge-forget-go'));
+    expect(await screen.findByTestId('knowledge-forget-note')).toHaveTextContent('Forgot “Escalation runbook”. Agents no longer recall it.');
+    expect(forgets).toEqual([{ id: DOC_ID }]);
+    expect(calls.filter((c) => c === 'POST /knowledge/forget')).toHaveLength(1);
+    await waitFor(() => expect(calls.filter((c) => c === 'GET /knowledge/map').length).toBe(reads + 1));
+    expect(screen.queryByTestId('knowledge-selected')).toBeNull();
+  });
+
+  it('a late Forget answer for one document leaves a newer selection and its confirm alone', async () => {
+    const DOC2 = 'knowledge:kdoc synthetic ingest:runbooks/oncall.md:';
+    let finish: (v: unknown) => void = () => {};
+    answer = () => new Promise((resolve) => { finish = resolve; });
+    await renderWith(true, { ...DOC_MAP, nodes: [...DOC_MAP.nodes, { key: DOC2, kind: 'knowledge', label: 'On-call runbook' }] });
+    const user = userEvent.setup();
+    await pick(user, DOC);
+    await user.click(screen.getByTestId('knowledge-forget'));
+    await user.click(screen.getByTestId('knowledge-forget-go'));
+    await pick(user, DOC2);
+    await user.click(screen.getByTestId('knowledge-forget'));
+    expect(screen.getByTestId('knowledge-forget-confirm')).toBeInTheDocument();
+    await act(async () => { finish({ forgotten: 1, skipped_live_source: 0 }); await Promise.resolve(); });
+    expect(await screen.findByTestId('knowledge-forget-note')).toHaveTextContent('Forgot “Escalation runbook”.');
+    expect(screen.getByTestId('knowledge-selected')).toHaveTextContent('On-call runbook');
+    expect(screen.getByTestId('knowledge-forget-confirm')).toBeInTheDocument();
+  });
+
+  it('a live data source\'s table is never offered Forget: it is refreshed through its source; a shape has no Forget', async () => {
+    await renderWith(true);
+    const user = userEvent.setup();
+    await pick(user, T);
+    expect(within(screen.getByTestId('knowledge-selected')).getByTestId('knowledge-forget-live')).toHaveTextContent('refreshed through the source, not forgotten');
+    expect(screen.queryByTestId('knowledge-forget')).toBeNull();
+    await pick(user, SHAPE_OK);
+    expect(screen.queryByTestId('knowledge-forget')).toBeNull();
+    expect(screen.queryByTestId('knowledge-forget-live')).toBeNull();
+  });
+
+  it('a refusal (409 live source structure) or an old estate (501) says nothing was deleted, and the selection stays', async () => {
+    answer = () => Promise.reject(new ApiError(409, 'refused'));
+    await renderWith(true);
+    const user = userEvent.setup();
+    await pick(user, DOC);
+    await user.click(screen.getByTestId('knowledge-forget'));
+    await user.click(screen.getByTestId('knowledge-forget-go'));
+    expect(await screen.findByTestId('knowledge-forget-note')).toHaveTextContent('refreshed through its source, not forgotten. Nothing was deleted.');
+    expect(screen.getByTestId('knowledge-selected')).toHaveTextContent('Escalation runbook');
+    answer = () => Promise.reject(new ApiError(501, 'estate_upgrade_required'));
+    await user.click(screen.getByTestId('knowledge-forget'));
+    await user.click(screen.getByTestId('knowledge-forget-go'));
+    await waitFor(() => expect(screen.getByTestId('knowledge-forget-note')).toHaveTextContent('can’t forget yet, so nothing was deleted'));
+  });
+
+  it('a crew without knowledgeForget offers no Forget', async () => {
+    await renderWith(false);
+    const user = userEvent.setup();
+    await pick(user, DOC);
+    expect(screen.queryByTestId('knowledge-forget')).toBeNull();
+    expect(screen.queryByTestId('knowledge-forget-live')).toBeNull();
   });
 });

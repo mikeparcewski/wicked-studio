@@ -3,6 +3,8 @@ import { getKnowledgeMap, type KnowledgeMapEdge, type KnowledgeMapNode, type Kno
 import { readErrorKind } from '../../api/errors.js';
 import { sourcesPath } from '../../api/sources.js';
 import { useTrackerLinksSupported } from '../../api/trackers.js';
+import { forgetFailureWords, forgetKnowledge, forgettableKnowledgeId } from '../../api/knowledgeForget.js';
+import { useCapabilities } from '../../store/capabilities.js';
 import { ProposalsSection } from '../ProposalsSection.js';
 import { EmptyState, Skeleton, StateBanner } from '../ui/index.js';
 
@@ -94,10 +96,15 @@ export function KnowledgeView(): React.ReactElement {
   // (DES-PM-001) Trackers, projects and the trail are drawn only on a crew with tracker links: without the capability
   // the map holds what it held before PM-1, whatever the answer carried.
   const trackerLinks = useTrackerLinksSupported();
+  // crew#1697: Forget is offered only on a crew that serves `POST /knowledge/forget`.
+  const canForget = useCapabilities((s) => s.knowledgeForget);
+  useEffect(() => { void useCapabilities.getState().load(); }, []);
+  const [forgetNote, setForgetNote] = useState<{ tone: 'ok' | 'fail'; text: string } | null>(null);
   const map = useMemo(() => (read.phase !== 'ok' ? null : trackerLinks ? read.map : withoutPm(read.map)), [read, trackerLinks]);
   const byKey = useMemo(() => new Map((map?.nodes ?? []).map((n) => [n.key, n])), [map]);
   const typed = useMemo(() => (map?.edges ?? []).filter((e) => LISTED.has(e.rel)), [map]);
   const shapes = useMemo(() => (map?.nodes ?? []).filter((n) => n.kind === 'shape'), [map]);
+  const tableCount = (map?.nodes ?? []).filter((n) => n.kind === 'table').length;
   // (DES-PM-001 §3.4) Linked trackers and the projects they are tracked in.
   const trackers = useMemo(() => (map?.nodes ?? []).filter((n) => n.kind === 'tracker'), [map]);
   const projectsOnMap = useMemo(() => (map?.nodes ?? []).filter((n) => n.kind === 'project').length, [map]);
@@ -133,7 +140,7 @@ export function KnowledgeView(): React.ReactElement {
   return (
     <div className="wk-knowview" data-testid="knowledge-view">
       <p className="wk-ue-sentence">
-        Your data sources, your repositories and the data shapes you approved, in one map. A shape says what a table is: what it joins, which code describes it, which rule governs it. Agents propose shapes; nothing is added until you approve it here.
+        Your data sources, your repositories and their data shapes, in one map. A shape says what a table is: what it joins, which code describes it, which rule governs it. A profile you run writes its shapes here at once; a shape an agent proposes is added only when you approve it here.
       </p>
 
       {/* Data shapes and the knowledge notes agents filed: one kind on the wire, each card says which it is. */}
@@ -151,7 +158,7 @@ export function KnowledgeView(): React.ReactElement {
             <EmptyState
               data-testid="knowledge-map-empty"
               title="Nothing to map yet."
-              body="Add a data source and test its connection, then profile it on its sheet. Its tables appear here, and its shapes once you approve them."
+              body="Add a data source and test its connection, then profile it on its sheet. Its tables and their shapes appear here."
               action={<a className="wk-link" href={sourcesPath()} data-testid="knowledge-map-sources">Open Data sources</a>}
             />
             {notes}
@@ -161,8 +168,8 @@ export function KnowledgeView(): React.ReactElement {
           <>
             <p className="wk-gk-muted" data-testid="knowledge-map-summary">
               {map.sources.length === 1 ? '1 data source' : `${map.sources.length} data sources`}
-              {' · '}{map.nodes.filter((n) => n.kind === 'table').length} tables
-              {' · '}{shapes.length === 1 ? '1 approved shape' : `${shapes.length} approved shapes`}
+              {' · '}{tableCount === 1 ? '1 table' : `${tableCount} tables`}
+              {' · '}{shapes.length === 1 ? '1 data shape' : `${shapes.length} data shapes`}
               {' · '}{typed.length === 1 ? '1 connection' : `${typed.length} connections`}
               {trackers.length > 0 && <span data-testid="knowledge-map-trackers">{' · '}{trackers.length === 1 ? '1 tracker' : `${trackers.length} trackers`}{projectsOnMap > 0 ? ` in ${projectsOnMap === 1 ? '1 project' : `${projectsOnMap} projects`}` : ''}</span>}
               {map.truncated && ' · the largest maps are cut to fit'}
@@ -200,11 +207,24 @@ export function KnowledgeView(): React.ReactElement {
                     {selected.repo !== undefined && <p className="wk-gk-muted">In repository {selected.repo}</p>}
                     {selected.summary !== undefined && <p className="wk-gk-content">{selected.summary}</p>}
                     {selected.kind === 'tracker' && <TrackerFacts node={selected} edges={map.edges} byKey={byKey} />}
+                    {canForget && (
+                      <ForgetKnowledge key={selected.key} node={selected}
+                        onDone={(tone, text) => {
+                          setForgetNote({ tone, text });
+                          // A late answer for A must not dismiss B, picked while A's Forget was in flight (codex r1 #1339).
+                          if (tone === 'ok') { const gone = selected.key; setSelectedKey((cur) => (cur === gone ? null : cur)); load(); }
+                        }} />
+                    )}
                   </div>
+                )}
+                {forgetNote !== null && (
+                  <p className={forgetNote.tone === 'fail' ? 'wk-gk-muted wk-learn-bad' : 'wk-gk-muted'} role="status" data-testid="knowledge-forget-note">
+                    {forgetNote.text} <button type="button" className="wk-link wk-se-x" onClick={() => setForgetNote(null)} aria-label="Dismiss">Dismiss</button>
+                  </p>
                 )}
                 <h3 className="wk-know-subtitle">Connections</h3>
                 {typed.length === 0 ? (
-                  <p className="wk-gk-muted" data-testid="knowledge-connections-empty">No approved shape connects anything yet. Approve a data shape above, and what it joins and describes is drawn here.</p>
+                  <p className="wk-gk-muted" data-testid="knowledge-connections-empty">No shape connects anything yet. When a profile finds what a table joins or which code describes it, or you approve a shape an agent proposed, it is drawn here.</p>
                 ) : (
                   <ul className="wk-know-edges" data-testid="knowledge-connections">
                     {typed.map((e) => (
@@ -266,6 +286,40 @@ export function KnowledgeView(): React.ReactElement {
         )}
       </section>
     </div>
+  );
+}
+
+/**
+ * Forget one piece of document knowledge (crew#1697 `POST /knowledge/forget {id}`), after a confirm. Only an "Other
+ * knowledge" node can be ({@link forgettableKnowledgeId}); a table says it is refreshed through its data source.
+ */
+function ForgetKnowledge({ node, onDone }: { node: KnowledgeMapNode; onDone: (tone: 'ok' | 'fail', text: string) => void }): React.ReactElement | null {
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const id = forgettableKnowledgeId(node);
+  if (node.kind === 'table') return <p className="wk-gk-muted" data-testid="knowledge-forget-live">A data source’s tables are refreshed through the source, not forgotten.</p>;
+  if (id === null) return null;
+  const forget = async (): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const out = await forgetKnowledge({ id });
+      onDone('ok', out.forgotten > 0 ? `Forgot “${node.label}”. Agents no longer recall it.` : `The knowledge store no longer held “${node.label}”, so nothing was deleted.`);
+    } catch (e) {
+      onDone('fail', forgetFailureWords(e));
+    } finally {
+      setBusy(false);
+      setAsking(false);
+    }
+  };
+  return asking ? (
+    <div className="wk-gk-row" role="group" aria-label="Forget this knowledge" data-testid="knowledge-forget-confirm">
+      <p className="wk-gk-muted">Forget it for good? Agents stop recalling it and the knowledge store deletes it. This can’t be undone.</p>
+      <button type="button" className="wk-btn wk-btn--danger wk-btn--sm" data-testid="knowledge-forget-go" disabled={busy} onClick={() => void forget()}>{busy ? 'Forgetting…' : 'Forget'}</button>
+      <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="knowledge-forget-cancel" disabled={busy} onClick={() => setAsking(false)}>Cancel</button>
+    </div>
+  ) : (
+    <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="knowledge-forget" onClick={() => setAsking(true)}>Forget…</button>
   );
 }
 

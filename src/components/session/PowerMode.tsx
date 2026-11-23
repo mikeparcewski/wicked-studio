@@ -3,7 +3,7 @@ import { durableFloorOverrides } from '../../board/assuranceModel.js';
 import { useEffect, useId, useRef, useState } from 'react';
 import { CircleCheck, CircleX, FileText, Flag, GitCommitHorizontal, MessageCircle, Pencil, ShieldCheck, Terminal, TrendingDown, TrendingUp, Zap } from 'lucide-react';
 import { ApiError } from '../../api/errors.js';
-import { powerApi, rigorRank, type HandoffStep, type PauseDecision, type PowerState, type Rigor, type RigorChange, type RigorPlan } from '../../api/power.js';
+import { PAUSE_CHANGED, powerApi, rigorRank, type HandoffStep, type PauseDecision, type PowerState, type Rigor, type RigorChange, type RigorPlan } from '../../api/power.js';
 import type { SessionView } from '../../api/types.js';
 import { queueDecision, reportDecision, useUndoQueue } from '../../board/undoQueue.js';
 import { InlineUndo } from '../InlineUndo.js';
@@ -401,7 +401,11 @@ export function PowerPauseCard({ view, power }: { view: SessionView; power: Powe
     setBusy(c);
     // The answer is `POST /runs/:id/power/pause` (the pause is not an engine gate), sent after the same 10 s undo
     // window every decision has; Undo sends nothing.
+    // (crew#1739) The pause this card shows, captured now: the answer names it, so one queued behind the undo window
+    // never lands on a newer pause the person never saw.
+    const shown = pause === null ? null : { checkpoint: pause.checkpoint, at: pause.at };
     const send = (decision: PauseDecision, note?: string): void => {
+      if (shown === null) { setBusy(null); setError('This job is not paused now, so there is nothing to answer.'); return; }
       const qid = queueDecision({
         verb: decision === 'stop' ? 'stop' : 'approve',
         runIds: [id],
@@ -411,12 +415,19 @@ export function PowerPauseCard({ view, power }: { view: SessionView; power: Powe
         closeNote: 'Close this tab before then and nothing is sent: the job stays paused.',
         commit: async () => {
           try {
-            const v = await powerApi.pause(id, decision, note);
-            // The pause this answer closed: a frame or an older session read never opens it again (studio#945).
-            rememberPower(id, v, pause);
+            const v = await powerApi.pause(id, decision, shown, note);
+            // The pause crew says this answer closed (crew#1739): a frame or an older session read never opens it again
+            // (studio#945).
+            rememberPower(id, v, v.answered);
             reportDecision('sent', `${PAUSE_CHOICES[c].label}: sent.`, { keys: [`power:${id}`] });
           } catch (e) {
             setError(errorWords(e));
+            // (crew#1739) The pause changed before this answer landed: this page answered nothing. The card shows the
+            // pause open now (crew's state, read again). The one it showed is no longer open (crew says so), so it is kept
+            // closed (studio#945's guard): a stale session read or frame never shows it again (codex r1 on #1350).
+            if (e instanceof ApiError && e.status === 409 && (e.body as { error?: unknown } | null)?.error === PAUSE_CHANGED) {
+              void powerApi.get(id).then((now) => rememberPower(id, now, shown), () => undefined);
+            }
             reportDecision('failed', `Not sent: ${errorWords(e)}`, { keys: [`power:${id}`] });
           } finally { setBusy(null); setQueued(null); }
         },

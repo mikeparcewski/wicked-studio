@@ -558,7 +558,7 @@ function withOperatorJudgment(r: AssuranceReceipt, unit: WorkUnit | undefined): 
  * stamped with the tree delivered), else — before the deliver phase has lifted, as at the deliver
  * gate — the same aggregate the engine builds (`deliver_lift.rs` `delivery_receipt`): the run's
  * contract, every instrument any gate ran, every one any gate skipped (first reason per
- * instrument). `who` lists the seats the gates name, so the card says who built and who checked.
+ * instrument; a not-due judge only when no gate ran or otherwise skipped one). `who` lists the seats the gates name, so the card says who built and who checked.
  */
 export function deliveryReceiptOf(
   view: SessionView | null | undefined,
@@ -587,10 +587,21 @@ export function deliveryReceiptOf(
   if (gates.length === 0) return null;
   const run = sessionAssurance(view, log) ?? { mode: gates[0]!.mode, required: gates[0]!.required };
   const out: AssuranceReceipt = { ...run, ran: [], skipped: [], ...who, tree: str((view?.session as unknown as { verified_tree?: unknown } | undefined)?.verified_tree), attempt: 0 };
+  // (core#1799, as `delivery_receipt` does) A gate where no judge was due (`not_applicable`: a scripted
+  // step, a review that changed no files) speaks for the delivery only when no gate ran a judge and none
+  // skipped one for another reason: a judged build beside a scripted test keeps "Independently accepted".
+  let judgeNotDue: SkippedInstrument | null = null;
   for (const g of gates) {
     for (const r of g.ran) if (!out.ran.includes(r)) out.ran.push(r);
-    for (const s of g.skipped) if (!out.skipped.some((k) => k.instrument === s.instrument)) out.skipped.push(s);
+    for (const s of g.skipped) {
+      if (s.instrument === 'judge' && s.reason === 'not_applicable') {
+        judgeNotDue ??= s;
+        continue;
+      }
+      if (!out.skipped.some((k) => k.instrument === s.instrument)) out.skipped.push(s);
+    }
   }
+  if (judgeNotDue !== null && !out.ran.includes('judge') && !out.skipped.some((k) => k.instrument === 'judge')) out.skipped.push(judgeNotDue);
   const fb = fallbacksOf(gates);
   const oj = judgmentsOf(gates, durableFloorOverrides(view));
   const rules = worstRules(gateRuleRows(view, log));
@@ -794,6 +805,24 @@ export function assuranceKind(r: AssuranceReceipt): AssuranceKind {
   if ((judged && r.judge !== null && r.judge === r.creator) || skippedSame) return 'same-seat';
   if (r.ran.length > 0) return 'floor-only';
   return 'unchecked';
+}
+
+/**
+ * (studio#1348, crew#1673 item 2) The word a passed acceptance is summed up with, from what the run's receipt says ran:
+ * "Passed" only when a check ran and the judge it required was not skipped. A receipt where nothing ran, or whose judge
+ * was skipped (reduced assurance) or could not rule (the operator judged instead), says that, never "Passed".
+ * No receipt (an older engine): "Passed", as crew's acceptance says.
+ */
+export function passedWord(r: AssuranceReceipt | null): string {
+  if (r === null) return 'Passed';
+  // What ran, not the kind: a skipped distinct evaluator alone reads `same-seat` with nothing run (codex r1 on #1350).
+  if (r.ran.length === 0) return 'Nothing verified';
+  const judgeSkips = r.skipped.filter((s) => s.instrument === 'judge');
+  if (judgeSkips.some((s) => s.reason === 'reduced_assurance')) return 'Judge skipped (reduced assurance)';
+  const operatorJudged = (r.operatorJudges ?? []).some((j) => j.floorOverride === undefined);
+  // A delivery's receipt is its gates' union: a judge that ran at one gate and not another is "in part".
+  if (judgeSkips.length > 0 || operatorJudged) return r.ran.includes('judge') ? 'Judged in part' : 'No judge ran';
+  return 'Passed';
 }
 
 /** The lead word when the decision PASSED (an approval, a delivery) … */
@@ -1034,7 +1063,7 @@ export function rulesHoldAt(events: readonly CoreEvent[] | null, units: readonly
 }
 
 /** {@link escalationFor}, but `null` when the unit was dispatched again after its newest escalation. */
-function escalationSinceDispatch(events: readonly CoreEvent[] | null, ord: number | null | undefined): { condition: string; denialSource: string } | null {
+function escalationSinceDispatch(events: readonly CoreEvent[] | null, ord: number | null | undefined): { condition: string; denialSource: string; summary: string } | null {
   if (typeof ord !== 'number') return null;
   const log = events ?? [];
   for (let i = log.length - 1; i >= 0; i--) {
@@ -1045,6 +1074,7 @@ function escalationSinceDispatch(events: readonly CoreEvent[] | null, ord: numbe
     return {
       condition: typeof e['condition'] === 'string' ? e['condition'] : '',
       denialSource: typeof e['denialSource'] === 'string' ? e['denialSource'] : '',
+      summary: typeof e['verdictSummary'] === 'string' ? e['verdictSummary'] : '',
     };
   }
   return null;
@@ -1067,6 +1097,24 @@ export const REDUCED_OPT_IN_DISCLOSURE =
  * ("a team run never grades on its creator seat"), so only the distinct-evaluator wording offers
  * the reduced opt-in; a run already reduced never sees it.
  */
+/**
+ * (core#1719, studio#1329) The engine's dead end for a distinct-evaluator review: no seat among this run's helpers can
+ * review the work independently (an author, a seat calling an author's provider, one that failed or can't take the
+ * step: core `pipeline.rs` `no_distinct_reviewer`, said in the denial). `outside` is the helper outside the run the
+ * engine named as able to review it, or `null` when it named none. `null` when the engine did not say so (a retry on
+ * another helper of the job may still work).
+ */
+export function noDistinctReviewer(events: readonly CoreEvent[] | null, ord: number | null | undefined, prompt: string | undefined): { outside: string | null } | null {
+  // THIS attempt's escalation only (one from before the unit's newest dispatch is an earlier attempt's, review r1): its
+  // summary is the engine's whole denial. The gate prompt quotes it cut at 240 characters (core `reason_head`), so it
+  // is read only when there is no escalation of this attempt.
+  const esc = escalationSinceDispatch(events, ord);
+  const said = esc !== null ? esc.summary : prompt ?? '';
+  if (!/no distinct reviewer remains among this run's helpers/i.test(said)) return null;
+  const named = /`([^`]+)` could review it, but it is not one of this run's helpers/.exec(said)?.[1] ?? null;
+  return { outside: named };
+}
+
 export function creatorSeatRefusal(events: readonly CoreEvent[] | null, ord: number | null | undefined, prompt: string | undefined): boolean {
   const esc = escalationFor(events, ord);
   const said = `${esc?.summary ?? ''}\n${prompt ?? ''}`;
