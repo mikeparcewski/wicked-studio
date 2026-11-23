@@ -722,6 +722,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
                   {s.asks === 'if-fails' && <em className="wk-pass-asks"> asks you if its check fails</em>}
                   {s.asks === 'maybe' && <em className="wk-pass-asks"> may ask you</em>}
                   {s.floor && <em className="wk-pass-floor"> added for this risk</em>}
+                  {s.controls.length > 0 && <span data-testid="job-passage-plan-controls" className="wk-pass-ctl"> · {s.controls.join(' · ')}</span>}
                   {s.added && <span className="wk-visually-hidden"> (new in this version)</span>}
                 </span>
               </li>

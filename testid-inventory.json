@@ -8763,6 +8763,12 @@
       ]
     },
     {
+      "testId": "job-passage-plan-controls",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
       "testId": "job-passage-plan-head",
       "files": [
         "src/components/session/JobPassage.tsx"
@@ -15500,6 +15506,12 @@
     },
     {
       "testId": "project-draft-epics",
+      "files": [
+        "src/components/product/ProjectRequirementsSection.tsx"
+      ]
+    },
+    {
+      "testId": "project-draft-epics-note",
       "files": [
         "src/components/product/ProjectRequirementsSection.tsx"
       ]

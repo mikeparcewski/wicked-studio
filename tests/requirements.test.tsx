@@ -184,6 +184,8 @@ describe('the dashboard’s Requirements section', () => {
     expect(screen.getByTestId('project-requirements-unread')).toHaveTextContent('shop-web has no requirements map yet · shop-ops could not be read.');
     fireEvent.click(screen.getByTestId('project-requirements-link'));
     expect(navigate).toHaveBeenCalledWith('/projects/shop/requirements');
+    // crew#372: the note promises no publish step (there is none): it says what the draft is and that nothing is published.
+    expect(screen.getByTestId('project-draft-epics-note').textContent).toBe('Turns chosen requirements into draft epics and stories for you to review. Nothing is published.');
     fireEvent.click(screen.getByTestId('project-draft-epics'));
     expect(useLaunchWizard.getState().draft).toMatchObject({ workflowId: DRAFT_EPICS_ID, projectId: 'shop', requirements: [] });
   });
