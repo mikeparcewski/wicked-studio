@@ -141,6 +141,15 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   const [moreOpen, setMoreOpen] = useState(false);
   /** (studio#1335) The proposal target whose every question choice is shown ("N more" pressed); another target folds. */
   const [allChoicesFor, setAllChoicesFor] = useState<string | null>(null);
+  /** The first choice "N more" revealed: it takes the focus once drawn. */
+  const revealFrom = useRef<string | null>(null);
+  const repliesBox = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const id = revealFrom.current;
+    if (id === null || allChoicesFor === null) return;
+    revealFrom.current = null;
+    repliesBox.current?.querySelector<HTMLButtonElement>(`[data-reply="${CSS.escape(id)}"]`)?.focus();
+  }, [allChoicesFor]);
   const [openSwap, setOpenSwap] = useState<string | null>(null);
   const [explain, setExplain] = useState(false);
   const head = lineage.head;
@@ -558,9 +567,11 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
     : v.phase === 'revising' || v.phase === 'swapPending' || v.phase === 'planning' || v.phase === 'replanning' || v.phase === 'starting' ? ' wk-pass--busy' : '';
   // studio#1335: crew sends every repository in scope as a choice; the card shows the named ones and enough to fill the
   // chips' count, then "N more" (JobRepoChoices' rule). The others stay replies (a typed answer can still bind one).
-  const choiceCap = v.phase === 'asking' && allChoicesFor !== pt ? askingChoicesShown(head.proposal) : Infinity;
-  const replies = v.replies.filter((r) => !r.id.startsWith('choice:') || Number(r.id.slice('choice:'.length)) < choiceCap);
+  const shownChoices = v.phase === 'asking' && allChoicesFor !== pt ? askingChoicesShown(head.proposal) : null;
+  const replies = shownChoices === null ? v.replies : v.replies.filter((r) => !r.id.startsWith('choice:') || shownChoices.has(Number(r.id.slice('choice:'.length))));
   const moreChoices = v.replies.length - replies.length;
+  // "N more" follows the last choice shown; pressing it moves focus to the first choice it reveals (it unmounts itself).
+  const lastShownChoice = moreChoices > 0 ? replies.filter((r) => r.id.startsWith('choice:')).at(-1)?.id ?? null : null;
   const progress = v.progress;
   const headQuestion = head.proposal.question ?? null;
   const requirementsQuestion = asksForRequirements(head.proposal);
@@ -847,7 +858,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       {runId !== null && <InlineUndo host="job-passage" keys={[gateKeyOf(runId), `stop:${runId}`]} />}
 
       {replies.length > 0 && confirmStop === null && (
-        <div role="group" aria-label={`Replies to the job, ${v.versionLabel}`} data-testid="job-passage-replies" className="wk-pass-acts">
+        <div ref={repliesBox} role="group" aria-label={`Replies to the job, ${v.versionLabel}`} data-testid="job-passage-replies" className="wk-pass-acts">
           {replies.map((r, i) => {
             const binds = bound !== null && bound.replyKey === `${lineage.lineage}:${r.id}`;
             return (
@@ -858,9 +869,10 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
                   {r.label}{r.id === 'start' && r.enabled ? ' →' : ''}{binds ? ' · answering' : ''}
                 </button>
                 {!r.enabled && r.held !== undefined && <span data-testid="job-passage-held" className="wk-pass-why">{r.held}</span>}
-                {moreChoices > 0 && r.id === `choice:${choiceCap - 1}` && <>
+                {r.id === lastShownChoice && <>
                   <span aria-hidden className="wk-pass-dot">·</span>
-                  <button type="button" data-testid="job-passage-choices-more" className="wk-pass-act wk-pass-act--quiet" onClick={() => setAllChoicesFor(pt)}>
+                  <button type="button" data-testid="job-passage-choices-more" className="wk-pass-act wk-pass-act--quiet"
+                    onClick={() => { revealFrom.current = v.replies.find((x) => x.id.startsWith('choice:') && !replies.includes(x))?.id ?? null; setAllChoicesFor(pt); }}>
                     {moreChoices} more
                   </button>
                 </>}

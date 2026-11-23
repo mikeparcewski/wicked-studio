@@ -619,6 +619,28 @@ describe('studio#1335: an asking card with every repository in scope as a choice
     expect(screen.getByTestId('job-passage-choices-more')).toHaveTextContent('6 more');
   });
 
+  it('a repository named only in a correction (details) shows, wherever crew placed it (codex r1)', async () => {
+    // crew orders by `words` only (repoChoicesFor(facts.words, …)); studio names from the words and their corrections.
+    const named = ['a1', 'b2', 'c3', 'd4', 'e5', 'f6'];
+    messages = [{ at: T0, turnId: 'person:1', kind: 'proposal', proposal: { ...askingAll(`Compare ${named.join(', ')}`, named), details: ['and rg7 too'] } }];
+    page();
+    await waitFor(() => expect(choiceLabels()).toEqual([...named, 'rg7']));
+    expect(screen.getByTestId('job-passage-choices-more')).toHaveTextContent('6 more');
+    // "6 more" sits after the last choice shown, before Not now.
+    const acts = Array.from(screen.getByTestId('job-passage-replies').querySelectorAll('button')).map((b) => b.getAttribute('data-reply') ?? b.getAttribute('data-testid'));
+    expect(acts.slice(-3)).toEqual(['choice:12', 'job-passage-choices-more', 'not_now']);
+  });
+
+  it('pressing "N more" moves the focus to the first choice it reveals', async () => {
+    messages = [{ at: T0, turnId: 'person:1', kind: 'proposal', proposal: askingAll('Map the domain of the service', []) }];
+    page();
+    const more = await screen.findByTestId('job-passage-choices-more');
+    more.focus();
+    fireEvent.click(more);
+    await waitFor(() => expect(document.activeElement).toHaveAttribute('data-reply', 'choice:6'));
+    expect(document.activeElement).toHaveTextContent('g8');
+  });
+
   it('a short list has no "more"', async () => {
     messages = [{ at: T0, turnId: 'person:1', kind: 'proposal', proposal: asking({ words: 'Map it', question: { kind: 'missing', text: 'Which repository?', choices: [{ label: 'rg1', edit: { repoRef: 'rg1' } }, { label: 'rg2', edit: { repoRef: 'rg2' } }] } }) }];
     page();

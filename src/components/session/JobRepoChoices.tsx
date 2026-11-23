@@ -18,17 +18,20 @@ export function asksForRepo(p: Pick<ArtifactProposal, 'question' | 'needs'>): bo
 }
 
 /**
- * (studio#1335) How many of crew's "Which repository?" choices an asking card shows before "N more": the same rule as
- * these chips, every one the words name plus enough to fill {@link CHOICES_MAX}. crew sends every repository in the
- * chat's scope (crew#1791), the named ones first, so the ones shown are the named ones and then crew's order.
+ * (studio#1335) Which of crew's "Which repository?" choices an asking card shows before "N more", by their index: the
+ * same rule as these chips, every one the words (and their corrections) name plus the first others in crew's order to
+ * fill {@link CHOICES_MAX}. `null` when every choice shows. crew sends every repository in the chat's scope (crew#1791).
  */
-export function askingChoicesShown(p: Pick<ArtifactProposal, 'question' | 'words' | 'details'>): number {
+export function askingChoicesShown(p: Pick<ArtifactProposal, 'question' | 'words' | 'details'>): ReadonlySet<number> | null {
   const choices = p.question?.choices ?? [];
-  const repos = choices.flatMap((c) => {
+  if (choices.length <= CHOICES_MAX) return null;
+  const repos = choices.map((c, i) => {
     const ref = (c.edit as { repoRef?: unknown } | undefined)?.repoRef;
-    return typeof ref === 'string' ? [{ id: ref, name: c.label }] : [];
+    return { i, id: typeof ref === 'string' ? ref : '', name: typeof ref === 'string' ? c.label : '' };
   });
-  return Math.max(CHOICES_MAX, reposNamedIn(jobWords(p), repos).length);
+  const shown = new Set(reposNamedIn(jobWords(p), repos.filter((r) => r.id !== '')).map((r) => r.i));
+  for (const r of repos) { if (shown.size >= CHOICES_MAX) break; shown.add(r.i); }
+  return shown.size >= choices.length ? null : shown;
 }
 
 /** The repositories offered: those the words name first (in registry order), then the rest by name. */
