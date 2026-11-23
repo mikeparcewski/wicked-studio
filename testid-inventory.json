@@ -20097,6 +20097,18 @@
       ]
     },
     {
+      "testId": "schedule-reduced",
+      "files": [
+        "src/components/insights/SchedulesSection.tsx"
+      ]
+    },
+    {
+      "testId": "schedule-reduced-offer",
+      "files": [
+        "src/components/insights/SchedulesSection.tsx"
+      ]
+    },
+    {
       "testId": "schedule-row",
       "files": [
         "src/components/insights/SchedulesSection.tsx"
@@ -20104,6 +20116,12 @@
     },
     {
       "testId": "schedule-run-now",
+      "files": [
+        "src/components/insights/SchedulesSection.tsx"
+      ]
+    },
+    {
+      "testId": "schedule-run-reduced",
       "files": [
         "src/components/insights/SchedulesSection.tsx"
       ]

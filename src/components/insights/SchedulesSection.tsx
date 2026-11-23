@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CADENCE_DAYS, REVIEW_WORKFLOW, cadenceWords, insightsApi, type WorkflowSchedule } from '../../api/insights.js';
+import { CADENCE_DAYS, REVIEW_WORKFLOW, asksReducedAssurance, cadenceWords, insightsApi, type WorkflowSchedule } from '../../api/insights.js';
 import { sessionPath } from '../../board/sessionModel.js';
 import { useProjectsStore } from '../../store/projects.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -18,7 +18,9 @@ export function scheduleLine(s: WorkflowSchedule): string {
   } else if (s.workflow === REVIEW_WORKFLOW) {
     parts.push('no review yet');
   }
-  if (s.lastOutcome === 'refused' && s.lastNote !== null) parts.push(`last start refused: ${s.lastNote}`);
+  if (s.reducedAssurance === true) parts.push('an agent that did the work may review it when no other can');
+  if (s.retryWith?.reducedAssurance === true && s.reducedAssurance !== true) parts.push('last start refused: no other agent can review this work independently');
+  else if (s.lastOutcome === 'refused' && s.lastNote !== null) parts.push(`last start refused: ${s.lastNote}`);
   else if (s.lastNote !== null && s.lastNote.startsWith('skipped')) parts.push(s.lastNote.replace(/^skipped: /u, 'waiting: '));
   return parts.join(' · ');
 }
@@ -31,6 +33,8 @@ export function SchedulesSection({ navigate }: { navigate: Navigate }): React.Re
   const [rows, setRows] = useState<WorkflowSchedule[] | null | undefined>(undefined);
   const [said, setSaid] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  // crew#1837: Run it now answered "no other agent can review this independently" (retryWith.reducedAssurance).
+  const [offered, setOffered] = useState<Record<string, boolean>>({});
   const projects = useProjectsStore((s) => s.projects);
   const loadProjects = useProjectsStore((s) => s.load);
 
@@ -44,7 +48,7 @@ export function SchedulesSection({ navigate }: { navigate: Navigate }): React.Re
   }, []);
   useEffect(() => { void read(); if (projects.length === 0) void loadProjects(); }, [read]); // eslint-disable-line react-hooks/exhaustive-deps -- once
 
-  const save = async (s: WorkflowSchedule, patch: Partial<Pick<WorkflowSchedule, 'enabled' | 'everyHours' | 'projectIds'>>): Promise<void> => {
+  const save = async (s: WorkflowSchedule, patch: Partial<Pick<WorkflowSchedule, 'enabled' | 'everyHours' | 'projectIds' | 'reducedAssurance'>>): Promise<void> => {
     setBusy(s.id);
     try {
       const next = await insightsApi.saveSchedule(s.id, {
@@ -52,6 +56,7 @@ export function SchedulesSection({ navigate }: { navigate: Navigate }): React.Re
         everyHours: patch.everyHours ?? s.everyHours,
         enabled: patch.enabled ?? s.enabled,
         projectIds: patch.projectIds ?? s.projectIds,
+        ...(patch.reducedAssurance !== undefined ? { reducedAssurance: patch.reducedAssurance } : {}),
       });
       setRows((cur) => (cur ?? []).map((r) => (r.id === s.id ? { ...next, ...(r.lastReview !== undefined && next.lastReview === undefined ? { lastReview: r.lastReview } : {}) } : r)));
       setSaid((m) => ({ ...m, [s.id]: 'Saved.' }));
@@ -62,14 +67,25 @@ export function SchedulesSection({ navigate }: { navigate: Navigate }): React.Re
     }
   };
 
-  const runNow = async (s: WorkflowSchedule): Promise<void> => {
+  const runNow = async (s: WorkflowSchedule, reduced = false): Promise<void> => {
     setBusy(s.id);
     try {
-      await insightsApi.runNow(s.id);
+      await (reduced ? insightsApi.runNow(s.id, { reducedAssurance: true }) : insightsApi.runNow(s.id));
+      setOffered((m) => ({ ...m, [s.id]: false }));
       setSaid((m) => ({ ...m, [s.id]: 'Started. It shows on Jobs, and the review lands in Insights when it finishes.' }));
       await read();
     } catch (e) {
-      setSaid((m) => ({ ...m, [s.id]: `Not started: ${e instanceof Error ? e.message : String(e)}` }));
+      if (!reduced && asksReducedAssurance(e)) {
+        setOffered((m) => ({ ...m, [s.id]: true }));
+        setSaid((m) => ({ ...m, [s.id]: 'Not started: no other agent can review this work independently.' }));
+      } else {
+        setSaid((m) => ({ ...m, [s.id]: `Not started: ${e instanceof Error ? e.message : String(e)}` }));
+        // Crew keeps the accept even when this start fails (another run working): show the row as saved.
+        if (reduced) {
+          setOffered((m) => ({ ...m, [s.id]: false }));
+          await read();
+        }
+      }
     } finally {
       setBusy(null);
     }
@@ -89,6 +105,7 @@ export function SchedulesSection({ navigate }: { navigate: Navigate }): React.Re
             const name = WORKFLOW_NAMES[s.workflow] ?? s.workflow;
             const covered = s.projectIds.length === 0 ? 'All projects' : projects.filter((p) => s.projectIds.includes(p.id)).map((p) => p.name).join(', ') || `${s.projectIds.length} projects`;
             const blockedPath = s.blocked ? sessionPath(`run:${s.blocked.target.runId}`) : '';
+            const offer = s.reducedAssurance !== true && (offered[s.id] === true || s.retryWith?.reducedAssurance === true);
             return (
               <div key={s.id} className="wk-schedule" data-testid="schedule-row" data-schedule={s.id} data-enabled={String(s.enabled)}>
                 <CalmRows label={name}>
@@ -123,6 +140,19 @@ export function SchedulesSection({ navigate }: { navigate: Navigate }): React.Re
                     }}>Open run</a>
                   </p>
                 )}
+                {offer && (
+                  <>
+                    <p className="wk-schedule-blocked" data-testid="schedule-reduced-offer">
+                      Every agent that could review this work did some of it, so none can review it independently. Sign in
+                      another agent (Agents), or let one that did the work review it from now on; each review says so.
+                    </p>
+                    <div className="wk-schedule-controls" style={{ marginBottom: 10 }}>
+                      <CalmButton testId="schedule-run-reduced" tone="primary" disabled={busy === s.id} onClick={() => void runNow(s, true)}>
+                        Allow it and run now
+                      </CalmButton>
+                    </div>
+                  </>
+                )}
                 <div className="wk-schedule-controls">
                   <label className="wk-schedule-toggle">
                     <input type="checkbox" data-testid="schedule-enabled" checked={s.enabled} disabled={busy === s.id}
@@ -134,6 +164,13 @@ export function SchedulesSection({ navigate }: { navigate: Navigate }): React.Re
                     {CADENCE_DAYS.map((d) => <option key={d} value={String(d)}>{cadenceWords(d * 24)}</option>)}
                     {!CADENCE_DAYS.includes(days as 1 | 2 | 3) && <option value="custom" disabled>{cadenceWords(s.everyHours)}</option>}
                   </select>
+                  {s.reducedAssurance === true && (
+                    <label className="wk-schedule-toggle">
+                      <input type="checkbox" data-testid="schedule-reduced" checked disabled={busy === s.id}
+                        onChange={() => void save(s, { reducedAssurance: false })} />
+                      <span>Allow a reviewer that did the work</span>
+                    </label>
+                  )}
                   <CalmButton testId="schedule-run-now" disabled={busy === s.id} onClick={() => void runNow(s)}>Run it now</CalmButton>
                 </div>
               </div>
