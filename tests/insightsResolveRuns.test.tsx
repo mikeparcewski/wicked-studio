@@ -116,6 +116,22 @@ describe('Accept on "Close N runs nobody finished" (crew#1165)', () => {
     expect(screen.queryByTestId('insights-resolve-archive')).toBeNull();
   });
 
+  it.each(['archived', 'refused'])('leaving while the first run is still answering (%s) sends no further run', async (how) => {
+    let settle: () => void = () => undefined;
+    resolveRun.mockImplementation((id: string) => new Promise((resolve, reject) => {
+      settle = () => (how === 'refused' ? reject(new Error(`run ${id} is executing`)) : resolve({ runId: id, action: 'archive', archived: true, cancelled: false, note: 'resolved: n' }));
+    }));
+    const { unmount } = render(<InsightsDecide selected={{ ...staleRec(), state: 'accepted' }} metrics={[]} navigate={vi.fn()} onDecided={async () => undefined} />);
+    fireEvent.click(screen.getByTestId('insights-resolve-archive'));
+    fireEvent.change(screen.getByTestId('insights-resolve-note'), { target: { value: 'gone' } });
+    fireEvent.click(screen.getByTestId('insights-resolve-archive-confirm'));
+    await waitFor(() => expect(resolveRun).toHaveBeenCalledTimes(1));
+    unmount();
+    settle();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(resolveRun.mock.calls).toEqual([[A, { action: 'archive', reason: 'gone' }]]);
+  });
+
   it('picked again later, an accepted recommendation still lists its runs to close (from its own action.runs)', () => {
     render(<InsightsDecide selected={{ ...staleRec(), state: 'accepted', decidedAt: '2026-11-20T10:00:00Z' }} metrics={[]} navigate={vi.fn()} onDecided={async () => undefined} />);
     expect(screen.getAllByTestId('insights-resolve-run').map((r) => r.getAttribute('data-run'))).toEqual([A, B, C]);
