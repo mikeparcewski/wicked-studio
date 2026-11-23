@@ -23,19 +23,22 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 /**
- * The selector of each rule whose block reads `needle`, comments dropped. One pass of indexOf: the regex this
+ * The selector of each rule whose block reads `needle`, once per block, comments dropped. One pass of indexOf: the regex this
  * replaces, /([^{}]+)\{[^}]*var\(--font-display\)/, retried every start position of each brace-free run, which
  * cost about 1.2 s on the 885K characters of src/styles and ran past 5 s on a loaded runner (studio#1354).
  */
 function rulesUsing(css: string, needle: string): string[] {
   const out: string[] = [];
-  const seen = new Set<number>();
-  for (let at = css.indexOf(needle); at >= 0; at = css.indexOf(needle, at + needle.length)) {
+  for (let at = css.indexOf(needle); at >= 0; ) {
     const open = css.lastIndexOf('{', at);
-    if (open < 0 || css.lastIndexOf('}', at) > open || seen.has(open)) continue;
-    seen.add(open);
-    const start = Math.max(css.lastIndexOf('{', open - 1), css.lastIndexOf('}', open - 1)) + 1;
-    out.push(css.slice(start, open).replace(/\/\*[\s\S]*?\*\//gu, '').trim());
+    if (open >= 0 && css.lastIndexOf('}', at) < open) {
+      const start = Math.max(css.lastIndexOf('{', open - 1), css.lastIndexOf('}', open - 1)) + 1;
+      out.push(css.slice(start, open).replace(/\/\*[\s\S]*?\*\//gu, '').trim());
+    }
+    // One name per block: the next read worth looking at is past this block's closing brace.
+    const close = css.indexOf('}', at);
+    if (close < 0) break;
+    at = css.indexOf(needle, close + 1);
   }
   return out;
 }
@@ -50,6 +53,11 @@ describe('rulesUsing (studio#1354)', () => {
 
   it('stays one pass on a long brace-free run (the old regex took about 7 s on this input)', () => {
     const css = `.a${' '.repeat(120_000)}{ color: red }\n.wk-wordmark { font-family: var(--font-display); }`;
+    expect(rulesUsing(css, 'var(--font-display)')).toEqual(['.wk-wordmark']);
+  });
+
+  it('stays one pass when one block reads the variable many times', () => {
+    const css = `.a { color: red }\n.wk-wordmark { ${'x: var(--font-display); '.repeat(40_000)}}`;
     expect(rulesUsing(css, 'var(--font-display)')).toEqual(['.wk-wordmark']);
   });
 });
