@@ -42,7 +42,7 @@ function widened(id: string, at: number): DecisionView {
 
 describe('ruleSentence — scope and effect in one sentence', () => {
   it('a recall-only project rule', () => {
-    expect(ruleSentence(rule(), 'Kestrel')).toBe('A Development rule for Kestrel — helpers are told about it when it applies; it never blocks.');
+    expect(ruleSentence(rule(), 'Kestrel')).toBe('A Development rule for Kestrel — helpers are told about it when it applies, and review checks work against it: a breach can hold a gate.');
   });
   it('falls back to the project id when its name is unknown, and says everywhere for a rule with no project', () => {
     expect(ruleSentence(rule(), null)).toMatch(/for upload-endpoint —/);
@@ -52,6 +52,20 @@ describe('ruleSentence — scope and effect in one sentence', () => {
     expect(ruleSentence(rule({ effect: 'deny' }), 'K')).toMatch(/blocks a gate when it fires\.$/);
     expect(ruleSentence(rule({ effect: 'allow' }), 'K')).toMatch(/allows outright when it fires\.$/);
     expect(ruleSentence(rule({ effect: 'allow_with_conditions', obligations: ['step:test', 'step:walkthrough'] }), 'K')).toMatch(/holds work to it: step:test, step:walkthrough\.$/);
+  });
+  it('never tells a person an in-force rule without an effect cannot block (studio#1314)', () => {
+    // wicked-core consider_rules (crates/wicked-governance/src/conformance.rs) puts every live, in-scope rule in force,
+    // recall-only and decide-lane alike; review checks work against each, and a breach can hold a gate.
+    const s = ruleSentence(rule(), 'K');
+    expect(s).not.toMatch(/never blocks|cannot block|can't block|can\u2019t block/i);
+    expect(s).toMatch(/review checks work against it: a breach can hold a gate\.$/);
+  });
+  it('says a shipped process rule (RVWL-1001..1004) is reported and, as shipped, never holds a gate', () => {
+    // wicked-core src/steering_packs.rs kind_of + src/rule_check.rs: a process rule's row is blocking: false.
+    for (const id of ['RVWL-1001', 'RVWL-1002', 'RVWL-1003', 'RVWL-1004']) {
+      expect(ruleSentence(rule({ id }), null)).toMatch(/a process rule review reports on; as shipped, it never holds a gate\.$/);
+    }
+    expect(ruleSentence(rule({ id: 'RVWL-1005' }), null)).toMatch(/a breach can hold a gate\.$/);
   });
   it('leads a retired rule with Retired', () => {
     expect(ruleSentence(rule({ retired: true }), 'K')).toMatch(/^Retired\. A Development rule/);

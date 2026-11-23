@@ -149,7 +149,7 @@ describe('the page', () => {
     expect(rows.map((r) => r.getAttribute('data-rule-id'))).toStrictEqual(['proposal:pr-auto', 'TST-1002', 'PAT-100']);
     expect(rows.map((r) => r.getAttribute('data-group'))).toStrictEqual(['words', 'testing', 'other']);
     // The row's line keeps DC's sentence for the rule (with the project's NAME) as its description.
-    expect(rows[0]?.querySelector('[data-testid="rules-row-line"]')?.getAttribute('data-sentence')).toBe('A Development rule for Kestrel — helpers are told about it when it applies; it never blocks.');
+    expect(rows[0]?.querySelector('[data-testid="rules-row-line"]')?.getAttribute('data-sentence')).toBe('A Development rule for Kestrel — helpers are told about it when it applies, and review checks work against it: a breach can hold a gate.');
     // Short facts, not the sentence repeated under every rule: type, reach, origin. The id is behind the row (the drawer), not on its face.
     expect(rows[0]?.querySelector('[data-testid="rules-row-line"]')?.textContent).toBe('Development · applies to Kestrel · from your words');
     expect(rows[0]?.textContent).not.toContain('proposal:pr-auto');
@@ -201,7 +201,7 @@ describe('the page', () => {
     const navigate = vi.fn();
     render(<SteerSurface pathname={rulePath('proposal:pr-auto')} search="" runs={[]} navigate={navigate} />);
     const drawer = await screen.findByTestId('steering-rule-drawer');
-    expect(drawer.querySelector('[data-testid="rule-sentence"]')?.textContent).toBe('A Development rule for Kestrel — helpers are told about it when it applies; it never blocks.');
+    expect(drawer.querySelector('[data-testid="rule-sentence"]')?.textContent).toBe('A Development rule for Kestrel — helpers are told about it when it applies, and review checks work against it: a breach can hold a gate.');
     expect(drawer.querySelector('[data-testid="steering-rule-statement"]')?.textContent).toBe(WORDS.statement);
     // ORIGIN from the ledger (B11): the operator's verbatim words, read from `/decisions` — DC's component, unchanged.
     await waitFor(() => expect(drawer.querySelector('[data-testid="rule-origin"]')).not.toBeNull());
