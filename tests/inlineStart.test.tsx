@@ -28,6 +28,7 @@ import { useProjectsStore } from '../src/store/projects.js';
 import { clearRepoCache } from '../src/store/repoCache.js';
 import { clearCachedRoster, setCachedRoster } from '../src/store/rosterCache.js';
 import { useSessionDrafts } from '../src/store/sessionDrafts.js';
+import { useLaunchNotices } from '../src/store/launchNotices.js';
 import { clearCachedWorkflows, setCachedWorkflows } from '../src/store/workflowCache.js';
 import { resetWorkflowCatalog } from '../src/store/workflowCatalog.js';
 import rig from './fixtures/workflowCatalog-rig.json';
@@ -68,6 +69,8 @@ let settingsGate: Promise<void> | null = null;
 let read: string[] = [];
 const gets = (): string[] => read;
 let posts: Array<{ path: string; body: Record<string, unknown> }> = [];
+/** `POST /runs` → 201: crew's answer (a full-assurance launch on a one-CLI roster adds `assuranceNotice`). */
+let runsAnswer: Record<string, unknown> = { runId: 'run-new' };
 function stubWire(): void {
   posts = [];
   read = [];
@@ -78,7 +81,7 @@ function stubWire(): void {
     if (init?.method !== undefined && init.method !== 'GET') {
       const body = typeof init.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : {};
       posts.push({ path, body });
-      if (path === '/runs') return json({ runId: 'run-new' }, 201);
+      if (path === '/runs') return json(runsAnswer, 201);
       if (path === '/plans/preview') return json(preview);
       if (path === '/apps') return json({ app: { slug: String(body['slug']), name: 'x', projectId: body['projectId'], head: { version: 1 } } }, 201);
       if (/^\/apps\/[^/]+\/turns$/.test(path)) return json({ runId: 'turn-run', turnId: 't1' }, 202);
@@ -122,6 +125,8 @@ const wfChip = (key: string): { workflowId: string; entryId?: string } | undefin
 const launches = (): Array<Record<string, unknown>> => posts.filter((p) => p.path === '/runs').map((p) => p.body);
 
 beforeEach(() => {
+  runsAnswer = { runId: 'run-new' };
+  useLaunchNotices.setState({ bySession: {} });
   repos = [repo('svc')];
   presets = [];
   preview = { steps: [] };
@@ -194,6 +199,23 @@ describe('a / pick starts the work in this chat', () => {
     expect(JSON.parse(String(body['clisJson'])).map((s: RosterSeat) => s.key)).toEqual(['claude', 'codex']);
     await waitFor(() => expect(nav).toHaveBeenCalledWith('/s/chat-1'));
     expect(wfChip('chat-1')).toBeUndefined();
+  });
+
+  it('studio#1239: crew\u2019s assuranceNotice is kept for the job\u2019s session (its chat and its run), with the body as sent', async () => {
+    // crew routes.ts POST /runs (~:4367-4370) adds `assuranceNotice` (core/assurance.ts): code, message, seats, retryWith.
+    const notice = { code: 'single_cli_roster', message: 'Every seat that can work (claude) runs the same CLI, so no other CLI can evaluate or judge this run\'s work.', seats: ['claude'], retryWith: { retryOf: 'run-new', reducedAssurance: true } };
+    runsAnswer = { runId: 'run-new', assuranceNotice: notice };
+    const nav = vi.fn();
+    render(<Harness navigate={nav} />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    enter();
+    await waitFor(() => expect(nav).toHaveBeenCalledWith('/s/chat-1'));
+    const kept = useLaunchNotices.getState().bySession;
+    expect(kept['chat-1']).toMatchObject({ runId: 'run-new', notice: { code: 'single_cli_roster', retryWith: { retryOf: 'run-new', reducedAssurance: true } } });
+    expect(kept['chat-1']!.body).toEqual(launches()[0]);
+    expect(kept['run:run-new']).toBe(kept['chat-1']);
   });
 
   it('without power mode on the daemon, the launch says nothing of power (an older schema) and still asks before step 1', async () => {

@@ -20433,6 +20433,54 @@
       ]
     },
     {
+      "testId": "session-launch-notice",
+      "files": [
+        "src/components/session/LaunchAssuranceNote.tsx"
+      ]
+    },
+    {
+      "testId": "session-launch-notice-cancel",
+      "files": [
+        "src/components/session/LaunchAssuranceNote.tsx"
+      ]
+    },
+    {
+      "testId": "session-launch-notice-confirm",
+      "files": [
+        "src/components/session/LaunchAssuranceNote.tsx"
+      ]
+    },
+    {
+      "testId": "session-launch-notice-dismiss",
+      "files": [
+        "src/components/session/LaunchAssuranceNote.tsx"
+      ]
+    },
+    {
+      "testId": "session-launch-notice-error",
+      "files": [
+        "src/components/session/LaunchAssuranceNote.tsx"
+      ]
+    },
+    {
+      "testId": "session-launch-notice-message",
+      "files": [
+        "src/components/session/LaunchAssuranceNote.tsx"
+      ]
+    },
+    {
+      "testId": "session-launch-notice-reduced",
+      "files": [
+        "src/components/session/LaunchAssuranceNote.tsx"
+      ]
+    },
+    {
+      "testId": "session-launch-notice-relaunch",
+      "files": [
+        "src/components/session/LaunchAssuranceNote.tsx"
+      ]
+    },
+    {
       "testId": "session-loading",
       "files": [
         "src/components/session/SessionView.tsx"
