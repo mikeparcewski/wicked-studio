@@ -1,5 +1,5 @@
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EditorView } from '../src/api/editors.js';
 import type { SessionView } from '../src/api/types.js';
 
@@ -13,6 +13,7 @@ vi.mock('../src/api/interactive.js', async (orig) => {
   const real = await orig<typeof import('../src/api/interactive.js')>();
   return { ...real, getVersions: vi.fn(async () => ({ head: 0, versions: [] })), listExports: vi.fn(async () => []) };
 });
+const interactive = await import('../src/api/interactive.js');
 
 const { PluginCard } = await import('../src/components/editorHost/PluginCard.js');
 const { InteractiveDocSurfaceAdapter } = await import('../src/editors/adapters/interactiveDoc.js');
@@ -37,7 +38,9 @@ const binding = (attempt?: ReturnType<typeof attemptOfRun>) => ({
   projectId: '_unfiled', docId: 'q3-brief', runId: 'run-doc-1', composerKey: 'c', ...(attempt !== undefined ? { attempt } : {}),
 });
 
-afterEach(() => { cleanup(); resetArtifactSizes(); });
+// The card reads the document's HTML once its manifest is read: answered here, never by the network.
+beforeEach(() => { vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 }))); });
+afterEach(() => { cleanup(); resetArtifactSizes(); vi.unstubAllGlobals(); });
 
 describe('attemptOfRun', () => {
   it('a run crew recorded as not landed is failed, with crew\'s reason', () => {
@@ -55,25 +58,54 @@ describe('attemptOfRun', () => {
 });
 
 describe('interactive-doc pills', () => {
-  const a = () => new InteractiveDocSurfaceAdapter(binding());
-  it('before a first version: building, stopped, or not made with why', () => {
-    expect(a().pills()).toEqual([{ id: 'version', text: 'Building…', tone: 'warn' }]);
-    expect(a().pills({ state: 'working' })[0]!.text).toBe('Building…');
-    expect(a().pills({ state: 'stopped' })[0]).toMatchObject({ text: 'Stopped', tone: 'bad' });
-    expect(a().pills(attemptOfRun(RESTARTED))[0]).toEqual({
+  // An adapter whose manifest has been read: head 0, no version.
+  const a = async () => { const d = new InteractiveDocSurfaceAdapter(binding()); await d.refresh(); return d; };
+  it('before a first version: building, stopped, or not made with why', async () => {
+    expect((await a()).pills()).toEqual([{ id: 'version', text: 'Building…', tone: 'warn' }]);
+    expect((await a()).pills({ state: 'working' })[0]!.text).toBe('Building…');
+    expect((await a()).pills({ state: 'stopped' })[0]).toMatchObject({ text: 'Stopped', tone: 'bad' });
+    expect((await a()).pills(attemptOfRun(RESTARTED))[0]).toEqual({
       id: 'version', text: 'Not made', tone: 'bad', why: 'The last attempt ended without a draft: interrupted by a restart.',
     });
   });
-  it('a version on disk wins over the attempt', () => {
-    const doc = a();
-    (doc as unknown as { head: number }).head = 2;
+
+  it('xreview P2: a manifest not read yet is never "no version": a revision that failed over Version 2 reads Version 2', async () => {
+    let answer!: (m: { head: number; versions: never[] }) => void;
+    vi.mocked(interactive.getVersions).mockImplementationOnce(() => new Promise((r) => { answer = r; }));
+    const doc = new InteractiveDocSurfaceAdapter(binding());
+    const moved = doc.refresh();
+    expect(doc.pills(attemptOfRun(RESTARTED))).toEqual([{ id: 'version', text: 'Reading…', tone: 'neutral' }]);
+    expect(doc.pills({ state: 'stopped' })[0]!.text).toBe('Reading…');
+    answer({ head: 2, versions: [] });
+    await moved;
     expect(doc.pills(attemptOfRun(RESTARTED))).toEqual([{ id: 'version', text: 'Version 2', tone: 'neutral' }]);
+  });
+
+  it('xreview P2: a manifest that could not be read says nothing about the attempt', async () => {
+    vi.mocked(interactive.getVersions).mockRejectedValueOnce(new Error('502'));
+    const doc = new InteractiveDocSurfaceAdapter(binding());
+    await doc.refresh().catch(() => null);
+    expect(doc.pills(attemptOfRun(RESTARTED))[0]!.text).toBe('Reading…');
+    expect(doc.pills({ state: 'working' })[0]!.text).toBe('Building…');
+  });
+
+  it('xreview P2: the first read that finds no version tells the card, though the head stays 0', async () => {
+    const doc = new InteractiveDocSurfaceAdapter(binding());
+    const told = vi.fn();
+    doc.subscribe(told);
+    await doc.refresh();
+    expect(told).toHaveBeenCalled();
+    expect(doc.pills({ state: 'stopped' })[0]!.text).toBe('Stopped');
+    told.mockClear();
+    await doc.refresh();
+    expect(told).not.toHaveBeenCalled();
   });
 });
 
 describe('the document card', () => {
-  it('follows the run: "Building…" while it works, then "Not made" and why once crew records the restart', () => {
+  it('follows the run: "Building…" while it works, then "Not made" and why once crew records the restart', async () => {
     const adapter = new InteractiveDocSurfaceAdapter(binding());
+    await adapter.refresh();
     const { rerender } = render(<PluginCard binding={binding(attemptOfRun(session({})))} editor={EDITOR} adapter={adapter} src="about:blank" grants={['artifact.read']} />);
     expect(screen.getByTestId('plugin-card-pill').textContent).toBe('Building…');
     expect(screen.queryByTestId('plugin-card-pill-why')).toBeNull();

@@ -25,6 +25,14 @@ export class InteractiveDocSurfaceAdapter extends InteractiveDocAdapter implemen
   private partsSeen = 0;
   private titleSeen: string | undefined;
   docTitle(): string | undefined { return this.titleSeen; }
+  /** The first manifest read that finds no version leaves the head at 0, so nothing else says it was read: the card
+   *  is told, for its pill (crew#1745). */
+  override async refresh(): ReturnType<InteractiveDocAdapter['refresh']> {
+    const was = this.artifact().read;
+    const moved = await super.refresh();
+    if (!was && moved === null) for (const l of this.listeners) l();
+    return moved;
+  }
   override async read(version?: number): ReturnType<InteractiveDocAdapter['read']> {
     const result = await super.read(version);
     if (!('error' in result) && result.version === this.head) {
@@ -55,9 +63,12 @@ export class InteractiveDocSurfaceAdapter extends InteractiveDocAdapter implemen
   }
   exports(): readonly ExportOption[] { return FORMATS[this.binding.kind] ?? []; }
   /** crew#1745: before its first version, the card says how the run making it stands: still building, stopped, or not
-   *  made with crew's reason (the run's `landing_failed.reason`). A version on disk always wins. */
+   *  made with crew's reason (the run's `landing_failed.reason`). A version on disk always wins, so "no version" is
+   *  said only once the manifest has been read (a revision's run can fail over a document that has versions). */
   pills(attempt?: ArtifactAttempt): readonly StatusPill[] {
     if (this.head >= 1) return [{ id: 'version', text: `Version ${this.head}`, tone: 'neutral' }];
+    const ended = attempt?.state === 'failed' || attempt?.state === 'stopped';
+    if (ended && !this.artifact().read) return [{ id: 'version', text: 'Reading…', tone: 'neutral' }];
     if (attempt?.state === 'failed') return [{ id: 'version', text: 'Not made', tone: 'bad', why: `The last attempt ended without a draft: ${attempt.why}.` }];
     if (attempt?.state === 'stopped') return [{ id: 'version', text: 'Stopped', tone: 'bad', why: 'The job stopped before it made a first version.' }];
     return [{ id: 'version', text: 'Building…', tone: 'warn' }];

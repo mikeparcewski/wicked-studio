@@ -14332,6 +14332,12 @@
       ]
     },
     {
+      "testId": "plugin-card-pill-why",
+      "files": [
+        "src/components/editorHost/PluginCard.tsx"
+      ]
+    },
+    {
       "testId": "plugin-card-tag",
       "files": [
         "src/components/editorHost/PluginCard.tsx"
