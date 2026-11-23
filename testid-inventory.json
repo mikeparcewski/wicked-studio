@@ -7437,6 +7437,12 @@
       ]
     },
     {
+      "testId": "failure-declined",
+      "files": [
+        "src/components/session/RunRecord.tsx"
+      ]
+    },
+    {
       "testId": "failure-engine",
       "files": [
         "src/components/session/RunRecord.tsx"
@@ -8643,6 +8649,12 @@
       ]
     },
     {
+      "testId": "job-passage-declined",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
       "testId": "job-passage-delivered",
       "files": [
         "src/components/session/JobPassage.tsx"
@@ -8650,6 +8662,18 @@
     },
     {
       "testId": "job-passage-details",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-domain-result",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-domain-retry",
       "files": [
         "src/components/session/JobPassage.tsx"
       ]
@@ -8710,6 +8734,42 @@
     },
     {
       "testId": "job-passage-held",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-install",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-install-clis",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-install-detail",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-install-mcp",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-install-retry",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-install-todo",
       "files": [
         "src/components/session/JobPassage.tsx"
       ]
@@ -9000,6 +9060,12 @@
       "testId": "job-passage-repos-retry",
       "files": [
         "src/components/session/JobRepoChoices.tsx"
+      ]
+    },
+    {
+      "testId": "job-passage-requirements-open",
+      "files": [
+        "src/components/session/JobPassage.tsx"
       ]
     },
     {
@@ -28395,6 +28461,7 @@
         "src/components/report/ReportPage.tsx",
         "src/components/session/AssuranceReceipt.tsx",
         "src/components/session/CodebaseDownload.tsx",
+        "src/components/session/JobPassage.tsx",
         "src/components/session/PowerMode.tsx",
         "src/components/session/RunConversation.tsx",
         "src/components/session/RunDataUse.tsx",
