@@ -40,8 +40,9 @@ export function lastActivityAt(events: readonly CoreEvent[]): number | null {
 }
 
 /** How long the run's running step has been silent, or null when it is not executing, waits on a question, or spoke in
- *  the last {@link SILENT_AFTER_MS}. `liveAt`: the newest live frame's arrival time (live frames carry no `ts`). */
-export function silentStep(view: SessionView, events: readonly CoreEvent[] | null | undefined, now: number, opts: { gateOpen?: boolean; liveAt?: number | null } = {}): SilentStep | null {
+ *  the last {@link SILENT_AFTER_MS}. `liveAt`: the newest live frame's arrival time (live frames carry no `ts`).
+ *  `crew`: crew's fresh verdict ({@link crewSilence}), which decides when it is not `undefined`. */
+export function silentStep(view: SessionView, events: readonly CoreEvent[] | null | undefined, now: number, opts: { gateOpen?: boolean; liveAt?: number | null; crew?: SilentStep | null | undefined } = {}): SilentStep | null {
   // A power run paused at a checkpoint waits on you: its quiet is the pause, not a silent step.
   if (view.session.status !== 'executing' || opts.gateOpen === true || isPowerPaused(view.session)) return null;
   // studio#981: an orphan has no worker; Resume is its one move.
@@ -49,22 +50,30 @@ export function silentStep(view: SessionView, events: readonly CoreEvent[] | nul
   // The engine's checks floor is running (retime 0.16.11): the seat is idle on purpose, the floor is the work. The
   // silence warning is about a seat's own turn only (the page says "Running checks" instead, `floorRun.ts`).
   if (runningFloor(events, now) !== null) return null;
-  const logged = lastActivityAt(events ?? []);
-  const at = Math.max(logged ?? 0, opts.liveAt ?? 0);
-  if (at === 0) return null;
-  const quiet = now - at;
-  if (quiet < SILENT_AFTER_MS) return null;
+  // Crew's fresh verdict (`crewSilence`, studio#1368) decides when there is one; else this page's own clock.
+  let minutes: number;
+  if (opts.crew !== undefined) {
+    if (opts.crew === null) return null;
+    minutes = opts.crew.minutes;
+  } else {
+    const logged = lastActivityAt(events ?? []);
+    const at = Math.max(logged ?? 0, opts.liveAt ?? 0);
+    if (at === 0) return null;
+    const quiet = now - at;
+    if (quiet < SILENT_AFTER_MS) return null;
+    minutes = Math.floor(quiet / 60_000);
+  }
   // The cursor unit (`unit_ix`, an index into the units in order: run 115fabdb's 5 is ord 6), else the first one handed out and not finished.
   const ix = (view.session as unknown as { unit_ix?: unknown }).unit_ix;
   const ordered = [...view.units].sort((a, b) => a.ord - b.ord);
   const unit = (typeof ix === 'number' ? ordered[ix] : undefined) ?? ordered.find((u) => u.status === 'distributed') ?? null;
   const cli = typeof unit?.assigned_cli === 'string' && unit.assigned_cli !== '' ? unit.assigned_cli : null;
-  return { minutes: Math.floor(quiet / 60_000), ord: unit?.ord ?? null, cli };
+  return { minutes, ord: unit?.ord ?? null, cli };
 }
 
 /** The header's and the thread's words: "No output for 21 min". */
 export function silentWords(s: SilentStep): string {
-  return `No output for ${s.minutes} min`;
+  return s.minutes < 1 ? 'No output yet' : `No output for ${s.minutes} min`;
 }
 
 /** studio#932: Everything has crew's liveness verdict without a run's event log. */
@@ -73,10 +82,30 @@ export function snapshotSilence(run: SystemRun | undefined): SilentStep | null {
   return { minutes: Math.floor(run.quietForMs / 60_000), ord: null, cli: null };
 }
 
-/** studio#1368: a live run's silence in crew's words for a list row ("No output for 21 min"), from crew's `/system`
- *  liveness, or null while crew says it works (or crew has not said). The Desk, a project's In progress and Jobs say
- *  this instead of "Working", as Everything and the run header do. */
-export function snapshotSilentWords(liveness: ReadonlyMap<string, SystemRun> | undefined, runId: string): string | null {
-  const s = snapshotSilence(liveness?.get(runId));
-  return s === null ? null : silentWords(s);
+/** The newest logged frame that is activity (unix ms): the runtime log holds no heartbeat (studio#1368), and the
+ *  daemon's own stall talk is skipped here, as in the durable trail. */
+export function lastLoggedActivity(log: readonly { type: string; ts: number }[] | undefined): number | undefined {
+  if (log === undefined) return undefined;
+  for (let i = log.length - 1; i >= 0; i--) if (!NOT_ACTIVITY.has(log[i]!.type)) return log[i]!.ts;
+  return undefined;
+}
+
+/** How old crew's `/system` answer may be and still speak for a run (two polls and a slow read). */
+export const CREW_FRESH_MS = 75_000;
+
+/**
+ * studio#1368: crew's verdict on a run's silence, from its `/system` liveness (which no heartbeat moves, crew#1501).
+ *  - `undefined`: crew has no fresh word on this run (no snapshot, an old one, or the run is not listed): the caller
+ *    uses its own clock, or claims nothing;
+ *  - `null`: crew says it works or waits, or a live frame or output reached this page after crew's last evidence;
+ *  - a silence: crew calls it quiet or stalled (at crew's own thresholds), counted from crew's last evidence, or from
+ *    the run's launch when crew has none on record.
+ */
+export function crewSilence(run: SystemRun | undefined, o: { snapshotAt: number | null; now: number; liveAt: number | null; createdAt: number | null }): SilentStep | null | undefined {
+  if (run === undefined || o.snapshotAt === null || o.now - o.snapshotAt > CREW_FRESH_MS) return undefined;
+  if (run.liveness !== 'quiet' && run.liveness !== 'stalled') return null;
+  const evidenceAt = run.quietForMs !== null ? o.snapshotAt - run.quietForMs : null;
+  if (o.liveAt !== null && (evidenceAt === null || o.liveAt > evidenceAt)) return null;
+  const since = evidenceAt ?? o.createdAt;
+  return { minutes: since === null ? 0 : Math.max(0, Math.floor((o.now - since) / 60_000)), ord: null, cli: null };
 }

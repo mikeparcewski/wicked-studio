@@ -1,4 +1,4 @@
-import { useSystemLiveness } from '../../store/systemSnapshot.js';
+import { useRowSilence } from '../../hooks/useCrewSilence.js';
 import { useCallback, useId, useMemo, useState } from 'react';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
 import type { SessionView } from '../../api/types.js';
@@ -67,13 +67,13 @@ export function DeskRuns({ start, runs, runsShown, refine, refineBar, now, navig
   // An unfiled job is "No project" on this page, in its line, its picker and its search alike.
   const nameOf = useCallback((id: string): string => projectWord(id, projectName), [projectName]);
   // studio#1368: crew's liveness per run, so a silent job never reads "Working".
-  const liveness = useSystemLiveness();
-  const view = useMemo(() => runsView(runs, refine, { group, status, query, now, title, names: { project: nameOf, agent: agentName }, allTime, liveness, ...(holds !== undefined ? { holds } : {}) }),
-    [runs, refine, group, status, query, now, title, nameOf, agentName, allTime, holds, liveness]);
+  const silentOf = useRowSilence(now);
+  const view = useMemo(() => runsView(runs, refine, { group, status, query, now, title, names: { project: nameOf, agent: agentName }, allTime, silentOf, ...(holds !== undefined ? { holds } : {}) }),
+    [runs, refine, group, status, query, now, title, nameOf, agentName, allTime, holds, silentOf]);
   // The picker's counts: the list as shown, over every project.
   const picking = showProject && onProject !== undefined;
-  const everyProject = useMemo(() => (picking ? runsView(runs, { ...refine, project: null }, { group, status, query, now, title, names: { project: nameOf, agent: agentName }, allTime, ...(holds !== undefined ? { holds } : {}) }).rows : null),
-    [picking, runs, refine, group, status, query, now, title, nameOf, agentName, allTime, holds]);
+  const everyProject = useMemo(() => (picking ? runsView(runs, { ...refine, project: null }, { group, status, query, now, title, names: { project: nameOf, agent: agentName }, allTime, silentOf, ...(holds !== undefined ? { holds } : {}) }).rows : null),
+    [picking, runs, refine, group, status, query, now, title, nameOf, agentName, allTime, holds, silentOf]);
   const choices = useMemo(() => (everyProject === null ? [] : projectChoices(everyProject, [...(projectIds ?? []), ...(refine.project !== null ? [refine.project] : [])], projectName)),
     [everyProject, projectIds, refine.project, projectName]);
   const s = view.stats;
@@ -184,7 +184,7 @@ export function DeskRuns({ start, runs, runsShown, refine, refineBar, now, navig
                   <li key={r.id} className="wk-jr-item" data-testid="desk-runs-row" data-run-id={r.id} data-project={r.project} data-outcome={r.outcome} data-word={r.word}>
                     <div className="wk-jr-row-wrap">
                       <a href={path} onClick={go(path)} data-testid="desk-runs-open" className="wk-jr-row" title={when === '' ? r.title : `${r.title}\n${when}`}>
-                        <span aria-hidden className="wk-jr-dot" data-tone={r.tone} />
+                        <span aria-hidden className="wk-jr-dot" data-tone={r.silent !== null ? 'gate' : r.tone} />
                         <span className="wk-jr-text">
                           <span className="wk-jr-row-title">{r.title}</span>
                           <span className="wk-jr-row-sub" data-testid="desk-runs-line">{jobLine(r, { agentName, projectName, showProject, ago })}</span>

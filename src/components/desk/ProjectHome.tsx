@@ -18,7 +18,8 @@ import { actionPath, rowVerb, waitWords } from '../../board/rankedNeeds.js';
 import { rowHeadline, rowLead } from '../../board/rowHeadline.js';
 import { useDeliverRefusals, useRowHeadlines } from '../../hooks/useRowHeadlines.js';
 import { UnfiledLine } from './UnfiledLine.js';
-import { useSystemLiveness, useSystemStore } from '../../store/systemSnapshot.js';
+import { useSystemStore } from '../../store/systemSnapshot.js';
+import { useRowSilence } from '../../hooks/useCrewSilence.js';
 import { relTime } from '../../board/relTime.js';
 import { sessionPath } from '../../board/sessionModel.js';
 import { deskLiveCounts } from '../../board/statusWords.js';
@@ -133,8 +134,8 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
     : folded.map(needRunId).filter((id): id is string => id !== null)), [items, folded]);
   const running = useMemo(() => deskLiveCounts(runs, held).working, [runs, held]);
   // studio#1368: crew's liveness per run, so a silent job never reads "Working".
-  const liveness = useSystemLiveness();
-  const progress = useMemo(() => homeProgress(runs, ROWS_MAX, liveness), [runs, liveness]);
+  const silentOf = useRowSilence(now);
+  const progress = useMemo(() => homeProgress(runs, ROWS_MAX, silentOf), [runs, silentOf]);
   const shownRepos = repos.filter((u) => u.attached || u.jobs > 0);
   const ready = known && !crewPending;
   const sentence = projectHomeSentence({ known: ready, waiting, running, repos: shownRepos.length });
@@ -228,8 +229,8 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
               : <CalmRows label="In progress">
                 {progress.rows.map((r) => {
                   const path = sessionPath(`run:${r.runId}`);
-                  return <CalmRow key={r.runId} data-testid="project-progress-row" data={{ 'run-id': r.runId }} tone="run" title={r.title} sub={r.line}
-                    meta={r.silent ?? 'Working'} metaTone={r.silent !== null ? 'warn' : 'ok'} href={path} onOpen={() => navigate(path)} />;
+                  return <CalmRow key={r.runId} data-testid="project-progress-row" data={{ 'run-id': r.runId, silent: String(r.silent !== null) }} tone={r.silent !== null ? 'gate' : 'run'} title={r.title} sub={r.line}
+                    meta={r.silent ?? 'Working'} metaTone={r.silent !== null ? 'gate' : 'ok'} href={path} onOpen={() => navigate(path)} />;
                 })}
               </CalmRows>}
             {progress.total > progress.rows.length && <a href={jobs} onClick={go(navigate, jobs)} className="wk-calm-more" data-testid="project-progress-more">{progress.total - progress.rows.length} more in progress <span aria-hidden>→</span></a>}

@@ -1,23 +1,39 @@
 import type { SessionView } from '../api/types.js';
 import { useRuntimeStore } from '../store/runtime.js';
+import { useSystemStore } from '../store/systemSnapshot.js';
+import { CREW_FRESH_MS, lastLoggedActivity } from './silentStep.js';
 import { isStalled } from './boardAttention.js';
 
 /** Statuses that mean the run is moving under its own power (the board model's `ACTIVE`). */
 const ACTIVE: ReadonlySet<string> = new Set(['planning', 'distributing', 'executing']);
 
+/** This page's newest live evidence for a run (unix ms): a logged frame that is activity (the log holds no heartbeat,
+ *  studio#1368; the daemon's stall talk is skipped) or streamed output. Read NON-reactively off the runtime store. */
+export function liveEvidenceAt(runId: string): number | null {
+  const s = useRuntimeStore.getState();
+  const at = Math.max(lastLoggedActivity(s.logs[runId]) ?? 0, s.deltaAt[runId] ?? 0);
+  return at === 0 ? null : at;
+}
+
+/** Crew's own evidence for a run from a fresh `/system` answer (unix ms): its last event, or its busy processes, which
+ *  no heartbeat moves (crew#1501). Read NON-reactively. */
+function crewEvidenceAt(runId: string, now: number): number | null {
+  const s = useSystemStore.getState();
+  if (s.mode !== 'system' || s.snapshotAt === null || now - s.snapshotAt > CREW_FRESH_MS) return null;
+  const run = s.snapshot?.runs.find((r) => r.runId === runId);
+  return run === undefined || run.quietForMs === null ? null : s.snapshotAt - run.quietForMs;
+}
+
 /**
- * The freshest activity evidence for a run: its newest streamed frame (read NON-reactively off
- * the runtime store — callers recompute on their own tick) or its durable tail, whichever is
- * later. Shared by the board model and the app-level needs-you fold (`useNeedsRows`), so the queue's
- * stall verdict never forks from the board's.
+ * The freshest activity evidence for a run: its newest streamed frame or output (read NON-reactively off the runtime
+ * store — callers recompute on their own tick), its durable tail, or crew's own evidence, whichever is later. Shared
+ * by the board model and the app-level needs-you fold (`useNeedsRows`), so the queue's stall verdict never forks from
+ * the board's.
  */
 export function activityEvidence(lastEventAt: Record<string, number>): (id: string) => number | undefined {
   return (id) => {
-    const log = useRuntimeStore.getState().logs[id];
-    const frame = log !== undefined && log.length > 0 ? log[log.length - 1]?.ts : undefined;
-    const tail = lastEventAt[id];
-    if (frame === undefined) return tail;
-    return tail === undefined ? frame : Math.max(frame, tail);
+    const at = Math.max(liveEvidenceAt(id) ?? 0, lastEventAt[id] ?? 0, crewEvidenceAt(id, Date.now()) ?? 0);
+    return at === 0 ? undefined : at;
   };
 }
 

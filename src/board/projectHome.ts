@@ -1,5 +1,4 @@
 import type { SessionView } from '../api/types.js';
-import type { SystemRun } from '../api/system.js';
 import { deliveryOf } from '../components/delivery.js';
 import { countWord, progressRows } from './deskHome.js';
 import { repoNameOf } from './deskWords.js';
@@ -34,8 +33,8 @@ export interface HomeProgressRow {
 }
 
 /** The project's working jobs (a job waiting on you is under Needs you, not here), newest first. */
-export function homeProgress(runs: readonly SessionView[], max: number, liveness?: ReadonlyMap<string, SystemRun>): { rows: HomeProgressRow[]; total: number } {
-  const all = progressRows(runs, { max: Number.MAX_SAFE_INTEGER, agentName: () => '', ...(liveness !== undefined ? { liveness } : {}) }).rows.filter((r) => r.tone === 'run');
+export function homeProgress(runs: readonly SessionView[], max: number, silentOf?: (v: SessionView) => string | null): { rows: HomeProgressRow[]; total: number } {
+  const all = progressRows(runs, { max: Number.MAX_SAFE_INTEGER, agentName: () => '', ...(silentOf !== undefined ? { silentOf } : {}) }).rows.filter((r) => r.tone === 'run');
   const byId = new Map(runs.map((v) => [v.session.id, v]));
   const rows = all.slice(0, max).map((r) => {
     const v = byId.get(r.runId);
