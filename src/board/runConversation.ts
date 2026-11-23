@@ -1,5 +1,5 @@
 import type { CoreEvent, SessionView } from '../api/types.js';
-import { deliveryOf, hasDeliveredRef } from '../components/delivery.js';
+import { deliveryOf, hasDeliveredRef, prNumberOf } from '../components/delivery.js';
 import type { ChainModel } from './chainModel.js';
 
 /**
@@ -324,7 +324,7 @@ function andList(items: readonly string[]): string {
 export function finalWords(view: SessionView, steps: { done: number; total: number }, checks: FinalChecks): FinalWords {
   const s = view.session.status;
   const d = deliveryOf(view);
-  const pr = d.url !== null ? { url: d.url, number: /\/pull\/(\d+)/.exec(d.url)?.[1] ?? null } : null;
+  const pr = d.url !== null ? { url: d.url, number: ((n) => (n === null ? null : String(n)))(prNumberOf(d.url)) } : null;
   const branch = d.pushed?.branch ?? null;
   const sentences: string[] = [];
   if (s !== 'completed' && steps.total > 0) sentences.push(`It stopped after ${steps.done} of ${steps.total} steps.`);

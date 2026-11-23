@@ -21,6 +21,7 @@ import {
   DELIVERY_LABEL,
   canDeliver,
   deliveryOf,
+  prNumberOf,
   resolveDelivery,
   runClassLicensed,
   type DeliveryClaim,
@@ -89,11 +90,8 @@ function isHostedRemote(remote: string): boolean {
   return hosted || scp;
 }
 
-/** Extract a GitHub PR number from a PR URL (`/pull/123`). `null` if not parseable. */
-function prNumberFromUrl(url: string): number | null {
-  const m = /\/pull\/(\d+)(?:[/?#]|$)/.exec(url);
-  return m ? parseInt(m[1]!, 10) : null;
-}
+/** The PR number of a PR URL (GitHub `/pull/123`, Azure DevOps `/pullrequest/123`, studio#1357). `null` if not one. */
+const prNumberFromUrl = prNumberOf;
 
 /**
  * The rail header's claim badge — the at-a-glance signal the operator decision

@@ -126,7 +126,8 @@ const NOTHING_TO_DELIVER = /nothing to deliver/i;
  * same as crew's `tail -1`.
  */
 export function prUrlFrom(text: string): string | null {
-  const matches = text.match(/https:\/\/\S+\/pull\/\d+/g);
+  // studio#1357: an Azure DevOps delivery prints `…/_git/<repo>/pullrequest/<n>` (crew's ADO helper) as its last line.
+  const matches = text.match(/https:\/\/\S+\/(?:pull|pullrequest)\/\d+/g);
   const last = matches === null ? null : (matches[matches.length - 1] ?? null);
   return last === null ? null : (isPrUrl(last) ? last : null);
 }
@@ -174,7 +175,24 @@ export function isPrUrl(candidate: string): boolean {
   // `https://[^[:space:]]+/pull/[0-9]+`, which stops at the digits. Refusing is honest;
   // silently stripping would alter what crew actually reported.
   if (parsed.search !== '' || parsed.hash !== '') return false;
-  return parsed.protocol === 'https:' && /\/pull\/\d+$/.test(parsed.pathname);
+  if (parsed.protocol !== 'https:') return false;
+  if (/\/pull\/\d+$/.test(parsed.pathname)) return true;
+  // studio#1357: an Azure DevOps pull request, in the one form crew writes (its deliver helper's `ADOWEB` +
+  // `/pullrequest/<id>`, always the canonical `dev.azure.com` host, never with userinfo):
+  // `https://dev.azure.com/<org>/<project>/_git/<repo>/pullrequest/<n>`.
+  return parsed.hostname === 'dev.azure.com' && parsed.username === '' && parsed.password === ''
+    && /^\/[^/]+\/[^/]+\/_git\/[^/]+\/pullrequest\/\d+$/.test(parsed.pathname);
+}
+
+/**
+ * The number of a pull request url {@link isPrUrl} admits — GitHub's `…/pull/<n>` or Azure DevOps's
+ * `…/_git/<repo>/pullrequest/<n>` (studio#1357) — else `null`. Every "PR #n" studio shows, and the
+ * `revisesPr` a Revise this PR sends, reads it here.
+ */
+export function prNumberOf(url: string): number | null {
+  if (!isPrUrl(url)) return null;
+  const m = /\/(?:pull|pullrequest)\/(\d+)$/.exec(new URL(url).pathname);
+  return m === null ? null : parseInt(m[1]!, 10);
 }
 
 /**

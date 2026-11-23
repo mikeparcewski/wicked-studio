@@ -239,7 +239,7 @@ describe('the deliver card: the one "Are you sure?"', () => {
   it('without the unit’s target sentence the pull request is a condition, never a promise', () => {
     const bare = [units[0]!, makeUnit({ id: 'r9:deliver', session_id: 'r9', ord: 2, status: 'pending', phase_ref: 'deliver', description: 'deliver' })];
     const ask = proposalCard({ view: run('r9', 'awaiting_human', bare), gate, chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI })!;
-    expect(ask.why).toMatch(/a pull request opens only if that origin is on GitHub/);
+    expect(ask.why).toMatch(/a pull request opens only if that origin is on GitHub or Azure DevOps\./);
   });
 });
 
