@@ -21,6 +21,9 @@ import { QeAcceptanceOptions, ReducedAssuranceOptIn } from '../session/Assurance
 import { REDUCED_RELAUNCH_WORDS } from '../session/GateRow.js';
 import { Switch } from '../ui/Switch.js';
 import { TechDetails } from '../ui/TechDetails.js';
+import { StandInChoice } from '../StandInChoice.js';
+import { helperNamer, saveStandInsEveryJob, standInChoiceOf, standInRelaunchBody, type StandInChoiceId, type StandInChoiceRefusal } from '../../board/standIn.js';
+import { AGENTS_PATH } from '../../hooks/useRoute.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { useSignInHere } from '../agents/useSignInHere.js';
 import { useLaunchPreview } from '../../hooks/useLaunchPlan.js';
@@ -180,6 +183,12 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   const [qeRefused, setQeRefused] = useState<{ key: string; detail: string | null; forced: boolean } | null>(null);
   const forcedRef = useRef(false);
   const attemptRef = useRef(0);
+  /** DES-STANDIN-001 S0: crew asked how to check this job (too few helpers signed in); nothing started. */
+  // A choice launches the job as the form shows it THEN, through `launch` itself (codex r1+delta on #1361): nothing is
+  // replayed from the refused attempt, so an edit made after the refusal (or during the settings save) is what is sent.
+  const [standIn, setStandIn] = useState<StandInChoiceRefusal | null>(null);
+  const [standInBusy, setStandInBusy] = useState<StandInChoiceId | null>(null);
+  const [standInError, setStandInError] = useState<string | null>(null);
   const drafting = draft.workflowId === DRAFT_EPICS_ID;
   const demoing = draft.workflowId === DEMO_VIDEO_ID;
   const [step, setStep] = useState<Step>(draft.workflowId === null ? 'workflow' : drafting ? 'requirements' : demoing ? 'demo' : 'what');
@@ -451,8 +460,11 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
     return confirm;
   };
 
-  const launch = async (): Promise<void> => {
-    if (draft.workflowId === null || launching || launchBlocker !== null) return;
+  /** `standInChoice`: the person answered the stand-in card ("this job" adds crew's `retryWith`; "every job" saved the
+   *  setting first and sends the request unflagged, DES §4 consentFor). */
+  const launch = async (standInChoice?: { refusal: StandInChoiceRefusal; scope: 'job' | 'always' }): Promise<void> => {
+    // A stand-in choice holds the launch lock through its settings save and hands it on here (codex delta 2).
+    if (draft.workflowId === null || (launching && standInChoice === undefined) || launchBlocker !== null) return;
     if (demoing) {
       launchingRef.current = true;
       setLaunching(true);
@@ -509,6 +521,8 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
     setError(null);
     // A QE refusal speaks for the attempt that drew it; this one is new (codex r1).
     setQeRefused(null);
+    // The card stays up while its own choice is carried out; any other launch replaces it.
+    if (standInChoice === undefined) { setStandIn(null); setStandInError(null); }
     try {
       const key = draft.composerKey;
       const chatId = launchChatId(key, chatIdOnLaunch);
@@ -534,9 +548,12 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
       }
       if (offerQe && force && (qeOff || !draft.skipQe)) body.forceQeAcceptance = true;
       forcedRef.current = body.forceQeAcceptance === true;
+      if (standInChoice?.scope === 'job') Object.assign(body, standInRelaunchBody(body, standInChoice.refusal));
       const out = await api.launchRun(body);
       const { runId } = out;
       useProvenanceStore.getState().markLaunchedHere(runId);
+      setStandIn(null);
+      setStandInError(null);
       if (key !== null) clearAboutChips(key);
       const dest = chatId !== null ? sessionPath(chatId) : sessionPath(`run:${runId}`);
       const notice = assuranceNoticeOf(out);
@@ -547,6 +564,11 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
       finish();
       navigate?.(dest);
     } catch (err) {
+      // Too few helpers to check it: the choice, not an error (nothing was created; DES §4).
+      const choice = standInChoiceOf(err);
+      setStandInError(null);
+      if (choice !== null) { setStandIn(choice); return; }
+      setStandIn(null);
       setError(err instanceof Error ? err.message : String(err));
       attemptRef.current += 1;
       setQeRefused(qeRefusalOf(err) === 'launch' ? { key: `launch:${attemptRef.current}`, detail: apiWire(err), forced: forcedRef.current } : null);
@@ -573,6 +595,35 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
     } finally {
       launchingRef.current = false;
       setLaunching(false);
+    }
+  };
+  // The launch as THIS render builds it: a choice awaiting the settings save calls the one current when it lands, so an
+  // edit made meanwhile is what is sent (codex delta on #1361).
+  const launchNow = useRef(launch);
+  launchNow.current = launch;
+  const mountedRef = useRef(true);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
+  // DES-STANDIN-001 §2.1 step 3: what each choice does. A launching choice holds the wizard's launch lock from the
+  // click (Launch, Back and Close wait), so the settings save and the launch are one step (codex delta 2 on #1361).
+  const chooseStandIn = async (id: StandInChoiceId): Promise<void> => {
+    if (standIn === null || launchingRef.current) return;
+    if (id === 'cancel') { setStandIn(null); setStandInError(null); return; }
+    if (id === 'sign_in') { closeStore(); (navigate ?? goToPath)(AGENTS_PATH); return; }
+    if (launchBlocker !== null) { setStandInError(launchBlocker); return; }
+    launchingRef.current = true;
+    setLaunching(true);
+    setStandInBusy(id);
+    setStandInError(null);
+    try {
+      if (id === 'always') {
+        // A setting not saved launches nothing and keeps the choices (another one, "this job", still works).
+        try { await saveStandInsEveryJob(); } catch (err) { setStandInError(err instanceof Error ? err.message : String(err)); return; }
+      }
+      if (!mountedRef.current) return;
+      await launchNow.current({ refusal: standIn, scope: id });
+    } finally {
+      setStandInBusy(null);
+      if (launchingRef.current) { launchingRef.current = false; setLaunching(false); }
     }
   };
   const openLaunched = (): void => { if (launched === null || launchingRef.current) return; finish(); navigate?.(launched.dest); };
@@ -986,6 +1037,10 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
               navigate={(p) => { closeStore(); (navigate ?? goToPath)(p); }} />
           )}
           </>}
+          {standIn !== null && launched === null && step === 'review' && (
+            <StandInChoice refusal={standIn} name={helperNamer(roster)} busy={standInBusy} error={standInError} testId="launch-wizard-standin"
+              onChoose={(id) => { void chooseStandIn(id); }} />
+          )}
           {error !== null && qeRefused === null && (
             <div role="alert" data-testid="launch-wizard-error" className="wk-composer-note wk-composer-note--bad">
               {launched !== null ? 'Couldn’t start it again. The first job is still running.' : 'Couldn’t launch this. Your choices are kept, so you can try again.'}

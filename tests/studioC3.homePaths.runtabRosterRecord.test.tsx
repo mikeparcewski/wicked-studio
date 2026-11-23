@@ -23,7 +23,7 @@ it('masks run-picker titles, delivery and acceptance reasons, monitor errors and
   vi.spyOn(api, 'getRunAcceptance').mockResolvedValue({ summary: { line: path('acceptance'), satisfied: false } } as never);
   useRunAcceptanceStore.setState({ byRun: {} });
   useRunEventStore.setState({ byRun: {} });
-  const story = (sendBackNote: string | null) => ({ rejectNote: null, sendBackNote, engineTimedOut: false, stop: null });
+  const story = (sendBackNote: string | null) => ({ rejectNote: null, rejected: null, sendBackNote, engineTimedOut: false, stop: null });
   useProvenanceStore.setState({ byRun: { rejected: { state: 'unknown' }, sentback: { state: 'unknown' }, base: { state: 'unknown' } }, rejectNotes: { rejected: path('reject') }, cancelStories: { sentback: story(path('send-back')) }, baseNotices: { base: path('base-note') } });
   await act(async () => { render(<>
     <RunTab runs={[makeView({ id: 'old-c3', problem: path('old-title'), status: 'completed' }), makeView({ id: 'run-c3', problem: path('title'), status: 'completed' }, [makeUnit({ id: 'run-c3:deliver', ord: 1, status: 'rejected', denial_reason: path('delivery') })])]} sessionId="session-c3" title="Job" />

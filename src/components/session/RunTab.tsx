@@ -23,7 +23,7 @@ import { useRunChain } from './ChainLine.js';
 import { RulesChecked, RunAssuranceLabel } from './AssuranceReceipt.js';
 import { CodebaseDownload, DeliverCredentialsNotice } from './CodebaseDownload.js';
 import { AssuranceReceipt, DeliveryAssuranceLines } from './AssuranceReceipt.js';
-import { RunRecordLines, RunStory } from './RunRecord.js';
+import { RunRecordLines, RunStory, useConsentDecline } from './RunRecord.js';
 import { RecoveryRow } from './RunConversation.js';
 import { SheetRunActions } from './RunActions.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
@@ -188,6 +188,8 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   const [confirmStop, setConfirmStop] = useState(false);
   const [stopReason, setStopReason] = useState('');
   const [glanceStop, setGlanceStop] = useState(false);
+  // studio#1364: a declined install is said as what happened, not why a job stopped.
+  const declined = useConsentDecline(view);
   const stop = (): void => {
     if (stopping) return;
     const reason = stopReason.trim();
@@ -310,7 +312,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         </div>
         {panelShown && open('now') && (session.status === 'failed' || session.status === 'cancelled') && (
           <div data-testid="run-tab-story" className="wk-run-tab-block">
-            <h4 className="wk-run-tab-heading">Why it stopped</h4>
+            <h4 className="wk-run-tab-heading">{declined !== null ? 'What happened' : 'Why it stopped'}</h4>
             <RunStory view={view} events={events ?? []} {...(navigate !== undefined ? { navigate } : {})} />
             <RecoveryRow view={view} {...(navigate !== undefined ? { navigate } : {})} />
           </div>

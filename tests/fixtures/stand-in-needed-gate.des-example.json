@@ -1,0 +1,12 @@
+{
+  "$comment": "DES EXAMPLE, NOT A WRITER'S OUTPUT. DES-STANDIN-001 rev 3 sections 2.3, 3.10 and 5.2: the mid-run gate (class stand_in_needed) whose answers are use_stand_ins{scope}, retry and reject. Coord ruling on the DES (S0 gaps, item 1): C3 lists use_stand_ins once with note none and accepts {approve: true, action: use_stand_ins, scope}; its intent token here is a placeholder studio does not read. retry is today's approve with intent retry. SWAP: when core C3 adds this shape to wicked-core tests/fixtures/gate-actions.json, refresh tests/fixtures/gate-actions.engine.json from it, add the shape name to the list in tests/gateContract.engine.test.ts, and delete this file with its test in tests/standInChoice.test.tsx.",
+  "stand-in-needed": {
+    "ord": 3,
+    "gateKind": "escalation",
+    "actions": [
+      { "action": "approve", "intent": "retry", "note": "optional" },
+      { "action": "use_stand_ins", "intent": "use_stand_ins", "note": "none" },
+      { "action": "reject", "intent": "stop", "note": "none" }
+    ]
+  }
+}
