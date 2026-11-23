@@ -49,8 +49,11 @@ export interface SourceProfileJoin {
 /**
  * (api-types 0.186.0) `POST /sources/:name/profile`, a human operator's only (403 `profile_human_only`). The
  * value-free profile of a described native Postgres source, through the data gate's person read, and the data shapes
- * it filed as `knowledge` proposals for the review (one per relation; an identical shape already in the queue is not
- * filed again). 409 `not_in_knowledge`: estate holds no structure for the source yet.
+ * it wrote (one per relation). 409 `not_in_knowledge`: estate holds no structure for the source yet.
+ *
+ * (crew#1625) A profile the person started is their decision: its shapes go straight into knowledge, scoped to the
+ * source, and a re-profile replaces the source's set. Nothing is filed for review, so `proposed` is always empty and
+ * `alreadyProposed` always 0 (kept for clients that still read them; read `written`, `unchanged` and `replaced`).
  */
 export interface SourceProfileResponse {
   name: string;
@@ -61,7 +64,15 @@ export interface SourceProfileResponse {
   joins: SourceProfileJoin[];
   /** Code entities named exactly like a relation, in the repos' code graphs. */
   describes: Array<{ relation: string; repo: string; name: string; kind: string; file: string }>;
+  /** (crew#1625) The shapes written into knowledge now: the id names the knowledge node (`kconcept synthetic proposal:<id>:`). */
+  written?: Array<{ id: string; relation: string }>;
+  /** (crew#1625) Shapes already in knowledge and the same (the bands and the links, not the day): left as they are. */
+  unchanged?: number;
+  /** (crew#1625) Older shapes of the source this profile replaced (forgotten from knowledge, or a pending one declined). */
+  replaced?: number;
+  /** @deprecated (crew#1625) Always empty: a profile files nothing for review. */
   proposed: Array<{ id: string; relation: string }>;
+  /** @deprecated (crew#1625) Always 0. */
   alreadyProposed: number;
   codeSearch: { searched: string[]; notSearched: string[] };
   /** Catalog documents estate holds that crew's own catalog does not (or a view not allowed): not profiled. */
@@ -84,6 +95,8 @@ export interface KnowledgeShapeRecord {
   profile: SourceProfileRelation;
   joins: SourceProfileJoin[];
   describes: Array<{ repo: string; symbolId: string; name: string; kind: string; file: string }>;
+  /** (crew#1625) The actor id of the person whose profile wrote it (provenance). */
+  profiledBy?: string;
 }
 
 /** (api-types 0.186.0) A node of the Knowledge map. `key` is `<store>:<id>` (`source:`, `repo:`, `knowledge:`, `estate:`). */
