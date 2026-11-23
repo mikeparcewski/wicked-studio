@@ -9069,6 +9069,42 @@
       ]
     },
     {
+      "testId": "knowledge-forget",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-forget-cancel",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-forget-confirm",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-forget-go",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-forget-live",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
+      "testId": "knowledge-forget-note",
+      "files": [
+        "src/components/desk/KnowledgeView.tsx"
+      ]
+    },
+    {
       "testId": "knowledge-graph",
       "files": [
         "src/components/desk/KnowledgeView.tsx"
@@ -11819,6 +11855,36 @@
       ]
     },
     {
+      "testId": "memory-erase",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-erase-cancel",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-erase-confirm",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-erase-content",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-erase-dialog",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
       "testId": "memory-full",
       "files": [
         "src/components/memory/MemoryPage.tsx"
@@ -11951,13 +12017,97 @@
       ]
     },
     {
+      "testId": "memory-retired-erase",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
       "testId": "memory-retired-erased",
       "files": [
         "src/components/memory/MemoryAdd.tsx"
       ]
     },
     {
+      "testId": "memory-retired-kept",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-list-fail",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-memories",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-memory",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-more",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-more-line",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-none",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-restore",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-restore-fail",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-restored",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-restored-note",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
       "testId": "memory-retired-row",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-unknown",
+      "files": [
+        "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retired-unsupported",
       "files": [
         "src/components/memory/MemoryAdd.tsx"
       ]

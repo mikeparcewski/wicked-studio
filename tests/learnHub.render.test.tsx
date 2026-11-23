@@ -413,7 +413,7 @@ describe('Memory: Steering’s ways in (§6.3)', () => {
     d.on('GET /proposals', { proposals: [{ id: 'q1', kind_type: 'memory', payload: { content: 'Old idea.' }, facets: {}, provenance: {}, state: 'rejected', created_at: 1 }] });
     d.on('POST /proposals', { id: 'n1' });
     d.on('POST /proposals/n1/approve', { outcome: 'promoted', active_id: 'm9' });
-    render(<MemoryRetired onClose={() => undefined} onBrought={() => undefined} />);
+    render(<MemoryRetired soft={false} onClose={() => undefined} onBrought={() => undefined} onErase={() => undefined} />);
     expect(screen.getByTestId('memory-retired-erased').textContent).toContain('erased');
     fireEvent.click(await screen.findByTestId('memory-retired-bring'));
     await waitFor(() => expect(d.sent('POST /proposals')[0]).toEqual({ content: 'Old idea.' }));

@@ -133,7 +133,7 @@ export function coachSeat(record: SeatRecord | undefined, seat: RosterSeat, wind
       label: `Route ${words} away from ${name}`,
       why: `${evidence} this week`,
       // studio#724: plain words for what the rule does (the stored statement is unchanged).
-      consequence: `Adds a standing instruction helpers read: hand ${words} work to a helper other than ${name}. Nothing is blocked.`,
+      consequence: `Adds a standing instruction helpers read: hand ${words} work to a helper other than ${name}. Review checks work against it until you retire it.`,
       phase,
       rule,
     };

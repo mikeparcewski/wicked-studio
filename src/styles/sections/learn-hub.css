@@ -220,6 +220,12 @@
 .wk-mem-composer select { height: 30px; border-radius: var(--radius-md); border: 1px solid var(--border-input); background: var(--surface-base); color: var(--ink-high); font: inherit; font-size: var(--text-sm); }
 .wk-mem-composer .wk-learn-row button[type="submit"] { margin-left: auto; }
 .wk-mem-table-bar b { margin-right: 4px; }
+/* Show retired (crew#1697): Restore and Delete for good sit beside the words; on a phone they go under them. */
+.wk-mem-retired-acts { flex-wrap: nowrap; gap: 8px; }
+@media (max-width: 767px) {
+  .wk-mem-retired-row { grid-template-columns: 10px minmax(0, 1fr); }
+  .wk-mem-retired-row .wk-mem-retired-acts { grid-column: 2; }
+}
 .wk-mem-table-scroll { overflow-x: auto; }
 .wk-mem-table table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
 .wk-mem-table th { padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--ink-muted); font-size: var(--text-xs); font-weight: var(--weight-semi); text-align: left; }
