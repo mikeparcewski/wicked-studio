@@ -58,7 +58,7 @@ origin = start_server(PORT, dist)
 
 ORDER = """() => [...document.querySelectorAll('[data-testid="system-chat"] [data-testid="assist-user-msg"], [data-testid="system-chat"] [data-testid="assist-chat-msg"]')]
   .map((el) => { const own = el.getAttribute('data-testid') === 'assist-user-msg' || el.getAttribute('data-agent') === 'you';
-    const t = (el.textContent || '').replace(/^(you|claude)/, '').trim(); return (own ? 'Q:' : 'A:') + t.slice(0, 40); })"""
+    const t = (el.textContent || '').replace(/^(you|claude)/i, '').trim(); return (own ? 'Q:' : 'A:') + t.slice(0, 40); })"""
 
 # The first line of an answer's code block: scrolled to, is it what a pointer at it hits? (A header or an inner clip over
 # it makes another element, or nothing in the message, the hit.)

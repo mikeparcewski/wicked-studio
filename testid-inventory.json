@@ -2383,6 +2383,12 @@
       ]
     },
     {
+      "testId": "assist-chat-msg-who",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
       "testId": "assist-chat-seat",
       "files": [
         "src/components/AssistDock.tsx"
@@ -2504,6 +2510,12 @@
     },
     {
       "testId": "assist-run-waiting",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-seat-line",
       "files": [
         "src/components/AssistDock.tsx"
       ]
@@ -20057,12 +20069,14 @@
     {
       "testId": "seat-citations-details",
       "files": [
+        "src/components/AssistDock.tsx",
         "src/components/session/SessionView.tsx"
       ]
     },
     {
       "testId": "seat-citations-toggle",
       "files": [
+        "src/components/AssistDock.tsx",
         "src/components/session/SessionView.tsx"
       ]
     },

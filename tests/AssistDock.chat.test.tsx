@@ -145,7 +145,7 @@ describe('AssistDock — the chat block', () => {
     const thread = screen.getByTestId('assist-thread');
     const order = [...thread.querySelectorAll('[data-testid="assist-user-msg"], [data-testid="assist-chat-msg"]')].map((el) => {
       const own = el.getAttribute('data-agent') === 'you' || el.getAttribute('data-testid') === 'assist-user-msg';
-      return `${own ? 'Q' : 'A'}:${(el.textContent ?? '').replace(/^(you|claude)/u, '').trim()}`;
+      return `${own ? 'Q' : 'A'}:${(el.textContent ?? '').replace(/^(you|Claude)/u, '').trim()}`;
     });
     expect(order).toEqual(['Q:how many open tickets per region?', 'A:first answer', 'Q:and with query on?', 'A:second answer']);
   });
@@ -161,7 +161,7 @@ describe('AssistDock — the chat block', () => {
     await user.click(screen.getByTestId('assist-send'));
     await waitFor(() => expect(screen.getByTestId('assist-input')).toHaveValue(''));
     act(() => emit?.(frame({ type: 'chatReply', chat: 'chat-1', cliKey: 'claude', turn_id: 't1', text: 'late first answer', ok: true })));
-    expect(screen.getAllByTestId('assist-chat-msg').map((m) => (m.textContent ?? '').replace(/^(you|claude)/u, '')))
+    expect(screen.getAllByTestId('assist-chat-msg').map((m) => (m.textContent ?? '').replace(/^(you|Claude)/u, '')))
       .toEqual(['late first answer', 'q2']);
   });
 
@@ -179,7 +179,7 @@ describe('AssistDock — the chat block', () => {
     await user.type(screen.getByTestId('assist-input'), 'q3');
     await user.click(screen.getByTestId('assist-send'));
     act(() => emit?.(frame({ type: 'chatDelta', chat: 'chat-1', cliKey: 'claude', turn_id: 't3', text: 'third answer' })));
-    const words = () => screen.getAllByTestId('assist-chat-msg').map((m) => (m.textContent ?? '').replace(/^(you|claude)/u, '').replace(/ …$/u, ''));
+    const words = () => screen.getAllByTestId('assist-chat-msg').map((m) => (m.textContent ?? '').replace(/^(you|Claude)/u, '').replace(/ …$/u, ''));
     expect(words()).toEqual(['q2', 'third answer']);
     await act(async () => { ack({ chatId: 'chat-1', turnId: 't3' }); });
     expect(words()).toEqual(['q2', 'q3', 'third answer']);
@@ -207,7 +207,7 @@ describe('AssistDock — the chat block', () => {
       emit?.(frame({ type: 'chatReply', chat: 'chat-1', cliKey: 'claude', turn_id: 't2', text: 'second answer', ok: true }));
       emit?.(frame({ type: 'chatReply', chat: 'chat-1', cliKey: 'claude', turn_id: 't3', text: 'third answer', ok: true }));
     });
-    expect(screen.getAllByTestId('assist-chat-msg').map((m) => (m.textContent ?? '').replace(/^(you|claude)/u, '')))
+    expect(screen.getAllByTestId('assist-chat-msg').map((m) => (m.textContent ?? '').replace(/^(you|Claude)/u, '')))
       .toEqual(['a1', 'q2', 'second answer', 'q3', 'third answer']);
   });
 
@@ -227,7 +227,7 @@ describe('AssistDock — the chat block', () => {
       { kind: 'seat', turnId: 't1', cliKey: 'claude', text: 'first answer', ok: true },
       { kind: 'user', turnId: 't2', text: 'follow-up' },
     ], closed: false }); });
-    expect(screen.getAllByTestId('assist-chat-msg').map((m) => (m.textContent ?? '').replace(/^(you|claude)/u, '')))
+    expect(screen.getAllByTestId('assist-chat-msg').map((m) => (m.textContent ?? '').replace(/^(you|Claude)/u, '')))
       .toEqual(['first question', 'first answer', 'follow-up']);
   });
 
@@ -250,7 +250,7 @@ describe('AssistDock — the chat block', () => {
     await act(async () => { ack!({ chatId: 'chat-1' }); });
     act(() => emit?.(frame({ type: 'chatReply', chat: 'chat-1', cliKey: 'claude', text: 'a2', ok: true })));
     await waitFor(() => expect(screen.getAllByTestId('assist-chat-msg')).toHaveLength(3));
-    expect(screen.getAllByTestId('assist-chat-msg').map((m) => `${m.getAttribute('data-agent')}:${(m.textContent ?? '').replace(/^(you|claude)/u, '')}`))
+    expect(screen.getAllByTestId('assist-chat-msg').map((m) => `${m.getAttribute('data-agent')}:${(m.textContent ?? '').replace(/^(you|Claude)/u, '')}`))
       .toEqual(['claude:a1', 'you:q2', 'claude:a2']);
   });
 
@@ -278,7 +278,7 @@ describe('AssistDock — the chat block', () => {
     act(() => emit?.(frame({ type: 'chatReply', chat: 'chat-1', cliKey: 'claude', text: 'a2', ok: true })));
     const thread = screen.getByTestId('assist-thread');
     const order = [...thread.querySelectorAll('[data-testid="assist-user-msg"], [data-testid="assist-chat-msg"], [data-testid="assist-note"]')]
-      .map((el) => (el.textContent ?? '').replace(/^(you|claude)/u, '').replace(/^· /u, '').trim());
+      .map((el) => (el.textContent ?? '').replace(/^(you|Claude)/u, '').replace(/^· /u, '').trim());
     expect(order).toEqual(['q1', 'a1', 'q2', 'network down', 'q2 again', 'a2']);
   });
 
@@ -310,7 +310,7 @@ describe('AssistDock — the chat block', () => {
     await user.click(screen.getByTestId('assist-send'));
     await waitFor(() => expect(screen.getAllByTestId('assist-chat-msg')).toHaveLength(4));
     const block = screen.getByTestId('assist-chat');
-    expect([...block.querySelectorAll('[data-testid="assist-chat-msg"], [data-testid="assist-note"]')].map((el) => (el.textContent ?? '').replace(/^(you|claude)/u, '').replace(/^· /u, '').trim()))
+    expect([...block.querySelectorAll('[data-testid="assist-chat-msg"], [data-testid="assist-note"]')].map((el) => (el.textContent ?? '').replace(/^(you|Claude)/u, '').replace(/^· /u, '').trim()))
       .toEqual(['a1', 'q2📎 notes.txt', 'q3', 'network down', 'q3 again']);
   });
 
@@ -335,7 +335,7 @@ describe('AssistDock — the chat block', () => {
     await waitFor(() => expect(screen.getAllByTestId('assist-chat-msg')).toHaveLength(1));
     await act(async () => { release!({ records: [{ kind: 'user', text: 'first question' }, { cliKey: 'claude', text: 'first answer', ok: true }], closed: false }); });
     await waitFor(() => expect(screen.getAllByTestId('assist-chat-msg')).toHaveLength(3));
-    expect(screen.getAllByTestId('assist-chat-msg').map((m) => (m.textContent ?? '').replace(/^(you|claude)/u, ''))).toEqual(['first question', 'first answer', 'one more thing']);
+    expect(screen.getAllByTestId('assist-chat-msg').map((m) => (m.textContent ?? '').replace(/^(you|Claude)/u, ''))).toEqual(['first question', 'first answer', 'one more thing']);
   });
 
   it('the narrow dock keeps its boxed block: the seat header and the capped scroller', async () => {
