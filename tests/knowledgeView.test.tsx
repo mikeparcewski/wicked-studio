@@ -573,7 +573,7 @@ describe('crew#1697 (studio#1248): Forget a piece of document knowledge', () => 
     await user.clear(within(box).getByTestId('knowledge-forget-source-input'));
     await user.type(within(box).getByTestId('knowledge-forget-source-input'), source);
     await user.click(within(box).getByTestId('knowledge-forget-source-ask'));
-    expect(screen.getByTestId('knowledge-forget-source-confirm')).toHaveTextContent(`Forget everything learned from “${source.trim()}”?`);
+    expect(screen.getByTestId('knowledge-forget-source-confirm').textContent).toContain(`Forget everything learned from “${source}”?`);
     expect(screen.getByTestId('knowledge-forget-source-confirm')).toHaveTextContent('This can’t be undone.');
     await user.click(screen.getByTestId('knowledge-forget-source-go'));
   };
@@ -584,7 +584,7 @@ describe('crew#1697 (studio#1248): Forget a piece of document knowledge', () => 
     const user = userEvent.setup();
     expect(screen.getByTestId('knowledge-forget-source-ask')).toBeDisabled();
     const reads = calls.filter((c) => c === 'GET /knowledge/map').length;
-    await forgetSource(user, '  runbooks/escalation.md ');
+    await forgetSource(user, 'runbooks/escalation.md');
     expect(await screen.findByTestId('knowledge-forget-source-note')).toHaveTextContent('Forgot 12 pieces of knowledge learned from “runbooks/escalation.md”. Agents no longer recall them.');
     expect(forgets).toEqual([{ source: 'runbooks/escalation.md' }]);
     await waitFor(() => expect(calls.filter((c) => c === 'GET /knowledge/map').length).toBe(reads + 1));
@@ -605,6 +605,19 @@ describe('crew#1697 (studio#1248): Forget a piece of document knowledge', () => 
     await waitFor(() => expect(screen.getByTestId('knowledge-forget-source-note')).toHaveTextContent('Nothing in the knowledge store came from “docs/typo.md”, so nothing was deleted. Type the source exactly as it was added: the same file path or web address.'));
     // Nothing went, so what was typed stays to correct.
     expect(screen.getByTestId('knowledge-forget-source-input')).toHaveValue('docs/typo.md');
+  });
+
+  it('sends the source exactly as typed: estate matches it exactly, so a space is part of it and is said (review r1)', async () => {
+    answer = () => Promise.resolve({ forgotten: 0, skipped_live_source: 0 });
+    await renderWith(true);
+    const user = userEvent.setup();
+    const box = screen.getByTestId('knowledge-forget-source');
+    await user.type(within(box).getByTestId('knowledge-forget-source-input'), '   ');
+    expect(within(box).getByTestId('knowledge-forget-source-ask')).toBeDisabled();
+    await forgetSource(user, 'docs/handbook.md ');
+    expect(forgets).toEqual([{ source: 'docs/handbook.md ' }]);
+    await user.click(within(box).getByTestId('knowledge-forget-source-ask'));
+    expect(screen.getByTestId('knowledge-forget-source-confirm')).toHaveTextContent('What you typed starts or ends with a space, and that space is part of the source.');
   });
 
   it('a refusal (409) or an old estate (501) says nothing was deleted; Cancel sends nothing', async () => {

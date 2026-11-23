@@ -323,7 +323,7 @@ function ForgetSource({ onForgot }: { onForgot: () => void }): React.ReactElemen
       <p className="wk-gk-muted">Agents recall what was learned from the files and web pages added to the knowledge store. To forget everything one of them taught, type it exactly as it was added.</p>
       <form
         className="wk-gk-row"
-        onSubmit={(e) => { e.preventDefault(); if (typed !== '') { setNote(null); setAsking(typed); } }}
+        onSubmit={(e) => { e.preventDefault(); if (typed !== '') { setNote(null); setAsking(source); } }}
       >
         <label htmlFor={inputId} className="wk-gk-muted">File path or web address</label>
         <input
@@ -340,7 +340,7 @@ function ForgetSource({ onForgot }: { onForgot: () => void }): React.ReactElemen
       </form>
       {asking !== null && (
         <div role="group" aria-label="Forget this source" data-testid="knowledge-forget-source-confirm">
-          <p className="wk-gk-muted">Forget everything learned from “{asking}”? Agents stop recalling it and the knowledge store deletes it. This can’t be undone.</p>
+          <p className="wk-gk-muted">Forget everything learned from “{asking}”? Agents stop recalling it and the knowledge store deletes it. This can’t be undone.{asking !== asking.trim() ? ' What you typed starts or ends with a space, and that space is part of the source.' : ''}</p>
           <div className="wk-gk-row">
             <button type="button" className="wk-btn wk-btn--danger wk-btn--sm" data-testid="knowledge-forget-source-go" disabled={busy} onClick={() => void forget(asking)}>{busy ? 'Forgetting…' : 'Forget everything from it'}</button>
             <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="knowledge-forget-source-cancel" disabled={busy} onClick={() => setAsking(null)}>Cancel</button>
