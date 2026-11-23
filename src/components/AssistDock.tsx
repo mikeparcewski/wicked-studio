@@ -277,6 +277,8 @@ interface DockChatMsg {
   /** A note about a helper the engine gave up on: `${ord}:${attempt}:${seat}` (a re-pick and the failed step it follows
    *  are one line). */
   seatLine?: string;
+  /** The helper was re-picked away from this turn: its later frames for the turn are not drawn. */
+  retires?: true;
   /** The daemon's citation verdicts for this reply (a `chatCitations` frame, or a replayed `citations` record). */
   citations?: ChatCitations;
 }
@@ -334,6 +336,9 @@ function citationsOf(r: unknown): ChatCitations {
   };
 }
 
+/** Where a live verdict is kept: the reply's helper and turn. */
+const verdictKey = (cliKey: string, turnId: string | undefined): string => `${cliKey}|${turnId ?? ''}`;
+
 /** A helper's name as the roster gives it ("Claude Code"), never its key. */
 const seatName = (key: string): string => cliName(key, getCachedRoster());
 
@@ -354,6 +359,50 @@ function couldNotAnswerWhy(reason: string | null): string {
 /** A team row (`teamEvent`) that says a helper stopped answering this chat's run: a re-pick, or an answer step that
  *  did not complete. */
 interface SeatStop { id: number | null; runId: string; key: string; seat: string; why: string; to: string | null }
+
+/** Two messages of one turn: equal turn ids, or either one untagged (an older daemon's frames). */
+const sameTurn = (a: string | undefined, b: string | undefined): boolean => a === undefined || b === undefined || a === b;
+
+/** A helper's reply that did not finish well: still typing, or ended in a failure. */
+const isOpenReply = (m: DockChatMsg, seat: string): boolean => m.note !== true && m.cliKey === seat && (m.pending || !m.ok);
+
+/** The helper has a "could not answer" line for the turn (`retiring`: only one that re-picked it away). */
+const hasSeatLine = (msgs: readonly DockChatMsg[], seat: string, turnId: string | undefined, retiring: boolean): boolean =>
+  msgs.some((m) => m.seatLine !== undefined && m.cliKey === seat && sameTurn(m.turnId, turnId) && (!retiring || m.retires === true));
+
+/** Folds a stop into the thread (pure): the helper's unfinished reply in the stop's turn becomes one line saying who could
+ *  not answer, why, and who answers instead. The turn is that reply's, else the newest question's: a turn closes before
+ *  the next question can be sent (crew refuses it with `turn_in_flight`). `onlyIfOpen`: nothing to close, nothing said. */
+function foldSeatStop(prev: DockChatMsg[], stop: SeatStop, name: (k: string) => string, firstTurnId: string | undefined, onlyIfOpen: boolean): DockChatMsg[] {
+  // The helper's newest unfinished reply: an older turn's failure is not this stop's.
+  let open = -1;
+  for (let i = prev.length - 1; i >= 0 && open < 0; i -= 1) if (isOpenReply(prev[i]!, stop.seat)) open = i;
+  if (onlyIfOpen && open < 0) return prev;
+  const turnId = (open >= 0 ? prev[open]!.turnId : undefined)
+    ?? [...prev].reverse().find((m) => m.cliKey === 'you' && m.note !== true && m.turnId !== undefined)?.turnId
+    ?? firstTurnId;
+  const text = `${name(stop.seat)} could not answer: ${stop.why}.${stop.to !== null ? ` ${name(stop.to)} answers instead.` : ''}`;
+  const lineAt = prev.findIndex((m) => m.seatLine === stop.key && sameTurn(m.turnId, turnId));
+  // The helper's unfinished replies in this turn go: the line says what happened to them.
+  const drop = (m: DockChatMsg): boolean => isOpenReply(m, stop.seat) && sameTurn(m.turnId, turnId);
+  if (lineAt >= 0) {
+    // The failed step and its re-pick are one line, in the re-pick's words (it names the engine's reason for the move
+    // and who answers now); a later row with no re-pick leaves it as it is.
+    const line = prev[lineAt]!;
+    const next = prev.map((m, i) => (i === lineAt && stop.to !== null ? { ...line, text, retires: true as const } : m));
+    return next.filter((m) => !drop(m));
+  }
+  const line: DockChatMsg = {
+    cliKey: stop.seat, text, pending: false, ok: false, note: true, seatLine: stop.key,
+    at: open >= 0 ? prev[open]!.at ?? Date.now() : Date.now(),
+    ...(turnId !== undefined ? { turnId } : {}),
+    ...(stop.to !== null ? { retires: true as const } : {}),
+  };
+  const next = prev.filter((m) => !drop(m));
+  const at = open >= 0 ? prev.slice(0, open).filter((m) => !drop(m)).length : next.length;
+  next.splice(at, 0, line);
+  return next;
+}
 
 function seatStopOf(ev: unknown): SeatStop | null {
   const row = (ev as { event?: { event_id?: unknown; event_type?: unknown; payload?: Record<string, unknown> } }).event;
@@ -436,8 +485,8 @@ function DockChat({ chatId, firstTurnId, resumed = false, onResumeProbe, onStatu
   footRef.current = answerFooter;
   const [seats, setSeats] = useState<Record<string, DockSeatState>>({});
   const [msgs, setMsgs] = useState<DockChatMsg[]>([]);
-  const msgsRef = useRef(msgs);
-  msgsRef.current = msgs;
+  /** Live citation verdicts (`chatCitations`), by helper and turn. */
+  const [verdicts, setVerdicts] = useState<Record<string, ChatCitations>>({});
   /** The chat's ask run (its `path`, once the first message launched it): its working step shows live below. */
   const [pathRun, setPathRun] = useState<string | null>(null);
   const [pathPa, setPathPa] = useState<string | null>(null);
@@ -535,6 +584,8 @@ function DockChat({ chatId, firstTurnId, resumed = false, onResumeProbe, onStatu
   /** Match the turn when present; older daemons' untagged chunks use FIFO. */
   const append = (cliKey: string, text: string, turnId?: string): void => {
     setMsgs((prev) => {
+      // A helper re-picked away from this turn: its late frames are not a bubble (studio#1370).
+      if (hasSeatLine(prev, cliKey, turnId, true)) return prev;
       const next = [...prev];
       for (let i = 0; i < next.length; i += 1) {
         const m = next[i];
@@ -555,6 +606,12 @@ function DockChat({ chatId, firstTurnId, resumed = false, onResumeProbe, onStatu
    *  a block that mounted mid-stream, intact). */
   const finalize = (cliKey: string, text: string, ok: boolean, turnId?: string): void => {
     setMsgs((prev) => {
+      // A helper re-picked away from this turn, or a failure the turn's "could not answer" line already says: no bubble,
+      // and nothing of that helper's left typing in the turn (studio#1370).
+      if (hasSeatLine(prev, cliKey, turnId, true) || (!ok && hasSeatLine(prev, cliKey, turnId, false))) {
+        const next = prev.filter((m) => !(m.note !== true && m.cliKey === cliKey && m.pending && sameTurn(m.turnId, turnId)));
+        return next.length === prev.length ? prev : next;
+      }
       const next = [...prev];
       for (let i = 0; i < next.length; i += 1) {
         const m = next[i];
@@ -573,46 +630,27 @@ function DockChat({ chatId, firstTurnId, resumed = false, onResumeProbe, onStatu
 
   // studio#1370: a helper the engine gave up on (a re-pick, or an answer step that did not complete) leaves one line —
   // who could not answer, why, and who answers instead — where its half-typed bubble was; never a bubble stuck on "…".
-  // A re-picked helper's late frames are not bubbles (the session page's rule, store/askThread.ts). Team rows name the
-  // chat's RUN, which is read a moment after the chat opens: rows that arrive first wait for it.
-  const retired = useRef(new Set<string>());
+  // A helper re-picked away from a turn is not drawn again in that turn: the engine never hands an answer step back to
+  // a seat that failed it (wicked-core actor.rs, `worker_failed_clis`). After a failed step with no re-pick the same
+  // helper tries again, so its new frames are drawn. Team rows name the chat's RUN, which is read a moment after the
+  // chat opens: rows that arrive first wait for it, by run.
   const stopsSeen = useRef(new Set<number>());
-  const stopsWaiting = useRef<SeatStop[]>([]);
-  const seatStopped = (stop: SeatStop): void => {
+  const stopsWaiting = useRef(new Map<string, SeatStop[]>());
+  const firstTurnRef = useRef(firstTurnId);
+  firstTurnRef.current = firstTurnId;
+  const seatStopped = (stop: SeatStop, onlyIfOpen = false): void => {
     if (stop.id !== null) {
       if (stopsSeen.current.has(stop.id)) return;
       stopsSeen.current.add(stop.id);
     }
-    if (stop.to !== null) {
-      retired.current.delete(stop.to);
-      retired.current.add(stop.seat);
-      // The live line under the answer names who is working on it now.
-      setPathPa(stop.to);
-    }
-    const said = `${seatName(stop.seat)} could not answer: ${stop.why}.`;
-    const instead = stop.to !== null ? ` ${seatName(stop.to)} answers instead.` : '';
-    setMsgs((prev) => {
-      const at = prev.findIndex((m) => m.seatLine === stop.key);
-      if (at >= 0) {
-        // The failed step and its re-pick are one line, in the re-pick's words: it names the engine's reason for the
-        // move (a failed step only says it failed) and who answers now.
-        if (stop.to === null) return prev;
-        const next = [...prev];
-        next[at] = { ...prev[at]!, text: `${said}${instead}` };
-        return next;
-      }
-      const line: DockChatMsg = { cliKey: stop.seat, text: `${said}${instead}`, pending: false, ok: false, note: true, seatLine: stop.key, at: Date.now() };
-      const open = prev.findIndex((m) => m.cliKey === stop.seat && m.pending);
-      if (open < 0) return [...prev, line];
-      const next = prev.filter((m) => !(m.cliKey === stop.seat && m.pending));
-      next.splice(open, 0, { ...line, ...(prev[open]!.turnId !== undefined ? { turnId: prev[open]!.turnId } : {}) });
-      return next;
-    });
+    // The live line under the answer names who is working on it now.
+    if (stop.to !== null) setPathPa(stop.to);
+    setMsgs((prev) => foldSeatStop(prev, stop, seatName, firstTurnRef.current, onlyIfOpen));
   };
   useEffect(() => {
     if (pathRun === null) return;
-    const ready = stopsWaiting.current.filter((st) => st.runId === pathRun);
-    stopsWaiting.current = [];
+    const ready = stopsWaiting.current.get(pathRun) ?? [];
+    stopsWaiting.current.clear();
     for (const st of ready) seatStopped(st);
   }, [pathRun]);
 
@@ -648,15 +686,16 @@ function DockChat({ chatId, firstTurnId, resumed = false, onResumeProbe, onStatu
       const stop = seatStopOf(ev);
       if (stop === null) return;
       if (pathRun === null) {
-        // Not yet known which run is this chat's: keep the newest few until it is.
-        stopsWaiting.current = [...stopsWaiting.current.slice(-31), stop];
+        // Not yet known which run is this chat's: keep the rows by run until it is (a bounded number of runs).
+        const waiting = stopsWaiting.current;
+        waiting.set(stop.runId, [...(waiting.get(stop.runId) ?? []), stop]);
+        if (waiting.size > 64) waiting.delete(waiting.keys().next().value!);
       } else if (stop.runId === pathRun) {
         seatStopped(stop);
       }
       return;
     }
     if (frame.chat !== chatId) return;
-    if ((frame.type === 'chatDelta' || frame.type === 'chatReply') && frame.cliKey !== undefined && retired.current.has(frame.cliKey)) return;
     switch (frame.type) {
       case 'chatSessionReady':
         if (frame.cliKey !== undefined) setSeats((s) => ({ ...s, [frame.cliKey!]: 'ready' }));
@@ -665,10 +704,7 @@ function DockChat({ chatId, firstTurnId, resumed = false, onResumeProbe, onStatu
         if (frame.cliKey !== undefined) {
           setSeats((s) => ({ ...s, [frame.cliKey!]: 'failed' }));
           // A reply it had begun is closed with a line, not left on "…" (studio#1370).
-          const cli = frame.cliKey;
-          if (msgsRef.current.some((m) => m.cliKey === cli && m.pending)) {
-            seatStopped({ id: null, runId: '', key: `session:${cli}:${Date.now()}`, seat: cli, why: 'its session ended', to: null });
-          }
+          seatStopped({ id: null, runId: '', key: `session:${frame.cliKey}`, seat: frame.cliKey, why: 'its session ended', to: null }, true);
         }
         onStatusRef.current?.('ready');
         break;
@@ -685,23 +721,15 @@ function DockChat({ chatId, firstTurnId, resumed = false, onResumeProbe, onStatu
           onStatusRef.current?.(frame.ok === true ? 'answered' : 'ready');
         }
         break;
-      case 'chatCitations': {
-        // studio#1369: the verdicts arrive after their reply; they mark the reply of the same turn and helper.
-        const cli = frame.cliKey;
-        if (cli === undefined) break;
-        const citations = citationsOf(ev);
-        setMsgs((prev) => {
-          for (let i = prev.length - 1; i >= 0; i -= 1) {
-            const m = prev[i]!;
-            if (m.note === true || m.cliKey !== cli || (frame.turn_id !== undefined && m.turnId !== frame.turn_id)) continue;
-            const next = [...prev];
-            next[i] = { ...m, citations };
-            return next;
-          }
-          return prev;
-        });
+      case 'chatCitations':
+        // studio#1369: the verdicts arrive after their reply (or before a resumed chat's history has loaded it); they
+        // are kept by helper and turn and mark that reply wherever it comes from.
+        if (frame.cliKey !== undefined) {
+          const key = verdictKey(frame.cliKey, frame.turn_id);
+          const citations = citationsOf(ev);
+          setVerdicts((v) => ({ ...v, [key]: citations }));
+        }
         break;
-      }
       default:
         break;
     }
@@ -755,7 +783,7 @@ function DockChat({ chatId, firstTurnId, resumed = false, onResumeProbe, onStatu
             Sent — the helpers answer here as their replies stream in.
           </p>
         ) : (
-          repliesByTurn(msgs, firstTurnId).map((m, i) => m.note === true ? (
+          repliesByTurn(msgs, firstTurnId).map((m) => (m.note === true || m.cliKey === 'you' ? m : { ...m, citations: m.citations ?? verdicts[verdictKey(m.cliKey, m.turnId)] })).map((m, i) => m.note === true ? (
             m.seatLine !== undefined ? (
               // A helper that could not answer: who, why, and who answers instead (studio#1370).
               <p key={i} data-testid="assist-seat-line" data-agent={m.cliKey} data-tone="gate" className="font-mono text-xs leading-relaxed" style={{ color: TONE_COLOR.gate }}>
