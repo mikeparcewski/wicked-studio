@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { RepoEntry, RosterSeat } from '../../api/types.js';
 import { qeAcceptanceSetting, workflowRequiresQe } from '../../board/assuranceModel.js';
-import { workflowLaunchBody } from '../../board/launchModel.js';
+import { assuranceNoticeOf, workflowLaunchBody } from '../../board/launchModel.js';
 import { sessionPath } from '../../board/sessionModel.js';
 import { entryOffered, entryWords, jobCatalogView, needsProject, needsRepo, type CatalogEntry } from '../../board/workflowCatalog.js';
 import { notOfferedLine } from '../../board/slashCatalog.js';
@@ -15,6 +15,7 @@ import { invalidatePresets, usePlanCatalog } from '../../store/planCatalog.js';
 import { startAppByChat } from '../../store/inlineStart.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { useProvenanceStore } from '../../store/provenance.js';
+import { useLaunchNotices } from '../../store/launchNotices.js';
 import { fetchReposCached, getCachedRepos } from '../../store/repoCache.js';
 import { catalogProjectOf, readWorkflowCatalog, useWorkflowCatalog } from '../../store/workflowCatalog.js';
 import { useWorkflowDefs } from '../../store/workflowCache.js';
@@ -281,8 +282,12 @@ export function InlineStart({
           power: chatStartPower(powerCapNow, defaultNow, reviewAsked),
         });
         if (forceAcceptance) body.forceQeAcceptance = true;
-        const { runId } = await api.launchRun(body);
+        const launched = await api.launchRun(body);
+        const { runId } = launched;
         useProvenanceStore.getState().markLaunchedHere(runId);
+        // studio#1239: crew's `assuranceNotice` is said on the job's session, with its confirmed relaunch.
+        const notice = assuranceNoticeOf(launched);
+        if (notice !== null) useLaunchNotices.getState().put({ runId, notice, body }, chatId);
         spend();
         navigate(chatId !== null ? sessionPath(chatId) : sessionPath(`run:${runId}`));
         return true;
