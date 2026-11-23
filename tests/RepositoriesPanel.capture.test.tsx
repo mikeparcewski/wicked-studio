@@ -145,6 +145,27 @@ describe('Add a repository: the chained Capture learnings job (studio#1083)', ()
     await waitFor(() => expect(client.api.listProjects).toHaveBeenCalledTimes(2));
   });
 
+  it('an older project read that lands late never counts for this opening (codex r1 delta on #1349)', async () => {
+    vi.mocked(client.api.listRepos).mockResolvedValue({ repos: [REPO] });
+    const answers: Array<(v: { projects: Project[] }) => void> = [];
+    vi.mocked(client.api.listProjects).mockImplementation(() => new Promise((res) => { answers.push(res); }));
+    const user = userEvent.setup();
+    // The ambient project's name is read before the form opens; opening reads the list again.
+    render(<RepositoriesPanel navigate={vi.fn()} ambientProject="p" />);
+    await waitFor(() => expect(answers).toHaveLength(1));
+    await user.click(await screen.findByTestId('repos-add'));
+    await waitFor(() => expect(answers).toHaveLength(2));
+    // The earlier read lands last-known "off"; it was not this opening's, so nothing is said as settled.
+    answers[0]!({ projects: [proj('p', false)] });
+    await new Promise((res) => setTimeout(res, 0));
+    expect(screen.queryByTestId('repo-capture-off')).toBeNull();
+    expect(screen.getByTestId('repo-capture-after')).toBeChecked();
+    // This opening's read says the project captures.
+    answers[1]!({ projects: [proj('p', true)] });
+    await waitFor(() => expect(screen.getByTestId('repo-capture-note')).toHaveTextContent('A Capture learnings job follows'));
+    expect(screen.queryByTestId('repo-capture-off')).toBeNull();
+  });
+
   it('a settings read that fails still offers the opt-out, worded as conditional', async () => {
     vi.mocked(client.api.getSettings).mockRejectedValue(new Error('offline'));
     render(<RepositoriesPanel navigate={vi.fn()} autoShowRegister />);

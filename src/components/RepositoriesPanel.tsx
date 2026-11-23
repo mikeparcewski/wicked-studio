@@ -153,22 +153,26 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
   useEffect(() => {
     if (ambientProject !== null) {
       setSelectedProjectId(ambientProject);
-      loadProjects();
+      // An open form reads the list itself (each opening reads it fresh, below).
+      if (!showRegister) loadProjects();
     }
-    // loadProjects is ref-guarded and single-shot, so listing only the carry is safe.
-  }, [ambientProject]);
+    // loadProjects is ref-guarded and single-shot, so listing only the carry is safe. `showRegister` is read, not a
+    // trigger: an opening reads the list in its own effect.
+  }, [ambientProject]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // studio#1083: whether the project list was read since the form opened. A project's capture override is only taken
   // from a fresh read; until then (or after a failed read) the form treats it as not known (codex r1 on #1349).
   const [projectsFresh, setProjectsFresh] = useState(false);
-  const projectsLanded = useRef(false);
+  /** The current project read: only its answer lands, so an older read (an earlier opening's) never counts as this
+   *  opening's, and overlapping reads never land out of order (codex r1 delta on #1349). */
+  const projectsGen = useRef(0);
 
   // crew-0182: the Project field lists the projects as soon as the form is up (it is a choice, not a lazy chip).
-  // Reopened after a read already landed, the list is read again (a project's override may have changed since).
+  // Every opening reads the list again (a project's override may have changed since).
   useEffect(() => {
     if (!showRegister) return;
     setProjectsFresh(false);
-    loadProjects(projectsLanded.current);
+    loadProjects(true);
   }, [showRegister]);
 
   // studio#1083 (crew#552): whether a Capture learnings job follows the onboarding. The daemon setting
@@ -191,16 +195,18 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
   function loadProjects(force = false): void {
     if (projectsRequested.current && !force) return;
     projectsRequested.current = true;
+    const gen = ++projectsGen.current;
     // A failed (or absent) read throws inside the chain, never out of the effect that asked.
     Promise.resolve()
       .then(() => api.listProjects())
       .then(({ projects: ps }) => {
-        projectsLanded.current = true;
+        if (gen !== projectsGen.current) return;
         setProjectsFresh(true);
         setProjectsFailed(false);
         setProjects([...ps].sort((a, b) => b.updated_at - a.updated_at));
       })
       .catch(() => {
+        if (gen !== projectsGen.current) return;
         projectsRequested.current = false; // transient — the Retry beside the field reads it again
         setProjectsFailed(true);
       });
