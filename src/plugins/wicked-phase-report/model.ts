@@ -593,7 +593,13 @@ function phaseState(r: Report, scope: PhaseScope): string {
   if (floor !== null) return floor;
   const step = HANDOFF_STEP[scope.phase];
   const rec = step !== undefined ? r.power?.handoff?.steps.get(step) : undefined;
-  if (rec !== undefined) return rec.status === 'passed' ? (scope.phase === 'review' || scope.phase === 'security' ? 'approved' : 'passed') : rec.status === 'failed' ? (scope.phase === 'review' ? 'changes asked' : 'failed') : rec.status;
+  if (rec !== undefined) {
+    // A step still on its way (pending, running) whose gate opened at or after its record waits on the person, not the
+    // seat (studio#1372: "Review · working: Codex · running" beside "Waiting on you at Review"). A finished record wins.
+    const settled = rec.status === 'passed' || rec.status === 'failed' || rec.status === 'skipped';
+    if (!settled && openGates(r).some((g) => inScope(scope, g.ord) && g.openedAt >= rec.at)) return 'waiting on you';
+    return rec.status === 'passed' ? (scope.phase === 'review' || scope.phase === 'security' ? 'approved' : 'passed') : rec.status === 'failed' ? (scope.phase === 'review' ? 'changes asked' : 'failed') : rec.status;
+  }
   const open = openGates(r).filter((g) => inScope(scope, g.ord));
   if (open.length > 0) return 'waiting on you';
   const span = unitSpan(r, scope);
