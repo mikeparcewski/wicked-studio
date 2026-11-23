@@ -21,6 +21,7 @@ import { artifactKey } from '../../store/artifactSizes.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { useGateStore } from '../../store/gates.js';
 import { ArtifactMorph } from './ArtifactMorph.js';
+import { attemptOfRun } from '../../board/runAttempt.js';
 import { PlanOrderEditor } from './PlanOrderEditor.js';
 import { WalkthroughEditor } from './WalkthroughEditor.js';
 
@@ -212,6 +213,8 @@ export function RunArtifacts({ view, composerKey, chain, only, frame }: {
   const producer = maker.role === 'seat' && /[\\/]/.test(maker.cli ?? maker.name) ? CREW : maker;
   if (count === 0) return null;
   const suffix = count === 1 ? 'made this' : 'made these';
+  // crew#1745: a document with no version yet says whether this run is still building it, stopped, or failed and why.
+  const attempt = attemptOfRun(view.session);
   const cards = (
     <div data-testid="run-artifacts" data-run-id={runId} data-count={count}>
       {/* H3: who made what is shown with them — the seat of the run's newest step that ran (HOST-API §2 producedBy). */}
@@ -246,6 +249,7 @@ export function RunArtifacts({ view, composerKey, chain, only, frame }: {
           composerKey={composerKey}
           kind={editorKindOf(d.style)}
           repoId={repoNameOf(view)}
+          attempt={attempt}
         />
       ))}
     </div>

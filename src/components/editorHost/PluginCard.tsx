@@ -622,7 +622,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const hasFull = decl?.full != null;
   const interactive = decl?.card.interactive === true && protocol >= 2;
   const aspect = decl?.card.aspect ?? '16:9';
-  const pills = adapter?.pills?.() ?? [];
+  const pills = adapter?.pills?.(binding.attempt) ?? [];
+  const pillWhy = pills.find((p) => p.why !== undefined)?.why;
   const actions = decl?.card.actions ?? [];
   const gate = run?.gateActions?.(binding) ?? null;
   const onExit = leaveFull;
@@ -694,6 +695,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
           {pills.map((p) => <span key={p.id} data-testid="plugin-card-pill" data-tone={p.tone} className={`wk-pill wk-pill--${p.tone}`}>{p.text}</span>)}
         </header>
       )}
+      {!full && pillWhy !== undefined && <p data-testid="plugin-card-pill-why" className="wk-host-note wk-pcard-why">{pillWhy}</p>}
       <FullShell
         open={full}
         tag={editor.title}

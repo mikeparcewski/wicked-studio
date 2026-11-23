@@ -1,6 +1,6 @@
 import { exportFileUrl, interactiveUrl, listExports, type ExportFormat } from '../../api/interactive.js';
 import { exportReadyText, runExport } from '../../interactive/exportWire.js';
-import { registerAdapter, type AdapterCapability, type ArtifactBinding, type ArtifactPart, type ExportOption, type ExportOutcome, type ExportedFile, type StatusPill, type SurfaceAdapter } from '../hostApi.js';
+import { registerAdapter, type AdapterCapability, type ArtifactAttempt, type ArtifactBinding, type ArtifactPart, type ExportOption, type ExportOutcome, type ExportedFile, type StatusPill, type SurfaceAdapter } from '../hostApi.js';
 import { InteractiveDocAdapter } from '../interactiveDocAdapter.js';
 import { inventoryOf } from '../ops.js';
 
@@ -54,7 +54,14 @@ export class InteractiveDocSurfaceAdapter extends InteractiveDocAdapter implemen
     return slides.map(([id, s]) => ({ id, label: s.title === '' ? `Slide ${s.n}` : s.title, state: 'pending' as const }));
   }
   exports(): readonly ExportOption[] { return FORMATS[this.binding.kind] ?? []; }
-  pills(): readonly StatusPill[] { return this.head >= 1 ? [{ id: 'version', text: `Version ${this.head}`, tone: 'neutral' }] : [{ id: 'version', text: 'Building…', tone: 'warn' }]; }
+  /** crew#1745: before its first version, the card says how the run making it stands: still building, stopped, or not
+   *  made with crew's reason (the run's `landing_failed.reason`). A version on disk always wins. */
+  pills(attempt?: ArtifactAttempt): readonly StatusPill[] {
+    if (this.head >= 1) return [{ id: 'version', text: `Version ${this.head}`, tone: 'neutral' }];
+    if (attempt?.state === 'failed') return [{ id: 'version', text: 'Not made', tone: 'bad', why: `The last attempt ended without a draft: ${attempt.why}.` }];
+    if (attempt?.state === 'stopped') return [{ id: 'version', text: 'Stopped', tone: 'bad', why: 'The job stopped before it made a first version.' }];
+    return [{ id: 'version', text: 'Building…', tone: 'warn' }];
+  }
   async exportFile(format: string, version: number): Promise<ExportOutcome> {
     const label = this.exports().find((x) => x.format === format)?.label ?? format;
     const out = await runExport({ projectId: this.binding.projectId, docId: this.binding.docId ?? '', version, format: format as ExportFormat });
