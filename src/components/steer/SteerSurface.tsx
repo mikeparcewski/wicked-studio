@@ -110,6 +110,16 @@ export function bySeverity(rules: readonly SteeringRule[]): SteeringRule[] {
     || a.id.localeCompare(b.id));
 }
 
+/** (studio#1344) The Table layout's row order while it stays open: the rows it already shows keep their places (an edit
+ *  that changes a rule's severity never moves its row), a row that left the list drops out, and a new one joins at the
+ *  end in the list's own order. */
+export function keepOrder(shown: readonly string[], listed: readonly string[]): string[] {
+  const now = new Set(listed);
+  const kept = shown.filter((id) => now.has(id));
+  const had = new Set(kept);
+  return [...kept, ...listed.filter((id) => !had.has(id))];
+}
+
 /** A rule's tags for the tag filter — its type, severity, every string target and applies_to value
  *  (the retired governance dashboard's vocabulary, kept: codex r2 #5). */
 export function ruleFacets(rule: SteeringRule): string[] {
@@ -285,6 +295,14 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
     if (facet !== null && !ruleFacets(r).includes(facet)) return false;
     return true;
   });
+
+  // (studio#1344) The Table layout re-sorts only on a new read the person asked for (Refresh, a proposal decision), a
+  // filter change or a layout switch; an inline edit (its optimistic apply and the save's own reload) keeps every row in place.
+  const tableOrder = useRef<{ key: string; ids: string[] } | null>(null);
+  const orderKey = JSON.stringify([tableLayout, view, type, mcpOnly, usageAsked, needle, facet, reviewTick]);
+  const listedIds = listed.map((r) => r.id);
+  const tableIds = tableOrder.current !== null && tableOrder.current.key === orderKey ? keepOrder(tableOrder.current.ids, listedIds) : listedIds;
+  tableOrder.current = { key: orderKey, ids: tableIds };
 
   const selected = selectedId === null ? null : rules.find((r) => r.id === selectedId) ?? null;
   /** A rule opens on an address: `/rules/:id` from the overview, `?rule=` on a filtered view. Either way the
@@ -585,7 +603,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
           <SteeringGrid rules={rules} type={type ?? 'all'} loading={false} error={null} selectedId={selectedId} unseeded={unseeded}
             onSelect={(id) => navigate(openPath(id))} onCommit={commitRule} onCreate={createRule}
             onRetired={(r, reason) => { setNote({ tone: 'ok', text: `Retired ${r.id}. Helpers no longer follow it; it stays listed under Retired. Your reason: “${reason}”` }); void load(); }}
-            addRequestTick={addTick} idFilter={listed.map((r) => r.id)} draftStore={gridDraft} />
+            addRequestTick={addTick} idFilter={tableIds} draftStore={gridDraft} />
         </>
       ) : unseeded ? (
         unseededEmpty

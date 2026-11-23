@@ -65,8 +65,10 @@ export const mcpApi = {
   save: (previewHash: string) => apiFetch<McpServer>('/mcp/servers', j({ previewHash })),
   remove: (name: string) => apiFetch<{ removed: string }>(`/mcp/servers/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   test: (name: string) => apiFetch<McpServerTestResponse>(`/mcp/servers/${encodeURIComponent(name)}/test`, { method: 'POST' }),
-  /** `readAccepted` (crew#1295, api-types 0.219.0): accept or withdraw the tool as an Apps read (a person only). */
-  setTool: (subject: string, body: { enabled?: boolean; classOverride?: McpToolClass | null; readAccepted?: boolean }) =>
+  /** `readAccepted` (crew#1295, api-types 0.219.0): accept or withdraw the tool as an Apps read (a person only).
+   *  `expectedSchemaHash` (crew#1788): the saved schema the person saw; crew refuses a patch against any other one
+   *  409 `schema_changed` and changes nothing. */
+  setTool: (subject: string, body: { enabled?: boolean; classOverride?: McpToolClass | null; readAccepted?: boolean; expectedSchemaHash?: string }) =>
     apiFetch<McpTool>(`/mcp/tools/${encodeURIComponent(subject)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   policies: (body: McpPolicyPreviewBody) => apiFetch<McpPolicyPreviewResponse>('/mcp/policies/preview', j(body)),
   approvals: () => apiFetch<McpApprovalsResponse>('/mcp/approvals'),

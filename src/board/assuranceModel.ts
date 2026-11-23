@@ -796,6 +796,23 @@ export function assuranceKind(r: AssuranceReceipt): AssuranceKind {
   return 'unchecked';
 }
 
+/**
+ * (studio#1348, crew#1673 item 2) The word a passed acceptance is summed up with, from what the run's receipt says ran:
+ * "Passed" only when a check ran and the judge it required was not skipped. A receipt where nothing ran, or whose judge
+ * was skipped (reduced assurance) or could not rule (the operator judged instead), says that, never "Passed".
+ * No receipt (an older engine): "Passed", as crew's acceptance says.
+ */
+export function passedWord(r: AssuranceReceipt | null): string {
+  if (r === null) return 'Passed';
+  if (assuranceKind(r) === 'unchecked') return 'Nothing verified';
+  const judgeSkips = r.skipped.filter((s) => s.instrument === 'judge');
+  if (judgeSkips.some((s) => s.reason === 'reduced_assurance')) return 'Judge skipped (reduced assurance)';
+  const operatorJudged = (r.operatorJudges ?? []).some((j) => j.floorOverride === undefined);
+  // A delivery's receipt is its gates' union: a judge that ran at one gate and not another is "in part".
+  if (judgeSkips.length > 0 || operatorJudged) return r.ran.includes('judge') ? 'Judged in part' : 'No judge ran';
+  return 'Passed';
+}
+
 /** The lead word when the decision PASSED (an approval, a delivery) … */
 const ACCEPTED_LABEL: Record<AssuranceKind, string> = {
   independent: 'Independently accepted',

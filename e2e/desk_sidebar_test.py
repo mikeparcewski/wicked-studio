@@ -164,7 +164,13 @@ with sync_playwright() as p:
                railBg: getComputedStyle(rail).backgroundColor, name: t.getAttribute('aria-label'), cls: t.className }; }"""
     page.wait_for_function("() => document.querySelector('[data-testid=\"desk-rail-nerve\"]')?.dataset.read !== 'checking'", timeout=15000)
     page.mouse.move(W // 2, H // 2)
-    page.wait_for_timeout(300)
+    # studio#1346: the tile's colours ease in (rail.css: a 140 ms background/border transition), and a loaded runner can
+    # read them mid-way after a tone change. Wait for the settled colours (the full-size probe's), then read them; a tile
+    # that never settles is still read below and fails the check with its values.
+    try:
+        page.wait_for_function(f"() => {{ const n = ({NERVE})(); return n.bg === n.full && n.edge === n.fullEdge; }}", timeout=5000)
+    except Exception:  # noqa: BLE001 - the check below reports what was read
+        pass
     nerve = page.evaluate(NERVE)
     words = {"green": "nothing needs you", "yellow": "needs a look", "red": "work is blocked"}
     check("6-nerve-colour", nerve["tone"] in words and nerve["bg"] == nerve["full"] and nerve["edge"] == nerve["fullEdge"] and nerve["bg"] != nerve["railBg"]

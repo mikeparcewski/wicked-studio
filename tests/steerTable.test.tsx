@@ -445,6 +445,33 @@ describe('Table layout — round-1 review (codex on #1340)', () => {
     expect(screen.getByTestId('steering-cell-severity')).toHaveValue('critical');
   });
 
+  it('studio#1344: editing a severity cell keeps every row in place; Refresh re-sorts', async () => {
+    const user = userEvent.setup();
+    const rows = [
+      rule({ id: 'PAT-001', severity: 'critical' }),
+      rule({ id: 'PAT-002', severity: 'warn' }),
+      rule({ id: 'PAT-003', severity: 'info' }),
+    ];
+    const edited = rows.map((r) => (r.id === 'PAT-003' ? { ...r, severity: 'critical' as const } : r));
+    listConformanceRules.mockResolvedValueOnce({ rules: rows }).mockResolvedValue({ rules: edited });
+    upsertConformanceRule.mockResolvedValue({ status: 'ok' });
+    page();
+    await screen.findAllByTestId('steering-grid-row');
+    const order = (): string[] => screen.getAllByTestId('steering-grid-row').map((tr) => tr.getAttribute('data-rule-id') ?? '');
+    expect(order()).toEqual(['PAT-001', 'PAT-002', 'PAT-003']);
+    const row3 = screen.getAllByTestId('steering-grid-row').find((tr) => tr.getAttribute('data-rule-id') === 'PAT-003')!;
+    await user.selectOptions(within(row3).getByTestId('steering-cell-severity'), 'critical');
+    // The optimistic apply and the save's own reload both leave the row where the person edited it.
+    expect(order()).toEqual(['PAT-001', 'PAT-002', 'PAT-003']);
+    await waitFor(() => expect(listConformanceRules).toHaveBeenCalledTimes(2));
+    await new Promise((res) => setTimeout(res, 0));
+    expect(order()).toEqual(['PAT-001', 'PAT-002', 'PAT-003']);
+    // A read the person asks for sorts again.
+    await user.click(screen.getByTestId('steer-more-button'));
+    await user.click(screen.getByTestId('steer-refresh'));
+    await waitFor(() => expect(order()).toEqual(['PAT-001', 'PAT-003', 'PAT-002']));
+  });
+
   it('a late refusal reverts only its own edit, never a newer accepted one', async () => {
     const user = userEvent.setup();
     const r = rule();

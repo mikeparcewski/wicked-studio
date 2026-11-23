@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { RunAcceptanceView, SessionView } from '../src/api/types.js';
 import { teamPlanApi } from '../src/api/teamPlan.js';
+import * as client from '../src/api/client.js';
 import { RunRibbon, RunTab } from '../src/components/session/RunTab.js';
 import * as chainLine from '../src/components/session/ChainLine.js';
 import { chainFromUnits } from '../src/board/chainModel.js';
@@ -256,6 +257,24 @@ describe('RunTab', () => {
     expect(within(checks).getByTestId('run-panel-summary')).toHaveTextContent('Not passed');
     expect(within(checks).getByTestId('run-tab-acceptance')).toHaveTextContent('Not accepted yet: QE FAIL.');
     expect(within(checks).getByTestId('run-tab-overridden')).toBeTruthy();
+  });
+
+  it.each([
+    ['nothing ran', { ran: [], skipped: [] }, 'Nothing verified'],
+    ['the judge was skipped under reduced assurance', { mode: 'reduced', ran: ['repo_checks'], skipped: [{ instrument: 'judge', reason: 'reduced_assurance', detail: null }] }, 'Judge skipped (reduced assurance)'],
+    ['no distinct judge seat', { ran: ['repo_checks'], skipped: [{ instrument: 'judge', reason: 'no_distinct_seat', detail: null }] }, 'No judge ran'],
+    ['a judge on another seat ran', { ran: ['judge'], skipped: [], judge: 'codex' }, 'Passed'],
+  ])('studio#1348: a passed acceptance where %s is summed up from the receipt, not as "Passed" by default', async (_what, over, word) => {
+    // The receipt as the engine's gateEvaluated carries it (the rule-verdict fixture below; core assurance receipt).
+    const assurance = { mode: 'full', required: ['judge'], creator: 'pi', evaluator: null, judge: null, tree: 't', attempt: 1, ...over };
+    const view = makeView({ status: 'completed' }, [makeUnit({ ord: 2, stage: 'review', status: 'done', assigned_cli: 'pi' })]);
+    useRunEventStore.setState({ byRun: { 'run-1': [{ type: 'gateEvaluated', session: 'run-1', ord: 2, ts: 1, combined: true, denial: null, assurance }] as never } });
+    // A finished run reads crew's acceptance (`GET /runs/:id/acceptance`): it passed.
+    vi.spyOn(client.api, 'getRunAcceptance').mockResolvedValue({ runId: 'run-1', summary: { required: true, satisfied: true, line: 'Accepted: the checks this run had to pass have passed.', walkthrough: null } } as unknown as RunAcceptanceView);
+    await tab([view]);
+    openSection('checks');
+    const checks = screen.getAllByTestId('run-panel-section').find((s) => s.dataset['section'] === 'checks')!;
+    expect((await within(checks).findByTestId('run-panel-summary')).textContent).toBe(word);
   });
 
   it('shows the exported orphan warning only while the event trail says it is orphaned', async () => {

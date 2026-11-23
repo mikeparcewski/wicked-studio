@@ -226,7 +226,7 @@ describe('the "this grew" dock (a pause, not an engine gate: POST /runs/:id/powe
       posts = [];
       const { unmount } = card(rec);
       await answer();
-      await waitFor(() => expect(pausePosts()).toEqual([rec === 'stop' ? { decision: 'stop', note: 'out of scope' } : { decision: rec }]));
+      await waitFor(() => expect(pausePosts()).toEqual([rec === 'stop' ? { decision: 'stop', note: 'out of scope', checkpoint: 3, at: pause.at } : { decision: rec, checkpoint: 3, at: pause.at }]));
       expect(posts.some((p) => p.path === `/runs/${RUN}/gate`)).toBe(false);
       unmount();
     }
@@ -249,12 +249,50 @@ describe('the "this grew" dock (a pause, not an engine gate: POST /runs/:id/powe
     card('split');
     await answer();
     expect(useLaunchWizard.getState().draft?.intent).toContain('The diff now spans 3 packages');
-    await waitFor(() => expect(pausePosts()).toEqual([{ decision: 'continue', note: expect.stringContaining('Split into lanes: finish only the original change here') }]));
+    await waitFor(() => expect(pausePosts()).toEqual([{ decision: 'continue', note: expect.stringContaining('Split into lanes: finish only the original change here'), checkpoint: 3, at: pause.at }]));
     expect(posts.some((p) => p.path === '/runs')).toBe(false);
   });
 
   it('the thread shows the pause card when the run is paused, with no gate open', async () => {
     render(<RunBlock view={view({ power: state({ pause }) })} badge={0} sessionId={`run:${RUN}`} />);
     expect(await screen.findByTestId('power-pause')).toBeTruthy();
+  });
+});
+
+describe('studio#1347 (crew#1739): a pause answer names the pause the card showed', () => {
+  const shown = { at: at(18), checkpoint: 3, reasons: ['The diff now spans 3 packages'], recommended: 'continue_high' as const };
+  beforeEach(() => { setUndoWindowForTest(0); });
+  const send = async (): Promise<void> => {
+    render(<PowerPauseCard view={view()} power={state({ pause: shown })} />);
+    await act(async () => { fireEvent.click(screen.getByTestId('power-pause-confirm')); await new Promise((r) => setTimeout(r, 5)); });
+  };
+
+  it('sends the checkpoint and time it showed, and records the pause crew says it answered', async () => {
+    // crew's 200 (`routes.ts` POST /runs/:id/power/pause): the run's PowerView plus `answered`, the pause read open.
+    answer = () => ({ status: 200, body: { runId: RUN, ...state({ pause: null }), answered: { checkpoint: 3, at: shown.at } } });
+    await send();
+    await waitFor(() => expect(posts.filter((p) => p.path === `/runs/${RUN}/power/pause`).map((p) => p.body)).toEqual([{ decision: 'continue_high', checkpoint: 3, at: shown.at }]));
+    await waitFor(() => expect(usePowerLocal.getState().answeredByRun[RUN]).toEqual({ checkpoint: 3, at: shown.at }));
+  });
+
+  it('a 409 Pause changed records nothing as answered and shows the pause open now', async () => {
+    const open = { at: at(25), checkpoint: 4, reasons: ['A new dependency in a sensitive area'], recommended: 'split' as const };
+    // crew's 409 body, as the route writes it: {error: 'Pause changed', reason, open}.
+    answer = () => ({ status: 409, body: { error: 'Pause changed', reason: 'This answer was for an earlier pause; the run is now paused at checkpoint 4. Read the pause again. Nothing was changed.', open: { checkpoint: 4, at: open.at } } });
+    const reads: string[] = [];
+    const posted = vi.mocked(globalThis.fetch).getMockImplementation()!;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if ((init?.method ?? 'GET') === 'GET' && path === `/runs/${RUN}/power`) {
+        reads.push(path);
+        return Promise.resolve(new Response(JSON.stringify({ runId: RUN, ...state({ pause: open }) }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      }
+      return posted(url, init);
+    }));
+    await send();
+    expect((await screen.findByTestId('power-pause-error')).textContent).toMatch(/now paused at checkpoint 4/);
+    await waitFor(() => expect(reads).toEqual([`/runs/${RUN}/power`]));
+    await waitFor(() => expect(usePowerLocal.getState().byRun[RUN]?.pause?.checkpoint).toBe(4));
+    expect(usePowerLocal.getState().answeredByRun[RUN]).toBeUndefined();
   });
 });
