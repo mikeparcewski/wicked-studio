@@ -7,7 +7,7 @@
  */
 
 import { apiFetch } from './client.js';
-import { isRouteUnsupported } from './errors.js';
+import { ApiError, isRouteUnsupported } from './errors.js';
 
 export type ScheduleOutcome = 'launched' | 'refused' | 'completed' | 'failed' | 'cancelled' | 'skipped';
 export type InsightsReviewStatus = 'running' | 'completed' | 'failed' | 'cancelled';
@@ -37,6 +37,12 @@ export interface WorkflowSchedule {
   updatedAt: string;
   lastReview?: { runId: string; launchedAt: string; endedAt: string | null; status: InsightsReviewStatus } | null;
   blocked?: ScheduleBlocked;
+  /** (api-types 0.224.0, crew#1837) The person let an agent that did the work review it when no other agent can.
+   *  Absent from an older crew (= off). */
+  reducedAssurance?: boolean;
+  /** (api-types 0.224.0, crew#1837) The last start was refused because every agent that could review the work did
+   *  some of it: accepting reduced assurance lets it run. */
+  retryWith?: { reducedAssurance: true };
 }
 
 export interface SchedulePutBody {
@@ -46,6 +52,12 @@ export interface SchedulePutBody {
   projectIds?: string[];
   repoRef?: string | null;
   problem?: string | null;
+  reducedAssurance?: boolean;
+}
+
+/** (api-types 0.224.0, crew#1837) "Run it now" with `reducedAssurance: true`: the person's accept, kept on the schedule. */
+export interface ScheduleRunBody {
+  reducedAssurance?: true;
 }
 
 export type InsightsMetricId = 'pass_rate' | 'override_rate' | 'unresolved_rate' | 'time_to_pr' | 'floor_minutes' | 'wait_on_people' | 'spend' | 'retries';
@@ -132,6 +144,14 @@ export const REVIEW_WORKFLOW = 'review-recent-work';
 /** The cadences Settings offers (the API takes any whole hour count from 24 to 2160). */
 export const CADENCE_DAYS = [1, 2, 3] as const;
 
+/** (crew#1837) Whether a refusal answers "accept reduced assurance and try again" (`retryWith.reducedAssurance`). */
+export function asksReducedAssurance(e: unknown): boolean {
+  const body = e instanceof ApiError ? e.body : undefined;
+  if (typeof body !== 'object' || body === null) return false;
+  const retry = (body as { retryWith?: unknown }).retryWith;
+  return typeof retry === 'object' && retry !== null && (retry as { reducedAssurance?: unknown }).reducedAssurance === true;
+}
+
 async function orNull<T>(p: Promise<T>): Promise<T | null> {
   try {
     return await p;
@@ -148,9 +168,13 @@ export const insightsApi = {
     orNull(apiFetch<{ schedules: WorkflowSchedule[] }>('/schedules')).then((r) => (r === null ? null : r.schedules)),
   saveSchedule: (id: string, body: SchedulePutBody): Promise<WorkflowSchedule> =>
     apiFetch<WorkflowSchedule>(`/schedules/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) }),
-  /** "Run it now". Rejects with crew's reason (409) when its last run is still going or another run is working. */
-  runNow: (id: string): Promise<{ runId: string; schedule: WorkflowSchedule }> =>
-    apiFetch<{ runId: string; schedule: WorkflowSchedule }>(`/schedules/${encodeURIComponent(id)}/run`, { method: 'POST' }),
+  /** "Run it now". Rejects with crew's reason (409) when its last run is still going or another run is working, and
+   *  with `code: "no_independent_reviewer"` + `retryWith` when every agent that could review the work did some of it. */
+  runNow: (id: string, body?: ScheduleRunBody): Promise<{ runId: string; schedule: WorkflowSchedule }> =>
+    apiFetch<{ runId: string; schedule: WorkflowSchedule }>(`/schedules/${encodeURIComponent(id)}/run`, {
+      method: 'POST',
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    }),
   accept: (id: string): Promise<{ recommendation: InsightsRecommendation; open: InsightsAcceptTarget }> =>
     apiFetch(`/insights/recommendations/${encodeURIComponent(id)}/accept`, { method: 'POST' }),
   dismiss: (id: string, reason: string): Promise<{ recommendation: InsightsRecommendation }> =>

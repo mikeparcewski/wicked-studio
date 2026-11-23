@@ -18,7 +18,7 @@ vi.mock('../src/api/insights.js', async (orig) => ({
     insights: () => insights(),
     schedules: () => schedules(),
     saveSchedule: (id: string, b: unknown) => saveSchedule(id, b),
-    runNow: (id: string) => runNow(id),
+    runNow: (id: string, b?: unknown) => (b === undefined ? runNow(id) : runNow(id, b)),
     accept: vi.fn(),
     dismiss: vi.fn(),
   },
@@ -264,6 +264,43 @@ describe('Schedules (Build & settings)', () => {
     runNow.mockResolvedValueOnce({ runId: 'x', schedule: row() });
     fireEvent.click(screen.getByTestId('schedule-run-now'));
     expect(await screen.findByText(/Started\./u)).toBeTruthy();
+  });
+
+  // crew#1837: on a one-seat daemon every agent that could review recent work did some of it.
+  it('a Run it now refused for no independent reviewer offers reduced assurance, and accepting runs it with it', async () => {
+    const { ApiError } = await import('../src/api/errors.js');
+    schedules.mockResolvedValue([row()]);
+    // The body crew's POST /schedules/:id/run answers (crew src/schedules/routes.ts, the NoIndependentReviewer branch).
+    const wire = 'the review could not be prepared: every seat that could interpret this review (claude) ran some of the work it reviews, so none can review it independently.';
+    runNow.mockRejectedValueOnce(new ApiError(409, wire, { code: 'no_independent_reviewer', error: wire, excluded: ['claude'], retryWith: { reducedAssurance: true } }));
+    render(<SchedulesSection navigate={vi.fn()} />);
+    expect(screen.queryByTestId('schedule-reduced-offer')).toBeNull();
+    fireEvent.click(await screen.findByTestId('schedule-run-now'));
+    expect((await screen.findByTestId('schedule-reduced-offer')).textContent).toMatch(/none can review it independently/u);
+    expect(screen.getByTestId('schedules-said').textContent).toBe('Not started: no other agent can review this work independently.');
+    runNow.mockResolvedValueOnce({ runId: 'x', schedule: row({ reducedAssurance: true }) });
+    schedules.mockResolvedValue([row({ reducedAssurance: true })]);
+    fireEvent.click(screen.getByTestId('schedule-run-reduced'));
+    await waitFor(() => expect(runNow).toHaveBeenLastCalledWith('review-recent-work', { reducedAssurance: true }));
+    await waitFor(() => expect(screen.queryByTestId('schedule-reduced-offer')).toBeNull());
+    expect((screen.getByTestId('schedule-reduced') as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('a scheduled start refused for that reason offers it from the row; an accepted schedule says so and can withdraw it', async () => {
+    const refused = row({ lastOutcome: 'refused', lastNote: 'every seat that could interpret this review (claude) ran some of the work it reviews', retryWith: { reducedAssurance: true }, reducedAssurance: false });
+    expect(scheduleLine(refused)).toMatch(/last start refused: no other agent can review this work independently$/u);
+    expect(scheduleLine(row({ reducedAssurance: true }))).toContain('an agent that did the work may review it when no other can');
+    schedules.mockResolvedValue([refused]);
+    render(<SchedulesSection navigate={vi.fn()} />);
+    expect(await screen.findByTestId('schedule-reduced-offer')).toBeTruthy();
+    expect(screen.queryByTestId('schedule-reduced')).toBeNull();
+    cleanup();
+    schedules.mockResolvedValue([row({ reducedAssurance: true })]);
+    saveSchedule.mockImplementation(async (_id: string, b: Record<string, unknown>) => ({ ...row(), ...b }));
+    render(<SchedulesSection navigate={vi.fn()} />);
+    fireEvent.click(await screen.findByTestId('schedule-reduced'));
+    await waitFor(() => expect(saveSchedule).toHaveBeenLastCalledWith('review-recent-work', expect.objectContaining({ reducedAssurance: false })));
+    await waitFor(() => expect(screen.queryByTestId('schedule-reduced')).toBeNull());
   });
 
   it('says plainly when this crew has no schedules', async () => {
