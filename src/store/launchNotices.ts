@@ -18,14 +18,30 @@ export interface LaunchNoticeEntry {
 
 interface LaunchNoticesStore {
   bySession: Record<string, LaunchNoticeEntry>;
+  /** Runs whose relaunch is in flight: one relaunch per notice, across remounts and the run's two sessions. */
+  relaunching: Record<string, true>;
+  /** Claim a run's relaunch; false when one is already in flight. */
+  beginRelaunch: (runId: string) => boolean;
+  endRelaunch: (runId: string) => void;
   /** Keep a launch's notice for the sessions that show its run: its own (`run:<runId>`) and the chat it went into. */
   put: (entry: LaunchNoticeEntry, chatId?: string | null) => void;
   /** Drop a run's notice wherever it is kept (a newer launch's notice in the same chat stays). */
   drop: (runId: string) => void;
 }
 
-export const useLaunchNotices = create<LaunchNoticesStore>((set) => ({
+export const useLaunchNotices = create<LaunchNoticesStore>((set, get) => ({
   bySession: {},
+  relaunching: {},
+  beginRelaunch: (runId) => {
+    if (get().relaunching[runId] === true) return false;
+    set((s) => ({ relaunching: { ...s.relaunching, [runId]: true } }));
+    return true;
+  },
+  endRelaunch: (runId) => set((s) => {
+    const { [runId]: _done, ...rest } = s.relaunching;
+    void _done;
+    return { relaunching: rest };
+  }),
   put: (entry, chatId) => set((s) => ({
     bySession: { ...s.bySession, [`run:${entry.runId}`]: entry, ...(typeof chatId === 'string' && chatId !== '' ? { [chatId]: entry } : {}) },
   })),

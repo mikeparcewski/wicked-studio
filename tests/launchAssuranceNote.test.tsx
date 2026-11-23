@@ -26,7 +26,7 @@ beforeEach(() => {
   vi.restoreAllMocks();
   takeRetryPrefill();
   localStorage.clear();
-  useLaunchNotices.setState({ bySession: {} });
+  useLaunchNotices.setState({ bySession: {}, relaunching: {} });
   useCapabilities.setState({ loaded: true, reducedAssurance: true });
 });
 afterEach(() => { cleanup(); useCapabilities.setState({ reducedAssurance: false }); });
@@ -56,6 +56,32 @@ describe('the composer launch keeps crew\'s notice for the job\'s session', () =
     const kept = useLaunchNotices.getState().bySession;
     expect(kept['run:r-new']).toEqual({ runId: 'r-new', notice: NOTICE, body: sent });
     expect(kept['chat-pay']).toBe(kept['run:r-new']);
+  });
+
+  it('the relaunch from a composer launch drops the first launch\u2019s own run id (sessionId) and its chat (codex r1)', async () => {
+    vi.spyOn(client.api, 'launchRun').mockResolvedValueOnce({ runId: 'r-new', assuranceNotice: NOTICE } as never).mockResolvedValueOnce({ runId: 'r-2' });
+    setRetryPrefill({
+      retryOf: null, chatId: 'chat-pay', problem: 'write up the offsite agenda', clis: ['claude'], workflowId: null, repoRef: null,
+      entityMode: 'shared', humanConfirm: { before: 1 }, projectId: null,
+    });
+    const onLaunched = vi.fn();
+    const { unmount } = render(<ChatInput runId={null} runStatus={null} onLaunched={onLaunched} />);
+    const user = userEvent.setup();
+    await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
+    await user.click(screen.getByTestId('launch-submit'));
+    await waitFor(() => expect(onLaunched).toHaveBeenCalledWith('r-new'));
+    const first = vi.mocked(client.api.launchRun).mock.calls[0]![0] as LaunchBodyWithDeliver & { sessionId?: string };
+    expect(typeof first.sessionId).toBe('string');
+    unmount();
+    const nav = vi.fn();
+    render(<LaunchAssuranceNote sessionId="run:r-new" navigate={nav} />);
+    await user.click(screen.getByTestId('session-launch-notice-reduced'));
+    await user.click(screen.getByTestId('session-launch-notice-relaunch'));
+    await waitFor(() => expect(nav).toHaveBeenCalledWith('/s/run%3Ar-2'));
+    const again = vi.mocked(client.api.launchRun).mock.calls[1]![0] as Record<string, unknown>;
+    const { sessionId: _s, chatId: _c, ...kept } = first;
+    void _s; void _c;
+    expect(again).toEqual({ ...kept, retryOf: 'r-new', reducedAssurance: true });
   });
 
   it('a launch with no notice keeps nothing', async () => {
@@ -106,6 +132,39 @@ describe('the session page says the notice, and relaunches only on a confirm', (
     render(<LaunchAssuranceNote sessionId="chat-1" navigate={vi.fn()} />);
     expect(screen.getByTestId('session-launch-notice')).toBeInTheDocument();
     expect(screen.queryByTestId('session-launch-notice-reduced')).toBeNull();
+  });
+
+  it('one relaunch per notice: a remount (or the run\u2019s other session) while it is in flight sends nothing more', async () => {
+    keep();
+    let answer!: (v: { runId: string }) => void;
+    const launch = vi.spyOn(client.api, 'launchRun').mockReturnValue(new Promise((r) => { answer = r; }) as never);
+    const nav = vi.fn();
+    const first = render(<LaunchAssuranceNote sessionId="chat-1" navigate={nav} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId('session-launch-notice-reduced'));
+    await user.click(screen.getByTestId('session-launch-notice-relaunch'));
+    first.unmount();
+    render(<LaunchAssuranceNote sessionId="run:r-new" navigate={nav} />);
+    await user.click(screen.getByTestId('session-launch-notice-reduced'));
+    expect(screen.getByTestId('session-launch-notice-relaunch')).toBeDisabled();
+    expect(launch).toHaveBeenCalledTimes(1);
+    answer({ runId: 'r-2' });
+    await waitFor(() => expect(nav).toHaveBeenCalledWith('/s/run%3Ar-2'));
+    expect(useLaunchNotices.getState().relaunching).toEqual({});
+  });
+
+  it('a refused relaunch is said only under its own notice', async () => {
+    keep();
+    useLaunchNotices.getState().put({ runId: 'r-other', notice: { ...NOTICE, retryWith: { retryOf: 'r-other', reducedAssurance: true } } as never, body }, 'chat-2');
+    vi.spyOn(client.api, 'launchRun').mockRejectedValue(new Error('the daemon said no'));
+    const { rerender } = render(<LaunchAssuranceNote sessionId="chat-1" navigate={vi.fn()} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId('session-launch-notice-reduced'));
+    await user.click(screen.getByTestId('session-launch-notice-relaunch'));
+    await screen.findByTestId('session-launch-notice-error');
+    rerender(<LaunchAssuranceNote sessionId="chat-2" navigate={vi.fn()} />);
+    expect(screen.getByTestId('session-launch-notice')).toBeInTheDocument();
+    expect(screen.queryByTestId('session-launch-notice-error')).toBeNull();
   });
 
   it('a refused relaunch says so and keeps the notice', async () => {

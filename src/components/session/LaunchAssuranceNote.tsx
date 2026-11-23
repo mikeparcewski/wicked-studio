@@ -15,25 +15,27 @@ import { REDUCED_RELAUNCH_WORDS } from './GateRow.js';
  */
 export function LaunchAssuranceNote({ sessionId, navigate }: { sessionId: string; navigate: (path: string) => void }): React.ReactElement | null {
   const entry = useLaunchNotices((s) => s.bySession[sessionId]);
+  // The relaunch in flight is the store's (one per notice): a remount or the run's other session never sends a second.
+  const sending = useLaunchNotices((s) => entry !== undefined && s.relaunching[entry.runId] === true);
   const reducedCap = useCapabilities((s) => s.reducedAssurance);
   const [confirm, setConfirm] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  /** A refused relaunch, said only under the notice it was made from. */
+  const [error, setError] = useState<{ runId: string; text: string } | null>(null);
   if (entry === undefined) return null;
   const confirming = confirm === entry.runId;
   const relaunch = async (): Promise<void> => {
-    if (sending) return;
-    setSending(true);
+    const { runId: first, body, notice } = entry;
+    if (!useLaunchNotices.getState().beginRelaunch(first)) return;
     setError(null);
     try {
-      const { runId } = await api.launchRun(reducedRelaunchBody(entry.body, entry.notice));
+      const { runId } = await api.launchRun(reducedRelaunchBody(body, notice));
       useProvenanceStore.getState().markLaunchedHere(runId);
-      useLaunchNotices.getState().drop(entry.runId);
+      useLaunchNotices.getState().drop(first);
       navigate(sessionPath(`run:${runId}`));
     } catch (e) {
-      setError(`Couldn’t start it again: ${e instanceof Error ? e.message : String(e)}. The first job is still running.`);
+      setError({ runId: first, text: `Couldn’t start it again: ${e instanceof Error ? e.message : String(e)}. The first job is still running.` });
     } finally {
-      setSending(false);
+      useLaunchNotices.getState().endRelaunch(first);
     }
   };
   return (
@@ -55,7 +57,7 @@ export function LaunchAssuranceNote({ sessionId, navigate }: { sessionId: string
           <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="session-launch-notice-dismiss" onClick={() => useLaunchNotices.getState().drop(entry.runId)}>Keep only this job</button>
         </div>
       )}
-      {error !== null && <p role="alert" data-testid="session-launch-notice-error" className="wk-launch-notice-body wk-launch-notice-error">{error}</p>}
+      {error !== null && error.runId === entry.runId && <p role="alert" data-testid="session-launch-notice-error" className="wk-launch-notice-body wk-launch-notice-error">{error.text}</p>}
     </div>
     </div>
   );
