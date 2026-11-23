@@ -104,6 +104,7 @@ export function KnowledgeView(): React.ReactElement {
   const byKey = useMemo(() => new Map((map?.nodes ?? []).map((n) => [n.key, n])), [map]);
   const typed = useMemo(() => (map?.edges ?? []).filter((e) => LISTED.has(e.rel)), [map]);
   const shapes = useMemo(() => (map?.nodes ?? []).filter((n) => n.kind === 'shape'), [map]);
+  const tableCount = (map?.nodes ?? []).filter((n) => n.kind === 'table').length;
   // (DES-PM-001 §3.4) Linked trackers and the projects they are tracked in.
   const trackers = useMemo(() => (map?.nodes ?? []).filter((n) => n.kind === 'tracker'), [map]);
   const projectsOnMap = useMemo(() => (map?.nodes ?? []).filter((n) => n.kind === 'project').length, [map]);
@@ -167,8 +168,8 @@ export function KnowledgeView(): React.ReactElement {
           <>
             <p className="wk-gk-muted" data-testid="knowledge-map-summary">
               {map.sources.length === 1 ? '1 data source' : `${map.sources.length} data sources`}
-              {' · '}{map.nodes.filter((n) => n.kind === 'table').length} tables
-              {' · '}{shapes.length === 1 ? '1 approved shape' : `${shapes.length} approved shapes`}
+              {' · '}{tableCount === 1 ? '1 table' : `${tableCount} tables`}
+              {' · '}{shapes.length === 1 ? '1 data shape' : `${shapes.length} data shapes`}
               {' · '}{typed.length === 1 ? '1 connection' : `${typed.length} connections`}
               {trackers.length > 0 && <span data-testid="knowledge-map-trackers">{' · '}{trackers.length === 1 ? '1 tracker' : `${trackers.length} trackers`}{projectsOnMap > 0 ? ` in ${projectsOnMap === 1 ? '1 project' : `${projectsOnMap} projects`}` : ''}</span>}
               {map.truncated && ' · the largest maps are cut to fit'}
@@ -223,7 +224,7 @@ export function KnowledgeView(): React.ReactElement {
                 )}
                 <h3 className="wk-know-subtitle">Connections</h3>
                 {typed.length === 0 ? (
-                  <p className="wk-gk-muted" data-testid="knowledge-connections-empty">No approved shape connects anything yet. Approve a data shape above, and what it joins and describes is drawn here.</p>
+                  <p className="wk-gk-muted" data-testid="knowledge-connections-empty">No shape connects anything yet. When a profile finds what a table joins or which code describes it, or you approve a shape an agent proposed, it is drawn here.</p>
                 ) : (
                   <ul className="wk-know-edges" data-testid="knowledge-connections">
                     {typed.map((e) => (

@@ -162,7 +162,7 @@ describe('Understand → Knowledge', () => {
       'support.tickets joins support.regions on region_id = id (a foreign key)',
       'support.tickets describes Ticket in escalations (named alike)',
     ]);
-    expect(screen.getByTestId('knowledge-map-summary').textContent).toBe('1 data source · 3 tables · 1 approved shape · 2 connections');
+    expect(screen.getByTestId('knowledge-map-summary').textContent).toBe('1 data source · 3 tables · 1 data shape · 2 connections');
   });
 
   it('NEGATIVE CONTROL: a pending or declined shape is never drawn (no node, no edge, no line); approved, it is', async () => {
@@ -228,6 +228,16 @@ describe('Understand → Knowledge', () => {
     pending[1]!(structuredClone(MAP));
     await new Promise((r) => setTimeout(r, 20));
     expect(screen.getByTestId('knowledge-graph-stub').getAttribute('data-nodes')).not.toContain('support.tickets shape');
+  });
+
+  it('crew#1625: a profiled shape that connects nothing is not sent to an approval that does not exist', async () => {
+    const lone = { ...structuredClone(MAP), edges: MAP.edges.filter((e) => e.rel === 'contains' || e.rel === 'derived_from') };
+    apiFetch.mockImplementation((path: unknown) => (String(path) === '/knowledge/map' ? Promise.resolve(lone) : Promise.resolve({ proposals: [] })));
+    render(<KnowledgeView />);
+    const empty = await screen.findByTestId('knowledge-connections-empty');
+    expect(empty.textContent).toContain('When a profile finds what a table joins');
+    expect(empty.textContent).not.toContain('Approve a data shape above');
+    expect(screen.getByTestId('knowledge-map-summary').textContent).toBe('1 data source · 3 tables · 1 data shape · 0 connections');
   });
 
   it('says what crew noted even when the map is empty, and how many approved shapes it could not draw', async () => {
