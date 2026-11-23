@@ -14,13 +14,18 @@ npm publish dates. Every version listed here exists on
 
 ## [0.16.17] — 2026-11-23
 
-Patch release on the train-12 cut 0c96f0cf, carrying 30 PRs since 0.16.16: #1287, #1286, #1288, #1292, #1293, #1291, #1299, #1303, #1307, #1306, #1297, #1298, #1308, #1300, #1309, #1304, #1302, #1313, #1310, #1315, #1316, #1317, #1318, #1320, #1325, #1328, #1326, #1321, #1323, #1322.
+Patch release on the train-12 re-cut 4 3f1a93b8, carrying 49 PRs since 0.16.16: #1287, #1286, #1288, #1292, #1293, #1291, #1299, #1303, #1307, #1306, #1297, #1298, #1308, #1300, #1309, #1304, #1302, #1313, #1310, #1315, #1316, #1317, #1318, #1320, #1325, #1328, #1326, #1321, #1323, #1322, #1336, #1333, #1334, #1339, #1338, #1340, #1341, #1343, #1345, #1349, #1350, #1351, #1355, #1356, #1352, #1353, #1358, #1359, #1360.
 
 ### Added
 
 - Set a rule's engine check from the add / edit form (#1310)
 - A refused turn links its broken rules; Publish can allow a private-network issuer (#1295, #1296) (#1328)
 - Remove a repository and drain for maintenance (#1323)
+- Soft retire with Show retired, Restore and Delete for good; Forget a knowledge note (#1339)
+- The rules table is a layout of the Steer page (#892, #689 row 46) (#1340)
+- Say crew's launch assuranceNotice on the job's session, with the confirmed reduced-assurance relaunch (#1345)
+- Capture opt-out on Add a repository, work-only helpers in job pickers, the eval memory axis (#1083, #1311, #1301) (#1349)
+- The held plan says each step's controls; Draft epics promises no publish (core#1259, crew#372 words) (#1352)
 
 ### Changed
 
@@ -29,6 +34,7 @@ Patch release on the train-12 cut 0c96f0cf, carrying 30 PRs since 0.16.16: #1287
   - Says what editor plugins may load (`network.media`).
   - Drops "warm CLI seats" (#957, #888).
 - A Watchtower row for an archived chat run opens its chat, not the run's thread (#888). (#1304)
+- Find --font-display readers in one pass, not a backtracking regex (#1356)
 
 ### Fixed
 
@@ -64,6 +70,19 @@ Patch release on the train-12 cut 0c96f0cf, carrying 30 PRs since 0.16.16: #1287
 - A partly refused page edit says which parts were not applied (#1326)
 - The rail and composer read seat roles apart; a failed repository attach survives a remount (#1321)
 - Structured unconfirmed addresses, per-tool read acceptance, no lost Agents-box click (#1322)
+- A launch made before Style's saved record was read is never wiped by that late read (#1336)
+- Retry preselects allow, launch_failed stops only its own Go, onboard creates the named project (#1333)
+- Voice load word ranks with the load; escalation never names a job seat the engine ruled out (#1334)
+- A rule with no effect no longer says it never blocks (#1338)
+- A rule that did not land is never "Approved"; capabilities re-read after a busy ping (#1341)
+- "Which repository?" folds past 6 with "N more"; host pages name no repository (#1343)
+- G68 defect slice (steer table order, pause identity, read-accept schema, Passed follows the receipt, nerve flake) (#1350)
+- Accept on "Close N runs nobody finished" lists the runs to archive or retry (crew#1165) (#1351)
+- A not-due judge gate keeps a judged run's delivery label before the lift (core#1827 companion) (#1355)
+- The profile box says the shapes were written into knowledge (crew#1625) (#1353)
+- An Azure DevOps PR shows its link and Revise this PR; ADO hand-over and clone-path words (studio#1357, crew#1839) (#1358)
+- The pill says Stopped or Not made, and why, instead of Building… forever (crew#1745) (#1359)
+- A step two helpers work in files each one's tool rows under its name (studio#935 item 5) (#1360)
 
 ## [0.16.16] — 2026-11-22
 
