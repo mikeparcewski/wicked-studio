@@ -68,13 +68,16 @@ describe('Accept on "Close N runs nobody finished" (crew#1165)', () => {
     expect(screen.queryByText(/Open each run below/u)).toBeNull();
   });
 
-  it('Archive all with a note resolves each run in turn with that note; a run crew refuses is named with its reason', async () => {
+  it('Archive all with a note resolves one run at a time with that note; a run crew refuses is named with its reason', async () => {
     accept.mockResolvedValue({ recommendation: { ...staleRec(), state: 'accepted' }, open: { kind: 'runs', runIds: [A, B, C] } });
-    // crew `POST /runs/:id/resolve` (routes.ts:4773): the archived answer; a running job is refused (409).
-    resolveRun.mockImplementation(async (id: string) => {
-      if (id === B) throw new Error(`run ${B} is executing: a running job cannot be resolved; stop it first`);
-      return { runId: id, action: 'archive', archived: true, cancelled: false, note: 'resolved: superseded by the v2 import' };
-    });
+    // crew `POST /runs/:id/resolve` (routes.ts:4773): the archived answer; a running job is refused (409). Each answer is
+    // held until the test lets it go, so a second request starting early would show.
+    const held: Array<{ id: string; settle: () => void }> = [];
+    resolveRun.mockImplementation((id: string) => new Promise((resolve, reject) => {
+      held.push({ id, settle: () => (id === B
+        ? reject(new Error(`run ${B} is executing: a running job cannot be resolved; stop it first`))
+        : resolve({ runId: id, action: 'archive', archived: true, cancelled: false, note: 'resolved: superseded by the v2 import' })) });
+    }));
     renderDecide();
     fireEvent.click(screen.getByTestId('insights-accept'));
     fireEvent.click(await screen.findByTestId('insights-resolve-archive'));
@@ -83,7 +86,17 @@ describe('Accept on "Close N runs nobody finished" (crew#1165)', () => {
     expect(confirm.textContent).toBe('Archive all 3');
     fireEvent.change(screen.getByTestId('insights-resolve-note'), { target: { value: ' superseded by the v2 import ' } });
     fireEvent.click(confirm);
-    await waitFor(() => expect(screen.getByTestId('insights-resolve-said').textContent).toBe('Archived 2 of 3; 1 could not be archived (said beside each).'));
+    const said = () => screen.getByTestId('insights-resolve-said').textContent;
+    for (const [i, id] of [A, B, C].entries()) {
+      await waitFor(() => expect(held).toHaveLength(i + 1));
+      expect(held[i]!.id).toBe(id);
+      expect(said()).toBe(`Archiving\u2026 ${i} of 3 answered.`); // never "all" while one is still out
+      for (const b of screen.getAllByTestId('insights-resolve-retry')) expect((b as HTMLButtonElement).disabled).toBe(true);
+      await new Promise((r) => setTimeout(r, 5));
+      expect(held).toHaveLength(i + 1); // the next run waits for this one's answer
+      held[i]!.settle();
+    }
+    await waitFor(() => expect(said()).toBe('Archived 2 of 3; 1 could not be archived (said beside each).'));
     expect(resolveRun.mock.calls).toEqual([A, B, C].map((id) => [id, { action: 'archive', reason: 'superseded by the v2 import' }]));
     const row = (id: string) => screen.getAllByTestId('insights-resolve-run').find((r) => r.getAttribute('data-run') === id)!;
     expect(row(A).getAttribute('data-outcome')).toBe('archived');
@@ -92,15 +105,36 @@ describe('Accept on "Close N runs nobody finished" (crew#1165)', () => {
     expect(within(row(B)).getByRole('alert').textContent).toBe(`Not archived: run ${B} is executing: a running job cannot be resolved; stop it first`);
 
     // Again: only the run still open is sent, and once it goes through, all are archived.
-    resolveRun.mockClear();
+    resolveRun.mockReset();
     resolveRun.mockResolvedValue({ runId: B, action: 'archive', archived: true, cancelled: true, note: 'resolved: stopped' });
     fireEvent.click(screen.getByTestId('insights-resolve-archive'));
     expect(screen.getByTestId('insights-resolve-archive-confirm').textContent).toBe('Archive it');
     fireEvent.change(screen.getByTestId('insights-resolve-note'), { target: { value: 'stopped' } });
     fireEvent.click(screen.getByTestId('insights-resolve-archive-confirm'));
-    await waitFor(() => expect(screen.getByTestId('insights-resolve-said').textContent).toBe('Archived all 3 runs.'));
+    await waitFor(() => expect(said()).toBe('Archived all 3 runs.'));
     expect(resolveRun.mock.calls).toEqual([[B, { action: 'archive', reason: 'stopped' }]]);
     expect(screen.queryByTestId('insights-resolve-archive')).toBeNull();
+  });
+
+  it('picked again later, an accepted recommendation still lists its runs to close (from its own action.runs)', () => {
+    render(<InsightsDecide selected={{ ...staleRec(), state: 'accepted', decidedAt: '2026-11-20T10:00:00Z' }} metrics={[]} navigate={vi.fn()} onDecided={async () => undefined} />);
+    expect(screen.getAllByTestId('insights-resolve-run').map((r) => r.getAttribute('data-run'))).toEqual([A, B, C]);
+    expect(screen.queryByTestId('insights-accept')).toBeNull();
+  });
+
+  it("a late Accept answer never lends its runs to the recommendation picked meanwhile", async () => {
+    let answer: (v: unknown) => void = () => undefined;
+    accept.mockReturnValue(new Promise((r) => { answer = r; }));
+    const navigate = vi.fn();
+    const other: InsightsRecommendation = { ...staleRec(), id: 'rev-1:issue-failure-x', candidate: 'issue-failure-x', kind: 'issue', title: 'File the failure', action: { issue: { repoRef: null, title: 't', body: 'b' } } };
+    const { rerender } = render(<InsightsDecide selected={staleRec()} metrics={[]} navigate={navigate} onDecided={async () => undefined} />);
+    fireEvent.click(screen.getByTestId('insights-accept'));
+    rerender(<InsightsDecide selected={other} metrics={[]} navigate={navigate} onDecided={async () => undefined} />);
+    answer({ recommendation: { ...staleRec(), state: 'accepted' }, open: { kind: 'runs', runIds: [A, B, C] } });
+    await waitFor(() => expect(accept).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 5));
+    expect(screen.queryByTestId('insights-resolve')).toBeNull();
+    expect(screen.getByTestId('insights-accept')).toBeTruthy();
   });
 
   it("Retry prefills that run's own launch, as the home page's tidy-up row does; an unreadable run opens its page", async () => {
@@ -120,10 +154,29 @@ describe('Accept on "Close N runs nobody finished" (crew#1165)', () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith(sessionPath(`run:${B}`)));
   });
 
-  it('one run reads in the singular, and a recommendation picked afterwards starts clean', async () => {
-    accept.mockResolvedValue({ recommendation: { ...staleRec(), state: 'accepted' }, open: { kind: 'runs', runIds: [A] } });
+  it('a Retry still reading its run when the panel goes away neither prefills nor navigates; one at a time', async () => {
+    accept.mockResolvedValue({ recommendation: { ...staleRec(), state: 'accepted' }, open: { kind: 'runs', runIds: [A, B, C] } });
+    let give: (v: unknown) => void = () => undefined;
+    getRun.mockReturnValue(new Promise((r) => { give = r; }));
     const navigate = vi.fn();
-    const { rerender } = render(<InsightsDecide selected={staleRec()} metrics={[]} navigate={navigate} onDecided={async () => undefined} />);
+    const { unmount } = render(<InsightsDecide selected={staleRec()} metrics={[]} navigate={navigate} onDecided={async () => undefined} />);
+    fireEvent.click(screen.getByTestId('insights-accept'));
+    const retries = await screen.findAllByTestId('insights-resolve-retry');
+    fireEvent.click(retries[0]!);
+    for (const b of screen.getAllByTestId('insights-resolve-retry')) expect((b as HTMLButtonElement).disabled).toBe(true);
+    unmount();
+    give({ run: (recorded as unknown as { runs: SessionView[] }).runs[0]! });
+    await new Promise((r) => setTimeout(r, 5));
+    expect(setRetryPrefill).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('one run reads in the singular, and a recommendation picked afterwards starts clean', async () => {
+    // crew's Accept answers the recommendation's own `action.runs` (review-service.ts:412).
+    const one: InsightsRecommendation = { ...staleRec(), action: { runs: [A] } };
+    accept.mockResolvedValue({ recommendation: { ...one, state: 'accepted' }, open: { kind: 'runs', runIds: [A] } });
+    const navigate = vi.fn();
+    const { rerender } = render(<InsightsDecide selected={one} metrics={[]} navigate={navigate} onDecided={async () => undefined} />);
     fireEvent.click(screen.getByTestId('insights-accept'));
     await screen.findByTestId('insights-resolve');
     expect(screen.getByTestId('insights-decided').textContent).toBe('Accepted. Archive this run with a note, or retry one.');

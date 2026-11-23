@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import { insightsApi, type InsightsAcceptTarget, type InsightsMetricDef, type InsightsRecommendation } from '../../api/insights.js';
 import { memoryPath } from '../../api/memory.js';
@@ -36,37 +36,55 @@ export function InsightsResolveRuns({ runIds, titles, navigate }: {
 }): React.ReactElement {
   const [noting, setNoting] = useState(false);
   const [note, setNote] = useState('');
-  const [busy, setBusy] = useState(false);
+  /** The archive batch in flight: how many runs it sends, and how many have answered. */
+  const [batch, setBatch] = useState<{ total: number; done: number } | null>(null);
+  const [retrying, setRetrying] = useState<string | null>(null);
   const [outcomes, setOutcomes] = useState<ReadonlyMap<string, RunOutcome>>(new Map());
+  // A batch or a Retry still answering after the panel went away (another recommendation, another page) stops there:
+  // no further run is archived and nothing navigates.
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const busy = batch !== null || retrying !== null;
   const open = runIds.filter((id) => outcomes.get(id)?.kind !== 'archived');
 
   const archiveAll = async (): Promise<void> => {
     const reason = note.trim();
-    if (reason === '') return;
-    setBusy(true);
+    if (reason === '' || busy) return;
+    const targets = open;
+    setBatch({ total: targets.length, done: 0 });
     const next = new Map(outcomes);
-    for (const id of open) {
+    // One at a time: the route stops and archives each run inside its own decision lock.
+    for (const [i, id] of targets.entries()) {
+      if (!mounted.current) return;
       try {
         await api.resolveRun(id, { action: 'archive', reason });
         next.set(id, { kind: 'archived' });
       } catch (e) {
         next.set(id, { kind: 'failed', message: e instanceof Error ? e.message : String(e) });
       }
+      if (!mounted.current) return;
       setOutcomes(new Map(next));
+      setBatch({ total: targets.length, done: i + 1 });
     }
-    setBusy(false);
+    setBatch(null);
     setNoting(false);
   };
 
   const retry = async (id: string): Promise<void> => {
+    if (busy) return;
+    setRetrying(id);
+    let path = sessionPath(`run:${id}`);
     try {
       const { run } = await api.getRun(id);
+      if (!mounted.current) return;
       setRetryPrefill(retryPrefillOf(run));
-      navigate('/runs/new');
+      path = '/runs/new';
     } catch {
       // The run could not be read: its own page offers Retry.
-      navigate(sessionPath(`run:${id}`));
     }
+    if (!mounted.current) return;
+    setRetrying(null);
+    navigate(path);
   };
 
   const archived = runIds.length - open.length;
@@ -108,9 +126,13 @@ export function InsightsResolveRuns({ runIds, titles, navigate }: {
           </CalmButton>
         </span>
       ))}
-      {outcomes.size > 0 && (
+      {(batch !== null || outcomes.size > 0) && (
         <p className="wk-insights-said" role="status" data-testid="insights-resolve-said">
-          {failed === 0 ? `Archived ${archived === 1 ? 'the run' : `all ${archived} runs`}.` : `Archived ${archived} of ${runIds.length}; ${failed} could not be archived (said beside each).`}
+          {batch !== null
+            ? `Archiving… ${batch.done} of ${batch.total} answered.`
+            : open.length === 0
+              ? `Archived ${runIds.length === 1 ? 'the run' : `all ${runIds.length} runs`}.`
+              : `Archived ${archived} of ${runIds.length}; ${failed} could not be archived (said beside each).`}
         </p>
       )}
     </div>
@@ -139,11 +161,17 @@ export function InsightsDecide({ selected, metrics, navigate, onDecided, said: c
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
-  /** (crew#1165) The runs an accepted resolve-stale recommendation names, listed to archive or retry. */
-  const [resolving, setResolving] = useState<readonly string[] | null>(null);
+  /** (crew#1165) The recommendation accepted here (its reloaded state may not say so yet). */
+  const [acceptedHere, setAcceptedHere] = useState<string | null>(null);
   // A new pointing starts over: no half-typed reason or old outcome carried to another recommendation.
   const selectedId = selected?.id ?? null;
-  useEffect(() => { setDismissing(false); setReason(''); setSaid(null); setResolving(null); }, [selectedId]);
+  const current = useRef(selectedId);
+  current.current = selectedId;
+  useEffect(() => { setDismissing(false); setReason(''); setSaid(null); }, [selectedId]);
+  // (crew#1165) An accepted "Close N runs nobody finished" lists the runs it names, to archive or retry, whenever it is
+  // picked again: the runs are the recommendation's own (`action.runs`, what crew's Accept answers).
+  const resolveRuns = selected !== null && selected.kind === 'resolve-stale' && (selected.action.runs?.length ?? 0) > 0 &&
+    (selected.state === 'accepted' || acceptedHere === selected.id) ? selected.action.runs! : null;
 
   const accept = async (rec: InsightsRecommendation): Promise<void> => {
     setBusy(true);
@@ -157,8 +185,8 @@ export function InsightsDecide({ selected, metrics, navigate, onDecided, said: c
       } else if (path !== null) {
         navigate(path);
       } else if (open.kind === 'runs' && open.runIds.length > 0) {
-        setResolving(open.runIds);
-        setSaid(null);
+        // Only for the recommendation still picked: a late answer never lends its runs to another one.
+        if (current.current === rec.id) setAcceptedHere(rec.id);
       } else {
         setSaid('Accepted.');
       }
@@ -215,13 +243,12 @@ export function InsightsDecide({ selected, metrics, navigate, onDecided, said: c
             );
           })()}
           {selected.proposalError !== null && <p className="wk-insights-line">Its proposal was not filed: {selected.proposalError}</p>}
-          {resolving !== null ? (
-            // (crew#1165) Accepted here: the runs it names, to close, whatever the reloaded state says.
+          {resolveRuns !== null ? (
             <>
               <p className="wk-insights-line" data-testid="insights-decided">
-                Accepted. Archive {resolving.length === 1 ? 'this run' : `these ${resolving.length} runs`} with a note, or retry one.
+                Accepted. Archive {resolveRuns.length === 1 ? 'this run' : `these ${resolveRuns.length} runs`} with a note, or retry one.
               </p>
-              <InsightsResolveRuns runIds={resolving} titles={new Map(selected.evidence.runs.map((r) => [r.id, r.title]))} navigate={navigate} />
+              <InsightsResolveRuns key={selected.id} runIds={resolveRuns} titles={new Map(selected.evidence.runs.map((r) => [r.id, r.title]))} navigate={navigate} />
             </>
           ) : selected.state === 'new' ? (
             dismissing ? (
