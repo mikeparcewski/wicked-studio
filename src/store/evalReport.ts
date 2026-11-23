@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { EvalReport } from '../api/testing.js';
+import type { EvalMemoryAxis, EvalReport } from '../api/testing.js';
 
 /**
  * The LATEST steering-eval report this session ran (Testing › Evals deposits it after a
@@ -25,12 +25,25 @@ let evalSeq = 0;
 /** One counter for this tab's eval deposits and history reads: orders them without any clock. */
 export function nextEvalSeq(): number { evalSeq += 1; return evalSeq; }
 
+/** (studio#1301) The memory axis of the last run made in this tab, with when it landed. The history keeps no memory
+ *  axis (crew records only the results), so this outlives the deposit's supersession: the store's coverage is only ever
+ *  known from a run's own answer. `axis: null` = that run had no memory store. Absent key on an older crew: not kept. */
+export interface EvalMemoryDeposit {
+  axis: EvalMemoryAxis | null;
+  at: number;
+}
+
 interface EvalReportState {
   latest: EvalDeposit | null;
+  memory: EvalMemoryDeposit | null;
   deposit: (report: EvalReport, corpus: string | null) => void;
 }
 
 export const useEvalReportStore = create<EvalReportState>((set) => ({
   latest: null,
-  deposit: (report, corpus) => set({ latest: { report, corpus, at: Date.now(), seq: nextEvalSeq() } }),
+  memory: null,
+  deposit: (report, corpus) => {
+    const at = Date.now();
+    set({ latest: { report, corpus, at, seq: nextEvalSeq() }, memory: report.memory !== undefined ? { axis: report.memory, at } : null });
+  },
 }));

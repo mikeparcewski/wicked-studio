@@ -488,7 +488,31 @@ export interface EvalResult {
   verdict: 'caught' | 'gap' | 'false_positive';
   /** Present on gaps (empty array allowed — recall found nothing nearby). */
   nearest_rules?: EvalNearestRule[];
+  /** (crew#1128, core#397) The memory axis for this sample: `null` when it declares no memories; absent from an
+   *  engine before core#397. Kept in the run history (the results are stored verbatim). */
+  memory?: EvalMemoryResult | null;
   [k: string]: unknown;
+}
+
+/**
+ * (crew#1128, core#397; wicked-crew-api-types `GovernanceEvalMemoryResult`, crew main after 0.223.0) What the worker's
+ * recall surfaced for one sample against its declared memories: `surfaced` every memory id recalled (rank order);
+ * `missing` the `expected_memories` nothing matched; `unexpected_surfaced` the `unexpected_memories` that surfaced.
+ * `verdict`: `false_positive` when an unexpected memory surfaced, else `gap` when an expected one did not, else `caught`.
+ * Typed here field for field until studio's api-types pin carries it.
+ */
+export interface EvalMemoryResult {
+  surfaced: string[];
+  missing: string[];
+  unexpected_surfaced: string[];
+  verdict: 'caught' | 'gap' | 'false_positive';
+}
+
+/** (crew#1128; api-types `GovernanceEvalMemoryAxis`) The report's memory axis: verdict counts over the samples that
+ *  declare memories, and coverage of the store's memories (the rest of `memories` listed as `unsurfaced`). */
+export interface EvalMemoryAxis {
+  summary: { total: number; caught: number; gaps: number; false_positives: number };
+  coverage: { memories: number; surfaced: number; unsurfaced: Array<{ memory_id: string; scope: string }> };
 }
 
 export interface EvalSummary {
@@ -506,6 +530,9 @@ export interface EvalReport {
   /** `"facet-only"` = the engine has no embedder: recall matched on facets alone and
    *  similarity-based gap analysis is degraded. `null` = full recall. */
   degraded: 'facet-only' | null;
+  /** (crew#1128) The memory axis: `null` when the run had no memory store (crew passes its store only when the file
+   *  exists); absent from a crew or engine before it. Only the run's own answer carries it: the history keeps none. */
+  memory?: EvalMemoryAxis | null;
   [k: string]: unknown;
 }
 

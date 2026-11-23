@@ -153,27 +153,60 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
   useEffect(() => {
     if (ambientProject !== null) {
       setSelectedProjectId(ambientProject);
-      loadProjects();
+      // An open form reads the list itself (each opening reads it fresh, below).
+      if (!showRegister) loadProjects();
     }
-    // loadProjects is ref-guarded and single-shot, so listing only the carry is safe.
-  }, [ambientProject]);
+    // loadProjects is ref-guarded and single-shot, so listing only the carry is safe. `showRegister` is read, not a
+    // trigger: an opening reads the list in its own effect.
+  }, [ambientProject]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // studio#1083: whether the project list was read since the form opened. A project's capture override is only taken
+  // from a fresh read; until then (or after a failed read) the form treats it as not known (codex r1 on #1349).
+  const [projectsFresh, setProjectsFresh] = useState(false);
+  /** The current project read: only its answer lands, so an older read (an earlier opening's) never counts as this
+   *  opening's, and overlapping reads never land out of order (codex r1 delta on #1349). */
+  const projectsGen = useRef(0);
 
   // crew-0182: the Project field lists the projects as soon as the form is up (it is a choice, not a lazy chip).
+  // Every opening reads the list again (a project's override may have changed since).
   useEffect(() => {
-    if (showRegister) loadProjects();
+    if (!showRegister) return;
+    setProjectsFresh(false);
+    loadProjects(true);
   }, [showRegister]);
 
-  function loadProjects(): void {
-    if (projectsRequested.current) return;
+  // studio#1083 (crew#552): whether a Capture learnings job follows the onboarding. The daemon setting
+  // (`onboardingAutoCapture`, absent = on), unless the chosen project overrides it; null = not known (read on every
+  // opening; pending or failed). The person can opt this one repository out (`autoCapture: false`); crew never captures
+  // on studio's say-so.
+  const [captureSetting, setCaptureSetting] = useState<boolean | null>(null);
+  const [captureAfter, setCaptureAfter] = useState(true);
+  useEffect(() => {
+    if (!showRegister) return undefined;
+    let live = true;
+    setCaptureSetting(null);
+    Promise.resolve()
+      .then(() => api.getSettings())
+      .then(({ settings }) => { if (live) setCaptureSetting(settings.onboardingAutoCapture !== false); })
+      .catch(() => { if (live) setCaptureSetting(null); });
+    return () => { live = false; };
+  }, [showRegister]);
+
+  function loadProjects(force = false): void {
+    if (projectsRequested.current && !force) return;
     projectsRequested.current = true;
+    const gen = ++projectsGen.current;
     // A failed (or absent) read throws inside the chain, never out of the effect that asked.
     Promise.resolve()
       .then(() => api.listProjects())
       .then(({ projects: ps }) => {
+        if (gen !== projectsGen.current) return;
+        setProjectsFresh(true);
         setProjectsFailed(false);
         setProjects([...ps].sort((a, b) => b.updated_at - a.updated_at));
       })
       .catch(() => {
+        if (gen !== projectsGen.current) return;
         projectsRequested.current = false; // transient — the Retry beside the field reads it again
         setProjectsFailed(true);
       });
@@ -286,6 +319,14 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     if (m.onboard.run !== null) reindexAsPrefill(m.onboard.run, m.repo.id, navigate);
   }
 
+  // The chosen project's own override wins over the daemon setting (crew's order, onboarding-capture.ts). It is known
+  // only once a read since the form opened lists the project; until then nothing is said as settled (codex r1 on #1349).
+  const chosenProject = selectedProjectId === null || !projectsFresh ? undefined : projects.find((p) => p.id === selectedProjectId);
+  const projectKnown = selectedProjectId === null || chosenProject !== undefined;
+  const projectCapture = chosenProject?.autoCapture;
+  /** true: a Capture learnings job follows; false: none does (the setting or the project is off); null: not known. */
+  const captureWillFollow: boolean | null = typeof projectCapture === 'boolean' ? projectCapture : projectKnown ? captureSetting : null;
+
   async function registerRepo(): Promise<void> {
     const name = newName.trim();
     const isRemote = sourceMode === 'remote';
@@ -297,9 +338,11 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     setRegistering(true);
     try {
       const projectId = selectedProjectId ?? undefined;
+      // studio#1083: the opt-out rides only when the person cleared it (and a capture would otherwise follow).
+      const opts = captureWillFollow !== false && !captureAfter ? [{ autoCapture: false }] as const : [] as const;
       const registered = isRemote
-        ? await api.cloneAndRegisterRepo(name, target, checkoutPath.trim() || undefined, projectId)
-        : await api.registerRepo(name, target, projectId);
+        ? await api.cloneAndRegisterRepo(name, target, checkoutPath.trim() || undefined, projectId, ...opts)
+        : await api.registerRepo(name, target, projectId, ...opts);
       const { repo, onboardError } = registered;
       // crew-0182: crew attached it (or says why not). An older crew did not read projectId's attach: studio attaches it,
       // and a failed attach is named on the repository's page (the registration itself has already succeeded).
@@ -540,7 +583,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                     {projectsFailed && (
                       <span className="wk-field-note wk-field-note--bad" role="alert" data-testid="repo-project-failed">
                         Your projects could not be listed.{' '}
-                        <button type="button" data-testid="repo-project-retry" className="wk-btn wk-btn--quiet wk-btn--sm" onClick={loadProjects}>Retry</button>
+                        <button type="button" data-testid="repo-project-retry" className="wk-btn wk-btn--quiet wk-btn--sm" onClick={() => loadProjects()}>Retry</button>
                       </span>
                     )}
                     <span className="wk-field-note" data-testid="repo-project-hint">
@@ -625,6 +668,26 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                   ? `Studio clones it to ${checkoutPath.trim() || `~/.wicked/repos/${newName || '<name>'}`}, then maps the code so work can find its way around. It runs as a tracked step you can watch and usually takes a few minutes.`
                   : 'Studio maps the code so work can find its way around. It runs as a tracked step you can watch and usually takes a few minutes.'}
               </p>
+
+              {captureWillFollow === false ? (
+                <p data-testid="repo-capture-off" className="wk-field-note">
+                  No Capture learnings job follows: automatic capture is off {typeof projectCapture === 'boolean' ? 'for this project' : 'in Settings'}.
+                </p>
+              ) : (
+                <div className="wk-pg-repo-field" data-testid="repo-capture">
+                  <label className="wk-pg-repo-check">
+                    <input type="checkbox" data-testid="repo-capture-after" aria-describedby="repo-capture-note" checked={captureAfter} onChange={(e) => setCaptureAfter(e.target.checked)} />
+                    <span>Then capture learnings from it</span>
+                  </label>
+                  <span id="repo-capture-note" className="wk-field-note" data-testid="repo-capture-note">
+                    {!captureAfter
+                      ? 'Only registered and mapped: no Capture learnings job runs on it.'
+                      : captureWillFollow === null
+                        ? 'When automatic capture is on, a Capture learnings job follows on your helpers; what it proposes waits for your review in Steering.'
+                        : 'A Capture learnings job follows on your helpers; what it proposes waits for your review in Steering.'}
+                  </span>
+                </div>
+              )}
 
               {registerError !== null && (
                 <StateBanner data-testid="repo-register-error" kind={readErrorKind(registerError)} what="the repository" said={plainRefusal(registerError, PLAIN_REGISTER_CODES)} error={errorText(registerError)} />
