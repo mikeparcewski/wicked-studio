@@ -12,6 +12,59 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.16.17] — 2026-11-23
+
+Patch release on the train-12 cut 0c96f0cf, carrying 30 PRs since 0.16.16: #1287, #1286, #1288, #1292, #1293, #1291, #1299, #1303, #1307, #1306, #1297, #1298, #1308, #1300, #1309, #1304, #1302, #1313, #1310, #1315, #1316, #1317, #1318, #1320, #1325, #1328, #1326, #1321, #1323, #1322.
+
+### Added
+
+- Set a rule's engine check from the add / edit form (#1310)
+- A refused turn links its broken rules; Publish can allow a private-network issuer (#1295, #1296) (#1328)
+- Remove a repository and drain for maintenance (#1323)
+
+### Changed
+
+- README:
+  - Says where a job's power mode is switched off, and which launches crew runs in power mode.
+  - Says what editor plugins may load (`network.media`).
+  - Drops "warm CLI seats" (#957, #888).
+- A Watchtower row for an archived chat run opens its chat, not the run's thread (#888). (#1304)
+
+### Fixed
+
+- The run's learnings line keeps checking after a failed read while it says "Distilling...", so it no longer stays on that word after the distil has finished (#943). (#1287)
+- The run page's jump button counts output that lands inside a step block or a turn already on screen (#858).
+- A run's event log is read in full even when live updates arrived first, and again after the connection comes back, so gate rows no longer read a stale log until reload (#1009). (#1286)
+- The power panel shows a checkpoint pause that opened while your own flip, raise or pause answer was on its way, and a pause you answered never comes back (#945, #947). (#1288)
+- The requirements header no longer says every uncounted row sits on a type shape; it names all three reasons (#1118).
+- "Approve as your own judgment" asks for your reason in an empty box instead of opening on the reviewer's send-back note (#1118). (#1292)
+- Understand → Coverage says what it is reading, stops waiting after 30 s, and offers Try again on a timeout or a failed read (#1289). (#1293)
+- The project page no longer says "Built" when the cross-repo link step failed or left members incomplete (#1104).
+- Added to existing surfaces: a running code-graph refresh and a repo re-index show their elapsed time against the budget the engine stops them at, and the project page says the last refresh's failure, naming a timeout and its budget (#1099). (#1291)
+- Table headers in a run's messages no longer break mid-word (#846).
+- The jump-to-latest button no longer covers message text: it sits beside the reading column on a desktop and under the thread on a phone (#985). (#1299)
+- MCP: a server row offers Inspect only while an MCP inspector plugin is installed and on. The page's Inspector action stays, and explains how to add one. (#1014) (#1303)
+- Leave out every run working document, in any project (#1307)
+- A project's Needs you stops waiting on sources it cannot count (#1306)
+- On a phone, choosing Chat in the navigation drawer closes the drawer (#974).
+- The phone top bar shows the site name set in Settings › Theme (#983). (#1297)
+- A gate card whose choices go on under its action row says "More below" (#1021).
+- On a phone, a helper's "not available" row wraps inside the gate card (#1112). (#1298)
+- Delete the never-set selected run; the in-flight check forgets an undone Stop (#1308)
+- With a custom accent close to the page colour, calm pages (Steering, Memory, Agents, Jobs, Build & settings) keep a visible row hover and readable link words, and their inline links are underlined (#921). (#1300)
+- Read crew's 200 "not generated" answer like its old 404 (#1309)
+- Helpers: a seat's council and work roles are read apart (crew#916). A work-only seat is Ready for chats and is no longer reported unusable. A reviewer-only seat reads "Reviews only", joins a job's helpers and never leads. Only a seat with both off reads "Not available". The row details show Reviews and Work, each with the service's reason. (#856) (#1302)
+- Journeys wait on conditions, Playwright pin made deliberate, nested-editor egress journey (#949, #1078, #946) (#1313)
+- **Understand: an answer that lands while Compare or Coverage is shown is followed to its end when you go back to the chat (#940).** (#1315)
+- **Chat jobs: picking a repository for a job in a new chat keeps the job in that chat (#1094).** The pick answers crew's question in place (crew#1672), instead of opening another chat and leaving this one behind. (#1316)
+- The chat beside an edited cut knows which video it is; drawer lines name real controls (#1317)
+- Background gate reads go one at a time; Helpers step 5 names the helpers new work uses (crew#1775, crew#1568 D05) (#1318)
+- A slow gate's retry waits in its own slot; base-cleared failures are placed (#1319, #1276) (#1320)
+- New job's power switch reads crew's posture; assurance notice and reduced-assurance retry (#1325)
+- A partly refused page edit says which parts were not applied (#1326)
+- The rail and composer read seat roles apart; a failed repository attach survives a remount (#1321)
+- Structured unconfirmed addresses, per-tool read acceptance, no lost Agents-box click (#1322)
+
 ## [0.16.16] — 2026-11-22
 
 Patch release on the train-11 cut 7c5c2267, carrying 41 PRs since 0.16.15: #1217, #1218, #1219, #1220, #1221, #1222, #1224, #1226, #1228, #1229, #1230, #1231, #1232, #1233, #1234, #1235, #1236, #1237, #1238, #1240, #1241, #1245, #1246, #1249, #1250, #1251, #1254, #1264, #1266, #1267, #1268, #1269, #1270, #1271, #1272, #1275, #1277, #1281, #1283, #1284, #1285.
