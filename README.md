@@ -206,8 +206,9 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
 - **See your knowledge** — Understand's **Knowledge map** draws your data sources and their tables
   beside your repositories and code, with the approved data shapes (what joins what, and which code
   describes a table) and the tracker links. **Profile this source** on a Postgres source's sheet
-  finds shapes from counts alone, never a value, and each one waits on the map for your Approve or
-  Reject.
+  finds shapes from counts alone, never a value, and writes them straight into knowledge, since you
+  started it; profiling again replaces them. A shape an agent proposes waits on the map for your
+  Approve or Reject.
 
 These need wicked-crew 0.17.0 or later, which bundles this release. Against an older daemon studio
 hides most of them or says the daemon doesn't offer them; Apps shows two sample apps, marked as samples,

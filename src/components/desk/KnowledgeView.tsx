@@ -139,7 +139,7 @@ export function KnowledgeView(): React.ReactElement {
   return (
     <div className="wk-knowview" data-testid="knowledge-view">
       <p className="wk-ue-sentence">
-        Your data sources, your repositories and the data shapes you approved, in one map. A shape says what a table is: what it joins, which code describes it, which rule governs it. Agents propose shapes; nothing is added until you approve it here.
+        Your data sources, your repositories and their data shapes, in one map. A shape says what a table is: what it joins, which code describes it, which rule governs it. A profile you run writes its shapes here at once; a shape an agent proposes is added only when you approve it here.
       </p>
 
       {/* Data shapes and the knowledge notes agents filed: one kind on the wire, each card says which it is. */}
@@ -157,7 +157,7 @@ export function KnowledgeView(): React.ReactElement {
             <EmptyState
               data-testid="knowledge-map-empty"
               title="Nothing to map yet."
-              body="Add a data source and test its connection, then profile it on its sheet. Its tables appear here, and its shapes once you approve them."
+              body="Add a data source and test its connection, then profile it on its sheet. Its tables and their shapes appear here."
               action={<a className="wk-link" href={sourcesPath()} data-testid="knowledge-map-sources">Open Data sources</a>}
             />
             {notes}

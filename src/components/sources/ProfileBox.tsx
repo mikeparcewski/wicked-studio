@@ -123,7 +123,7 @@ export function ProfileBox({ source }: { source: string }): React.ReactElement {
           <ul className="wk-src-profile-rows" data-testid="source-profile-rows">
             {result.relations.map((r) => <li key={r.key}>{relationLine(result, r.key)}</li>)}
           </ul>
-          <p className="wk-src-note"><a className="wk-link wk-src-profile-link" href={KNOWLEDGE_VIEW_PATH} data-testid="source-profile-map">See them in Understand → Knowledge map</a></p>
+          <p className="wk-src-note"><a className="wk-link wk-src-profile-link" href={KNOWLEDGE_VIEW_PATH} data-testid="source-profile-review">See them in Understand → Knowledge map</a></p>
         </div>
       )}
     </div>

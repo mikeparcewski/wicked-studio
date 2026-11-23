@@ -354,8 +354,17 @@ describe('the source sheet\'s Profile box', () => {
     expect(out.textContent).toContain('Profiled 1 table, found 1 join. Wrote 2 data shapes into knowledge. 1 table could not be read.');
     expect(out.textContent).not.toContain('review');
     expect(within(out).getByTestId('source-profile-rows').textContent).toBe('support.tickets: 100-9,999 rows · key id · joins support.regionssupport.audit_log: not read (timeout)');
-    expect(within(out).getByTestId('source-profile-map').getAttribute('href')).toBe(KNOWLEDGE_VIEW_PATH);
+    expect(within(out).getByTestId('source-profile-review').getAttribute('href')).toBe(KNOWLEDGE_VIEW_PATH);
     expect(screen.getByTestId('source-profile-run').textContent).toBe('Profile again');
+  });
+
+  it('a re-profile says what it wrote, left unchanged and replaced, read through the parser', async () => {
+    const user = userEvent.setup();
+    apiFetch.mockImplementation(() => Promise.resolve({ ...PROFILE, written: [{ id: 'p3', relation: 'support.tickets' }], unchanged: 1, replaced: 1 }));
+    render(<ProfileBox source="support-pg" />);
+    await user.click(screen.getByTestId('source-profile-run'));
+    const out = await screen.findByTestId('source-profile-result');
+    expect(out.textContent).toContain('Wrote 1 data shape into knowledge. 1 shape was already in knowledge, unchanged. Replaced 1 older shape.');
   });
 
   it('reads a profile defensively: a malformed answer is an error the box says, never a crash', async () => {
@@ -365,6 +374,9 @@ describe('the source sheet\'s Profile box', () => {
     expect(p.joins).toEqual([]);
     expect(p.written).toEqual([{ id: 'p1', relation: '' }]);
     expect([p.unchanged, p.replaced]).toEqual([0, 0]);
+    // Counts are narrowed, never coerced: a numeric string or a fraction is 0; a count crew sent is kept.
+    expect(readSourceProfile({ name: 'pg', relations: [], written: [], unchanged: '2', replaced: 1.5 })).toMatchObject({ unchanged: 0, replaced: 0 });
+    expect(readSourceProfile({ name: 'pg', relations: [], written: [], unchanged: 3, replaced: 1 })).toMatchObject({ unchanged: 3, replaced: 1 });
     // crew#1625: a crew that still files the profile for review (no `written`) is said, never shown as nothing written.
     expect(() => readSourceProfile({ name: 'pg', relations: [], proposed: [{ id: 'p1', relation: 's.t' }], alreadyProposed: 0 })).toThrow(ProfileWireError);
     const user = userEvent.setup();
