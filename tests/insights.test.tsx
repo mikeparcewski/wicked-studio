@@ -34,7 +34,6 @@ const { trendSvg, formatMetric, TREND_METRICS } = await import('../src/plugins/w
 const { insightsLineWords, InsightsLine } = await import('../src/components/insights/InsightsLine.js');
 const { SchedulesSection, scheduleLine } = await import('../src/components/insights/SchedulesSection.js');
 const { acceptPath } = await import('../src/components/insights/InsightsPage.js');
-const { sessionPath } = await import('../src/board/sessionModel.js');
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -276,11 +275,11 @@ describe('Schedules (Build & settings)', () => {
 
 describe('where Accept lands', () => {
   const rec = response().reviews[0]!.recommendations[0]!;
-  it('a proposal opens its approve queue, a setting its page, one run that run', () => {
+  it('a proposal opens its approve queue, a setting its page; runs open nothing (the panel lists them to close, crew#1165)', () => {
     expect(acceptPath({ kind: 'proposal', proposalId: 'p' }, { ...rec, kind: 'steering-rule' })).toBe('/steering/proposals');
     expect(acceptPath({ kind: 'proposal', proposalId: 'p' }, { ...rec, kind: 'memory' })).toBe('/memory?view=proposals');
     expect(acceptPath({ kind: 'settings', section: 'seats' }, rec)).toBe('/agents');
-    expect(acceptPath({ kind: 'runs', runIds: [RUN_ID] }, rec)).toBe(sessionPath(`run:${RUN_ID}`));
+    expect(acceptPath({ kind: 'runs', runIds: [RUN_ID] }, rec)).toBeNull();
     expect(acceptPath({ kind: 'runs', runIds: [RUN_ID, 'b'] }, rec)).toBeNull();
   });
 });

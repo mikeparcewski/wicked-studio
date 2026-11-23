@@ -13,6 +13,12 @@
 .wk-insights-dismiss label { font-size: var(--text-body); color: var(--ink-muted); }
 .wk-insights-dismiss textarea { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-card); color: var(--ink-high); font: inherit; }
 .wk-insights-said { margin: 0; font-size: var(--text-body); color: var(--ink-muted); }
+.wk-insights-resolve { display: flex; flex-direction: column; gap: 10px; }
+.wk-insights-resolve-runs { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: var(--text-body); color: var(--ink-body); }
+.wk-insights-resolve-runs li { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.wk-insights-resolve-runs a { flex: 1 1 0; min-width: 0; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+.wk-insights-resolve-act { flex: 0 0 auto; }
+.wk-insights-resolve-fail { flex: 1 0 100%; color: var(--status-fail); overflow-wrap: anywhere; }
 .wk-nc-insights { margin: 10px 0 0; font-size: var(--text-body); color: var(--ink-muted); }
 .wk-nc-insights a { color: var(--accent); }
 @media (max-width: 860px) {

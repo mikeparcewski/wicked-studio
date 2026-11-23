@@ -8433,6 +8433,48 @@
       ]
     },
     {
+      "testId": "insights-resolve",
+      "files": [
+        "src/components/insights/InsightsDecide.tsx"
+      ]
+    },
+    {
+      "testId": "insights-resolve-archive",
+      "files": [
+        "src/components/insights/InsightsDecide.tsx"
+      ]
+    },
+    {
+      "testId": "insights-resolve-archive-confirm",
+      "files": [
+        "src/components/insights/InsightsDecide.tsx"
+      ]
+    },
+    {
+      "testId": "insights-resolve-note",
+      "files": [
+        "src/components/insights/InsightsDecide.tsx"
+      ]
+    },
+    {
+      "testId": "insights-resolve-retry",
+      "files": [
+        "src/components/insights/InsightsDecide.tsx"
+      ]
+    },
+    {
+      "testId": "insights-resolve-run",
+      "files": [
+        "src/components/insights/InsightsDecide.tsx"
+      ]
+    },
+    {
+      "testId": "insights-resolve-said",
+      "files": [
+        "src/components/insights/InsightsDecide.tsx"
+      ]
+    },
+    {
       "testId": "insights-review",
       "files": [
         "src/plugins/wicked-insights/plugin.ts"
