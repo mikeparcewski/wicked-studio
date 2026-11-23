@@ -109,6 +109,47 @@ describe('studio#631: the composer helpers row', () => {
     expect(JSON.parse(localStorage.getItem('wicked_launch_dropped_seats') ?? '[]')).toEqual(['copilot']);
   });
 
+  it('studio#1311: a job lists the work-only helper off, sends it once turned on, and marks a reviewer-only one in words', async () => {
+    const roster = [
+      seat('claude'),
+      { ...seat('codex'), auth: 'signed_in', council_eligible: true, work_eligible: false } as RosterSeat,
+      { ...seat('pi'), enabled_for_council: false, auth: 'signed_in', council_eligible: false, work_eligible: true } as RosterSeat,
+    ];
+    setCachedRoster(roster);
+    render(<Harness onSend={() => {}} />);
+    type('/workflow-mcp-server');
+    await waitFor(() => expect(document.querySelector('[data-cmd="workflow-mcp-server"]')).not.toBeNull());
+    key('Enter');
+    await waitFor(() => expect(screen.getByTestId('composer-start')).toBeInTheDocument());
+    expect(screen.getAllByTestId('composer-seat').map((b) => [b.dataset.key, b.getAttribute('aria-pressed')])).toEqual([['claude', 'true'], ['codex', 'true'], ['pi', 'false']]);
+    expect(seatButton('codex')).toHaveTextContent('codex · reviews only');
+    expect(seatButton('pi')).toHaveTextContent('pi · no council vote');
+    fireEvent.click(seatButton('pi'));
+    expect(seatButton('pi').getAttribute('aria-pressed')).toBe('true');
+    type('build an MCP server for the ledger');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent(/in /));
+    key('Enter');
+    await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
+    const seats = (JSON.parse(String(posts.find((p) => p.path === '/runs')!.body.clisJson)) as Array<{ key: string }>).map((s) => s.key);
+    expect(seats).toEqual(['claude', 'codex', 'pi']);
+  });
+
+  it('studio#1311: a job sent without touching the work-only helper leaves it out (codex r1 on #1349)', async () => {
+    setCachedRoster([seat('claude'), seat('codex'), { ...seat('pi'), enabled_for_council: false, work_eligible: true } as RosterSeat]);
+    render(<Harness onSend={() => {}} />);
+    type('/workflow-mcp-server');
+    await waitFor(() => expect(document.querySelector('[data-cmd="workflow-mcp-server"]')).not.toBeNull());
+    key('Enter');
+    await waitFor(() => expect(screen.getByTestId('composer-start')).toBeInTheDocument());
+    expect(seatButton('pi').getAttribute('aria-pressed')).toBe('false');
+    type('build an MCP server for the ledger');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent(/in /));
+    key('Enter');
+    await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
+    const seats = (JSON.parse(String(posts.find((p) => p.path === '/runs')!.body.clisJson)) as Array<{ key: string }>).map((s) => s.key);
+    expect(seats).toEqual(['claude', 'codex']);
+  });
+
   it('dropping every seat refuses the send and says why — never a silent fall back to all', () => {
     const onSend = vi.fn();
     render(<Harness onSend={onSend} />);

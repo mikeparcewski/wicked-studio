@@ -21,6 +21,7 @@ import { useDaemonRuleStore } from '../../hooks/useDaemonRuleStore.js';
 import { useLatestEval } from '../../hooks/useLatestEval.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useEvalReportStore } from '../../store/evalReport.js';
+import { evalMemoryView, memoryOf, memorySummaryWords, memoryVerdictWords, type EvalMemoryView } from '../../board/evalMemory.js';
 import { useSteerDraft } from '../../store/steerDraft.js';
 import { EVAL_FACET_MATCH_EXPLANATION, EvalHistory } from '../EvalHistory.js';
 import { readFileText } from '../fileText.js';
@@ -83,6 +84,44 @@ const SENTENCE = 'Check your steering rules against real agent behaviour.';
 /** A rule as a person reads it: its statement when this daemon has the rule, else its name. */
 function ruleWords(id: string, rules: ReadonlyMap<string, SteeringRule>): string {
   return rules.get(id)?.statement ?? id;
+}
+
+/** studio#1301: the memory axis (crew#1128) — whether the memories behaviours name reach the work, and which stored
+ *  memories no behaviour's recall surfaced. Each part says where it comes from (see board/evalMemory.ts). */
+function EvalMemorySection({ view }: { view: EvalMemoryView }): React.ReactElement {
+  const cov = view.coverage;
+  return (
+    <section className="wk-ue-sec" data-testid="evaluate-memory" aria-labelledby="evaluate-memory-title">
+      <h2 id="evaluate-memory-title" className="wk-ue-label">Memories</h2>
+      {/* The shown run's counts, and apart from them what is known only from the run made here (codex r1 on #1349). */}
+      {(view.samples > 0 || view.noStoreAt === null) && <p className="wk-ue-note" data-testid="evaluate-memory-summary">{memorySummaryWords(view)}</p>}
+      {view.noStoreAt !== null && (
+        <p className="wk-ue-note" data-testid="evaluate-memory-nostore">
+          The run you made here <span title={absTime(view.noStoreAt)}>{relTime(view.noStoreAt)}</span> had no memory store, so no memory was checked.
+        </p>
+      )}
+      {cov !== null && (
+        <>
+          <p className="wk-ue-note" data-testid="evaluate-memory-coverage">
+            {cov.surfaced} of {cov.memories} stored {cov.memories === 1 ? 'memory' : 'memories'} surfaced for some behaviour
+            {' '}<span className="wk-se-quiet-sm" title={absTime(cov.at)}>(the run you made here, {relTime(cov.at)})</span>.
+          </p>
+          {cov.unsurfaced.length > 0 && (
+            <details className="wk-tech-details" data-testid="evaluate-memory-unsurfaced">
+              <summary className="wk-tech-details-summary">Never surfaced ({cov.unsurfaced.length})</summary>
+              <ul className="wk-ue-caveats">
+                {cov.unsurfaced.map((m) => (
+                  <li key={`${m.scope} ${m.memory_id}`} className="wk-ue-note" data-testid="evaluate-memory-unsurfaced-row" data-memory-id={m.memory_id}>
+                    {m.memory_id} <span className="wk-se-quiet-sm">· {m.scope}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </>
+      )}
+    </section>
+  );
 }
 
 function NearestRules({ result, navigate, foreign, rules }: {
@@ -234,6 +273,8 @@ export function EvaluateSurface({ navigate, title = 'Evaluate', intro = SENTENCE
   const results = useMemo(() => ev?.results ?? [], [ev]);
   const blocked = results.filter((r) => r.verdict === 'caught' && r.sample.kind === 'bad').length;
   const passed = results.filter((r) => r.verdict === 'caught' && r.sample.kind === 'good').length;
+  const lastRunMemory = useEvalReportStore((st) => st.memory);
+  const memoryView = useMemo(() => (ev === null ? null : evalMemoryView(results, lastRunMemory)), [ev, results, lastRunMemory]);
   const totals = rules !== null ? steerTotals(rules) : null;
   const daemonStore = useDaemonRuleStore();
   const store = ev !== null ? storeMatch(ev.ruleStore, daemonStore) : 'unknown';
@@ -384,6 +425,8 @@ export function EvaluateSurface({ navigate, title = 'Evaluate', intro = SENTENCE
             )}
           </section>
         )}
+
+        {memoryView !== null && <EvalMemorySection view={memoryView} />}
 
         <BringYourOwn mode={byo} onMode={setByo} runs={runs} jobPick={jobPick}
           onImported={(r) => { setCorpus(r.scope); setOptionsOpen(true); }}
@@ -593,6 +636,9 @@ function TypeDetail({ open, rows, latest, navigate, rules, daemonStore, onBack, 
                       {open === 'all' && <>{STEERING_TYPE_LABELS[r.sample.steering_type as SteeringType] ?? r.sample.steering_type} · </>}
                       {r.expected === 'deny' ? 'Should be blocked' : 'Should go through'} · {r.fired.length === 0 ? 'Rules that fired: —' : `Rules that fired: ${r.fired.map((id) => ruleWords(id, rules)).join('; ')}`}
                     </span>
+                    {memoryOf(r) !== null && (
+                      <span className="wk-ue-behaviour-line" data-testid="testing-evals-memory" data-memory-verdict={memoryOf(r)!.verdict}>{memoryVerdictWords(memoryOf(r)!)}</span>
+                    )}
                     {gap && (
                       <button type="button" data-testid="testing-evals-gap-toggle" aria-expanded={isOpen} className="wk-ue-linkbtn wk-ue-back"
                         onClick={() => setOpenId(isOpen ? null : r.sample.id)}>{isOpen ? 'Hide nearest rules' : 'Nearest rules'}</button>

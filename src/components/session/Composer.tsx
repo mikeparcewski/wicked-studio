@@ -24,7 +24,7 @@ import {
 import { gateInstance } from '../../board/proposalCard.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { seatLabel, userSeats } from '../../board/seatNames.js';
-import { NO_WORKER_PICKED, onlyReviewersChosen, seatJoinStanding } from '../gateVerdictModel.js';
+import { NO_WORKER_PICKED, onlyReviewersChosen, REVIEWS_ONLY_WORDS, reviewsOnly, seatJoinStanding, WORKS_ONLY_WORDS, worksOnly } from '../gateVerdictModel.js';
 import { defaultSelection } from '../../board/chatOpen.js';
 import { chosenSeats, NO_SEAT_PICKED, seatOff, useComposerSeats, useLaunchSeats } from '../../store/composerSeats.js';
 import { loadCatalog, loadPresets, usePlanCatalog } from '../../store/planCatalog.js';
@@ -414,7 +414,8 @@ export function Composer({
     // studio#686 (UX audit row 12): only seats a user may address — never the judge seat or a
     // non-CLI helper — so the helpers row and the `@` menu offer the same list under one name each.
     const addressable = new Set(userSeats(roster).map((s) => s.key));
-    const keys = wfChip !== null ? roster.filter((s) => s.enabled_for_council).map((s) => s.key) : defaultSelection(roster, true);
+    // studio#1311: a job also lists the work-only helpers (council off, seated for work), off until turned on.
+    const keys = wfChip !== null ? roster.filter((s) => s.enabled_for_council || worksOnly(s)).map((s) => s.key) : defaultSelection(roster, true);
     return keys.filter((k) => addressable.has(k));
   }, [roster, wfChip]);
   const ats: AtItem[] = useMemo(() => {
@@ -460,7 +461,9 @@ export function Composer({
     const st = seatJoinStanding(s);
     return st.state === 'ready' || st.state === 'unknown' ? [] : [s.key];
   })), [wfChip, roster]);
-  const isOffSeat = (key: string): boolean => (unusable.has(key) ? !picked.includes(key) : seatOff(key, dropped, picked));
+  const workOnly = useMemo(() => new Set(wfChip === null ? [] : (roster ?? []).filter((s) => worksOnly(s)).map((s) => s.key)), [wfChip, roster]);
+  const offUnlessPicked = (key: string): boolean => unusable.has(key) || workOnly.has(key);
+  const isOffSeat = (key: string): boolean => (offUnlessPicked(key) ? !picked.includes(key) : seatOff(key, dropped, picked));
   const sendSeats = wfChip === null ? chosenSeats(eligibleSeats, dropped, picked) : eligibleSeats.filter((k) => !isOffSeat(k));
   // An `@helper` named to answer (ASK-S1) but turned off in the row would be silently dropped as the
   // chat's primary — refused instead, by name (codex r1 on #631).
@@ -819,10 +822,12 @@ export function Composer({
                 data-key={key}
                 aria-pressed={on}
                 title={on ? `${name} takes part — click to leave it out` : `${name} is left out — click to include it`}
-                onClick={() => toggleSeat(key, unusable.has(key))}
+                onClick={() => toggleSeat(key, offUnlessPicked(key))}
                 className={`wk-composer-chip wk-composer-seat${on ? '' : ' wk-composer-seat--off'}`}
               >
-                {name}
+                <span className="wk-composer-seat-name">{name}</span>
+                {wfChip !== null && reviewsOnly(seat) && <span className="wk-composer-seat-role" data-testid="composer-seat-role"> · {REVIEWS_ONLY_WORDS}</span>}
+                {workOnly.has(key) && <span className="wk-composer-seat-role" data-testid="composer-seat-role"> · {WORKS_ONLY_WORDS}</span>}
               </button>
             );
           })}

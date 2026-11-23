@@ -65,6 +65,12 @@ export interface RegisterRepoAnswer {
   projectAttachError?: string;
 }
 
+/** `POST /repos` options beyond the location and project (studio#1083). */
+export interface RegisterRepoOpts {
+  /** `false`: no Capture learnings job follows this onboarding (crew#552's one-off opt-out). */
+  autoCapture?: boolean;
+}
+
 function jobAccepts(): { accepts?: Array<'job' | 'onboard'> } {
   const caps = useCapabilities.getState();
   // (crew 0.18.2) `onboard`: studio draws a chat's "add a repository" card; only where crew advertises it.
@@ -517,18 +523,20 @@ export const api = {
   /** Register a local git repo and launch an onboarding run. Returns the repo and run id. */
   /** (crew 0.18.2) With `projectId` crew attaches the repo there and files its onboarding run (`projectAttached`), or says
    *  why not (`projectAttachError`); an older crew answers with neither. */
-  registerRepo: (name: string, rootPath: string, projectId?: string) =>
+  /** (studio#1083, crew#552) `opts.autoCapture: false`: register and onboard only, with no chained Capture learnings
+   *  job. Only the opt-out is ever sent: whether a capture follows otherwise is crew's (the setting, the project's). */
+  registerRepo: (name: string, rootPath: string, projectId?: string, opts?: RegisterRepoOpts) =>
     apiFetch<RegisterRepoAnswer>('/repos', {
       method: 'POST',
-      body: JSON.stringify({ name, rootPath, ...(projectId !== undefined ? { projectId } : {}) }),
+      body: JSON.stringify({ name, rootPath, ...(projectId !== undefined ? { projectId } : {}), ...(opts?.autoCapture === false ? { autoCapture: false } : {}) }),
     }),
 
   /** Clone a remote git URL, register it, and launch an onboarding run.
    *  `checkoutPath` (absolute) overrides the default ~/.wicked/repos/<name>. */
-  cloneAndRegisterRepo: (name: string, gitUrl: string, checkoutPath?: string, projectId?: string) =>
+  cloneAndRegisterRepo: (name: string, gitUrl: string, checkoutPath?: string, projectId?: string, opts?: RegisterRepoOpts) =>
     apiFetch<RegisterRepoAnswer>('/repos', {
       method: 'POST',
-      body: JSON.stringify({ name, gitUrl, ...(checkoutPath ? { rootPath: checkoutPath } : {}), ...(projectId !== undefined ? { projectId } : {}) }),
+      body: JSON.stringify({ name, gitUrl, ...(checkoutPath ? { rootPath: checkoutPath } : {}), ...(projectId !== undefined ? { projectId } : {}), ...(opts?.autoCapture === false ? { autoCapture: false } : {}) }),
     }),
 
   /** (crew#1230) Remove a repository's registration. Its checkout and code map stay on disk. */
