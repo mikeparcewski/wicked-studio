@@ -49,6 +49,14 @@ import { openChat } from '../../store/chatFlow.js';
 import { PowerPauseCard } from './PowerMode.js';
 import { usePower } from '../../hooks/usePower.js';
 import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
+import { useProvenanceStore } from '../../store/provenance.js';
+import { consentDeclineOf, installRecordOf, installUnitOf, installWords } from '../../board/installOutcome.js';
+import { unitKeyOf } from '../../board/runConversation.js';
+import { mcpPath } from '../../api/mcp.js';
+import { coverageHeadline, DOMAIN_EXTRACTION_ID, domainJobResultOf, requirementsNotGenerated, type DomainJobResult } from '../../board/requirementsState.js';
+import { projectRequirementsPath } from '../../hooks/useRoute.js';
+import { fetchReposCached } from '../../store/repoCache.js';
+import { RequirementsModal } from '../RequirementsModal.js';
 
 /**
  * WICKED'S PASSAGE (DES-CATALOG-002 rev 7 §2.8.1, the v4 "Ink" direction, mockup new-job-v5): the job, inline in the
@@ -168,6 +176,15 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   const runId = run?.session.id ?? lineage.runId;
   const gate = useGateStore((st) => (runId === null ? undefined : st.gates[runId]));
   const runEvents = useRunEventStore((st) => (runId === null ? undefined : st.byRun[runId]));
+  // studio#1364: why a stopped job stopped, off the run's one audit read: a Decline at the install's consent is not a
+  // failure or a stop (the pull request it delivered stays).
+  const stoppedRun = v.phase === 'stopped' ? runId : null;
+  useEffect(() => { if (stoppedRun !== null) useProvenanceStore.getState().load(stoppedRun, true); }, [stoppedRun]);
+  const cancelStory = useProvenanceStore((st) => (stoppedRun === null ? null : st.cancelStories[stoppedRun] ?? null));
+  const declined = run !== null && v.phase === 'stopped' ? consentDeclineOf(run, cancelStory) : null;
+  // Until that read answers (or fails), a stopped job offers no way on: a Try again that a Decline then withdraws is a
+  // press on the wrong thing.
+  const storyRead = useProvenanceStore((st) => stoppedRun !== null && (st.cancelStories[stoppedRun] !== undefined || st.byRun[stoppedRun]?.state === 'unknown'));
   const pt = proposalTarget(head.proposal);
   // A confirm made for one run closes when the job's run is another.
   useEffect(() => { if (confirmStop !== null && confirmStop !== runId) setConfirmStop(null); }, [confirmStop, runId]);
@@ -553,7 +570,8 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
         <p className="wk-pass-settled">
           {v.phase === 'notStarted' && moved !== null
             ? <>Moved to {moved.where}: {v.proposal.what.label} · <button type="button" className="wk-pass-inl" data-testid="job-passage-moved-open" onClick={() => openChat(moved.chatId)}>Open it</button></>
-            : settledLine(v, { pr })}
+            : declined !== null ? `${declined.install ? 'Delivered, not installed' : 'Delivered; a step was declined'}. ${v.proposal.what.label}${pr !== null ? ` · ${pr}` : ''}`
+              : settledLine(v, { pr })}
           {runId !== null && <> · <button type="button" className="wk-pass-inl" data-testid="job-passage-details" onClick={() => openSheet({ kind: 'session', sessionId: `run:${runId}` })}>Details ›</button></>}
         </p>
         <div aria-live="polite" className="wk-visually-hidden" data-testid="job-passage-live">{announce}</div>
@@ -563,7 +581,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
 
   // A repository job (a run or a compose on a repository): the one a failure hands to Bug.
   const repoJob = (v.proposal.launch === 'run' || v.proposal.launch === 'compose') && ((v.proposal.repoRefs ?? v.proposal.repos).length > 0);
-  const tone = v.needsYou ? ' wk-pass--needs' : v.phase === 'delivered' ? ' wk-pass--ok' : v.phase === 'failed' || v.phase === 'stopped' ? ' wk-pass--bad'
+  const tone = v.needsYou ? ' wk-pass--needs' : v.phase === 'delivered' || declined !== null ? ' wk-pass--ok' : v.phase === 'failed' || v.phase === 'stopped' ? ' wk-pass--bad'
     : v.phase === 'revising' || v.phase === 'swapPending' || v.phase === 'planning' || v.phase === 'replanning' || v.phase === 'starting' ? ' wk-pass--busy' : '';
   // studio#1335: crew sends every repository in scope as a choice; the card shows the named ones and enough to fill the
   // chips' count, then "N more" (JobRepoChoices' rule). The others stay replies (a typed answer can still bind one).
@@ -782,8 +800,9 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
         </p>
       )}
 
-      {v.phase === 'delivered' && run !== null && <Delivered run={run} />}
-      {v.phase === 'stopped' && run !== null && (
+      {v.phase === 'delivered' && run !== null && <Delivered run={run} {...(navigate !== undefined ? { navigate } : {})} />}
+      {declined !== null && run !== null && <DeclinedInstall run={run} install={declined.install} />}
+      {v.phase === 'stopped' && run !== null && declined === null && (
         <p data-testid="job-passage-stopped" className="wk-pass-sub">Stopped. {progress !== null ? `${progress.done} of ${progress.total} steps had run.` : ''} {deliverySummary(run) ?? ''}</p>
       )}
       {v.phase === 'failed' && run !== null && (
@@ -794,7 +813,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
       )}
       {/* After a stop or a failure: the person's own next job, made in this chat by the existing person route
           (POST /chats/:id/proposals) and run only by its Start. */}
-      {(v.phase === 'stopped' || v.phase === 'failed') && run !== null && (
+      {((v.phase === 'stopped' && storyRead && declined === null) || v.phase === 'failed') && run !== null && (
         <div role="group" aria-label="What next" data-testid="job-passage-after" className="wk-pass-acts">
           {v.phase === 'failed' && repoJob && (
             <button type="button" data-testid="job-passage-fix-bug" disabled={handOff} className="wk-pass-act wk-pass-act--go"
@@ -1067,21 +1086,151 @@ function QuestionInput({ label, target, disabled, onAnswer }: { label: string; t
   );
 }
 
-/** The delivery: what the run handed over and what was checked, each from its record (never more than it says). */
-function Delivered({ run }: { run: SessionView }): React.ReactElement {
+/** The delivery: what the run handed over and what was checked, each from its record (never more than it says). A domain
+ *  mapping says what it mapped (studio#1365) and an MCP server's install says what it registered (studio#1367). */
+function Delivered({ run, navigate }: { run: SessionView; navigate?: Navigate }): React.ReactElement {
   const handed = handedOf(run);
   const pr = deliverySummary(run);
+  const domain = run.session.workflow_id === DOMAIN_EXTRACTION_ID;
+  const install = installUnitOf(run);
   return (
     <div data-testid="job-passage-delivered" className="wk-pass-done">
       <p className="wk-pass-sub">
-        <b>Done.</b> {outcomeLine(run)}
+        <b>Done.</b> {domain && handed === null ? 'Finished mapping the requirements.' : outcomeLine(run)}
         {handed?.href != null && <> · <a href={handed.href} target="_blank" rel="noreferrer">{pr ?? 'the pull request'}</a></>}
         {handed?.href == null && handed?.branch != null && <> · branch <code>{handed.branch}</code></>}
       </p>
+      {domain && <DomainResultLine run={run} {...(navigate !== undefined ? { navigate } : {})} />}
+      {install !== null && <InstallResultLine run={run} unit={install} {...(navigate !== undefined ? { navigate } : {})} />}
       <RunAssuranceLabel view={run} />
       <p className="wk-pass-grey wk-pass-sub">What was checked, each from its record, is in{' '}
         <button type="button" className="wk-pass-inl" onClick={() => openSheet({ kind: 'session', sessionId: `run:${run.session.id}` })}>Details ›</button>
       </p>
+    </div>
+  );
+}
+
+/** studio#1364: a job whose install (or another consent step) was declined after its delivery: what was delivered stays,
+ *  nothing was installed, and the job is not a failure to try again. */
+function DeclinedInstall({ run, install }: { run: SessionView; install: boolean }): React.ReactElement {
+  const handed = handedOf(run);
+  const pr = deliverySummary(run);
+  return (
+    <div data-testid="job-passage-declined" className="wk-pass-done">
+      <p className="wk-pass-sub">
+        <b>{install ? 'Delivered, not installed.' : 'Delivered; you declined a step.'}</b>{' '}
+        {install ? 'You declined the install, so nothing was installed.' : 'That step didn’t run.'}
+        {handed?.href != null && <> <a href={handed.href} target="_blank" rel="noreferrer">{pr ?? 'The pull request'}</a> was delivered and stays as it is.</>}
+        {handed?.href == null && handed?.branch != null && <> The branch <code>{handed.branch}</code> was pushed and stays as it is.</>}
+      </p>
+      <p className="wk-pass-grey wk-pass-sub">
+        <button type="button" className="wk-pass-inl" onClick={() => openSheet({ kind: 'session', sessionId: `run:${run.session.id}` })}>Details ›</button>
+      </p>
+    </div>
+  );
+}
+
+/** studio#1365: what a finished domain mapping found (the share of real requirements against the minimum, and the business
+ *  domains), read once from the repository's requirements, with the way to the requirements themselves. */
+function DomainResultLine({ run, navigate }: { run: SessionView; navigate?: Navigate }): React.ReactElement | null {
+  const repoId = run.session.repo_ref;
+  const projectId = typeof run.session.project_id === 'string' ? run.session.project_id : null;
+  const [result, setResult] = useState<DomainJobResult | 'failed' | null>(null);
+  const [tries, setTries] = useState(0);
+  const [open, setOpen] = useState(false);
+  const [repoName, setRepoName] = useState<string | null>(null);
+  useEffect(() => {
+    if (repoId === null) return undefined;
+    let live = true;
+    setResult(null);
+    api.listRequirements(repoId, { limit: 1 }).then(
+      (page) => { if (live) setResult(domainJobResultOf(page)); },
+      (e: unknown) => {
+        if (!live) return;
+        const notYet = requirementsNotGenerated(e);
+        setResult(notYet !== null ? { coverage: notYet.share, domains: null, built: false } : 'failed');
+      },
+    );
+    fetchReposCached().then((repos) => { if (live) setRepoName(repos.find((r) => r.id === repoId)?.name ?? null); }, () => undefined);
+    return () => { live = false; };
+  }, [repoId, tries]);
+  const openMap = repoId !== null
+    ? <button type="button" className="wk-pass-inl" data-testid="job-passage-requirements-open" onClick={() => setOpen(true)}>Open the requirements</button>
+    : projectId !== null && navigate !== undefined
+      ? <a className="wk-pass-inl" data-testid="job-passage-requirements-open" href={projectRequirementsPath(projectId)}
+          onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate(projectRequirementsPath(projectId)); }}>Open the requirements</a>
+      : null;
+  if (repoId === null && openMap === null) return null;
+  let words: string;
+  if (repoId === null) words = 'The requirements it mapped are with the project.';
+  else if (result === null) words = 'Reading what it mapped…';
+  else if (result === 'failed') words = 'What it mapped couldn’t be read just now.';
+  else words = domainResultWords(result);
+  return (
+    <>
+      <p data-testid="job-passage-domain-result" data-state={result === null ? 'loading' : result === 'failed' ? 'failed' : result.built ? 'built' : 'not-built'} className="wk-pass-sub">
+        {words}{' '}
+        {result === 'failed' && <><button type="button" className="wk-pass-inl" data-testid="job-passage-domain-retry" onClick={() => setTries((n) => n + 1)}>Try again</button>{' · '}</>}
+        {openMap}
+      </p>
+      {open && repoId !== null && <RequirementsModal repoId={repoId} repoName={repoName ?? repoId} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+/** "Mapped 85% real requirements · minimum 80%, across 12 business domains." */
+export function domainResultWords(r: DomainJobResult): string {
+  const share = r.coverage !== null ? coverageHeadline(r.coverage) : null;
+  const domains = r.domains !== null && r.domains > 0 ? `${r.domains} business ${r.domains === 1 ? 'domain' : 'domains'}` : null;
+  if (!r.built) {
+    return share !== null
+      ? `The requirements map wasn’t built: ${share}. The requirements view says how to go on.`
+      : 'The requirements map wasn’t built. The requirements view says how to go on.';
+  }
+  if (share !== null) return `Mapped ${share}${domains !== null ? `, across ${domains}` : ''}.`;
+  return domains !== null ? `Mapped the requirements across ${domains}.` : 'The requirements map is built.';
+}
+
+/** studio#1367: what the MCP server's install did, from the install step's own record (registered, waiting on a token,
+ *  the helpers' configurations skipped), never a plain Done over a server nobody can use. */
+function InstallResultLine({ run, unit, navigate }: { run: SessionView; unit: SessionView['units'][number]; navigate?: Navigate }): React.ReactElement | null {
+  const [output, setOutput] = useState<string | null | 'failed' | undefined>(undefined);
+  const [tries, setTries] = useState(0);
+  const key = unitKeyOf(run.session.id, unit);
+  useEffect(() => {
+    let live = true;
+    setOutput(undefined);
+    api.getUnitOutput(run.session.id, key).then(({ output: o }) => { if (live) setOutput(o); }, () => { if (live) setOutput('failed'); });
+    return () => { live = false; };
+  }, [run.session.id, key, tries]);
+  if (output === undefined) return <p data-testid="job-passage-install" data-state="loading" className="wk-pass-sub wk-pass-grey">Reading what the install did…</p>;
+  if (output === 'failed') {
+    return (
+      <p data-testid="job-passage-install" data-state="failed" className="wk-pass-sub">
+        What the install did couldn’t be read just now.{' '}
+        <button type="button" className="wk-pass-inl" data-testid="job-passage-install-retry" onClick={() => setTries((n) => n + 1)}>Try again</button>
+      </p>
+    );
+  }
+  const record = installRecordOf(output);
+  if (record === null) {
+    return <p data-testid="job-passage-install" data-state="unknown" className="wk-pass-sub">The install left no record of what it registered. Check MCP tools to see whether the server is there.</p>;
+  }
+  const w = installWords(record);
+  const href = mcpPath(w.registered ? record.key : null);
+  return (
+    <div data-testid="job-passage-install" data-state={w.registered ? 'registered' : record.ok ? 'not-registered' : 'failed'}>
+      <p className="wk-pass-sub"><b>{w.line}</b></p>
+      {w.todo !== null && <p data-testid="job-passage-install-todo" className="wk-pass-sub">{w.todo}</p>}
+      {w.clis !== null && <p data-testid="job-passage-install-clis" className="wk-pass-sub wk-pass-grey">{w.clis}</p>}
+      {navigate !== undefined && (
+        <p className="wk-pass-sub">
+          <a className="wk-pass-inl" data-testid="job-passage-install-mcp" href={href}
+            onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate(href); }}>
+            {w.registered ? 'Open it in MCP tools' : 'Open MCP tools'}
+          </a>
+        </p>
+      )}
     </div>
   );
 }

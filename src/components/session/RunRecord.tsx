@@ -14,6 +14,8 @@ import { RunIntentAmendments } from '../RunIntentAmendments.js';
 import { WatchRunLines } from '../WatchLines.js';
 import { everythingPath } from '../../board/everythingModel.js';
 import { engineFailureOf } from '../../board/engineFailure.js';
+import { consentDeclineOf } from '../../board/installOutcome.js';
+import { deliverySummary, handedOf } from '../../board/proposalCard.js';
 
 const EMPTY: readonly CoreEvent[] = [];
 
@@ -57,10 +59,27 @@ export function RunStory({ view, navigate, events = EMPTY }: {
   if (status === 'cancelled') {
     const stop = story?.stop ?? null;
     const shownStop = stop !== null && (stop.byPerson || stop.reason !== null) ? stop : null;
-    const engineStopped = shownStop === null && rejectNote === null && story?.engineTimedOut === true;
-    const sendBack = shownStop === null && rejectNote === null ? story?.sendBackNote ?? null : null;
+    // studio#1364: a Decline at a consent gate (the MCP install, after the pull request was delivered) is said as what
+    // it was, with the delivery that stays; a rejection on record (words or not) is the reason, never an older send-back.
+    const declined = consentDeclineOf(view, story);
+    const rejected = rejectNote !== null || (story?.rejected ?? null) !== null;
+    const engineStopped = shownStop === null && !rejected && story?.engineTimedOut === true;
+    const sendBack = shownStop === null && !rejected ? story?.sendBackNote ?? null : null;
+    if (declined !== null && shownStop === null) {
+      const handed = handedOf(view);
+      const pr = deliverySummary(view);
+      return (
+        <div data-testid="failure-banner" data-kind="cancelled" data-cause="declined" className="wk-session-run-story">
+          <p data-testid="failure-declined" className="wk-session-run-story-line">
+            {declined.install ? 'You declined the install, so nothing was installed.' : 'You declined this step, so it didn’t run.'}
+            {handed?.href != null && <> <a href={handed.href} target="_blank" rel="noreferrer" className="wk-link">{pr ?? 'The pull request'}</a> was delivered and stays as it is.</>}
+            {handed?.href == null && handed?.branch != null && <> The branch <code>{handed.branch}</code> was pushed and stays as it is.</>}
+          </p>
+        </div>
+      );
+    }
     return (
-      <div data-testid="failure-banner" data-kind="cancelled" data-cause={shownStop !== null ? 'stopped' : rejectNote !== null ? 'rejected' : engineStopped ? 'engine-timeout' : 'unattributed'} className="wk-session-run-story">
+      <div data-testid="failure-banner" data-kind="cancelled" data-cause={shownStop !== null ? 'stopped' : rejected ? 'rejected' : engineStopped ? 'engine-timeout' : 'unattributed'} className="wk-session-run-story">
         {/* The status sentence already says "Cancelled"; the story says only WHY, when it is known. */}
         {engineStopped && <p className="wk-session-run-story-line">It was stopped automatically: a step ran past its time limit.</p>}
         {shownStop !== null && (
@@ -69,11 +88,14 @@ export function RunStory({ view, navigate, events = EMPTY }: {
         {shownStop === null && rejectNote !== null && (
           <p data-testid="failure-reject-note" className="wk-session-run-story-note">You rejected it: “{show(rejectNote)}”</p>
         )}
+        {shownStop === null && rejectNote === null && rejected && (
+          <p data-testid="failure-reject-note" className="wk-session-run-story-note">You rejected it; no reason was given.</p>
+        )}
         {sendBack !== null && (
           <p data-testid="failure-send-back-note" className="wk-session-run-story-note">Your last send-back to the creator (acted on — not a rejection): “{show(sendBack)}”</p>
         )}
         {/* The door to the other stopped runs rides with a story; alone it is a stray link. */}
-        {navigate !== undefined && (shownStop !== null || engineStopped || rejectNote !== null || sendBack !== null) && <AllRunsLink navigate={navigate} filter="cancelled" />}
+        {navigate !== undefined && (shownStop !== null || engineStopped || rejected || sendBack !== null) && <AllRunsLink navigate={navigate} filter="cancelled" />}
       </div>
     );
   }

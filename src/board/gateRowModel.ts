@@ -150,6 +150,10 @@ export function consentMissingOf(gate: OpenGate, events: readonly CoreEvent[] | 
   return null;
 }
 
+/** studio#1364: what Decline at the install's consent does, said before it is pressed. The engine ends the job here; the
+ *  pull request it already delivered stays. */
+export const DECLINE_INSTALL_TITLE = 'Don’t install now: nothing is installed and the job ends here. The pull request already delivered stays as it is.';
+
 export function consentChoicesOf(gate: OpenGate, events: readonly CoreEvent[] | null): GateRowChoice[] | null {
   let frame: Record<string, unknown> | null = null;
   for (let i = (events ?? []).length - 1; i >= 0; i--) {
@@ -168,7 +172,7 @@ export function consentChoicesOf(gate: OpenGate, events: readonly CoreEvent[] | 
   tokens.forEach((t, i) => {
     if (typeof t !== 'string') return;
     if (t === 'reject') {
-      out.push({ key: 'decline', label: 'Decline', decision: { approve: false }, note: 'none', title: 'Cancel the run; nothing is installed and nothing in this phase runs.' });
+      out.push({ key: 'decline', label: 'Decline', decision: { approve: false }, note: 'none', title: DECLINE_INSTALL_TITLE });
       return;
     }
     if (!t.startsWith('consent:')) return;
@@ -194,7 +198,7 @@ export function consentChoicesOf(gate: OpenGate, events: readonly CoreEvent[] | 
     });
   });
   // Decline is always an answer, even if a producer's list left it out.
-  if (!out.some((c) => c.key === 'decline')) out.push({ key: 'decline', label: 'Decline', decision: { approve: false }, note: 'none', title: 'Cancel the run; nothing is installed and nothing in this phase runs.' });
+  if (!out.some((c) => c.key === 'decline')) out.push({ key: 'decline', label: 'Decline', decision: { approve: false }, note: 'none', title: DECLINE_INSTALL_TITLE });
   return out;
 }
 

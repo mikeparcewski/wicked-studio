@@ -335,3 +335,20 @@ export function mismatchCountOf(page: unknown): number | null {
   const v = (page as { mismatches?: unknown } | null)?.mismatches;
   return isCount(v) ? v : null;
 }
+
+/**
+ * studio#1365: what a finished domain-extraction job found, from one requirements read of its repository: the share of
+ * real requirements (against the minimum) and how many business domains the corpus holds. `built` is false when crew
+ * answered "not generated" (the map was not built; its 404 still carries the share so far).
+ */
+export interface DomainJobResult {
+  coverage: RequirementsCoverage | null;
+  /** The business-domain catalog's size (crew api-types 0.207.0 `businessDomains`); null when the daemon sends none. */
+  domains: number | null;
+  built: boolean;
+}
+
+export function domainJobResultOf(page: unknown): DomainJobResult {
+  const d = (page as { businessDomains?: unknown } | null)?.businessDomains;
+  return { coverage: coverageOf(page), domains: Array.isArray(d) ? d.length : null, built: true };
+}
