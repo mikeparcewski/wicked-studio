@@ -201,6 +201,12 @@
       ]
     },
     {
+      "testId": "agents-login-copy",
+      "files": [
+        "src/components/agents/containerSignIn.tsx"
+      ]
+    },
+    {
       "testId": "agents-login-line",
       "files": [
         "src/components/agents/containerSignIn.tsx"
@@ -24851,6 +24857,12 @@
     },
     {
       "testId": "terminal",
+      "files": [
+        "src/components/Terminal.tsx"
+      ]
+    },
+    {
+      "testId": "terminal-copy-note",
       "files": [
         "src/components/Terminal.tsx"
       ]
