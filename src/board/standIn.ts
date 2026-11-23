@@ -146,12 +146,12 @@ export function helperNamer(roster: readonly SeatNameInput[] | null | undefined)
   };
 }
 
-/** What one short role is called on the card (DES §2.1: reviewer, judge, QE reviewer, council). */
+/** What one short role is called on the card, by what it does (DES §2.1 roles; coord round 2: no insider words). */
 function roleWords(r: PreflightRole): string {
   switch (r.role) {
     case 'evaluator': case 'party_excluded': return 'a reviewer';
     case 'judge': return 'a judge';
-    case 'qe_reviewer': return 'a QE reviewer';
+    case 'qe_reviewer': return 'a tester who checks the result does what you asked';
     case 'rule_judge': return 'a rules checker';
     case 'council': return `a council of ${Math.max(r.needed, 1)}`;
     case 'monitor': return r.needed > 1 ? `${r.needed} helpers to watch the team's work` : "a helper to watch the team's work";
@@ -159,10 +159,11 @@ function roleWords(r: PreflightRole): string {
   }
 }
 
-/** "a", "a and b", "a, b and c". */
+/** "a", "a and b", "a, b, and c": the last comma keeps a long item ("a tester who checks …") from running into the next. */
 export function listWords(items: readonly string[]): string {
   if (items.length <= 1) return items[0] ?? '';
-  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]!}`;
+  if (items.length === 2) return `${items[0]!} and ${items[1]!}`;
+  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]!}`;
 }
 
 const uniq = (xs: readonly string[]): string[] => [...new Set(xs.filter((x) => x.trim() !== ''))];
@@ -217,18 +218,17 @@ export function standInChoiceWords(r: StandInChoiceRefusal, name: (cli: string) 
     : signedIn.length === 1 ? `${signedIn[0]!} is the only helper signed in.`
       : `${listWords(signedIn)} are signed in.`;
   const needs = firm.length > 0
-    ? `This job needs ${listWords(firm)} that did not build the work${council !== null ? `, and ${council}` : ''}.`
+    ? `This job needs checks by helpers that did not build the work: ${listWords(firm)}${council !== null ? `, plus ${council}` : ''}.`
     : council !== null
       ? 'If a disagreement comes up, it goes to a council of helpers that did not build or review the work.'
       : 'This job needs checks by helpers that did not build the work.';
   const enough = signedIn.length > 1 ? ' There are not enough of them left for that.' : '';
 
   const bases = uniq(short.filter((x) => x.canStandIn && x.standInFrom !== null).map((x) => name(x.standInFrom!.cli)));
-  const models = uniq(short.flatMap((x) => (x.canStandIn ? x.standInFrom?.models ?? [] : [])).filter((m): m is string => m !== null));
   const tool = bases.length > 0 ? listWords(bases) : signedIn.length === 1 ? signedIn[0]! : 'a signed-in helper';
   const meaning = `wicked can fill ${short.length === 1 && council === null ? 'that role' : 'those roles'} with stand-ins. `
-    + `A stand-in is ${tool} again, in a separate, fresh session: it sees the work but none of the builder's reasoning`
-    + `${models.length > 0 ? `, and it runs on the ${models.join(' or ')} model where it can` : ''}.`;
+    // No model is named: studio names no model anywhere on screen (coord round 2 on #1361).
+    + `A stand-in is ${tool} again, in a separate, fresh session: it sees the work but none of the builder's reasoning.`;
   const record = 'The job, every check, the delivery and the pull request will say a stand-in did the check. '
     + 'It is never counted as a check by a different helper.';
 
@@ -243,6 +243,9 @@ export function standInChoiceWords(r: StandInChoiceRefusal, name: (cli: string) 
 
 // ── "Every job" ───────────────────────────────────────────────────────────────────────────────────────────────────
 
+/** What the card says when "every job" could not be saved (refused, or not kept): one sentence for both. */
+export const SETTINGS_NOT_SAVED = 'Settings could not be saved, so nothing started. Choose “Use stand-ins for this job” instead, or try again.';
+
 /** DES §4 `SystemSettings.standInReview` (local until K1). */
 export type StandInReview = 'ask' | 'always';
 
@@ -252,7 +255,7 @@ export type StandInReview = 'ask' | 'always';
  * must echo the setting, or nothing is launched: a service that drops the key would refuse the same way again.
  */
 export async function saveStandInsEveryJob(): Promise<void> {
-  const out = await api.updateSettings({ standInReview: 'always' } as never);
+  const out = await api.updateSettings({ standInReview: 'always' } as never).catch(() => null);
   const saved = (out as { settings?: { standInReview?: unknown } } | null)?.settings?.standInReview;
-  if (saved !== 'always') throw new Error('This service did not save “use stand-ins for every job”, so nothing started. Choose “Use stand-ins for this job” instead.');
+  if (saved !== 'always') throw new Error(SETTINGS_NOT_SAVED);
 }

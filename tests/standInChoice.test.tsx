@@ -15,7 +15,7 @@ import { ApiError } from '../src/api/errors.js';
 import type { RepoEntry, RosterSeat, WorkflowDef } from '../src/api/types.js';
 import { choiceTokens, contractChoices, type GateAction } from '../src/board/gateContract.js';
 import { sessionGateChoices } from '../src/board/gateRowModel.js';
-import { helperNamer, standInChoiceOf, standInChoiceWords, standInRelaunchBody, type StandInChoiceRefusal } from '../src/board/standIn.js';
+import { helperNamer, saveStandInsEveryJob, SETTINGS_NOT_SAVED, standInChoiceOf, standInChoiceWords, standInRelaunchBody, type StandInChoiceRefusal } from '../src/board/standIn.js';
 import { ChatInput } from '../src/components/ChatInput.js';
 import { LaunchWizard } from '../src/components/launch/LaunchWizard.js';
 import { Composer } from '../src/components/session/Composer.js';
@@ -43,7 +43,7 @@ const ROSTER = [seat('claude', 'Claude Code')];
 const name = helperNamer(ROSTER);
 
 /** Words the brief keeps off the screen: engine terms, the status code and the refusal's code. */
-const OFF_SCREEN = /\bseat|roster|independen|\b409\b|stand_in|evaluator|qe_reviewer|rule_judge|party_excluded/i;
+const OFF_SCREEN = /\bseat|roster|independen|\b409\b|stand_in|evaluator|qe_reviewer|rule_judge|party_excluded|\bQE\b|\bsonnet\b|this service|daemon/i;
 
 describe('the 409 stand_in_choice body, read', () => {
   it('reads the DES example whole', () => {
@@ -68,6 +68,18 @@ describe('the 409 stand_in_choice body, read', () => {
     expect(r.choices.map((c) => c.id)).toEqual(['cancel', 'job']);
   });
 
+  it('"every job" not saved, refused or not kept, says one plain sentence (coord round 2)', async () => {
+    expect(SETTINGS_NOT_SAVED).toBe('Settings could not be saved, so nothing started. Choose “Use stand-ins for this job” instead, or try again.');
+    expect(SETTINGS_NOT_SAVED).not.toMatch(OFF_SCREEN);
+    const put = vi.spyOn(client.api, 'updateSettings').mockRejectedValueOnce(new ApiError(500, 'the daemon refused this'));
+    await expect(saveStandInsEveryJob()).rejects.toThrow(SETTINGS_NOT_SAVED);
+    put.mockResolvedValueOnce({ settings: {} } as never);
+    await expect(saveStandInsEveryJob()).rejects.toThrow(SETTINGS_NOT_SAVED);
+    put.mockResolvedValueOnce({ settings: { standInReview: 'always' } } as never);
+    await expect(saveStandInsEveryJob()).resolves.toBeUndefined();
+    put.mockRestore();
+  });
+
   it('"this job" re-sends the exact request with retryWith, and nothing else changes', () => {
     const sent = { problem: 'fix the reader', workflow: 'bug', sessionId: 'r-1', clisJson: '[]', repoRef: 'repo-1', deliver: 'pr' as const };
     expect(standInRelaunchBody(sent, standInChoiceOf(refusalError())!)).toEqual({ ...sent, standIns: true });
@@ -80,8 +92,9 @@ describe('the words a first-time user reads', () => {
 
   it('one CLI: who is signed in, what the job needs, what a stand-in is, and what the record says', () => {
     expect(words.title).toBe('Only one helper can check this job');
-    expect(words.why).toBe('Claude Code is the only helper signed in. This job needs a reviewer, a judge, a QE reviewer and a rules checker that did not build the work, and a council of 3 if a disagreement comes up.');
-    expect(words.meaning).toBe('wicked can fill those roles with stand-ins. A stand-in is Claude Code again, in a separate, fresh session: it sees the work but none of the builder\'s reasoning, and it runs on the sonnet model where it can.');
+    // coord round 2: the QE role by what it does; no model named (studio names none on screen).
+    expect(words.why).toBe('Claude Code is the only helper signed in. This job needs checks by helpers that did not build the work: a reviewer, a judge, a tester who checks the result does what you asked, and a rules checker, plus a council of 3 if a disagreement comes up.');
+    expect(words.meaning).toBe('wicked can fill those roles with stand-ins. A stand-in is Claude Code again, in a separate, fresh session: it sees the work but none of the builder\'s reasoning.');
     expect(words.record).toMatch(/say a stand-in did the check/);
     expect(words.record).toMatch(/never counted as a check by a different helper/);
   });
@@ -239,7 +252,7 @@ describe('the launch wizard asks instead of failing', () => {
     const navigate = await launchRefused();
     fireEvent.click(screen.getByTestId('launch-wizard-standin-always'));
     await screen.findByTestId('launch-wizard-standin-error');
-    expect(screen.getByTestId('launch-wizard-standin-error').textContent).toMatch(/did not save/);
+    expect(screen.getByTestId('launch-wizard-standin-error')).toHaveTextContent('Settings could not be saved, so nothing started. Choose “Use stand-ins for this job” instead, or try again.');
     expect(screen.queryByTestId('launch-wizard-error')).toBeNull();
     expect(launches()).toHaveLength(1);
     expect(navigate).not.toHaveBeenCalled();
