@@ -360,10 +360,12 @@ export interface JobPlanStep {
 export function planStepControls(rec: Readonly<Record<string, unknown>> | undefined): string[] {
   if (rec === undefined) return [];
   const out: string[] = [];
-  if (rec['executes_code'] === true) out.push('runs code');
-  if (rec['executes_code'] === false) out.push('runs no code');
-  if (rec['writes_nothing'] === true) out.push('changes no files');
-  if (rec['answer_only'] === true) out.push('an answer only: checked that it answers');
+  // Each phrase says what the declaration does, never more (codex r1 on #1352): `executes_code` makes it code work (its
+  // code checks apply; `false` forbids nothing, so it says nothing); `writes_nothing` is about the run's own tree; the
+  // answer-only substance check asks only for a non-empty reply.
+  if (rec['executes_code'] === true) out.push('code work: code checks apply');
+  if (rec['writes_nothing'] === true) out.push("no file changes in the run's tree");
+  if (rec['answer_only'] === true) out.push('answer only: checked only that it replies');
   const pin = strOf(rec['validator_pin']);
   if (pin !== null) out.push(`pinned check: ${pin}`);
   const due = Array.isArray(rec['required_deliverables']) ? rec['required_deliverables'].filter((d): d is string => typeof d === 'string' && d.trim() !== '') : [];

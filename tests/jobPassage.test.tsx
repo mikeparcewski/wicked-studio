@@ -278,8 +278,8 @@ describe('wicked’s passage (the held plan)', () => {
     await waitFor(() => expect(screen.getAllByTestId('job-passage-plan-step')).toHaveLength(3));
     const controls = screen.getAllByTestId('job-passage-plan-step').map((r) => [r.querySelector('b')!.textContent, r.querySelector('[data-testid="job-passage-plan-controls"]')?.textContent ?? null]);
     expect(controls).toEqual([
-      ['Build', ' · runs code · must produce docs/api.md · one helper'],
-      [expect.any(String), ' · changes no files · an answer only: checked that it answers · pinned check: evidence-floor'],
+      ['Build', ' · code work: code checks apply · must produce docs/api.md · one helper'],
+      [expect.any(String), " · no file changes in the run's tree · answer only: checked only that it replies · pinned check: evidence-floor"],
       ['Review', null],
     ]);
   });

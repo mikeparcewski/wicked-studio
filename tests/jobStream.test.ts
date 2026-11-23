@@ -386,8 +386,10 @@ describe('follow-up: plan outline, re-plan on record, ticks', () => {
     const { planStepControls } = await import('../src/board/jobStream.js');
     expect(planStepControls(undefined)).toEqual([]);
     expect(planStepControls({ catalog: 'review', id: 'review' })).toEqual([]);
-    expect(planStepControls({ catalog: 'build', id: 'b', executes_code: false, verified_evidence: true, requires_capture_report: true, pool: 3, required_deliverables: ['', 'a.md', 'b.md'] }))
-      .toEqual(['runs no code', 'must produce a.md, b.md', 'its output is acceptance evidence', 'ends with a capture report', 'up to 3 helpers']);
+    expect(planStepControls({ catalog: 'build', id: 'b', verified_evidence: true, requires_capture_report: true, pool: 3, required_deliverables: ['', 'a.md', 'b.md'] }))
+      .toEqual(['must produce a.md, b.md', 'its output is acceptance evidence', 'ends with a capture report', 'up to 3 helpers']);
+    // `executes_code: false` forbids nothing (a Tool step may still run commands), so it is not said (codex r1 on #1352).
+    expect(planStepControls({ catalog: 'run', id: 'run', executes_code: false })).toEqual([]);
     // Values of another shape say nothing.
     expect(planStepControls({ executes_code: 'yes', validator_pin: 7, pool: 1.5, answer_only: 1, required_deliverables: 'x' })).toEqual([]);
   });
