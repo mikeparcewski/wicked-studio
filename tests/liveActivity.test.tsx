@@ -3,7 +3,7 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CoreEvent } from '../src/api/types.js';
-import { activityRows, activitySummary, currentTurn, narration, toolKind, turnEnded } from '../src/board/liveActivity.js';
+import { activityRows, activitySummary, currentTurn, narration, rowsBySeat, toolKind, turnEnded } from '../src/board/liveActivity.js';
 import { LiveActivity } from '../src/components/session/LiveActivity.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useRuntimeStore } from '../src/store/runtime.js';
@@ -78,5 +78,71 @@ describe('the live list', () => {
     render(<LiveActivity runId={R} ord={2} />);
     expect(screen.getAllByTestId('live-activity-row')).toHaveLength(5);
     expect(screen.getByTestId('live-activity-earlier').textContent).toBe('3 earlier');
+  });
+});
+
+describe('studio#935 item 5: rows filed by the seat that made them', () => {
+  // Frames as core's serializer writes them since core#1790 (wicked-core src/event.rs:2477-2491, `cli` after `attempt`);
+  // the same shape crew pins in packages/crew/tests/wire-contract.test.ts:163-166. A QE step's executor (codex) and its
+  // isolated reviewer (pi) share one `ord`.
+  const frame = (cli: string | null, id: string, state: 'started' | 'finished', kind: string, toolName: string, target: string | null, s: number): Record<string, unknown> => ({
+    type: 'toolActivity', session: R, ord: 4, attempt: 0, ...(cli !== null ? { cli } : {}), at: T(s), id, state, kind, tool: toolName, target,
+    ok: state === 'finished' ? true : null, durationMs: state === 'finished' ? 900 : null,
+  });
+  const qe = ev([
+    { type: 'unitDispatched', session: R, ord: 4, attempt: 0, ts: T(0) },
+    frame('codex', 'c1', 'finished', 'run', 'bash', 'npm test -- invoices', 1),
+    frame('pi', 'p1', 'finished', 'read', 'read', 'src/routes/invoices.ts', 2),
+    frame('codex', 'c2', 'started', 'edit', 'apply_patch', 'src/lib/money.ts', 3),
+    frame('pi', 'p2', 'finished', 'search', 'grep', 'formatMoney', 4),
+  ]);
+
+  it('each row keeps its seat, and two seats make two groups in the order they first appear', () => {
+    const rows = activityRows(qe, 4);
+    expect(rows.map((r) => r.cli)).toEqual(['codex', 'pi', 'codex', 'pi']);
+    expect(rowsBySeat(rows, 'codex').map((g) => [g.cli, g.rows.map((r) => r.text)])).toEqual([
+      ['codex', ['Tests passed · `npm test -- invoices`', 'Editing src/lib/money.ts']],
+      ['pi', ['Read src/routes/invoices.ts', 'Searched formatMoney']],
+    ]);
+  });
+
+  it('one seat, or an older core with no `cli`, is one list as before; another seat than the step\'s is named', () => {
+    const solo = ev([{ type: 'unitDispatched', session: R, ord: 4, attempt: 0, ts: T(0) }, frame('codex', 'c1', 'finished', 'read', 'read', 'a.ts', 1), frame(null, 'x', 'finished', 'read', 'read', 'b.ts', 2)]);
+    expect(rowsBySeat(activityRows(solo, 4), 'codex')).toEqual([{ cli: null, rows: activityRows(solo, 4) }]);
+    expect(rowsBySeat(activityRows(solo, 4), null).map((g) => g.cli)).toEqual([null]);
+    const old = ev([{ type: 'unitDispatched', session: R, ord: 4, attempt: 0, ts: T(0) }, frame(null, 'x', 'finished', 'read', 'read', 'b.ts', 1)]);
+    expect(rowsBySeat(activityRows(old, 4), 'codex').map((g) => g.cli)).toEqual([null]);
+    const other = ev([{ type: 'unitDispatched', session: R, ord: 4, attempt: 0, ts: T(0) }, frame('pi', 'p1', 'finished', 'read', 'read', 'b.ts', 1)]);
+    expect(rowsBySeat(activityRows(other, 4), 'codex').map((g) => g.cli)).toEqual(['pi']);
+  });
+
+  it('a quiet seat\'s heartbeat is filed under that seat', () => {
+    const quiet = ev([...qe, { type: 'toolActivity', session: R, ord: 4, attempt: 0, cli: 'pi', at: T(20), id: 'working-0', state: 'working', kind: 'working', tool: 'pi', target: 'last output 15 s ago', ok: null, durationMs: 15_000 }]);
+    const rows = activityRows(quiet, 4);
+    expect(rows.at(-1)).toMatchObject({ kind: 'working', cli: 'pi' });
+    expect(rowsBySeat(rows, 'codex').find((g) => g.cli === 'pi')!.rows.map((r) => r.kind)).toContain('working');
+  });
+
+  describe('the live list', () => {
+    beforeEach(() => { useRunEventStore.setState({ byRun: {} }); useRuntimeStore.setState({ outputs: {} } as never); vi.useFakeTimers(); vi.setSystemTime(T(5)); });
+    afterEach(() => { cleanup(); vi.useRealTimers(); });
+
+    it('pi\'s rows sit under Pi, not under the step\'s Codex', () => {
+      useRunEventStore.setState({ byRun: { [R]: qe as never } });
+      render(<LiveActivity runId={R} ord={4} seat="codex" />);
+      const groups = screen.getAllByTestId('live-activity-group');
+      expect(groups.map((g) => [g.querySelector('[data-testid="live-activity-who"]')?.textContent, [...g.querySelectorAll('[data-testid="live-activity-row"] .wk-live-text')].map((r) => r.textContent)])).toEqual([
+        ['Codex', ['Tests passed · `npm test -- invoices`', 'Editing src/lib/money.ts']],
+        ['Pi', ['Read src/routes/invoices.ts', 'Searched formatMoney']],
+      ]);
+    });
+
+    it('a step one seat works in shows no seat names over its rows', () => {
+      useRunEventStore.setState({ byRun: { [R]: ev([{ type: 'unitDispatched', session: R, ord: 4, attempt: 0, ts: T(0) }, frame('codex', 'c1', 'finished', 'read', 'read', 'a.ts', 1)]) as never } });
+      render(<LiveActivity runId={R} ord={4} seat="codex" />);
+      expect(screen.getAllByTestId('live-activity-row')).toHaveLength(1);
+      expect(screen.queryByTestId('live-activity-who')).toBeNull();
+      expect(screen.queryByTestId('live-activity-group')).toBeNull();
+    });
   });
 });

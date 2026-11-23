@@ -144,6 +144,9 @@ button.pm-chip { cursor: pointer; }
 .wk-live-row--fail .wk-live-icon { color: var(--status-fail); }
 .wk-live-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .wk-live-ago { flex-shrink: 0; font-size: var(--text-xs); color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+/* studio#935 item 5: a step two helpers work in files each one's rows under its name. */
+.wk-live-group { display: flex; flex-direction: column; gap: 1px; }
+.wk-live-who { margin: 4px 0 0; font-size: var(--text-xs); color: var(--ink-high); font-weight: var(--weight-semi); }
 .wk-live-earlier { margin: 0 0 0 14px; font-size: var(--text-xs); color: var(--ink-dim); }
 .wk-live-said { margin: 2px 0 0 14px; font-size: var(--text-xs); color: var(--ink-muted); font-style: italic; overflow-wrap: anywhere; }
 .wk-live-summary { margin: 4px 0 0; font-size: var(--text-xs); color: var(--ink-muted); }

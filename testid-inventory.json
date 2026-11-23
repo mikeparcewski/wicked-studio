@@ -10539,6 +10539,12 @@
       ]
     },
     {
+      "testId": "live-activity-group",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
+      ]
+    },
+    {
       "testId": "live-activity-row",
       "files": [
         "src/components/session/LiveActivity.tsx"
@@ -10546,6 +10552,12 @@
     },
     {
       "testId": "live-activity-said",
+      "files": [
+        "src/components/session/LiveActivity.tsx"
+      ]
+    },
+    {
+      "testId": "live-activity-who",
       "files": [
         "src/components/session/LiveActivity.tsx"
       ]
