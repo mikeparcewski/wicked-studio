@@ -110,6 +110,16 @@ export function bySeverity(rules: readonly SteeringRule[]): SteeringRule[] {
     || a.id.localeCompare(b.id));
 }
 
+/** (studio#1344) The Table layout's row order while it stays open: the rows it already shows keep their places (an edit
+ *  that changes a rule's severity never moves its row), a row that left the list drops out, and a new one joins at the
+ *  end in the list's own order. */
+export function keepOrder(shown: readonly string[], listed: readonly string[]): string[] {
+  const now = new Set(listed);
+  const kept = shown.filter((id) => now.has(id));
+  const had = new Set(kept);
+  return [...kept, ...listed.filter((id) => !had.has(id))];
+}
+
 /** A rule's tags for the tag filter — its type, severity, every string target and applies_to value
  *  (the retired governance dashboard's vocabulary, kept: codex r2 #5). */
 export function ruleFacets(rule: SteeringRule): string[] {
@@ -153,11 +163,15 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
   /** A refresh that fails after a good read keeps the rules it had (and says so): the list, and the
    *  id inventory an open create form checks collisions against, never drop to empty (codex r2 #1). */
   const [refreshFailed, setRefreshFailed] = useState<unknown>(null);
-  const load = useCallback(async (): Promise<SteeringRule[] | null> => {
+  /** (studio#1344) Bumped with the rules of a read the person asked for, in the same render: the Table layout sorts again. */
+  const [sortTick, setSortTick] = useState(0);
+  /** `resort`: a read the person asked for (Refresh, a proposal decision), so the Table layout sorts its answer again;
+   *  a save's own reload keeps the rows where they are. */
+  const load = useCallback(async (resort = false): Promise<SteeringRule[] | null> => {
     const mine = ++seq.current;
     try {
       const { rules } = await api.listConformanceRules();
-      if (mine === seq.current) { setRead({ kind: 'ok', rules: rules as SteeringRule[] }); setRefreshFailed(null); }
+      if (mine === seq.current) { setRead({ kind: 'ok', rules: rules as SteeringRule[] }); setRefreshFailed(null); if (resort) setSortTick((t) => t + 1); }
       return rules as SteeringRule[];
     } catch (e) {
       if (mine === seq.current) {
@@ -285,6 +299,14 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
     if (facet !== null && !ruleFacets(r).includes(facet)) return false;
     return true;
   });
+
+  // (studio#1344) The Table layout re-sorts only on a new read the person asked for (Refresh, a proposal decision), a
+  // filter change or a layout switch; an inline edit (its optimistic apply and the save's own reload) keeps every row in place.
+  const tableOrder = useRef<{ key: string; ids: string[] } | null>(null);
+  const orderKey = JSON.stringify([tableLayout, view, type, mcpOnly, usageAsked, needle, facet, sortTick]);
+  const listedIds = listed.map((r) => r.id);
+  const tableIds = tableOrder.current !== null && tableOrder.current.key === orderKey ? keepOrder(tableOrder.current.ids, listedIds) : listedIds;
+  tableOrder.current = { key: orderKey, ids: tableIds };
 
   const selected = selectedId === null ? null : rules.find((r) => r.id === selectedId) ?? null;
   /** A rule opens on an address: `/rules/:id` from the overview, `?rule=` on a filtered view. Either way the
@@ -420,7 +442,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
   };
   /** Bumped by Refresh, so an open Not accepted list reads the queue again. */
   const [rejectedRev, setRejectedRev] = useState(0);
-  const refreshAll = (): void => { void load(); setReviewTick((t) => t + 1); setRejectedRev((r) => r + 1); latest.reload(); };
+  const refreshAll = (): void => { void load(true); setReviewTick((t) => t + 1); setRejectedRev((r) => r + 1); latest.reload(); };
 
   // Operator 2026-11-01: no header button; Add a rule is the ⋯ menu's first item, every other way to add or
   // manage follows it. A new rule's id is checked against the rules in force, so it waits for them to load.
@@ -524,7 +546,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
       )}
       {refreshFailed !== null && read.kind === 'ok' && (
         <CalmNote tone="fail" data-testid="steer-refresh-failed" role="status">
-          Couldn&rsquo;t refresh the rules; showing the last ones read. <button type="button" className="wk-link wk-se-x" onClick={() => { void load(); }}>Try again</button>
+          Couldn&rsquo;t refresh the rules; showing the last ones read. <button type="button" className="wk-link wk-se-x" onClick={() => { void load(true); }}>Try again</button>
         </CalmNote>
       )}
       {note !== null && (
@@ -570,7 +592,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
       {filterNotes}
       {view === 'proposals' ? (
         <div className="wk-se-proposals wk-calm-proposals" data-testid="governance-review-inbox">
-          <ProposalsSection kind="policy" heading="Rule proposals" onDecision={() => { setReviewTick((t) => t + 1); void load(); }} onSettled={() => setRejectedRev((r) => r + 1)} />
+          <ProposalsSection kind="policy" heading="Rule proposals" onDecision={() => { setReviewTick((t) => t + 1); void load(true); }} onSettled={() => setRejectedRev((r) => r + 1)} />
         </div>
       ) : view === 'not-accepted' ? (
         <NotAcceptedList kind="policy" revision={rejectedRev} projectName={projectName} />
@@ -585,7 +607,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
           <SteeringGrid rules={rules} type={type ?? 'all'} loading={false} error={null} selectedId={selectedId} unseeded={unseeded}
             onSelect={(id) => navigate(openPath(id))} onCommit={commitRule} onCreate={createRule}
             onRetired={(r, reason) => { setNote({ tone: 'ok', text: `Retired ${r.id}. Helpers no longer follow it; it stays listed under Retired. Your reason: “${reason}”` }); void load(); }}
-            addRequestTick={addTick} idFilter={listed.map((r) => r.id)} draftStore={gridDraft} />
+            addRequestTick={addTick} idFilter={tableIds} draftStore={gridDraft} />
         </>
       ) : unseeded ? (
         unseededEmpty

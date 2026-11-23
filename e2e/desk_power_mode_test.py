@@ -18,7 +18,7 @@ against the `power_mode` corpus (e2e/power_mode_corpus.py, the api-types 0.149.0
      the dock says "Claude Code is waiting", the Nerve Center is not green (GET /system lists the pause as crew will
      after wicked-crew#1206); the decision dock holds the pause card, "Split
      into lanes" leads, the reasons are listed, Other options lists Switch to phased / Continue at high rigor / Stop;
-     Continue POSTs {decision: 'continue_high'} to /runs/:id/power/pause after the undo window, and the card goes.
+     Continue POSTs {decision: 'continue_high', checkpoint, at} (the pause shown) to /runs/:id/power/pause after the undo window, and the card goes.
   7. PHASED REQUIRED (r-pm-phased): the switch is Off and disabled, its tooltip "Phased is required: …"; a click sends
      nothing.
   8. SETTINGS: "Power mode for new jobs: On".
@@ -247,7 +247,9 @@ with sync_playwright() as p:
     page.wait_for_timeout(11500)
     sent = [x for x in posts() if x["route"] in ("pause", "gate")]
     check("pause-continue", len(sent) == 1 and sent[0]["route"] == "pause" and sent[0]["runId"] == "r-pm-pause"
-          and sent[0]["body"] == {"decision": "continue_high"}
+          # crew#1739: the answer names the pause the card showed (r-pm-pause's checkpoint 3 and its time).
+          and sent[0]["body"].get("decision") == "continue_high" and sent[0]["body"].get("checkpoint") == 3
+          and isinstance(sent[0]["body"].get("at"), int) and set(sent[0]["body"]) == {"decision", "checkpoint", "at"}
           and page.locator('[data-testid="power-pause"]').count() == 0, posts=sent)
 
     # ── 7. phased required ─────────────────────────────────────────────────────────────────────

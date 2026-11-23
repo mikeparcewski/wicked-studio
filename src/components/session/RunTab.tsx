@@ -32,7 +32,7 @@ import { useSilentStep } from '../../hooks/useSilentStep.js';
 import { silentWords } from '../../board/silentStep.js';
 import { useRunningFloor } from '../../hooks/useRunningFloor.js';
 import { floorWords } from '../../board/floorRun.js';
-import { deliveryAssuranceOf, deliveryReceiptOf, runRuleRows } from '../../board/assuranceModel.js';
+import { deliveryAssuranceOf, deliveryReceiptOf, passedWord, runRuleRows } from '../../board/assuranceModel.js';
 import { deliveryOf } from '../delivery.js';
 import { useRunCoverage } from '../../hooks/useRunCoverage.js';
 import { endedAtMs, finishedAtMs } from '../../board/needsYou.js';
@@ -381,7 +381,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
       </Section>
     ),
     checks: (
-      <Section id="checks" {...fold} summary={quiet.has('checks') ? 'Nothing checked yet' : acceptancePassed === false ? 'Not passed' : overridden !== null || toolOverrides.length > 0 ? 'Overridden by you' : acceptancePassed === true ? 'Passed' : ''}>
+      <Section id="checks" {...fold} summary={quiet.has('checks') ? 'Nothing checked yet' : acceptancePassed === false ? 'Not passed' : overridden !== null || toolOverrides.length > 0 ? 'Overridden by you' : acceptancePassed === true ? passedWord(runReceipt) : ''}>
         <div data-testid="run-tab-checks" className="wk-run-tab-block">
           <RunAssuranceLabel view={view} />
           {rulesRows.length > 0 && <RulesChecked rows={rulesRows} testId="run-tab-rules" soFar={!isTerminal(view)} />}
