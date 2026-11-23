@@ -42,7 +42,7 @@ import { RunQuestions } from './ThreadQuestions.js';
 import { OrphanedRow } from './RunConversation.js';
 import { RunArtifacts } from './RunArtifacts.js';
 import { asksForProject, JobProjectChoices } from './JobProjectChoices.js';
-import { asksForRepo, JobRepoChoices } from './JobRepoChoices.js';
+import { askingChoicesShown, asksForRepo, JobRepoChoices } from './JobRepoChoices.js';
 import { asksForRequirements, JobRequirementsChoices } from './JobRequirementsChoices.js';
 import { movedFrom, useJobMoves } from '../../store/jobMoves.js';
 import { openChat } from '../../store/chatFlow.js';
@@ -139,6 +139,8 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   /** The run the open "Stop the job?" confirm was made for: it never stops another run. */
   const [confirmStop, setConfirmStop] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  /** (studio#1335) The proposal target whose every question choice is shown ("N more" pressed); another target folds. */
+  const [allChoicesFor, setAllChoicesFor] = useState<string | null>(null);
   const [openSwap, setOpenSwap] = useState<string | null>(null);
   const [explain, setExplain] = useState(false);
   const head = lineage.head;
@@ -554,7 +556,11 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   const repoJob = (v.proposal.launch === 'run' || v.proposal.launch === 'compose') && ((v.proposal.repoRefs ?? v.proposal.repos).length > 0);
   const tone = v.needsYou ? ' wk-pass--needs' : v.phase === 'delivered' ? ' wk-pass--ok' : v.phase === 'failed' || v.phase === 'stopped' ? ' wk-pass--bad'
     : v.phase === 'revising' || v.phase === 'swapPending' || v.phase === 'planning' || v.phase === 'replanning' || v.phase === 'starting' ? ' wk-pass--busy' : '';
-  const replies = v.replies;
+  // studio#1335: crew sends every repository in scope as a choice; the card shows the named ones and enough to fill the
+  // chips' count, then "N more" (JobRepoChoices' rule). The others stay replies (a typed answer can still bind one).
+  const choiceCap = v.phase === 'asking' && allChoicesFor !== pt ? askingChoicesShown(head.proposal) : Infinity;
+  const replies = v.replies.filter((r) => !r.id.startsWith('choice:') || Number(r.id.slice('choice:'.length)) < choiceCap);
+  const moreChoices = v.replies.length - replies.length;
   const progress = v.progress;
   const headQuestion = head.proposal.question ?? null;
   const requirementsQuestion = asksForRequirements(head.proposal);
@@ -852,6 +858,12 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
                   {r.label}{r.id === 'start' && r.enabled ? ' →' : ''}{binds ? ' · answering' : ''}
                 </button>
                 {!r.enabled && r.held !== undefined && <span data-testid="job-passage-held" className="wk-pass-why">{r.held}</span>}
+                {moreChoices > 0 && r.id === `choice:${choiceCap - 1}` && <>
+                  <span aria-hidden className="wk-pass-dot">·</span>
+                  <button type="button" data-testid="job-passage-choices-more" className="wk-pass-act wk-pass-act--quiet" onClick={() => setAllChoicesFor(pt)}>
+                    {moreChoices} more
+                  </button>
+                </>}
               </Fragment>
             );
           })}

@@ -326,6 +326,16 @@ describe('F41: the words name a repository as a whole token', () => {
     expect(names('https://git.example/acme/rg1/blob/main/rg2.git https://git.example/acme/rg1/tree/main/zeta/-/blob/f')).toEqual(['rg1']);
     expect(names('https://git.example/acme/rg10/tree/main/-/file https://gitlab.com/grp/rg2/tree/main')).toEqual(['rg2', 'rg10']);
   });
+  it('a host\u2019s own pages name no repository: an organisation or group link is not an owner (studio#1331)', () => {
+    const acme = [...REPOS, { id: 'acme', name: 'acme', root_path: '/r/acme', default_branch: 'main', registered_at: 1 }];
+    const names = (w: string) => reposNamedIn(w, acme).map((r) => r.id);
+    expect(names('see https://github.com/orgs/acme/projects/7')).toEqual([]);
+    expect(names('https://gitlab.com/groups/acme/-/merge_requests')).toEqual([]);
+    expect(names('https://bitbucket.org/workspace/acme and https://github.com/users/acme/projects/1')).toEqual([]);
+    expect(names('https://github.com/SETTINGS/acme https://github.com/sponsors/acme https://github.com/topics/acme')).toEqual([]);
+    // An owner that merely looks like one of those words in a later segment still names its repository.
+    expect(names('https://github.com/acme/rg1/pull/9 https://github.com/orgs-team/acme')).toEqual(['rg1', 'acme']);
+  });
   it('orders the named ones first, the rest by name', () => {
     expect(repoChoices('zeta and rg1', REPOS).list.map((r) => r.id)).toEqual(['zeta', 'rg1', 'rg10', 'rg2']);
   });
@@ -574,5 +584,45 @@ describe('F41 review folds (r7, r8), on the project move that remains (F39)', ()
     // person was still here; the move itself (its seed and the Not now) never went out.
     expect(posts.map((p) => p.path).filter((path) => !/^\/projects\/[^/]+\/members$/.test(path))).toEqual([]);
     expect(useChatFlow.getState().request?.chatId).toBe('elsewhere');
+  });
+});
+
+describe('studio#1335: an asking card with every repository in scope as a choice', () => {
+  // crew's question for a missing repository with repositories in the chat's scope (crew chat-jobs.ts ~:507-510): every
+  // one, the ones the words name first, each `{label: name, edit: {repoRef: id}}`. 13 repositories, as crew#1791's repro.
+  const scope = ['a1', 'b2', 'c3', 'd4', 'e5', 'f6', 'g8', 'h9', 'i10', 'j11', 'k12', 'rg2', 'rg7'];
+  const askingAll = (words: string, named: string[]) => asking({
+    words,
+    needs: asking().needs!.map((n) => (n.id === 'intent' ? { ...n, value: words } : n)),
+    question: { kind: 'missing', text: 'Which repository?', choices: [...named, ...scope.filter((r) => !named.includes(r))].map((r) => ({ label: r, edit: { repoRef: r } })) },
+  });
+  const choiceLabels = () => screen.queryAllByTestId('job-passage-reply').filter((b) => (b.getAttribute('data-reply') ?? '').startsWith('choice:')).map((b) => b.textContent);
+  const notNow = () => screen.queryAllByTestId('job-passage-reply').filter((b) => b.getAttribute('data-reply') === 'not_now');
+
+  it('shows 6 replies and "7 more", which reveals the rest; Not now stays', async () => {
+    messages = [{ at: T0, turnId: 'person:1', kind: 'proposal', proposal: askingAll('Map the domain of the service', []) }];
+    page();
+    await waitFor(() => expect(choiceLabels()).toEqual(['a1', 'b2', 'c3', 'd4', 'e5', 'f6']));
+    expect(notNow()).toHaveLength(1);
+    expect(screen.getByTestId('job-passage-choices-more')).toHaveTextContent('7 more');
+    fireEvent.click(screen.getByTestId('job-passage-choices-more'));
+    expect(choiceLabels()).toEqual(scope);
+    expect(screen.queryByTestId('job-passage-choices-more')).toBeNull();
+    expect(notNow()).toHaveLength(1);
+  });
+
+  it('every repository the words name shows, even past 6', async () => {
+    const named = ['a1', 'b2', 'c3', 'd4', 'e5', 'f6', 'g8'];
+    messages = [{ at: T0, turnId: 'person:1', kind: 'proposal', proposal: askingAll(`Compare ${named.join(', ')}`, named) }];
+    page();
+    await waitFor(() => expect(choiceLabels()).toEqual(named));
+    expect(screen.getByTestId('job-passage-choices-more')).toHaveTextContent('6 more');
+  });
+
+  it('a short list has no "more"', async () => {
+    messages = [{ at: T0, turnId: 'person:1', kind: 'proposal', proposal: asking({ words: 'Map it', question: { kind: 'missing', text: 'Which repository?', choices: [{ label: 'rg1', edit: { repoRef: 'rg1' } }, { label: 'rg2', edit: { repoRef: 'rg2' } }] } }) }];
+    page();
+    await waitFor(() => expect(choiceLabels()).toEqual(['rg1', 'rg2']));
+    expect(screen.queryByTestId('job-passage-choices-more')).toBeNull();
   });
 });

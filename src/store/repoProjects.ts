@@ -40,8 +40,13 @@ function names(words: string, term: string): boolean {
 }
 
 const REPO_OPS = new Set(['pull', 'pulls', 'pull-requests', 'merge_requests', 'tree', 'blob', 'commit', 'commits', 'compare']);
+/** (studio#1331) First path segments that are a host's own pages, not an owner: an organisation's or a group's link
+ *  names no repository (`github.com/orgs/acme/projects/7`, `gitlab.com/groups/acme/-/merge_requests`). The same set as
+ *  crew's port of this rule (crew `packages/crew/src/api/chat-jobs.ts` `NOT_AN_OWNER`), so the two pick alike. */
+const NOT_AN_OWNER = new Set(['orgs', 'users', 'enterprises', 'settings', 'sponsors', 'marketplace', 'apps', 'topics', 'collections', 'search', 'notifications', 'groups', 'dashboard', 'explore', 'workspace', 'account']);
 
-/** The repository one link names, or null (CJ13). GitHub and Bitbucket: `<owner>/<repo>`, whatever follows. Elsewhere
+/** The repository one link names, or null (CJ13); a host's own pages ({@link NOT_AN_OWNER}) name none. GitHub and
+ *  Bitbucket: `<owner>/<repo>`, whatever follows. Elsewhere
  *  the repository is the segment before the first repository operation after it (`pull`, `tree`, `blob`, `commit`,
  *  `compare`, `merge_requests`, or GitLab's `-` separator before one; on gitlab.com any `-`), so nothing in the content
  *  path after it can rename it; with no operation, a GitLab project home names its last segment and a clone link
@@ -51,6 +56,7 @@ function linkedRepo(link: string): string | null {
   try { url = new URL(link); } catch { return null; }
   const segs = url.pathname.split('/').filter((x) => x !== '').map((x) => { try { return decodeURIComponent(x); } catch { return x; } });
   const host = url.hostname.toLowerCase().replace(/^www\./u, '');
+  if (NOT_AN_OWNER.has((segs[0] ?? '').toLowerCase())) return null;
   let repo: string | undefined;
   if (host === 'github.com' || host === 'bitbucket.org') repo = segs.length >= 2 ? segs[1] : undefined;
   else {

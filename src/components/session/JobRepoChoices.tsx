@@ -17,6 +17,20 @@ export function asksForRepo(p: Pick<ArtifactProposal, 'question' | 'needs'>): bo
   return missing !== undefined && missing.id === 'repo';
 }
 
+/**
+ * (studio#1335) How many of crew's "Which repository?" choices an asking card shows before "N more": the same rule as
+ * these chips, every one the words name plus enough to fill {@link CHOICES_MAX}. crew sends every repository in the
+ * chat's scope (crew#1791), the named ones first, so the ones shown are the named ones and then crew's order.
+ */
+export function askingChoicesShown(p: Pick<ArtifactProposal, 'question' | 'words' | 'details'>): number {
+  const choices = p.question?.choices ?? [];
+  const repos = choices.flatMap((c) => {
+    const ref = (c.edit as { repoRef?: unknown } | undefined)?.repoRef;
+    return typeof ref === 'string' ? [{ id: ref, name: c.label }] : [];
+  });
+  return Math.max(CHOICES_MAX, reposNamedIn(jobWords(p), repos).length);
+}
+
 /** The repositories offered: those the words name first (in registry order), then the rest by name. */
 export function repoChoices<R extends Pick<RepoEntry, 'id' | 'name'>>(words: string, repos: readonly R[]): { named: R[]; list: R[] } {
   const named = reposNamedIn(words, repos);
