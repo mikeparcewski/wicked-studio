@@ -1004,10 +1004,11 @@ export function worksOnly(seat: RosterSeat | undefined): boolean {
 
 /** The words a reviewer-only helper's chip carries in New job and the composer (studio#1311), visible on a phone. */
 export const REVIEWS_ONLY_WORDS = 'reviews only';
-/** The words a work-only helper's chip carries (studio#1311). */
-export const WORKS_ONLY_WORDS = 'works only';
+/** The words a work-only helper's chip carries (studio#1311). Only the council ballot is off: the agent judge and review
+ *  steps are work roles, so it may still check work (crew `api/seat-standing.ts` roles; codex r1 on #1349). */
+export const WORKS_ONLY_WORDS = 'no council vote';
 /** The note beside the work-only helpers New job and the composer list off (studio#1311). */
-export const WORKS_ONLY_NOTE = 'does the work, never reviews; off unless you turn it on';
+export const WORKS_ONLY_NOTE = 'takes work, casts no council vote; off unless you turn it on';
 
 /** A job whose helpers all only review has no one to do its steps (codex r1 on #1302): said before it is sent. */
 export const NO_WORKER_PICKED = 'Every helper turned on for this job only reviews — turn on one that takes work.';

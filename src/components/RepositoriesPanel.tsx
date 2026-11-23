@@ -158,19 +158,29 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     // loadProjects is ref-guarded and single-shot, so listing only the carry is safe.
   }, [ambientProject]);
 
+  // studio#1083: whether the project list was read since the form opened. A project's capture override is only taken
+  // from a fresh read; until then (or after a failed read) the form treats it as not known (codex r1 on #1349).
+  const [projectsFresh, setProjectsFresh] = useState(false);
+  const projectsLanded = useRef(false);
+
   // crew-0182: the Project field lists the projects as soon as the form is up (it is a choice, not a lazy chip).
+  // Reopened after a read already landed, the list is read again (a project's override may have changed since).
   useEffect(() => {
-    if (showRegister) loadProjects();
+    if (!showRegister) return;
+    setProjectsFresh(false);
+    loadProjects(projectsLanded.current);
   }, [showRegister]);
 
   // studio#1083 (crew#552): whether a Capture learnings job follows the onboarding. The daemon setting
-  // (`onboardingAutoCapture`, absent = on), unless the chosen project overrides it; null = not known (the settings read
-  // failed). The person can opt this one repository out (`autoCapture: false`); crew never captures on studio's say-so.
+  // (`onboardingAutoCapture`, absent = on), unless the chosen project overrides it; null = not known (read on every
+  // opening; pending or failed). The person can opt this one repository out (`autoCapture: false`); crew never captures
+  // on studio's say-so.
   const [captureSetting, setCaptureSetting] = useState<boolean | null>(null);
   const [captureAfter, setCaptureAfter] = useState(true);
   useEffect(() => {
     if (!showRegister) return undefined;
     let live = true;
+    setCaptureSetting(null);
     Promise.resolve()
       .then(() => api.getSettings())
       .then(({ settings }) => { if (live) setCaptureSetting(settings.onboardingAutoCapture !== false); })
@@ -178,13 +188,15 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     return () => { live = false; };
   }, [showRegister]);
 
-  function loadProjects(): void {
-    if (projectsRequested.current) return;
+  function loadProjects(force = false): void {
+    if (projectsRequested.current && !force) return;
     projectsRequested.current = true;
     // A failed (or absent) read throws inside the chain, never out of the effect that asked.
     Promise.resolve()
       .then(() => api.listProjects())
       .then(({ projects: ps }) => {
+        projectsLanded.current = true;
+        setProjectsFresh(true);
         setProjectsFailed(false);
         setProjects([...ps].sort((a, b) => b.updated_at - a.updated_at));
       })
@@ -301,10 +313,13 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     if (m.onboard.run !== null) reindexAsPrefill(m.onboard.run, m.repo.id, navigate);
   }
 
-  // The chosen project's own override wins over the daemon setting (crew's order, onboarding-capture.ts).
-  const projectCapture = selectedProjectId === null ? undefined : projects.find((p) => p.id === selectedProjectId)?.autoCapture;
+  // The chosen project's own override wins over the daemon setting (crew's order, onboarding-capture.ts). It is known
+  // only once a read since the form opened lists the project; until then nothing is said as settled (codex r1 on #1349).
+  const chosenProject = selectedProjectId === null || !projectsFresh ? undefined : projects.find((p) => p.id === selectedProjectId);
+  const projectKnown = selectedProjectId === null || chosenProject !== undefined;
+  const projectCapture = chosenProject?.autoCapture;
   /** true: a Capture learnings job follows; false: none does (the setting or the project is off); null: not known. */
-  const captureWillFollow: boolean | null = typeof projectCapture === 'boolean' ? projectCapture : captureSetting;
+  const captureWillFollow: boolean | null = typeof projectCapture === 'boolean' ? projectCapture : projectKnown ? captureSetting : null;
 
   async function registerRepo(): Promise<void> {
     const name = newName.trim();
@@ -562,7 +577,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                     {projectsFailed && (
                       <span className="wk-field-note wk-field-note--bad" role="alert" data-testid="repo-project-failed">
                         Your projects could not be listed.{' '}
-                        <button type="button" data-testid="repo-project-retry" className="wk-btn wk-btn--quiet wk-btn--sm" onClick={loadProjects}>Retry</button>
+                        <button type="button" data-testid="repo-project-retry" className="wk-btn wk-btn--quiet wk-btn--sm" onClick={() => loadProjects()}>Retry</button>
                       </span>
                     )}
                     <span className="wk-field-note" data-testid="repo-project-hint">

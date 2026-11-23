@@ -93,12 +93,12 @@ function EvalMemorySection({ view }: { view: EvalMemoryView }): React.ReactEleme
   return (
     <section className="wk-ue-sec" data-testid="evaluate-memory" aria-labelledby="evaluate-memory-title">
       <h2 id="evaluate-memory-title" className="wk-ue-label">Memories</h2>
-      {view.noStoreAt !== null ? (
+      {/* The shown run's counts, and apart from them what is known only from the run made here (codex r1 on #1349). */}
+      {(view.samples > 0 || view.noStoreAt === null) && <p className="wk-ue-note" data-testid="evaluate-memory-summary">{memorySummaryWords(view)}</p>}
+      {view.noStoreAt !== null && (
         <p className="wk-ue-note" data-testid="evaluate-memory-nostore">
           The run you made here <span title={absTime(view.noStoreAt)}>{relTime(view.noStoreAt)}</span> had no memory store, so no memory was checked.
         </p>
-      ) : (
-        <p className="wk-ue-note" data-testid="evaluate-memory-summary">{memorySummaryWords(view)}</p>
       )}
       {cov !== null && (
         <>

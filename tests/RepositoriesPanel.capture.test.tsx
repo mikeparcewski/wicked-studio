@@ -97,6 +97,54 @@ describe('Add a repository: the chained Capture learnings job (studio#1083)', ()
     expect(await screen.findByTestId('repo-capture-after')).toBeChecked();
   });
 
+  it('a project not read yet is never taken as following the setting: capture off in Settings still offers the box (codex r1 on #1349)', async () => {
+    vi.mocked(client.api.getSettings).mockResolvedValue(settings(false));
+    let answer!: (v: { projects: Project[] }) => void;
+    vi.mocked(client.api.listProjects).mockReturnValue(new Promise((res) => { answer = res; }));
+    const user = userEvent.setup();
+    render(<RepositoriesPanel navigate={vi.fn()} ambientProject="loud-on" autoShowRegister />);
+    await waitFor(() => expect(client.api.getSettings).toHaveBeenCalled());
+    // The project's own override is not known yet: the opt-out stays offered, worded as conditional.
+    expect(await screen.findByTestId('repo-capture-note')).toHaveTextContent('When automatic capture is on');
+    // It lands: this project captures even though Settings say off, so clearing the box must send the opt-out.
+    answer({ projects: [proj('loud-on', true)] });
+    await waitFor(() => expect(screen.getByTestId('repo-capture-note')).toHaveTextContent('A Capture learnings job follows'));
+    await user.click(screen.getByTestId('repo-capture-after'));
+    await fill(user);
+    await submit(user);
+    expect(client.api.registerRepo).toHaveBeenCalledWith('my-repo', '/tmp/my-repo', 'loud-on', { autoCapture: false });
+  });
+
+  it('a failed project read keeps the opt-out offered for a chosen project', async () => {
+    vi.mocked(client.api.getSettings).mockResolvedValue(settings(false));
+    vi.mocked(client.api.listProjects).mockRejectedValue(new Error('offline'));
+    render(<RepositoriesPanel navigate={vi.fn()} ambientProject="loud-on" autoShowRegister />);
+    await waitFor(() => expect(client.api.listProjects).toHaveBeenCalled());
+    await waitFor(() => expect(client.api.getSettings).toHaveBeenCalled());
+    await new Promise((res) => setTimeout(res, 0));
+    expect(await screen.findByTestId('repo-capture-after')).toBeChecked();
+    expect(screen.queryByTestId('repo-capture-off')).toBeNull();
+  });
+
+  it('reopened, the form reads Settings and the projects again instead of reusing the last answer', async () => {
+    vi.mocked(client.api.getSettings).mockResolvedValue(settings(false));
+    vi.mocked(client.api.listRepos).mockResolvedValue({ repos: [REPO] }); // the list head (and its Add) shows with a repository
+    const user = userEvent.setup();
+    render(<RepositoriesPanel navigate={vi.fn()} />);
+    await user.click(await screen.findByTestId('repos-add'));
+    expect(await screen.findByTestId('repo-capture-off')).toBeInTheDocument();
+    await user.click(screen.getByTestId('repos-add'));
+    let answer!: (v: { settings: SystemSettings }) => void;
+    vi.mocked(client.api.getSettings).mockReturnValue(new Promise((res) => { answer = res; }));
+    await user.click(screen.getByTestId('repos-add'));
+    // While the new read is out the last "off" is not said as settled.
+    expect(await screen.findByTestId('repo-capture-after')).toBeChecked();
+    expect(screen.queryByTestId('repo-capture-off')).toBeNull();
+    answer(settings(true));
+    await waitFor(() => expect(screen.getByTestId('repo-capture-note')).toHaveTextContent('A Capture learnings job follows'));
+    await waitFor(() => expect(client.api.listProjects).toHaveBeenCalledTimes(2));
+  });
+
   it('a settings read that fails still offers the opt-out, worded as conditional', async () => {
     vi.mocked(client.api.getSettings).mockRejectedValue(new Error('offline'));
     render(<RepositoriesPanel navigate={vi.fn()} autoShowRegister />);

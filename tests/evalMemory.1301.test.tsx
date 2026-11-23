@@ -51,6 +51,12 @@ const RESULTS: EvalResult[] = [
   },
 ];
 
+const HISTORY_RESULTS: EvalResult[] = [
+  { ...RESULTS[2]!, sample: { ...RESULTS[2]!.sample, id: 'H-1' } },
+  { ...RESULTS[2]!, sample: { ...RESULTS[2]!.sample, id: 'H-2', description: 'another doc change' } },
+  RESULTS[3]!,
+];
+
 const AXIS = {
   summary: { total: 3, caught: 1, gaps: 1, false_positives: 1 },
   coverage: { memories: 5, surfaced: 3, unsurfaced: [{ memory_id: 'mem-old', scope: 'project:billing' }, { memory_id: 'mem-x', scope: 'repo:svc' }] },
@@ -125,7 +131,8 @@ describe('Evaluate: the memory axis (studio#1301)', () => {
     wire({
       '/testing/evals/run': () => { listed = true; return Promise.resolve(REPORT); },
       '/testing/evals': () => Promise.resolve({ runs: listed ? [row] : [] }),
-      '/testing/evals/e1': () => Promise.resolve({ ...row, results: RESULTS }),
+      // A distinct history row: two memory samples, both caught (the run's own answer had three: 1/1/1).
+      '/testing/evals/e1': () => Promise.resolve({ ...row, results: HISTORY_RESULTS }),
     });
     page();
     await user.click(screen.getByTestId('testing-evals-run'));
@@ -133,8 +140,25 @@ describe('Evaluate: the memory axis (studio#1301)', () => {
     await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/testing/evals/e1'));
     await waitFor(() => expect(useEvalReportStore.getState().latest).toBeNull());
     const section = await screen.findByTestId('evaluate-memory');
-    expect(within(section).getByTestId('evaluate-memory-summary')).toHaveTextContent('3 behaviours name memories');
+    expect(within(section).getByTestId('evaluate-memory-summary')).toHaveTextContent('2 behaviours name memories: 2 surfaced what they should, 0 missed one, 0 surfaced one they should not.');
     expect(within(section).getByTestId('evaluate-memory-coverage')).toHaveTextContent('3 of 5 stored memories surfaced for some behaviour (the run you made here');
+  });
+
+  it('a no-store run made here never hides a later history run\'s memory counts (codex r1 on #1349)', async () => {
+    const user = userEvent.setup();
+    let listed = false;
+    const row = { id: 'e2', created_at: 1_700_000_000, actor: 'other', corpus: null, type_filter: null, rule_store: '/s/rules.db', summary: REPORT.summary, per_type: {}, degraded: null };
+    wire({
+      '/testing/evals/run': () => { listed = true; return Promise.resolve({ results: RESULTS.map((r) => ({ ...r, memory: null })), summary: REPORT.summary, degraded: null, memory: null }); },
+      '/testing/evals': () => Promise.resolve({ runs: listed ? [row] : [] }),
+      '/testing/evals/e2': () => Promise.resolve({ ...row, results: HISTORY_RESULTS }),
+    });
+    page();
+    await user.click(screen.getByTestId('testing-evals-run'));
+    await waitFor(() => expect(useEvalReportStore.getState().latest).toBeNull());
+    const section = await screen.findByTestId('evaluate-memory');
+    await waitFor(() => expect(within(section).getByTestId('evaluate-memory-summary')).toHaveTextContent('2 behaviours name memories'));
+    expect(within(section).getByTestId('evaluate-memory-nostore')).toHaveTextContent('The run you made here');
   });
 });
 

@@ -371,9 +371,9 @@ describe('the Lead agent (DES-TEAMING-002 §8.1)', () => {
     expect(Object.fromEntries(chips.map((c) => [c.dataset.key, c.getAttribute('aria-pressed')]))).toEqual({ claude: 'true', codex: 'true', pi: 'false' });
     const chip = (k: string): HTMLElement => chips.find((c) => c.dataset.key === k)!;
     expect(chip('codex')).toHaveTextContent('codex · reviews only');
-    expect(chip('pi')).toHaveTextContent('pi · works only');
+    expect(chip('pi')).toHaveTextContent('pi · no council vote');
     expect(chip('claude').textContent).toBe('claude');
-    expect(screen.getByTestId('launch-wizard-workonly-note')).toHaveTextContent('pi: does the work, never reviews; off unless you turn it on.');
+    expect(screen.getByTestId('launch-wizard-workonly-note')).toHaveTextContent('pi: takes work, casts no council vote; off unless you turn it on.');
     fireEvent.click(chip('pi'));
     expect(chip('pi').getAttribute('aria-pressed')).toBe('true');
     expect(useLaunchSeats.getState().picked).toContain('pi');
@@ -382,6 +382,31 @@ describe('the Lead agent (DES-TEAMING-002 §8.1)', () => {
     await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
     const sent = JSON.parse(String(posts.find((p) => p.path === '/runs')!.body.clisJson)) as Array<{ key: string }>;
     expect(sent.map((x) => x.key)).toEqual(['claude', 'codex', 'pi']);
+  });
+
+  it('studio#1311: untouched, or turned on and off again, the work-only helper is not sent (codex r1 on #1349)', async () => {
+    const worker = { ...seat('pi'), enabled_for_council: false, auth: 'signed_in', council_eligible: false, work_eligible: true } as RosterSeat;
+    setCachedRoster([seat('claude'), seat('codex'), worker]);
+    await toOptions();
+    const pi = (): HTMLElement => screen.getAllByTestId('launch-wizard-seat').find((c) => c.dataset.key === 'pi')!;
+    fireEvent.click(pi());
+    fireEvent.click(pi());
+    expect(pi().getAttribute('aria-pressed')).toBe('false');
+    next();
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
+    const sent = JSON.parse(String(posts.find((p) => p.path === '/runs')!.body.clisJson)) as Array<{ key: string }>;
+    expect(sent.map((x) => x.key)).toEqual(['claude', 'codex']);
+  });
+
+  it('studio#1311: a work-only helper never touched is left out of the launch', async () => {
+    setCachedRoster([seat('claude'), seat('codex'), { ...seat('pi'), enabled_for_council: false, work_eligible: true } as RosterSeat]);
+    await toOptions();
+    next();
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
+    const sent = JSON.parse(String(posts.find((p) => p.path === '/runs')!.body.clisJson)) as Array<{ key: string }>;
+    expect(sent.map((x) => x.key)).toEqual(['claude', 'codex']);
   });
 
   it('studio#1311: a seat out of the council pool that the daemon does not seat for work is still not listed', async () => {
