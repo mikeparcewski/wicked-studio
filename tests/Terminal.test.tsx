@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import { Terminal } from '../src/components/Terminal.js';
 import * as client from '../src/api/client.js';
 
@@ -346,25 +346,64 @@ describe('Terminal (DES-TERMINAL-001 §6 — the web bridge)', () => {
         expect(linksAt(term, 1)).toBeUndefined();
         linksAt(term, 4)![0]!.activate(new MouseEvent('mouseup'), LINK);
         expect(open).toHaveBeenCalledWith(LINK, '_blank', 'noopener,noreferrer');
+        // A drag that ends on the link, or an Option/Shift press (they select), does not open it (review r1).
+        const host = screen.getByTestId('terminal-host');
+        fireEvent.mouseDown(host, { clientX: 10, clientY: 10 });
+        linksAt(term, 4)![0]!.activate(new MouseEvent('mouseup', { clientX: 200, clientY: 10 }), LINK);
+        fireEvent.mouseDown(host, { clientX: 10, clientY: 10 });
+        linksAt(term, 4)![0]!.activate(new MouseEvent('mouseup', { clientX: 10, clientY: 10, altKey: true }), LINK);
+        expect(open).toHaveBeenCalledTimes(1);
       } finally {
         open.mockRestore();
       }
     });
 
-    it('an OSC 52 copy reaches the clipboard and says so; a refused one says how to copy by hand', async () => {
+    it('an OSC 52 copy is offered, never done on its own: Copy it copies, a refusal says how to copy by hand (review r1)', async () => {
       const term = await mounted();
       const writeText = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('NotAllowedError'));
       vi.stubGlobal('navigator', { ...navigator, platform: 'MacIntel', clipboard: { writeText } });
       try {
         const handler = term.osc.get(52)!;
         act(() => { expect(handler(`c;${btoa(LINK)}`)).toBe(true); });
+        expect(writeText).not.toHaveBeenCalled();
+        expect(screen.getByTestId('terminal-copy-ask')).toHaveTextContent(`The program in this terminal wants to copy ${LINK.length} characters to your clipboard.`);
+        // The text itself is never drawn (it can be a sign-in token).
+        expect(screen.getByTestId('terminal-copy-ask')).not.toHaveTextContent('claude.ai');
+        fireEvent.click(screen.getByTestId('terminal-copy-go'));
         expect(writeText).toHaveBeenCalledWith(LINK);
         await waitFor(() => expect(screen.getByTestId('terminal-copy-note')).toHaveTextContent('Copied to your clipboard.'));
-        act(() => { handler(`c;${btoa('sk-made-up')}`); });
-        await waitFor(() => expect(screen.getByTestId('terminal-copy-note')).toHaveTextContent('your browser didn’t allow it. To copy text from the terminal, hold Option (⌥) while you drag over it, then press ⌘C.'));
-        // A read request is never answered with the clipboard.
+        act(() => { handler(`c;${btoa('made-up-value')}`); });
+        fireEvent.click(screen.getByTestId('terminal-copy-go'));
+        await waitFor(() => expect(screen.getByTestId('terminal-copy-note')).toHaveTextContent('Your browser didn’t allow the copy. To copy text from the terminal, hold Option (⌥) while you drag over it, then press ⌘C.'));
+        // Don't copy drops the offer; a read request is never answered.
+        act(() => { handler(`c;${btoa('another')}`); });
+        fireEvent.click(screen.getByTestId('terminal-copy-skip'));
+        expect(screen.queryByTestId('terminal-copy-ask')).toBeNull();
         act(() => { handler('c;?'); });
+        expect(screen.queryByTestId('terminal-copy-ask')).toBeNull();
         expect(writeText).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.unstubAllGlobals();
+        vi.stubGlobal('WebSocket', FakeWebSocket);
+        vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+      }
+    });
+
+    it('only the newest copy says how it went (review r1)', async () => {
+      const term = await mounted();
+      let rejectOld: (e: Error) => void = () => {};
+      const writeText = vi.fn()
+        .mockImplementationOnce(() => new Promise((_r, rej) => { rejectOld = rej; }))
+        .mockResolvedValueOnce(undefined);
+      vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+      try {
+        act(() => { term.osc.get(52)!(`c;${btoa('first')}`); });
+        fireEvent.click(screen.getByTestId('terminal-copy-go'));
+        term.selection = 'second';
+        act(() => { term.keyHandler!(new KeyboardEvent('keydown', { key: 'C', ctrlKey: true, shiftKey: true })); });
+        await waitFor(() => expect(screen.getByTestId('terminal-copy-note')).toHaveTextContent('Copied to your clipboard.'));
+        await act(async () => { rejectOld(new Error('late')); await Promise.resolve(); });
+        expect(screen.getByTestId('terminal-copy-note')).toHaveTextContent('Copied to your clipboard.');
       } finally {
         vi.unstubAllGlobals();
         vi.stubGlobal('WebSocket', FakeWebSocket);
@@ -382,8 +421,10 @@ describe('Terminal (DES-TERMINAL-001 §6 — the web bridge)', () => {
         expect(writeText).not.toHaveBeenCalled();
         expect(term.keyHandler!(new KeyboardEvent('keydown', { key: 'C', ctrlKey: true, shiftKey: true }))).toBe(false);
         expect(writeText).toHaveBeenCalledWith('the selected text');
+        // With nothing selected it is still never the program's (it would be its interrupt; review r1).
         term.selection = '';
-        expect(term.keyHandler!(new KeyboardEvent('keydown', { key: 'C', ctrlKey: true, shiftKey: true }))).toBe(true);
+        expect(term.keyHandler!(new KeyboardEvent('keydown', { key: 'C', ctrlKey: true, shiftKey: true }))).toBe(false);
+        expect(writeText).toHaveBeenCalledTimes(1);
       } finally {
         vi.unstubAllGlobals();
         vi.stubGlobal('WebSocket', FakeWebSocket);

@@ -1,6 +1,6 @@
 /**
  * studio#1362: claude's sign-in link in studio's terminal opens on click, joined across the rows it spans, and an
- * OSC 52 copy is read (or refused) the way the terminal hands it to the clipboard.
+ * OSC 52 copy is read (or refused) the way the terminal offers it to the person.
  *
  * Real shape: the rows come from a REAL xterm buffer (not opened: parsing needs no layout), fed the bytes a TUI writes.
  * claude's setup-token screen (Ink) turns mouse reporting on and wraps a long line itself at the terminal's width (core
@@ -10,7 +10,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { Terminal as XTerm } from '@xterm/xterm';
-import { copyNote, findUrls, openUrl, osc52Text, readRow, selectWords, type TermRow } from '../src/board/terminalLinks.js';
+import { copyAskWords, copyNote, findUrls, linksAt, LINK_ROWS_MAX, openUrl, opensOnRelease, osc52Text, readRow, selectWords, type TermRow } from '../src/board/terminalLinks.js';
 
 const LINK = 'https://claude.ai/oauth/authorize?code=true&client_id=00000000-0000-4000-8000-000000000000&response_type=code'
   + '&redirect_uri=https%3A%2F%2Fconsole.anthropic.com%2Foauth%2Fcode%2Fcallback&scope=user%3Ainference'
@@ -66,6 +66,52 @@ describe('a printed sign-in link (studio#1362)', () => {
     expect(findUrls(rows, 80).map((f) => f.url)).toEqual([url]);
   });
 
+  it('a link whose scheme the terminal cut across two rows is still one link (review r1)', async () => {
+    for (const pad of [74, 76, 79]) {
+      const rows = await screenOf(`${'x'.repeat(pad)} ${LINK}\r\n`, 80);
+      expect(findUrls(rows, 80).map((f) => f.url)).toEqual([LINK]);
+    }
+  });
+
+  it('two addresses on two rows stay two links, even when the first fills the width (review r1)', async () => {
+    const first = 'https://example.com/' + 'a'.repeat(60);
+    const rows = await screenOf(`${first}\r\n${LINK.slice(0, 70)}\r\n`, 80);
+    expect(findUrls(rows, 80).map((f) => f.url)).toEqual([first, LINK.slice(0, 70)]);
+  });
+
+  it('a shell prompt after a full-width link is not taken into it (review r1)', async () => {
+    const url = 'https://example.com/' + 'b'.repeat(60);
+    const rows = await screenOf(`${url}\r\nuser@host:~/work$ `, 80);
+    expect(findUrls(rows, 80).map((f) => f.url)).toEqual([url]);
+  });
+
+  it('letters of any script stay in the link; a cut address is never offered (review r1)', async () => {
+    const rows = await screenOf('Docs: https://example.com/über/straße and https://café.example/menu\r\nhttps://\r\n', 80);
+    expect(findUrls(rows, 80).map((f) => f.url)).toEqual(['https://example.com/über/straße', 'https://café.example/menu']);
+  });
+
+  it('a link longer than any fixed window is found whole from any of its rows; past the cap it is not offered (review r1)', async () => {
+    const long = 'https://claude.ai/oauth/authorize?state=' + 'z'.repeat(1000);
+    const rows = await screenOf(inkWrapped(long, 40) + '\r\n\r\n> ', 40, 60);
+    const read = (i: number): TermRow => rows[i] ?? { text: '', cols: [], wrapped: false };
+    const spanned = Math.ceil(long.length / 40);
+    expect(spanned).toBeGreaterThan(25);
+    for (const y of [0, 13, spanned - 1]) expect(linksAt(read, rows.length, y, 40).map((f) => f.url)).toEqual([long]);
+    // More rows than the cap: the address could be cut, so nothing is offered.
+    const huge = 'https://example.com/' + 'q'.repeat(40 * (LINK_ROWS_MAX + 5));
+    const many = inkWrapped(huge, 40).split('\r\n').map((t) => ({ text: t, cols: [...t].map((_, i) => i), wrapped: false }));
+    expect(linksAt((i) => many[i]!, many.length, 0, 40)).toEqual([]);
+  });
+
+  it('a click opens; a drag, another button, or Option/Shift (they select) does not (review r1)', () => {
+    const at = { button: 0, altKey: false, shiftKey: false, clientX: 100, clientY: 50 };
+    expect(opensOnRelease(at, { x: 101, y: 50 })).toBe(true);
+    expect(opensOnRelease(at, { x: 160, y: 50 })).toBe(false);
+    expect(opensOnRelease({ ...at, button: 2 }, { x: 100, y: 50 })).toBe(false);
+    expect(opensOnRelease({ ...at, altKey: true }, { x: 100, y: 50 })).toBe(false);
+    expect(opensOnRelease({ ...at, shiftKey: true }, { x: 100, y: 50 })).toBe(false);
+  });
+
   it('opens only http(s), in a new tab with no opener', () => {
     const open = vi.fn();
     expect(openUrl(LINK, open as unknown as typeof window.open)).toBe(true);
@@ -86,9 +132,10 @@ describe('an OSC 52 copy (studio#1362)', () => {
     expect(osc52Text('c;%%%')).toBeNull();
     expect(osc52Text('nothing')).toBeNull();
   });
-  it('says where the copy went, and what to do when the browser refused it, in this computer’s keys', () => {
+  it('asks before copying, says where the copy went, and what to do when the browser refused it, in this computer’s keys', () => {
+    expect(copyAskWords(412)).toBe('The program in this terminal wants to copy 412 characters to your clipboard.');
     expect(copyNote(true)).toBe('Copied to your clipboard.');
-    expect(copyNote(false, true)).toBe('The terminal tried to copy to your clipboard, but your browser didn’t allow it. To copy text from the terminal, hold Option (⌥) while you drag over it, then press ⌘C.');
+    expect(copyNote(false, true)).toBe('Your browser didn’t allow the copy. To copy text from the terminal, hold Option (⌥) while you drag over it, then press ⌘C.');
     expect(selectWords(false)).toBe('To copy text from the terminal, hold Shift while you drag over it, then press Ctrl+Shift+C.');
   });
 });

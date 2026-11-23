@@ -24862,7 +24862,25 @@
       ]
     },
     {
+      "testId": "terminal-copy-ask",
+      "files": [
+        "src/components/Terminal.tsx"
+      ]
+    },
+    {
+      "testId": "terminal-copy-go",
+      "files": [
+        "src/components/Terminal.tsx"
+      ]
+    },
+    {
       "testId": "terminal-copy-note",
+      "files": [
+        "src/components/Terminal.tsx"
+      ]
+    },
+    {
+      "testId": "terminal-copy-skip",
       "files": [
         "src/components/Terminal.tsx"
       ]

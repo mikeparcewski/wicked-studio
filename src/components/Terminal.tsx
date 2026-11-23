@@ -1,15 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { api, terminalWsUrl } from '../api/client.js';
 import { homeMasker } from '../board/homePath.js';
 import { splitUtf8 } from '../board/utf8Segments.js';
-import { copyNote, findUrls, openUrl, osc52Text, readRow, type TermRow } from '../board/terminalLinks.js';
+import { copyAskWords, copyNote, linksAt, openUrl, opensOnRelease, osc52Text, readRow } from '../board/terminalLinks.js';
 import { resolveToken } from '../styles/resolveToken.js';
-
-/** Rows read above and below a hovered row when looking for a link that spans rows. */
-const LINK_REACH = 24;
 
 interface Props {
   /** Working directory the PTY opens in. */
@@ -66,8 +63,21 @@ export function Terminal({ cwd, cmd, governed = true, initialInput, concealHome,
   // Snapshot the open-time props; the session opens once (see effect deps: []).
   const propsRef = useRef({ cwd, cmd, governed, initialInput, concealHome, open, onOpenError, onExit });
   propsRef.current = { cwd, cmd, governed, initialInput, concealHome, open, onOpenError, onExit };
-  /** What the last copy from the terminal did (studio#1362), said under it until the next one. */
-  const [copied, setCopied] = useState<string | null>(null);
+  /** (studio#1362) A copy the terminal's program asked for, waiting on the person, or what the last copy did. */
+  const [copy, setCopy] = useState<{ kind: 'ask'; chars: number } | { kind: 'done'; text: string } | null>(null);
+  /** The text the program asked to copy (never drawn: it can be a sign-in token), and each request's number. */
+  const askedRef = useRef<string | null>(null);
+  const copySeq = useRef(0);
+  const mountedRef = useRef(true);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
+  /** Put text on the clipboard from a person's own gesture; only the newest request says how it went. */
+  const toClipboard = useCallback((text: string): void => {
+    const mine = ++copySeq.current;
+    const done = (ok: boolean): void => { if (copySeq.current === mine && mountedRef.current) setCopy({ kind: 'done', text: copyNote(ok) }); };
+    const clip = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
+    if (clip === undefined || typeof clip.writeText !== 'function') done(false);
+    else clip.writeText(text).then(() => done(true), () => done(false));
+  }, []);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -100,44 +110,41 @@ export function Terminal({ cwd, cmd, governed = true, initialInput, concealHome,
     const fit = new FitAddon();
     term.loadAddon(fit);
 
-    // (studio#1362) A printed web address opens in a new tab on click, joined across the rows it spans. It works while a
-    // program has mouse reporting on (xterm's link layer reads the click before the report is sent).
+    // (studio#1362) A printed web address opens in a new tab on a click, joined across the rows it spans. It works while
+    // a program has mouse reporting on (xterm's link layer reads the click before the report is sent). A drag, or a
+    // press with Option or Shift (they select), never opens it.
+    let down: { x: number; y: number } | null = null;
+    const onDown = (e: MouseEvent): void => { down = { x: e.clientX, y: e.clientY }; };
+    host.addEventListener('mousedown', onDown, true);
     const links = term.registerLinkProvider({
       provideLinks: (y, callback) => {
         const buf = term.buffer.active;
-        // Enough rows around the hovered one for the longest sign-in link (a few rows at any width).
-        const from = Math.max(0, y - 1 - LINK_REACH);
-        const to = Math.min(buf.length - 1, y - 1 + LINK_REACH);
-        const rows: TermRow[] = [];
-        for (let i = from; i <= to; i++) rows.push(readRow(buf.getLine(i), term.cols));
-        const found = findUrls(rows, term.cols).filter((u) => u.start.row + from <= y - 1 && u.end.row + from >= y - 1);
+        const found = linksAt((i) => readRow(buf.getLine(i), term.cols), buf.length, y - 1, term.cols);
         callback(found.length === 0 ? undefined : found.map((u) => ({
           text: u.url,
-          range: { start: { x: u.start.col + 1, y: u.start.row + from + 1 }, end: { x: u.end.col + 1, y: u.end.row + from + 1 } },
+          range: { start: { x: u.start.col + 1, y: u.start.row + 1 }, end: { x: u.end.col + 1, y: u.end.row + 1 } },
           decorations: { pointerCursor: true, underline: true },
-          activate: (_e: MouseEvent, text: string) => { openUrl(text); },
+          activate: (e: MouseEvent, text: string) => { if (opensOnRelease(e, down)) openUrl(text); },
         })));
       },
     });
 
-    // (studio#1362) A program's copy (OSC 52, e.g. claude's copy key) goes to the clipboard, and the terminal says
-    // whether it got there: a browser can refuse a write it did not see a click for.
-    const toClipboard = (text: string): void => {
-      const done = (ok: boolean): void => { if (!disposed) setCopied(copyNote(ok)); };
-      const clip = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
-      if (clip === undefined || typeof clip.writeText !== 'function') done(false);
-      else clip.writeText(text).then(() => done(true), () => done(false));
-    };
+    // (studio#1362) A program's copy (OSC 52, e.g. claude's copy key) is offered, never done on its own: the terminal's
+    // output is the program's, so it may not change the clipboard behind the person's back. "Copy it" copies.
     const osc52 = term.parser.registerOscHandler(52, (data) => {
       const text = osc52Text(data);
-      if (text !== null) toClipboard(text);
+      if (text !== null && !disposed) {
+        askedRef.current = text;
+        copySeq.current++;
+        setCopy({ kind: 'ask', chars: text.length });
+      }
       return true;
     });
-    // Ctrl+Shift+C copies the selection (Shift-drag selects off a Mac; ⌘C already copies on one). Plain Ctrl+C stays
-    // the program's interrupt.
+    // Ctrl+Shift+C copies the selection (Shift-drag selects off a Mac; ⌘C already copies on one). It is never sent to
+    // the program (it would be its interrupt); plain Ctrl+C stays the program's.
     term.attachCustomKeyEventHandler((ev) => {
-      if (ev.type !== 'keydown' || !ev.ctrlKey || !ev.shiftKey || ev.altKey || ev.metaKey || ev.key.toLowerCase() !== 'c' || !term.hasSelection()) return true;
-      toClipboard(term.getSelection());
+      if (!ev.ctrlKey || !ev.shiftKey || ev.altKey || ev.metaKey || ev.key.toLowerCase() !== 'c') return true;
+      if (ev.type === 'keydown' && term.hasSelection()) toClipboard(term.getSelection());
       ev.preventDefault();
       return false;
     });
@@ -282,6 +289,7 @@ export function Terminal({ cwd, cmd, governed = true, initialInput, concealHome,
       dataSub.dispose();
       links.dispose();
       osc52.dispose();
+      host.removeEventListener('mousedown', onDown, true);
       try {
         socket?.close();
       } catch {
@@ -310,7 +318,14 @@ export function Terminal({ cwd, cmd, governed = true, initialInput, concealHome,
         className="h-64 w-full overflow-hidden rounded p-1"
         style={{ background: 'var(--surface-base)' }}
       />
-      {copied !== null && <p data-testid="terminal-copy-note" role="status" className="text-xs" style={{ color: 'var(--ink-dim)' }}>{copied}</p>}
+      {copy?.kind === 'ask' && (
+        <div data-testid="terminal-copy-ask" role="status" className="flex flex-wrap items-center gap-2 text-xs" style={{ color: 'var(--ink-dim)' }}>
+          <span>{copyAskWords(copy.chars)}</span>
+          <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="terminal-copy-go" onClick={() => { const t = askedRef.current; askedRef.current = null; if (t !== null) toClipboard(t); }}>Copy it</button>
+          <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="terminal-copy-skip" onClick={() => { askedRef.current = null; copySeq.current++; setCopy(null); }}>Don’t copy</button>
+        </div>
+      )}
+      {copy?.kind === 'done' && <p data-testid="terminal-copy-note" role="status" className="text-xs" style={{ color: 'var(--ink-dim)' }}>{copy.text}</p>}
     </div>
   );
 }

@@ -1,17 +1,17 @@
 /**
  * What a person needs to get text OUT of studio's terminal (studio#1362): a printed web address opens on click, and a
- * program's clipboard write (OSC 52) reaches the clipboard or says it did not. Pure parts here; the terminal wires
- * them to xterm's own `registerLinkProvider` and `parser.registerOscHandler` (no extra addon).
+ * program's clipboard write (OSC 52) is offered to the person to copy. Pure parts here; the terminal wires them to
+ * xterm's own `registerLinkProvider` and `parser.registerOscHandler` (no extra addon).
  *
- * A sign-in link is long, so it spans rows. Two ways: the terminal wrapped it (the next row is marked wrapped), or the
- * program wrapped it itself at the terminal's width (claude's Ink screen does: core `seat_login.rs` reads the token it
- * wraps the same way, "a row that ended exactly at the terminal width, the next row holds token characters alone").
- * Both are joined into one link.
+ * A sign-in link is long, so it spans rows. Two ways: the terminal wrapped it (the next row is marked wrapped: one
+ * logical line), or the program wrapped it itself at the terminal's width (claude's Ink screen does: core
+ * `seat_login.rs` reads the token it wraps the same way, "a row that ended exactly at the terminal width, the next row
+ * holds token characters alone"). Both are joined into one link.
  */
 
 import type { IBufferLine } from '@xterm/xterm';
 
-/** One terminal row as drawn: its text, and the cell column of each UTF-16 unit of that text. */
+/** One terminal row as drawn: its text (trailing blanks dropped), and the cell column of each UTF-16 unit of it. */
 export interface TermRow {
   text: string;
   cols: number[];
@@ -39,8 +39,41 @@ export function readRow(line: IBufferLine | undefined, width: number): TermRow {
 export interface CellPos { row: number; col: number }
 export interface FoundUrl { url: string; start: CellPos; end: CellPos }
 
-const URL_CHAR = /[A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]/u;
-const URL_START = /https?:\/\/[A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]+/gu;
+/** A character an address may hold: the URL punctuation, and letters and digits of any script. */
+const URL_CHAR = /[\p{L}\p{N}\p{M}\-._~:/?#[\]@!$&'()*+,;=%]/u;
+const URL_START = /https?:\/\/[\p{L}\p{N}\p{M}\-._~:/?#[\]@!$&'()*+,;=%]+/giu;
+/** A row that starts a new address, or ends like a shell prompt, is never a link's continuation. */
+const NEW_ADDRESS = /^[a-z][a-z0-9+.-]*:\/\//iu;
+const PROMPT_END = /[$#%]$/u;
+
+/** A row reaches the terminal's last cell. */
+const isFull = (row: TermRow, width: number): boolean => row.text.length > 0 && (row.cols[row.text.length - 1] ?? -1) + 1 >= width;
+
+/** Rows the terminal wrapped, joined: each character keeps its row and cell. */
+interface Line { text: string; pos: CellPos[] }
+
+function logicalLines(rows: readonly TermRow[], width: number): Line[] {
+  const lines: Line[] = [];
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r]!;
+    const cur = row.wrapped && lines.length > 0 ? lines[lines.length - 1]! : null;
+    const line = cur ?? { text: '', pos: [] };
+    if (cur !== null) {
+      // The row before was cut by the terminal: its trailing blanks up to the width were real spaces.
+      const prev = line.pos.length > 0 ? line.pos[line.pos.length - 1]! : null;
+      if (prev !== null) for (let c = prev.col + 1; c < width; c++) { line.text += ' '; line.pos.push({ row: prev.row, col: c }); }
+    }
+    line.text += row.text;
+    for (let i = 0; i < row.text.length; i++) line.pos.push({ row: r, col: row.cols[i] ?? i });
+    if (cur === null) lines.push(line);
+  }
+  for (const l of lines) {
+    const t = l.text.trimEnd();
+    l.text = t;
+    l.pos.length = t.length;
+  }
+  return lines;
+}
 
 function runOfUrlChars(text: string, from: number): number {
   let i = from;
@@ -64,42 +97,48 @@ function trimTail(url: string): number {
   }
 }
 
-/** Every http(s) address in the rows, each joined across the rows it spans. Columns are 0-based cells. */
+/** A whole http(s) address with a host, or false (a cut or malformed one is never offered). */
+function isAddress(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return (u.protocol === 'http:' || u.protocol === 'https:') && u.hostname !== '';
+  } catch {
+    return false;
+  }
+}
+
+/** Every http(s) address in the rows, each joined across the rows it spans. Rows and columns are 0-based. */
 export function findUrls(rows: readonly TermRow[], width: number): FoundUrl[] {
+  const lines = logicalLines(rows, width);
   const out: FoundUrl[] = [];
-  /** Per row, the text index before which a link already took the row's text (a continuation). */
-  const taken = new Array<number>(rows.length).fill(0);
-  for (let r = 0; r < rows.length; r++) {
-    const row = rows[r]!;
-    URL_START.lastIndex = taken[r]!;
-    for (let m = URL_START.exec(row.text); m !== null; m = URL_START.exec(row.text)) {
-      const startIdx = m.index;
-      const startCol = row.cols[startIdx] ?? startIdx;
-      // Each piece: the row it is on and its text-index span [from, to).
-      const pieces: Array<{ row: number; from: number; to: number }> = [{ row: r, from: startIdx, to: startIdx + m[0].length }];
+  /** Per line, the text index before which a link already took the line's text (a continuation). */
+  const taken = new Array<number>(lines.length).fill(0);
+  for (let l = 0; l < lines.length; l++) {
+    const line = lines[l]!;
+    URL_START.lastIndex = taken[l]!;
+    for (let m = URL_START.exec(line.text); m !== null; m = URL_START.exec(line.text)) {
+      const startCol = line.pos[m.index]!.col;
+      // Each piece: the line it is on and its text-index span [from, to).
+      const pieces: Array<{ line: number; from: number; to: number }> = [{ line: l, from: m.index, to: m.index + m[0].length }];
       for (;;) {
         const last = pieces[pieces.length - 1]!;
-        const lrow = rows[last.row]!;
-        // Only a piece that runs to the row's last cell can go on.
-        const endCol = lrow.cols[last.to - 1];
-        if (last.to !== lrow.text.length || endCol === undefined || endCol + 1 < width) break;
-        const n = last.row + 1;
-        const next = rows[n];
-        if (next === undefined) break;
-        if (next.wrapped) {
-          const to = runOfUrlChars(next.text, 0);
-          if (to === 0) break;
-          pieces.push({ row: n, from: 0, to });
-          continue;
-        }
+        const lline = lines[last.line]!;
+        // Only a piece that runs to the last cell of the line's last row can go on, onto the next line.
+        const end = lline.pos[last.to - 1];
+        if (last.to !== lline.text.length || end === undefined || end.col + 1 < width) break;
+        const next = lines[last.line + 1];
+        if (next === undefined || next.pos.length === 0 || next.pos[0]!.row !== end.row + 1) break;
         // The program's own wrap: the next row holds address characters alone, indented no further than the link.
         const lead = next.text.length - next.text.trimStart().length;
-        if ((next.cols[lead] ?? lead) > startCol) break;
+        if ((next.pos[lead]?.col ?? lead) > startCol) break;
         const to = runOfUrlChars(next.text, lead);
-        if (to === lead || next.text.slice(to).trim() !== '') break;
-        pieces.push({ row: n, from: lead, to });
+        const piece = next.text.slice(lead, to);
+        if (to === lead || next.text.slice(to).trim() !== '' || NEW_ADDRESS.test(piece)) break;
+        const full = (next.pos[to - 1]?.col ?? -1) + 1 >= width;
+        if (!full && PROMPT_END.test(piece)) break;
+        pieces.push({ line: last.line + 1, from: lead, to });
       }
-      let url = pieces.map((p) => rows[p.row]!.text.slice(p.from, p.to)).join('');
+      let url = pieces.map((p) => lines[p.line]!.text.slice(p.from, p.to)).join('');
       const keep = trimTail(url);
       // Trimmed characters come off the last pieces.
       let cut = url.length - keep;
@@ -109,15 +148,40 @@ export function findUrls(rows: readonly TermRow[], width: number): FoundUrl[] {
         if (len > cut) { p.to -= cut; cut = 0; } else { pieces.pop(); cut -= len; }
       }
       url = url.slice(0, keep);
-      const end = pieces[pieces.length - 1];
-      if (end === undefined || !/^https?:\/\/[^/?#]+/u.test(url)) continue;
-      for (const p of pieces.slice(1)) taken[p.row] = Math.max(taken[p.row]!, p.to);
-      const endRow = rows[end.row]!;
-      out.push({ url, start: { row: r, col: startCol }, end: { row: end.row, col: endRow.cols[end.to - 1] ?? end.to - 1 } });
-      if (pieces.length > 1) break; // the rest of this row was the link
+      const last = pieces[pieces.length - 1];
+      if (last === undefined || !isAddress(url)) continue;
+      for (const p of pieces.slice(1)) taken[p.line] = Math.max(taken[p.line]!, p.to);
+      out.push({ url, start: line.pos[m.index]!, end: lines[last.line]!.pos[last.to - 1]! });
+      if (pieces.length > 1) break; // the rest of this line was the link
     }
   }
   return out;
+}
+
+/** The most rows looked at either side of a hovered row (a 4,000-character address at 20 columns). */
+export const LINK_ROWS_MAX = 200;
+
+/**
+ * The links on buffer row `y` (0-based): the rows that could belong to one link with it (terminal-wrapped, or each one
+ * reaching the width) are read whole, so a link is never cut by a fixed window; a run of rows longer than
+ * {@link LINK_ROWS_MAX} is cut, and a link touching that cut is not offered (it could be a part of an address).
+ */
+export function linksAt(read: (i: number) => TermRow, length: number, y: number, width: number): FoundUrl[] {
+  const cache = new Map<number, TermRow>();
+  const row = (i: number): TermRow => { let r = cache.get(i); if (r === undefined) { r = read(i); cache.set(i, r); } return r; };
+  const joinsBack = (i: number): boolean => i > 0 && (row(i).wrapped || isFull(row(i - 1), width));
+  const joinsOn = (i: number): boolean => i + 1 < length && (isFull(row(i), width) || row(i + 1).wrapped);
+  let start = y;
+  while (joinsBack(start) && y - start < LINK_ROWS_MAX) start--;
+  let end = y;
+  while (joinsOn(end) && end - y < LINK_ROWS_MAX) end++;
+  const cutBefore = joinsBack(start);
+  const cutAfter = joinsOn(end);
+  const rows: TermRow[] = [];
+  for (let i = start; i <= end; i++) rows.push(row(i));
+  return findUrls(rows, width)
+    .map((u) => ({ ...u, start: { row: u.start.row + start, col: u.start.col }, end: { row: u.end.row + start, col: u.end.col } }))
+    .filter((u) => u.start.row <= y && u.end.row >= y && !(cutBefore && u.start.row === start) && !(cutAfter && u.end.row === end));
 }
 
 /** Open a printed address in a new tab, never handing this page to it. Only http(s). */
@@ -127,7 +191,16 @@ export function openUrl(url: string, open: typeof window.open = window.open.bind
   return true;
 }
 
-/** The longest text a program may put on the clipboard through the terminal (a sign-in link or token is far less). */
+/**
+ * Whether a release on a link is a click that opens it: the main button, no selection modifier (Option or Shift,
+ * which select), and the pointer where it went down (a drag selects, it does not open).
+ */
+export function opensOnRelease(e: Pick<MouseEvent, 'button' | 'altKey' | 'shiftKey' | 'clientX' | 'clientY'>, down: { x: number; y: number } | null): boolean {
+  if (e.button !== 0 || e.altKey || e.shiftKey) return false;
+  return down === null || Math.hypot(e.clientX - down.x, e.clientY - down.y) <= 4;
+}
+
+/** The longest text a program may offer for the clipboard through the terminal (a sign-in link or token is far less). */
 export const OSC52_MAX_CHARS = 100_000;
 
 /**
@@ -160,9 +233,12 @@ export function selectWords(mac = isMacPlatform()): string {
     : 'To copy text from the terminal, hold Shift while you drag over it, then press Ctrl+Shift+C.';
 }
 
-/** What the terminal says after a program asked to copy something. */
+/** What the terminal says when its program asks to put text on the clipboard: nothing is copied until you say so. */
+export function copyAskWords(chars: number): string {
+  return `The program in this terminal wants to copy ${chars === 1 ? '1 character' : `${chars.toLocaleString('en-US')} characters`} to your clipboard.`;
+}
+
+/** What the terminal says after a copy. */
 export function copyNote(ok: boolean, mac = isMacPlatform()): string {
-  return ok
-    ? 'Copied to your clipboard.'
-    : `The terminal tried to copy to your clipboard, but your browser didn’t allow it. ${selectWords(mac)}`;
+  return ok ? 'Copied to your clipboard.' : `Your browser didn’t allow the copy. ${selectWords(mac)}`;
 }
