@@ -118,19 +118,29 @@ export function Terminal({ cwd, cmd, governed = true, initialInput, concealHome,
     host.addEventListener('mousedown', onDown, true);
     const links = term.registerLinkProvider({
       provideLinks: (y, callback) => {
-        const buf = term.buffer.active;
-        const found = linksAt((i) => readRow(buf.getLine(i), term.cols), buf.length, y - 1, term.cols);
+        const read = (row: number) => {
+          const buf = term.buffer.active;
+          return linksAt((i) => readRow(buf.getLine(i), term.cols), buf.length, row, term.cols);
+        };
+        const found = read(y - 1);
         callback(found.length === 0 ? undefined : found.map((u) => ({
           text: u.url,
           range: { start: { x: u.start.col + 1, y: u.start.row + 1 }, end: { x: u.end.col + 1, y: u.end.row + 1 } },
           decorations: { pointerCursor: true, underline: true },
-          activate: (e: MouseEvent, text: string) => { if (opensOnRelease(e, down)) openUrl(text); },
+          // The screen may have changed since the link was found (xterm keeps it while only part of it is redrawn):
+          // it opens only if the same address is still there, in the same place.
+          activate: (e: MouseEvent, text: string) => {
+            if (!opensOnRelease(e, down)) return;
+            const still = read(u.start.row).some((v) => v.url === text && v.start.row === u.start.row && v.start.col === u.start.col && v.end.row === u.end.row && v.end.col === u.end.col);
+            if (still) openUrl(text);
+          },
         })));
       },
     });
 
     // (studio#1362) A program's copy (OSC 52, e.g. claude's copy key) is offered, never done on its own: the terminal's
-    // output is the program's, so it may not change the clipboard behind the person's back. "Copy it" copies.
+    // output is the program's, so it may not change the clipboard behind the person's back. "Copy it" copies. Copying
+    // a selection is the browser's own (⌘C on a Mac; the right-click menu's Copy elsewhere, which xterm readies).
     const osc52 = term.parser.registerOscHandler(52, (data) => {
       const text = osc52Text(data);
       if (text !== null && !disposed) {
@@ -140,15 +150,6 @@ export function Terminal({ cwd, cmd, governed = true, initialInput, concealHome,
       }
       return true;
     });
-    // Ctrl+Shift+C copies the selection (Shift-drag selects off a Mac; ⌘C already copies on one). It is never sent to
-    // the program (it would be its interrupt); plain Ctrl+C stays the program's.
-    term.attachCustomKeyEventHandler((ev) => {
-      if (!ev.ctrlKey || !ev.shiftKey || ev.altKey || ev.metaKey || ev.key.toLowerCase() !== 'c') return true;
-      if (ev.type === 'keydown' && term.hasSelection()) toClipboard(term.getSelection());
-      ev.preventDefault();
-      return false;
-    });
-
     // xterm keystrokes → PTY stdin over the dedicated WS (raw, as a text frame).
     const dataSub = term.onData((chunk: string) => {
       if (socket && socket.readyState === WebSocket.OPEN) socket.send(chunk);

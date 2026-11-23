@@ -17,37 +17,41 @@ export interface TermRow {
   cols: number[];
   /** The terminal wrapped this row onto the one before (xterm `IBufferLine.isWrapped`). */
   wrapped: boolean;
+  /** The last cell the row's text covers (a wide character's second cell included); -1 for a blank row. */
+  lastCol: number;
 }
 
 /** One buffer row as text, with each character's cell column (a wide character takes two cells). */
 export function readRow(line: IBufferLine | undefined, width: number): TermRow {
-  if (line === undefined) return { text: '', cols: [], wrapped: false };
+  if (line === undefined) return { text: '', cols: [], wrapped: false, lastCol: -1 };
   let text = '';
   const cols: number[] = [];
+  const ends: number[] = [];
   for (let x = 0; x < width; x++) {
     const cell = line.getCell(x);
     if (cell === undefined) break;
-    if (cell.getWidth() === 0) continue;
+    const w = cell.getWidth();
+    if (w === 0) continue;
     const ch = cell.getChars() || ' ';
-    for (let i = 0; i < ch.length; i++) cols.push(x);
+    for (let i = 0; i < ch.length; i++) { cols.push(x); ends.push(x + w - 1); }
     text += ch;
   }
   const trimmed = text.trimEnd();
-  return { text: trimmed, cols: cols.slice(0, trimmed.length), wrapped: line.isWrapped };
+  return { text: trimmed, cols: cols.slice(0, trimmed.length), wrapped: line.isWrapped, lastCol: trimmed.length > 0 ? ends[trimmed.length - 1]! : -1 };
 }
 
 export interface CellPos { row: number; col: number }
 export interface FoundUrl { url: string; start: CellPos; end: CellPos }
 
 /** A character an address may hold: the URL punctuation, and letters and digits of any script. */
-const URL_CHAR = /[\p{L}\p{N}\p{M}\-._~:/?#[\]@!$&'()*+,;=%]/u;
+const URL_RUN = /[\p{L}\p{N}\p{M}\-._~:/?#[\]@!$&'()*+,;=%]+/uy;
 const URL_START = /https?:\/\/[\p{L}\p{N}\p{M}\-._~:/?#[\]@!$&'()*+,;=%]+/giu;
 /** A row that starts a new address, or ends like a shell prompt, is never a link's continuation. */
 const NEW_ADDRESS = /^[a-z][a-z0-9+.-]*:\/\//iu;
 const PROMPT_END = /[$#%]$/u;
 
 /** A row reaches the terminal's last cell. */
-const isFull = (row: TermRow, width: number): boolean => row.text.length > 0 && (row.cols[row.text.length - 1] ?? -1) + 1 >= width;
+const isFull = (row: TermRow, width: number): boolean => row.lastCol + 1 >= width;
 
 /** Rows the terminal wrapped, joined: each character keeps its row and cell. */
 interface Line { text: string; pos: CellPos[] }
@@ -59,9 +63,8 @@ function logicalLines(rows: readonly TermRow[], width: number): Line[] {
     const cur = row.wrapped && lines.length > 0 ? lines[lines.length - 1]! : null;
     const line = cur ?? { text: '', pos: [] };
     if (cur !== null) {
-      // The row before was cut by the terminal: its trailing blanks up to the width were real spaces.
-      const prev = line.pos.length > 0 ? line.pos[line.pos.length - 1]! : null;
-      if (prev !== null) for (let c = prev.col + 1; c < width; c++) { line.text += ' '; line.pos.push({ row: prev.row, col: c }); }
+      // The row before was cut by the terminal: its blanks up to the width were real spaces (a whole blank row too).
+      for (let c = rows[r - 1]!.lastCol + 1; c < width; c++) { line.text += ' '; line.pos.push({ row: r - 1, col: c }); }
     }
     line.text += row.text;
     for (let i = 0; i < row.text.length; i++) line.pos.push({ row: r, col: row.cols[i] ?? i });
@@ -75,10 +78,11 @@ function logicalLines(rows: readonly TermRow[], width: number): Line[] {
   return lines;
 }
 
+/** Where a run of address characters from `from` ends (by code point: a letter outside the first plane is one). */
 function runOfUrlChars(text: string, from: number): number {
-  let i = from;
-  while (i < text.length && URL_CHAR.test(text[i]!)) i++;
-  return i;
+  URL_RUN.lastIndex = from;
+  const m = URL_RUN.exec(text);
+  return m === null ? from : from + m[0].length;
 }
 
 /** Drop what usually closes the sentence around a link ("(see https://x.y/z)." → "https://x.y/z"). */
@@ -125,7 +129,7 @@ export function findUrls(rows: readonly TermRow[], width: number): FoundUrl[] {
         const lline = lines[last.line]!;
         // Only a piece that runs to the last cell of the line's last row can go on, onto the next line.
         const end = lline.pos[last.to - 1];
-        if (last.to !== lline.text.length || end === undefined || end.col + 1 < width) break;
+        if (last.to !== lline.text.length || end === undefined || !isFull(rows[end.row]!, width)) break;
         const next = lines[last.line + 1];
         if (next === undefined || next.pos.length === 0 || next.pos[0]!.row !== end.row + 1) break;
         // The program's own wrap: the next row holds address characters alone, indented no further than the link.
@@ -134,7 +138,7 @@ export function findUrls(rows: readonly TermRow[], width: number): FoundUrl[] {
         const to = runOfUrlChars(next.text, lead);
         const piece = next.text.slice(lead, to);
         if (to === lead || next.text.slice(to).trim() !== '' || NEW_ADDRESS.test(piece)) break;
-        const full = (next.pos[to - 1]?.col ?? -1) + 1 >= width;
+        const full = to === next.text.length && isFull(rows[next.pos[to - 1]!.row]!, width);
         if (!full && PROMPT_END.test(piece)) break;
         pieces.push({ line: last.line + 1, from: lead, to });
       }
@@ -222,7 +226,7 @@ export function osc52Text(data: string): string | null {
   }
 }
 
-/** Is this a Mac (Option-drag selects; ⌘C copies), else Shift-drag and Ctrl+Shift+C. */
+/** Is this a Mac (Option-drag selects, ⌘C copies), else Shift-drag and the right-click menu's Copy. */
 export const isMacPlatform = (): boolean =>
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad/u.test(navigator.platform || navigator.userAgent);
 
@@ -230,7 +234,7 @@ export const isMacPlatform = (): boolean =>
 export function selectWords(mac = isMacPlatform()): string {
   return mac
     ? 'To copy text from the terminal, hold Option (⌥) while you drag over it, then press ⌘C.'
-    : 'To copy text from the terminal, hold Shift while you drag over it, then press Ctrl+Shift+C.';
+    : 'To copy text from the terminal, hold Shift while you drag over it, then right-click it and choose Copy.';
 }
 
 /** What the terminal says when its program asks to put text on the clipboard: nothing is copied until you say so. */

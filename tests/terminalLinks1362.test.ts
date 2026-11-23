@@ -93,14 +93,25 @@ describe('a printed sign-in link (studio#1362)', () => {
   it('a link longer than any fixed window is found whole from any of its rows; past the cap it is not offered (review r1)', async () => {
     const long = 'https://claude.ai/oauth/authorize?state=' + 'z'.repeat(1000);
     const rows = await screenOf(inkWrapped(long, 40) + '\r\n\r\n> ', 40, 60);
-    const read = (i: number): TermRow => rows[i] ?? { text: '', cols: [], wrapped: false };
+    const read = (i: number): TermRow => rows[i] ?? { text: '', cols: [], wrapped: false, lastCol: -1 };
     const spanned = Math.ceil(long.length / 40);
     expect(spanned).toBeGreaterThan(25);
     for (const y of [0, 13, spanned - 1]) expect(linksAt(read, rows.length, y, 40).map((f) => f.url)).toEqual([long]);
     // More rows than the cap: the address could be cut, so nothing is offered.
     const huge = 'https://example.com/' + 'q'.repeat(40 * (LINK_ROWS_MAX + 5));
-    const many = inkWrapped(huge, 40).split('\r\n').map((t) => ({ text: t, cols: [...t].map((_, i) => i), wrapped: false }));
+    const many = inkWrapped(huge, 40).split('\r\n').map((t) => ({ text: t, cols: [...t].map((_, i) => i), wrapped: false, lastCol: t.length - 1 }));
     expect(linksAt((i) => many[i]!, many.length, 0, 40)).toEqual([]);
+  });
+
+  it('a wide character at the row’s end, a whole blank wrapped row, a letter outside the first plane (review r2)', async () => {
+    // 22 columns: 界 takes cells 20-21, so the row is full and the link goes on.
+    expect(findUrls(await screenOf('https://example.com/界/next\r\n', 22, 10), 22).map((f) => f.url)).toEqual(['https://example.com/界/next']);
+    // A link filling 40 columns, a row of 40 blanks the terminal wrapped, then a word: the word is not the link's.
+    const url40 = 'https://example.com/' + 'c'.repeat(20);
+    expect(findUrls(await screenOf(url40 + ' '.repeat(40) + 'tail\r\n', 40, 10), 40).map((f) => f.url)).toEqual([url40]);
+    // claude's own wrap with 𐐀 (two UTF-16 units) in the next row.
+    const deseret = 'https://example.com/' + 'd'.repeat(60) + '/𐐀𐐀/end';
+    expect(findUrls(await screenOf(inkWrapped(deseret, 80) + '\r\n', 80, 10), 80).map((f) => f.url)).toEqual([deseret]);
   });
 
   it('a click opens; a drag, another button, or Option/Shift (they select) does not (review r1)', () => {
@@ -136,6 +147,6 @@ describe('an OSC 52 copy (studio#1362)', () => {
     expect(copyAskWords(412)).toBe('The program in this terminal wants to copy 412 characters to your clipboard.');
     expect(copyNote(true)).toBe('Copied to your clipboard.');
     expect(copyNote(false, true)).toBe('Your browser didn’t allow the copy. To copy text from the terminal, hold Option (⌥) while you drag over it, then press ⌘C.');
-    expect(selectWords(false)).toBe('To copy text from the terminal, hold Shift while you drag over it, then press Ctrl+Shift+C.');
+    expect(selectWords(false)).toBe('To copy text from the terminal, hold Shift while you drag over it, then right-click it and choose Copy.');
   });
 });

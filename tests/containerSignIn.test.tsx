@@ -160,7 +160,7 @@ describe('container sign-in hooks (crew#1006)', () => {
     expect(within(modal).getByTestId('agents-check-result')).toHaveAttribute('data-state', 'signing-in');
     // (studio#1362) The window says how to open the sign-in link and how to copy while the helper holds the mouse.
     expect(within(login).getByTestId('agents-login-copy')).toHaveTextContent(
-      /^Click a sign-in link in the terminal to open it in a new tab\. To copy text from the terminal, hold (Shift while you drag over it, then press Ctrl\+Shift\+C|Option \(⌥\) while you drag over it, then press ⌘C)\.$/u,
+      /^Click a sign-in link in the terminal to open it in a new tab\. To copy text from the terminal, hold (Shift while you drag over it, then right-click it and choose Copy|Option \(⌥\) while you drag over it, then press ⌘C)\.$/u,
     );
 
     // The CLI's sign-in finished: the terminal exits, studio waits for crew's ingest, then re-checks.

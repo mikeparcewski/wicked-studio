@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
     registerLinkProvider: ReturnType<typeof vi.fn>;
     osc: Map<number, (data: string) => boolean>;
     keyHandler: ((ev: KeyboardEvent) => boolean) | null;
+    attachCustomKeyEventHandler: ReturnType<typeof vi.fn>;
   }>,
 }));
 
@@ -353,6 +354,11 @@ describe('Terminal (DES-TERMINAL-001 §6 — the web bridge)', () => {
         fireEvent.mouseDown(host, { clientX: 10, clientY: 10 });
         linksAt(term, 4)![0]!.activate(new MouseEvent('mouseup', { clientX: 10, clientY: 10, altKey: true }), LINK);
         expect(open).toHaveBeenCalledTimes(1);
+        // The program rewrote the link's last row after it was found: the old address is not opened (review r2).
+        const found = linksAt(term, 3)![0]!;
+        term.lines = [...term.lines.slice(0, 3), 'X'.repeat(LINK.length - 80), ...term.lines.slice(4)];
+        found.activate(new MouseEvent('mouseup'), LINK);
+        expect(open).toHaveBeenCalledTimes(1);
       } finally {
         open.mockRestore();
       }
@@ -399,11 +405,12 @@ describe('Terminal (DES-TERMINAL-001 §6 — the web bridge)', () => {
       try {
         act(() => { term.osc.get(52)!(`c;${btoa('first')}`); });
         fireEvent.click(screen.getByTestId('terminal-copy-go'));
-        term.selection = 'second';
-        act(() => { term.keyHandler!(new KeyboardEvent('keydown', { key: 'C', ctrlKey: true, shiftKey: true })); });
+        act(() => { term.osc.get(52)!(`c;${btoa('second')}`); });
+        fireEvent.click(screen.getByTestId('terminal-copy-go'));
         await waitFor(() => expect(screen.getByTestId('terminal-copy-note')).toHaveTextContent('Copied to your clipboard.'));
         await act(async () => { rejectOld(new Error('late')); await Promise.resolve(); });
         expect(screen.getByTestId('terminal-copy-note')).toHaveTextContent('Copied to your clipboard.');
+        expect(writeText.mock.calls).toEqual([['first'], ['second']]);
       } finally {
         vi.unstubAllGlobals();
         vi.stubGlobal('WebSocket', FakeWebSocket);
@@ -411,25 +418,9 @@ describe('Terminal (DES-TERMINAL-001 §6 — the web bridge)', () => {
       }
     });
 
-    it('Ctrl+Shift+C copies the selection; plain Ctrl+C stays the program’s', async () => {
+    it('takes no keys of its own: copying a selection is the browser’s (review r2)', async () => {
       const term = await mounted();
-      const writeText = vi.fn().mockResolvedValue(undefined);
-      vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
-      try {
-        term.selection = 'the selected text';
-        expect(term.keyHandler!(new KeyboardEvent('keydown', { key: 'c', ctrlKey: true }))).toBe(true);
-        expect(writeText).not.toHaveBeenCalled();
-        expect(term.keyHandler!(new KeyboardEvent('keydown', { key: 'C', ctrlKey: true, shiftKey: true }))).toBe(false);
-        expect(writeText).toHaveBeenCalledWith('the selected text');
-        // With nothing selected it is still never the program's (it would be its interrupt; review r1).
-        term.selection = '';
-        expect(term.keyHandler!(new KeyboardEvent('keydown', { key: 'C', ctrlKey: true, shiftKey: true }))).toBe(false);
-        expect(writeText).toHaveBeenCalledTimes(1);
-      } finally {
-        vi.unstubAllGlobals();
-        vi.stubGlobal('WebSocket', FakeWebSocket);
-        vi.stubGlobal('ResizeObserver', FakeResizeObserver);
-      }
+      expect(term.attachCustomKeyEventHandler).not.toHaveBeenCalled();
     });
   });
 
