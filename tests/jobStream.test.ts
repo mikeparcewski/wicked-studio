@@ -125,7 +125,7 @@ describe('jobView', () => {
     makeView({ id: 'run-1', status: status as never, unit_ix: ix }, units);
   const held = (over: Partial<JobRunInputs> = {}): JobRunInputs => ({
     ...NO_RUN, view: runView('awaiting_human'), gate: { ord: 1, receivedAt: 5, gateKind: 'plan_approval', prompt: '' },
-    plan: { ord: 1, planRev: 2, steps: ['Plan', 'Port', 'Deliver'].map((label) => ({ id: label, label, detail: null, asks: null, floor: false, added: false })), fresh: true }, ...over,
+    plan: { ord: 1, planRev: 2, steps: ['Plan', 'Port', 'Deliver'].map((label) => ({ id: label, label, detail: null, asks: null, floor: false, added: false, controls: [] })), fresh: true }, ...over,
   });
 
   it('Plan held: Approve names the plan version and is bound to run, ord and planRev; the margin says "plan v2"', () => {
@@ -380,6 +380,18 @@ describe('follow-up: plan outline, re-plan on record, ticks', () => {
       { event_id: 6, event_type: 'wicked.team.plan.proposed', payload: { proposal_id: 'p3', asks: [], steps: [{ id: 'port', catalog: 'build', instructions: 'Delete everything' }] } },
       { event_id: 6.5, event_type: 'wicked.team.plan.refused', payload: { proposal_id: 'p3' } }, rows[2]!];
     expect(enrichPlan(steps, refusedRows, 2).steps[0]!.detail).toBe('reporting-api to .NET 8');
+  });
+
+  it('wicked-core#1259: a plan step\'s controls in words, each only when the plan set it', async () => {
+    const { planStepControls } = await import('../src/board/jobStream.js');
+    expect(planStepControls(undefined)).toEqual([]);
+    expect(planStepControls({ catalog: 'review', id: 'review' })).toEqual([]);
+    expect(planStepControls({ catalog: 'build', id: 'b', verified_evidence: true, requires_capture_report: true, pool: 3, required_deliverables: ['', 'a.md', 'b.md'] }))
+      .toEqual(['must produce a.md, b.md', 'its output is acceptance evidence', 'ends with a capture report', 'up to 3 helpers']);
+    // `executes_code: false` forbids nothing (a Tool step may still run commands), so it is not said (codex r1 on #1352).
+    expect(planStepControls({ catalog: 'run', id: 'run', executes_code: false })).toEqual([]);
+    // Values of another shape say nothing.
+    expect(planStepControls({ executes_code: 'yes', validator_pin: 7, pool: 1.5, answer_only: 1, required_deliverables: 'x' })).toEqual([]);
   });
 
   it('reads a re-plan from the record (a send-back in any tab) until crew accepts or holds a plan, or the work starts', async () => {

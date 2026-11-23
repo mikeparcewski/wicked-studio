@@ -106,6 +106,8 @@
 .wk-pass-ol li { position: relative; }
 .wk-pass-ol .d { color: var(--ink-muted); }
 .wk-pass-floor { font-style: normal; font-size: var(--text-caption); color: var(--ink-muted); }
+/* (wicked-core#1259) The controls the plan set on a step: what raises or lowers its checks. */
+.wk-pass-ctl { font-size: var(--text-caption); color: var(--ink-muted); }
 /* What changed in this revision (§2.7.3 rule 4): only the new steps are washed, with crew's what-changed line. */
 .wk-pass-new::before { content: ''; position: absolute; left: -24px; top: 2px; bottom: 2px; width: 3px; border-radius: 2px; background: var(--wk-pass-rule); }
 .wk-pass-new .l b { background: var(--wk-pass-chg); border-radius: 3px; padding: 0 3px; }
