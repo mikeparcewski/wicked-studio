@@ -8541,6 +8541,12 @@
       ]
     },
     {
+      "testId": "job-passage-choices-more",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
       "testId": "job-passage-coming",
       "files": [
         "src/components/session/JobPassage.tsx"
