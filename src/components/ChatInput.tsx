@@ -1007,7 +1007,14 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     if (standIn === null || submitting || choosingRef.current) return;
     if (id === 'cancel') { setStandIn(null); setStandInError(null); return; }
     if (id === 'sign_in') { navigate?.(AGENTS_PATH); return; }
+    // The form's own Send blockers, checked BEFORE the settings save, so a choice that cannot launch changes nothing
+    // (codex delta 3 on #1361). `submit` checks them again when it runs.
     if (!problem.trim() || selectedClis.size === 0) { setStandInError('Say what the job is and pick a helper first.'); return; }
+    if (targetRequired || deliverWaits || noCarryingSeatReason(selectedClis, roster) !== null
+      || (offerQe && !qeOff && skipQe && skipQeReason.trim() === '')) {
+      setStandInError('The form above can’t start this job yet. Fix what it says, then choose again.');
+      return;
+    }
     choosingRef.current = true;
     setSubmitting(true);
     setStandInBusy(id);
@@ -1018,7 +1025,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         try { await saveStandInsEveryJob(); } catch (err) { setStandInError(err instanceof Error ? err.message : String(err)); return; }
       }
       if (!mountedRef.current) return;
-      await submitNow.current(standIn.override, { refusal: standIn.refusal, scope: id });
+      // A failure before the launch's own handling (the gate preview) is said on the card, not dropped.
+      await submitNow.current(standIn.override, { refusal: standIn.refusal, scope: id })
+        .catch((err: unknown) => { setStandInError(err instanceof Error ? err.message : String(err)); });
     } finally {
       choosingRef.current = false;
       setStandInBusy(null);
