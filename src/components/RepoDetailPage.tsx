@@ -7,6 +7,7 @@ import { readErrorKind } from '../api/errors.js';
 import { relTime } from '../board/relTime.js';
 import { fullRunTitle, jobTitle, plainRunTitle } from '../board/deskWords.js';
 import { outcomeOf } from '../board/deskInsights.js';
+import { splitAskContext } from '../board/askPack.js';
 import { statusWord } from '../board/statusWords.js';
 import { repoGraphState, repoGraphWords } from '../board/repoGraphState.js';
 import { knowledgeMarks } from '../board/repoKnowledge.js';
@@ -918,6 +919,14 @@ export function repoRunTitle(session: SessionView['session']): string {
   return session.problem || (session as { title?: unknown }).title ? jobTitle(session) : 'Untitled run';
 }
 
+/** The row's hover text: an ask's whole question (without the context Ask appended for the helper), else the run's
+ *  full title; none for a run with no words. */
+export function repoRunHover(session: SessionView['session']): string | undefined {
+  const problem = (session.problem ?? '').trim();
+  if (problem === '') return undefined;
+  return (session as { ask_path?: unknown }).ask_path === true ? splitAskContext(problem).typed.trim() : fullRunTitle(problem);
+}
+
 /** One run on this repository: its title, one status word, and when (UI-CONTRACT §4.6 list row). */
 function RunRow({ view, onSelect }: { view: SessionView; onSelect: (id: string) => void }): React.ReactElement {
   const { session } = view;
@@ -928,7 +937,7 @@ function RunRow({ view, onSelect }: { view: SessionView; onSelect: (id: string) 
     <button type="button" data-testid="run-link" data-run-id={session.id} className="wk-list-row wk-pg-repo-run" onClick={() => onSelect(session.id)}>
       <span className="wk-list-row-status"><span className="wk-status-dot" data-status={status.tone} aria-hidden /></span>
       <span className="wk-pg-repo-run-text">
-        <span className="wk-list-row-title" title={(session.problem ?? '').trim() !== '' ? fullRunTitle(session.problem.trim()) : undefined}>{repoRunTitle(session)}</span>
+        <span className="wk-list-row-title" title={repoRunHover(session)}>{repoRunTitle(session)}</span>
         <span className="wk-list-row-meta">
           {status.word}{at !== undefined ? <> · <span title={new Date(at).toLocaleString()}>{relTime(at)}</span></> : null}
         </span>

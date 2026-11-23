@@ -62,6 +62,8 @@ describe('answered asks are not "Working now" (studio#1371)', () => {
     const ask = recent.find((r) => r.getAttribute('data-run-id') === 'a-1')!;
     expect(ask).toHaveTextContent('In tiny-math-t12, what does sum([1,2,3]) return with the code as');
     expect(ask).toHaveTextContent('Answered');
+    // The whole question on hover, every sentence of it.
+    expect(ask.querySelector('.wk-list-row-title')).toHaveAttribute('title', QUESTION);
   });
 
   it('the Jobs tab counts and lists only the working run under Working now', async () => {
@@ -71,6 +73,19 @@ describe('answered asks are not "Working now" (studio#1371)', () => {
     const stats = screen.getByTestId('repo-detail-stats');
     expect(stats).toHaveTextContent(/1\s*working now/);
     expect(stats).toHaveTextContent(/2\s*finished/);
+  });
+
+  it('the hover leaves out the context Ask appended for the helper', async () => {
+    const packed = makeView({
+      id: 'a-9', repo_ref: 'tiny-math-t12', status: 'awaiting_human', created_at: 400,
+      problem: `${QUESTION}\n\n---\n[studio context pack — assembled 2026-11-23T13:05:00.000Z]\nwhere: Desk (/)`,
+      ...({ title: 'In tiny-math-t12', ask_path: true, ask_turn: true } as object),
+    });
+    runs = [packed];
+    render(page());
+    const row = (await screen.findAllByTestId('run-link')).find((r) => r.getAttribute('data-run-id') === 'a-9')!;
+    expect(row.querySelector('.wk-list-row-title')).toHaveAttribute('title', QUESTION);
+    expect(row).not.toHaveTextContent('context pack');
   });
 
   it('a page with only answered asks shows no Working now section', async () => {
