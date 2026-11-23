@@ -274,9 +274,14 @@ describe('Schedules (Build & settings)', () => {
     const wire = 'the review could not be prepared: every seat that could interpret this review (claude) ran some of the work it reviews, so none can review it independently.';
     runNow.mockRejectedValueOnce(new ApiError(409, wire, { code: 'no_independent_reviewer', error: wire, excluded: ['claude'], retryWith: { reducedAssurance: true } }));
     render(<SchedulesSection navigate={vi.fn()} />);
+    await screen.findByTestId('schedule-row');
     expect(screen.queryByTestId('schedule-reduced-offer')).toBeNull();
+    expect(screen.queryByTestId('schedule-reduced')).toBeNull();
     fireEvent.click(await screen.findByTestId('schedule-run-now'));
     expect((await screen.findByTestId('schedule-reduced-offer')).textContent).toMatch(/none can review it independently/u);
+    // The first click asked plainly; nothing was accepted before the person's own click.
+    expect(runNow).toHaveBeenCalledExactlyOnceWith('review-recent-work');
+    expect(saveSchedule).not.toHaveBeenCalled();
     expect(screen.getByTestId('schedules-said').textContent).toBe('Not started: no other agent can review this work independently.');
     runNow.mockResolvedValueOnce({ runId: 'x', schedule: row({ reducedAssurance: true }) });
     schedules.mockResolvedValue([row({ reducedAssurance: true })]);
@@ -301,6 +306,26 @@ describe('Schedules (Build & settings)', () => {
     fireEvent.click(await screen.findByTestId('schedule-reduced'));
     await waitFor(() => expect(saveSchedule).toHaveBeenLastCalledWith('review-recent-work', expect.objectContaining({ reducedAssurance: false })));
     await waitFor(() => expect(screen.queryByTestId('schedule-reduced')).toBeNull());
+  });
+
+  it('another refusal never offers reduced assurance; an accepted start that fails still shows the saved accept', async () => {
+    const { ApiError } = await import('../src/api/errors.js');
+    schedules.mockResolvedValue([row()]);
+    runNow.mockRejectedValueOnce(new ApiError(409, 'not started: another run is working', { error: 'not started: another run is working' }));
+    render(<SchedulesSection navigate={vi.fn()} />);
+    fireEvent.click(await screen.findByTestId('schedule-run-now'));
+    expect(await screen.findByText(/Not started: .*another run is working/u)).toBeTruthy();
+    expect(screen.queryByTestId('schedule-reduced-offer')).toBeNull();
+    cleanup();
+    schedules.mockResolvedValue([row({ lastOutcome: 'refused', retryWith: { reducedAssurance: true }, reducedAssurance: false })]);
+    render(<SchedulesSection navigate={vi.fn()} />);
+    runNow.mockRejectedValueOnce(new ApiError(409, 'not started: another run is working', { error: 'not started: another run is working' }));
+    // Crew kept the accept before the start was refused.
+    schedules.mockResolvedValue([row({ lastOutcome: 'refused', reducedAssurance: true })]);
+    fireEvent.click(await screen.findByTestId('schedule-run-reduced'));
+    expect((await screen.findByTestId('schedule-reduced') as HTMLInputElement).checked).toBe(true);
+    expect(screen.queryByTestId('schedule-reduced-offer')).toBeNull();
+    expect(screen.getByTestId('schedules-said').textContent).toMatch(/Not started: .*another run is working/u);
   });
 
   it('says plainly when this crew has no schedules', async () => {

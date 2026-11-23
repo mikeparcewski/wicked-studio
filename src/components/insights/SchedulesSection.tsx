@@ -80,6 +80,11 @@ export function SchedulesSection({ navigate }: { navigate: Navigate }): React.Re
         setSaid((m) => ({ ...m, [s.id]: 'Not started: no other agent can review this work independently.' }));
       } else {
         setSaid((m) => ({ ...m, [s.id]: `Not started: ${e instanceof Error ? e.message : String(e)}` }));
+        // Crew keeps the accept even when this start fails (another run working): show the row as saved.
+        if (reduced) {
+          setOffered((m) => ({ ...m, [s.id]: false }));
+          await read();
+        }
       }
     } finally {
       setBusy(null);
