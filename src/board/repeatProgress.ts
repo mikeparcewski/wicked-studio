@@ -15,20 +15,36 @@ import type { GateRowChoice } from './gateRowModel.js';
 /** Events after which a loop's ask is no longer open: the run moved on (an answer re-ran a step) or ended. */
 const ASK_CLOSED_BY = new Set(['resumed', 'unitExecuting', 'unitDispatched', 'runCancelled', 'sessionCompleted', 'sessionFailed']);
 
+/** Events that put the run on a step (or a step's own gate before it runs): one past the loop's own step means the loop
+ *  is over. */
+const STEP_STARTED_BY = new Set(['unitExecuting', 'unitDispatched', 'awaitingHuman']);
+
+/** The event types {@link repeatLineOf} reads: a caller that fetches a subset of the trail asks for these. */
+export const REPEAT_LINE_EVENTS = ['stepRepeated', 'awaitingHuman', 'resumed', 'unitExecuting', 'unitDispatched'] as const;
+
 /**
  * The run's latest progress line, or null when no page has finished yet (or the run is not a loop). An ask's line
  * ("… budget reached …") counts only while that ask is open: once the run moved on, the newest page's line stands
  * (agy on the studio branch: the operator chose "Map more" and the header still said the budget was reached).
+ *
+ * studio#1366: a loop that is done says nothing more. The engine emits `stepRepeated` only when it sends the run back
+ * for another page; a page that reached the minimum (or an answer that finished with what was found) lets the run move
+ * on with no frame of its own. So once a step AFTER the loop's step is dispatched, runs, or opens its gate before it
+ * runs ("ask me before every step"), the last page's "42% · about 41 min left" is history, and the line is null.
  */
 export function repeatLineOf(events: readonly CoreEvent[] | null | undefined): string | null {
   const list = events ?? [];
   let movedOn = false;
+  /** The furthest step the run started after the event being read (scanning back from the newest). */
+  let reached = -1;
   for (let i = list.length - 1; i >= 0; i--) {
     const e = list[i] as unknown as Record<string, unknown>;
     const type = e['type'];
     if (typeof type === 'string' && ASK_CLOSED_BY.has(type)) movedOn = true;
-    if (type === 'stepRepeated' && typeof e['line'] === 'string' && e['line'].trim() !== '') return e['line'].trim();
-    if (type === 'awaitingHuman' && e['gateKind'] === 'repeat' && !movedOn
+    if (typeof type === 'string' && STEP_STARTED_BY.has(type) && typeof e['ord'] === 'number' && e['ord'] > reached) reached = e['ord'];
+    const loopOver = typeof e['ord'] === 'number' && reached > e['ord'];
+    if (type === 'stepRepeated' && typeof e['line'] === 'string' && e['line'].trim() !== '') return loopOver ? null : e['line'].trim();
+    if (type === 'awaitingHuman' && e['gateKind'] === 'repeat' && !movedOn && !loopOver
       && typeof e['repeatLine'] === 'string' && e['repeatLine'].trim() !== '') return e['repeatLine'].trim();
   }
   return null;
