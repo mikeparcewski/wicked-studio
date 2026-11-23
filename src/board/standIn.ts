@@ -167,6 +167,11 @@ export function listWords(items: readonly string[]): string {
 
 const uniq = (xs: readonly string[]): string[] => [...new Set(xs.filter((x) => x.trim() !== ''))];
 
+/** "A disagreement would need 1 stand-in" / "… 3 stand-ins". */
+function standInsWord(n: number): string {
+  return `A disagreement would need ${n} ${n === 1 ? 'stand-in' : 'stand-ins'}`;
+}
+
 /** One choice as the card draws it: the button, and what happens next. */
 export interface StandInChoiceLine {
   id: StandInChoiceId;
@@ -205,7 +210,7 @@ export function standInChoiceWords(r: StandInChoiceRefusal, name: (cli: string) 
   const council = councils.length > 0 ? `a council of ${Math.max(...councils.map((c) => Math.max(c.needed, 1)))} if a disagreement comes up` : null;
 
   const title = signedIn.length === 1 ? 'Only one helper can check this job'
-    : firm.length === 0 && councils.length > 0 ? `A disagreement would need ${Math.max(...councils.map((c) => c.shortBy))} stand-ins`
+    : firm.length === 0 && councils.length > 0 ? standInsWord(Math.max(...councils.map((c) => c.shortBy)))
       : 'Not enough helpers can check this job';
 
   const who = signedIn.length === 0 ? 'No other helper is signed in.'

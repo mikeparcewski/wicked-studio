@@ -463,7 +463,8 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   /** `standInChoice`: the person answered the stand-in card ("this job" adds crew's `retryWith`; "every job" saved the
    *  setting first and sends the request unflagged, DES §4 consentFor). */
   const launch = async (standInChoice?: { refusal: StandInChoiceRefusal; scope: 'job' | 'always' }): Promise<void> => {
-    if (draft.workflowId === null || launching || launchBlocker !== null) return;
+    // A stand-in choice holds the launch lock through its settings save and hands it on here (codex delta 2).
+    if (draft.workflowId === null || (launching && standInChoice === undefined) || launchBlocker !== null) return;
     if (demoing) {
       launchingRef.current = true;
       setLaunching(true);
@@ -551,6 +552,8 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
       const out = await api.launchRun(body);
       const { runId } = out;
       useProvenanceStore.getState().markLaunchedHere(runId);
+      setStandIn(null);
+      setStandInError(null);
       if (key !== null) clearAboutChips(key);
       const dest = chatId !== null ? sessionPath(chatId) : sessionPath(`run:${runId}`);
       const notice = assuranceNoticeOf(out);
@@ -563,6 +566,7 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
     } catch (err) {
       // Too few helpers to check it: the choice, not an error (nothing was created; DES §4).
       const choice = standInChoiceOf(err);
+      setStandInError(null);
       if (choice !== null) { setStandIn(choice); return; }
       setStandIn(null);
       setError(err instanceof Error ? err.message : String(err));
@@ -597,11 +601,17 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   // edit made meanwhile is what is sent (codex delta on #1361).
   const launchNow = useRef(launch);
   launchNow.current = launch;
-  // DES-STANDIN-001 §2.1 step 3: what each choice does.
+  const mountedRef = useRef(true);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
+  // DES-STANDIN-001 §2.1 step 3: what each choice does. A launching choice holds the wizard's launch lock from the
+  // click (Launch, Back and Close wait), so the settings save and the launch are one step (codex delta 2 on #1361).
   const chooseStandIn = async (id: StandInChoiceId): Promise<void> => {
-    if (standIn === null || launchingRef.current || standInBusy !== null) return;
+    if (standIn === null || launchingRef.current) return;
     if (id === 'cancel') { setStandIn(null); setStandInError(null); return; }
     if (id === 'sign_in') { closeStore(); (navigate ?? goToPath)(AGENTS_PATH); return; }
+    if (launchBlocker !== null) { setStandInError(launchBlocker); return; }
+    launchingRef.current = true;
+    setLaunching(true);
     setStandInBusy(id);
     setStandInError(null);
     try {
@@ -609,9 +619,11 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
         // A setting not saved launches nothing and keeps the choices (another one, "this job", still works).
         try { await saveStandInsEveryJob(); } catch (err) { setStandInError(err instanceof Error ? err.message : String(err)); return; }
       }
+      if (!mountedRef.current) return;
       await launchNow.current({ refusal: standIn, scope: id });
     } finally {
       setStandInBusy(null);
+      if (launchingRef.current) { launchingRef.current = false; setLaunching(false); }
     }
   };
   const openLaunched = (): void => { if (launched === null || launchingRef.current) return; finish(); navigate?.(launched.dest); };

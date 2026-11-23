@@ -820,7 +820,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   /** `standInChoice`: the person answered the stand-in card ("this job" adds crew's `retryWith`; "every job" saved the
    *  setting first and sends the request unflagged, DES-STANDIN-001 §4 consentFor). */
   async function submit(preflightOverride = false, standInChoice?: { refusal: StandInChoiceRefusal; scope: 'job' | 'always' }): Promise<void> {
-    if (!problem.trim() || selectedClis.size === 0 || submitting) return;
+    // A stand-in choice holds `submitting` through its settings save and hands it on here (codex delta 2 on #1361).
+    if (!problem.trim() || selectedClis.size === 0 || (submitting && standInChoice === undefined)) return;
     // (studio#1150) What the form shows as Send is pressed: crew's answer for these fields, captured now (never re-read
     // after the awaits below, when another answer may have landed).
     const postureKeyAtSend = posturePreview.key;
@@ -978,6 +979,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       // Too few helpers to check it: the choice, not an error (nothing was created; DES-STANDIN-001 §4).
       const choice = standInChoiceOf(err);
       setStandIn(choice !== null ? { refusal: choice, override: preflightOverride } : null);
+      setStandInError(null);
       if (choice !== null) return;
       if (refused !== null) setBaseSkillRefusal(refused);
       else if (qeRefusalOf(err) === 'launch') {
@@ -996,11 +998,18 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // edit made meanwhile is what is sent (codex delta on #1361).
   const submitNow = useRef(submit);
   submitNow.current = submit;
-  // DES-STANDIN-001 §2.1 step 3: what each choice does.
+  const choosingRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
+  // DES-STANDIN-001 §2.1 step 3: what each choice does. A launching choice holds `submitting` from the click (Send
+  // waits), so the settings save and the Send are one step (codex delta 2 on #1361).
   async function chooseStandIn(id: StandInChoiceId): Promise<void> {
-    if (standIn === null || submitting || standInBusy !== null) return;
+    if (standIn === null || submitting || choosingRef.current) return;
     if (id === 'cancel') { setStandIn(null); setStandInError(null); return; }
     if (id === 'sign_in') { navigate?.(AGENTS_PATH); return; }
+    if (!problem.trim() || selectedClis.size === 0) { setStandInError('Say what the job is and pick a helper first.'); return; }
+    choosingRef.current = true;
+    setSubmitting(true);
     setStandInBusy(id);
     setStandInError(null);
     try {
@@ -1008,9 +1017,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         // A setting not saved launches nothing and keeps the choices (another one, "this job", still works).
         try { await saveStandInsEveryJob(); } catch (err) { setStandInError(err instanceof Error ? err.message : String(err)); return; }
       }
+      if (!mountedRef.current) return;
       await submitNow.current(standIn.override, { refusal: standIn.refusal, scope: id });
     } finally {
+      choosingRef.current = false;
       setStandInBusy(null);
+      setSubmitting(false);
     }
   }
 

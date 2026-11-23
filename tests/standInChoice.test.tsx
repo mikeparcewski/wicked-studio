@@ -112,6 +112,13 @@ describe('the words a first-time user reads', () => {
     expect(w.meaning).toMatch(/^wicked can fill those roles with stand-ins\. A stand-in is Claude Code again/);
   });
 
+  it('one council seat short reads "1 stand-in"', () => {
+    const body = structuredClone(CHOICE.body) as { preflight: { signedIn: string[]; roles: Array<Record<string, unknown>> } };
+    body.preflight.signedIn = ['claude', 'codex', 'pi'];
+    body.preflight.roles = body.preflight.roles.map((r) => (r['role'] === 'council' ? { ...r, real: ['pi', 'codex'], shortBy: 1 } : { ...r, real: ['codex'], shortBy: 0 }));
+    expect(standInChoiceWords(standInChoiceOf(refusalError(body as never))!, name).title).toBe('A disagreement would need 1 stand-in');
+  });
+
   it('a helper the roster does not name is named the way studio names its family; no model said when none is known', () => {
     const body = structuredClone(CHOICE.body) as { preflight: { signedIn: string[]; roles: Array<{ standInFrom: { cli: string; models: (string | null)[] } }> } };
     body.preflight.signedIn = ['codex#2'];
@@ -290,20 +297,23 @@ describe('the launch wizard asks instead of failing', () => {
     expect(second).toEqual({ ...first, problem: 'fix the writer instead', standIns: true });
   });
 
-  it('an edit while "every job" is saving is what is sent once the setting is saved (codex delta)', async () => {
+  it('while "every job" is saving, Launch, Back and Close wait: one launch, after the save (codex delta 2)', async () => {
     let release: () => void = () => {};
     const held = new Promise<void>((r) => { release = r; });
     const wire = vi.mocked(fetch).getMockImplementation()!;
     vi.mocked(fetch).mockImplementation(((url: string, init?: RequestInit) => (init?.method === 'PUT' ? held.then(() => wire(url, init)) : wire(url, init))) as never);
-    await launchRefused();
+    const navigate = await launchRefused();
     fireEvent.click(screen.getByTestId('launch-wizard-standin-always'));
-    await backToWhat();
-    fireEvent.change(screen.getByTestId('launch-wizard-intent'), { target: { value: 'fix the writer instead' } });
-    await toReview();
-    release();
-    await waitFor(() => expect(launches()).toHaveLength(2));
-    const [first, second] = launches();
-    expect(second).toEqual({ ...first, problem: 'fix the writer instead' });
+    await waitFor(() => expect(screen.getByTestId('launch-wizard-standin-always')).toHaveTextContent('Starting…'));
+    expect(screen.getByTestId('launch-wizard-launch')).toBeDisabled();
+    expect(screen.getByTestId('launch-wizard-back')).toBeDisabled();
+    expect(screen.getByTestId('launch-wizard-close')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    expect(launches()).toHaveLength(1);
+    await act(async () => { release(); });
+    await waitFor(() => expect(navigate).toHaveBeenCalled());
+    expect(launches()).toHaveLength(2);
+    expect(launches()[1]).toEqual(launches()[0]);
   });
 
   it('going back and forth without an edit keeps the card for the same request', async () => {
@@ -377,10 +387,28 @@ describe('the /runs/new launch form asks too', () => {
     fireEvent.click(screen.getByTestId('launch-standin-always'));
     await waitFor(() => expect(client.api.updateSettings).toHaveBeenCalledWith({ standInReview: 'always' }));
     fireEvent.change(screen.getByTestId('launch-problem'), { target: { value: 'fix the writer instead' } });
+    expect(screen.getByTestId('launch-submit')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('launch-submit'));
+    expect(launch).toHaveBeenCalledTimes(1);
     await act(async () => { release(); });
     await waitFor(() => expect(onLaunched).toHaveBeenCalledWith('r-new'));
     const [first, second] = launch.mock.calls.map((c) => withoutId(c[0]));
     expect(second).toEqual({ ...first, problem: 'fix the writer instead' });
+  });
+
+  it('a choice on a form that cannot launch says why, and saves and sends nothing (codex delta 2)', async () => {
+    const settings = vi.spyOn(client.api, 'updateSettings');
+    const launch = vi.spyOn(client.api, 'launchRun').mockRejectedValueOnce(refusalError());
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    fireEvent.change(screen.getByTestId('launch-problem'), { target: { value: 'fix the reader' } });
+    await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
+    fireEvent.click(screen.getByTestId('launch-submit'));
+    await screen.findByTestId('launch-standin');
+    fireEvent.change(screen.getByTestId('launch-problem'), { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('launch-standin-always'));
+    expect(await screen.findByTestId('launch-standin-error')).toHaveTextContent('Say what the job is');
+    expect(settings).not.toHaveBeenCalled();
+    expect(launch).toHaveBeenCalledTimes(1);
   });
 
   it('an edit to the words after the refusal is what "this job" sends (codex r1 + delta)', async () => {
