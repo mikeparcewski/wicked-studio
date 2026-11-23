@@ -201,6 +201,12 @@
       ]
     },
     {
+      "testId": "agents-login-copy",
+      "files": [
+        "src/components/agents/containerSignIn.tsx"
+      ]
+    },
+    {
       "testId": "agents-login-line",
       "files": [
         "src/components/agents/containerSignIn.tsx"
@@ -24905,6 +24911,30 @@
     },
     {
       "testId": "terminal",
+      "files": [
+        "src/components/Terminal.tsx"
+      ]
+    },
+    {
+      "testId": "terminal-copy-ask",
+      "files": [
+        "src/components/Terminal.tsx"
+      ]
+    },
+    {
+      "testId": "terminal-copy-go",
+      "files": [
+        "src/components/Terminal.tsx"
+      ]
+    },
+    {
+      "testId": "terminal-copy-note",
+      "files": [
+        "src/components/Terminal.tsx"
+      ]
+    },
+    {
+      "testId": "terminal-copy-skip",
       "files": [
         "src/components/Terminal.tsx"
       ]

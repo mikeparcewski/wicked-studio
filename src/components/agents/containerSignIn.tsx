@@ -7,6 +7,7 @@ import { seatLabel } from '../../board/seatNames.js';
 import { getCachedRoster } from '../../store/rosterCache.js';
 import { isShortcutsPaletteOpen } from '../../hooks/useGlobalShortcuts.js';
 import { useLayerStore } from '../../store/layers.js';
+import { selectWords } from '../../board/terminalLinks.js';
 import { Terminal } from '../Terminal.js';
 import { AgentLoginProvider, SignInNotCompleted } from './agentLogin.js';
 import { holdInert, useLoginCover } from './inertHold.js';
@@ -157,6 +158,8 @@ function LoginTerminal({ session, open, onOpenError, onClosed, onExit }: {
               ? loginFinishLine(key, name, onHost)
               : onHost ? `Opening ${name}’s own sign-in on this computer…` : `Opening ${name}’s sign-in… The first sign-in can take a few minutes while it is prepared.`}
           </p>
+          {/* (studio#1362) A helper's sign-in can keep the mouse for itself: say how to open its link and copy from it. */}
+          {opened && <p data-testid="agents-login-copy" className="wk-agents-safe">{`Click a sign-in link in the terminal to open it in a new tab. ${selectWords()}`}</p>}
           <Terminal cwd="." open={open} onOpenError={onOpenError} onExit={onExit} />
           <span className="wk-agents-safe">{onHost ? `Studio opens ${name}’s own sign-in on this computer.` : `Studio opens ${name}’s sign-in; follow its steps there.`} Studio never shows your password or token. For Claude, paste only the code your browser shows into claude’s own prompt: the sign-in reads the token claude prints, and asks you to paste it (unechoed) only if it cannot.</span>
         </div>
