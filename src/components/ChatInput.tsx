@@ -562,11 +562,6 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const formPosture = launchPosture({ ...postureInput, previewAnswer: { status: 'none' } });
   const previewFields = formPosture.payload.fields;
   const posturePreview = usePosturePreview(previewFields, powerChoice, healthSettled);
-  /** What a Send from here would ask for, as the person set it (the stand-in card answers only this request). */
-  const requestKey = JSON.stringify([launchProblem, [...selectedClis].sort(), entityMode, previewFields, linkedExclude, retryOf,
-    groupAttach, reducedAssurance, skipQe, skipQeReason, forceQe, powerChoice]);
-  const requestKeyNow = useRef(requestKey);
-  requestKeyNow.current = requestKey;
   const { shown, payload } = launchPosture({ ...postureInput, previewAnswer: posturePreview.answer });
 
   function loadProjects(): void {
@@ -592,11 +587,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const [qeRefusal, setQeRefusal] = useState<{ key: string; detail: string | null; forced: boolean } | null>(null);
   const qeAttempt = useRef(0);
   /** DES-STANDIN-001 S0: crew asked how to check this job (too few helpers signed in); nothing started. */
-  // `key` is the request it answers (codex r1 on #1361): an edit after the refusal drops the card.
-  const [standIn, setStandIn] = useState<{ refusal: StandInChoiceRefusal; body: LaunchBodyWithDeliver; key: string } | null>(null);
+  // A choice sends the job as the form shows it THEN, through `submit` itself (codex r1+delta on #1361): nothing is
+  // replayed from the refused attempt, so an edit made after the refusal (or during the settings save) is what is sent.
+  // `override`: the refused Send had overridden the no-repo preflight (the choice keeps that answer).
+  const [standIn, setStandIn] = useState<{ refusal: StandInChoiceRefusal; override: boolean } | null>(null);
   const [standInBusy, setStandInBusy] = useState<StandInChoiceId | null>(null);
   const [standInError, setStandInError] = useState<string | null>(null);
-  useEffect(() => { if (standIn !== null && standIn.key !== requestKey) { setStandIn(null); setStandInError(null); } }, [standIn, requestKey]);
   /** studio#404: the id this launch was sent under (client-minted), while its POST is outstanding. */
   const [pendingRunId, setPendingRunId] = useState<string | null>(null);
   /** studio#404: the pending run is already on the daemon — offered while the POST is still out. */
@@ -821,7 +817,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   }
 
   // ── Submit ─────────────────────────────────────────────────────────────────
-  async function submit(preflightOverride = false): Promise<void> {
+  /** `standInChoice`: the person answered the stand-in card ("this job" adds crew's `retryWith`; "every job" saved the
+   *  setting first and sends the request unflagged, DES-STANDIN-001 §4 consentFor). */
+  async function submit(preflightOverride = false, standInChoice?: { refusal: StandInChoiceRefusal; scope: 'job' | 'always' }): Promise<void> {
     if (!problem.trim() || selectedClis.size === 0 || submitting) return;
     // (studio#1150) What the form shows as Send is pressed: crew's answer for these fields, captured now (never re-read
     // after the awaits below, when another answer may have landed).
@@ -866,9 +864,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     }
     setBaseSkillRefusal(null);
     setQeRefusal(null);
-    setStandIn(null);
-    setStandInError(null);
-    const keyAtLaunch = requestKeyNow.current;
+    // The card stays up while its own choice is carried out; any other Send replaces it.
+    if (standInChoice === undefined) { setStandIn(null); setStandInError(null); }
     setStartedRunId(null);
     openedEarly.current = null;
 
@@ -934,6 +931,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       ? postureAtSend : { status: 'none' as const };
     const { power } = launchPosture({ ...postureInput, takesPower, previewAnswer }).payload;
     if (power !== undefined) body.power = power;
+    if (standInChoice?.scope === 'job') Object.assign(body, standInRelaunchBody(body, standInChoice.refusal));
 
     /** The body crew accepted (the retry without `deliver` when that was it): a relaunch sends the same. */
     let sent = body;
@@ -972,14 +970,16 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       const notice = assuranceNoticeOf(launched);
       if (notice !== null) useLaunchNotices.getState().put({ runId: newRunId, notice, body: sent }, sent.chatId ?? null);
       setProblem('');
+      setStandIn(null);
       // Opened early from the "your run started" offer: the operator is already there.
       if (openedEarly.current !== newRunId) onLaunched(newRunId);
     } catch (err) {
       const refused = baseSkillRefusalOf(err);
       // Too few helpers to check it: the choice, not an error (nothing was created; DES-STANDIN-001 §4).
       const choice = standInChoiceOf(err);
-      if (choice !== null) setStandIn({ refusal: choice, body: sent, key: keyAtLaunch });
-      else if (refused !== null) setBaseSkillRefusal(refused);
+      setStandIn(choice !== null ? { refusal: choice, override: preflightOverride } : null);
+      if (choice !== null) return;
+      if (refused !== null) setBaseSkillRefusal(refused);
       else if (qeRefusalOf(err) === 'launch') {
         qeAttempt.current += 1;
         setQeRefusal({ key: `launch:${qeAttempt.current}`, detail: apiWire(err), forced: body.forceQeAcceptance === true });
@@ -992,33 +992,24 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     }
   }
 
-  // DES-STANDIN-001 §2.1 step 3: what each choice does. "This job" and "every job" re-send the same request.
+  // The Send as THIS render builds it: a choice awaiting the settings save calls the one current when it lands, so an
+  // edit made meanwhile is what is sent (codex delta on #1361).
+  const submitNow = useRef(submit);
+  submitNow.current = submit;
+  // DES-STANDIN-001 §2.1 step 3: what each choice does.
   async function chooseStandIn(id: StandInChoiceId): Promise<void> {
-    if (standIn === null || submitting || standIn.key !== requestKeyNow.current) return;
+    if (standIn === null || submitting || standInBusy !== null) return;
     if (id === 'cancel') { setStandIn(null); setStandInError(null); return; }
     if (id === 'sign_in') { navigate?.(AGENTS_PATH); return; }
-    setSubmitting(true);
     setStandInBusy(id);
-    setError(null);
     setStandInError(null);
     try {
       if (id === 'always') {
         // A setting not saved launches nothing and keeps the choices (another one, "this job", still works).
         try { await saveStandInsEveryJob(); } catch (err) { setStandInError(err instanceof Error ? err.message : String(err)); return; }
       }
-      // "Every job" sends the request unchanged: crew takes consent from the setting (DES §4 consentFor).
-      const body = id === 'job' ? standInRelaunchBody(standIn.body, standIn.refusal) : standIn.body;
-      const { runId: newRunId } = await api.launchRun(body);
-      useProvenanceStore.getState().markLaunchedHere(newRunId);
-      setStandIn(null);
-      setProblem('');
-      onLaunched(newRunId);
-    } catch (err) {
-      const again = standInChoiceOf(err);
-      if (again !== null) setStandIn({ ...standIn, refusal: again });
-      else { setStandIn(null); setError(err instanceof Error ? err.message : String(err)); }
+      await submitNow.current(standIn.override, { refusal: standIn.refusal, scope: id });
     } finally {
-      setSubmitting(false);
       setStandInBusy(null);
     }
   }
@@ -2247,7 +2238,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         <QeRefusalWarning kind="launch" refusalKey={qeRefusal.key} detail={qeRefusal.detail} forced={qeRefusal.forced} navigate={navigate} testId="launch-qe-refused" />
       )}
 
-      {standIn !== null && standIn.key === requestKey && (
+      {standIn !== null && (
         <StandInChoice refusal={standIn.refusal} name={helperNamer(roster)} busy={standInBusy} error={standInError} testId="launch-standin"
           onChoose={(id) => { void chooseStandIn(id); }} />
       )}

@@ -127,7 +127,11 @@ export function standInChoiceOf(e: unknown): StandInChoiceRefusal | null {
   };
 }
 
-/** "this job" re-sends the exact request the person made, with crew's `retryWith` (DES §6: one launch, no edits). */
+/**
+ * "This job": the request the form sends, with crew's `retryWith` (DES §5.2, §6). The forms build it through their own
+ * launch path at the moment of the choice, so an unedited form re-sends the refused request field for field and an
+ * edited one sends what it shows (nothing is replayed from the refused attempt).
+ */
 export function standInRelaunchBody(sent: LaunchBodyWithDeliver, refusal: StandInChoiceRefusal): StandInLaunchBody {
   return { ...sent, ...refusal.retryWith };
 }
@@ -238,7 +242,7 @@ export function standInChoiceWords(r: StandInChoiceRefusal, name: (cli: string) 
 export type StandInReview = 'ask' | 'always';
 
 /**
- * "Every job": turn the setting on (DES §2.1 step 3, §4), then the caller re-sends the ORIGINAL request without
+ * "Every job": turn the setting on (DES §2.1 step 3, §4), then the caller sends the request again without
  * `standIns`, so crew takes consent from the setting (scope `always`; a request flag would record `job`). The answer
  * must echo the setting, or nothing is launched: a service that drops the key would refuse the same way again.
  */

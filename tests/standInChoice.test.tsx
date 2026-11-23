@@ -264,19 +264,46 @@ describe('the launch wizard asks instead of failing', () => {
     expect((await screen.findByTestId('launch-wizard-intent') as HTMLTextAreaElement).value).toBe('fix the reader');
   });
 
-  it('an edit after the refusal drops the card: no choice sends a request the form no longer shows (codex r1)', async () => {
-    await launchRefused();
-    fireEvent.click(screen.getByTestId('launch-wizard-back'));
-    expect(screen.queryByTestId('launch-wizard-standin')).toBeNull();
-    while (screen.getByTestId('launch-wizard-step').dataset.step !== 'what') fireEvent.click(screen.getByTestId('launch-wizard-back'));
-    fireEvent.change(screen.getByTestId('launch-wizard-intent'), { target: { value: 'fix the writer instead' } });
+  async function toReview(): Promise<void> {
     for (let i = 0; i < 6 && screen.getByTestId('launch-wizard-step').dataset.step !== 'review'; i += 1) {
       await waitFor(() => expect(screen.getByTestId('launch-wizard-next')).toBeEnabled());
       fireEvent.click(screen.getByTestId('launch-wizard-next'));
     }
     expect(screen.getByTestId('launch-wizard-step').dataset.step).toBe('review');
+  }
+  async function backToWhat(): Promise<void> {
+    while (screen.getByTestId('launch-wizard-step').dataset.step !== 'what') {
+      await waitFor(() => expect(screen.getByTestId('launch-wizard-back')).toBeEnabled());
+      fireEvent.click(screen.getByTestId('launch-wizard-back'));
+    }
+  }
+
+  it('an edit after the refusal is what a choice sends: nothing is replayed from the refused attempt (codex r1 + delta)', async () => {
+    await launchRefused();
+    await backToWhat();
     expect(screen.queryByTestId('launch-wizard-standin')).toBeNull();
-    expect(launches()).toHaveLength(1);
+    fireEvent.change(screen.getByTestId('launch-wizard-intent'), { target: { value: 'fix the writer instead' } });
+    await toReview();
+    fireEvent.click(screen.getByTestId('launch-wizard-standin-job'));
+    await waitFor(() => expect(launches()).toHaveLength(2));
+    const [first, second] = launches();
+    expect(second).toEqual({ ...first, problem: 'fix the writer instead', standIns: true });
+  });
+
+  it('an edit while "every job" is saving is what is sent once the setting is saved (codex delta)', async () => {
+    let release: () => void = () => {};
+    const held = new Promise<void>((r) => { release = r; });
+    const wire = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(((url: string, init?: RequestInit) => (init?.method === 'PUT' ? held.then(() => wire(url, init)) : wire(url, init))) as never);
+    await launchRefused();
+    fireEvent.click(screen.getByTestId('launch-wizard-standin-always'));
+    await backToWhat();
+    fireEvent.change(screen.getByTestId('launch-wizard-intent'), { target: { value: 'fix the writer instead' } });
+    await toReview();
+    release();
+    await waitFor(() => expect(launches()).toHaveLength(2));
+    const [first, second] = launches();
+    expect(second).toEqual({ ...first, problem: 'fix the writer instead' });
   });
 
   it('going back and forth without an edit keeps the card for the same request', async () => {
@@ -304,6 +331,9 @@ describe('the launch wizard asks instead of failing', () => {
   });
 });
 
+/** A Send mints its own session id each time (the refused one created nothing); the rest is compared. */
+const withoutId = (b: unknown): Record<string, unknown> => { const o = { ...(b as Record<string, unknown>) }; delete o['sessionId']; return o; };
+
 describe('the /runs/new launch form asks too', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -329,19 +359,43 @@ describe('the /runs/new launch form asks too', () => {
     expect(onLaunched).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId('launch-standin-job'));
     await waitFor(() => expect(onLaunched).toHaveBeenCalledWith('r-new'));
-    expect(launch.mock.calls[1]![0]).toEqual({ ...launch.mock.calls[0]![0], standIns: true });
+    const [first, second] = launch.mock.calls.map((c) => withoutId(c[0]));
+    expect(second).toEqual({ ...first, standIns: true });
     expect(screen.queryByTestId('launch-standin')).toBeNull();
   });
-  it('an edit to the words after the refusal drops the card (codex r1)', async () => {
-    vi.spyOn(client.api, 'launchRun').mockRejectedValueOnce(refusalError());
-    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+
+  it('an edit while "every job" is saving is what is sent, unflagged, once the setting is saved (codex delta)', async () => {
+    let release: () => void = () => {};
+    vi.spyOn(client.api, 'updateSettings').mockImplementation(() => new Promise((r) => { release = () => r({ settings: { standInReview: 'always' } } as never); }));
+    const launch = vi.spyOn(client.api, 'launchRun').mockRejectedValueOnce(refusalError()).mockResolvedValueOnce({ runId: 'r-new' });
+    const onLaunched = vi.fn();
+    render(<ChatInput runId={null} runStatus={null} onLaunched={onLaunched} />);
+    fireEvent.change(screen.getByTestId('launch-problem'), { target: { value: 'fix the reader' } });
+    await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
+    fireEvent.click(screen.getByTestId('launch-submit'));
+    await screen.findByTestId('launch-standin');
+    fireEvent.click(screen.getByTestId('launch-standin-always'));
+    await waitFor(() => expect(client.api.updateSettings).toHaveBeenCalledWith({ standInReview: 'always' }));
+    fireEvent.change(screen.getByTestId('launch-problem'), { target: { value: 'fix the writer instead' } });
+    await act(async () => { release(); });
+    await waitFor(() => expect(onLaunched).toHaveBeenCalledWith('r-new'));
+    const [first, second] = launch.mock.calls.map((c) => withoutId(c[0]));
+    expect(second).toEqual({ ...first, problem: 'fix the writer instead' });
+  });
+
+  it('an edit to the words after the refusal is what "this job" sends (codex r1 + delta)', async () => {
+    const launch = vi.spyOn(client.api, 'launchRun').mockRejectedValueOnce(refusalError()).mockResolvedValueOnce({ runId: 'r-new' });
+    const onLaunched = vi.fn();
+    render(<ChatInput runId={null} runStatus={null} onLaunched={onLaunched} />);
     fireEvent.change(screen.getByTestId('launch-problem'), { target: { value: 'fix the reader' } });
     await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
     fireEvent.click(screen.getByTestId('launch-submit'));
     await screen.findByTestId('launch-standin');
     fireEvent.change(screen.getByTestId('launch-problem'), { target: { value: 'fix the writer instead' } });
-    await waitFor(() => expect(screen.queryByTestId('launch-standin')).toBeNull());
-    expect(client.api.launchRun).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId('launch-standin-job'));
+    await waitFor(() => expect(onLaunched).toHaveBeenCalledWith('r-new'));
+    const [first, second] = launch.mock.calls.map((c) => withoutId(c[0]));
+    expect(second).toEqual({ ...first, problem: 'fix the writer instead', standIns: true });
   });
 });
 
