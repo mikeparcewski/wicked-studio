@@ -38,6 +38,21 @@ describe('capabilities after a busy ping', () => {
     expect(getHealth).toHaveBeenCalledTimes(2);
   });
 
+  it('busy twice: still only one re-read', async () => {
+    getHealth.mockResolvedValue(health('busy', []));
+    await useCapabilities.getState().load();
+    await vi.advanceTimersByTimeAsync(BUSY_REREAD_MS * 5);
+    expect(getHealth).toHaveBeenCalledTimes(2);
+  });
+
+  it('the re-read takes only chatWorkflows: a capability set since (a launch\u2019s fresh read) is kept', async () => {
+    getHealth.mockResolvedValueOnce(health('busy', [])).mockResolvedValueOnce({ ...health('ok', ['analyze']), capabilities: { runChatId: false, powerMode: false, chatWorkflows: ['analyze'] } });
+    await useCapabilities.getState().load();
+    useCapabilities.setState({ powerMode: true });
+    await vi.advanceTimersByTimeAsync(BUSY_REREAD_MS);
+    expect(useCapabilities.getState()).toMatchObject({ powerMode: true, runChatId: true, chatWorkflows: ['analyze'] });
+  });
+
   it('an ok ping is read once', async () => {
     getHealth.mockResolvedValue(health('ok', ['analyze']));
     await useCapabilities.getState().load();

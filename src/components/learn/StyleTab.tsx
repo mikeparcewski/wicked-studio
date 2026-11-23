@@ -303,14 +303,14 @@ function StylePipeline({ record, launching, sourceCount, onLearn, onReset, launc
           // studio#1337: a rule crew could not land is not adopted; it stays proposed in Steering, where its card says why.
           const failed = landingFailure(await approveProposal(p.id));
           if (failed === null) kept += 1;
-          else notLanded.push(failed);
+          else notLanded.push(`\u201c${policyPayload(p).rule ?? p.id}\u201d: ${failed}`);
         }
       }
       if (kept > 0) void useFirstRun.getState().markLearnUsed();
       const line = which === 'memories' ? `You kept ${kept} of ${of} memories · saved to Memory` : `You adopted ${kept} of ${of} rules · now in Steering`;
       onDecided({ ...record, decided: { ...decided, [which]: line } });
       if (notLanded.length > 0) {
-        setFail(`${notLanded.length === 1 ? '1 rule' : `${notLanded.length} rules`} did not land and ${notLanded.length === 1 ? 'is' : 'are'} still proposed in Steering: ${notLanded[0]}`);
+        setFail(`${notLanded.length === 1 ? '1 rule' : `${notLanded.length} rules`} did not land as asked; see Steering\u2019s Proposed rules. ${notLanded.join(' ')}`);
       }
       void poll();
     } catch (e) {

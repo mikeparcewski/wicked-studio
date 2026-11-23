@@ -60,7 +60,8 @@ describe('landingFailure', () => {
     expect(landingFailure(FAILED)).toBe(ERROR);
     expect(landingFailure(LANDED)).toBeNull();
     expect(landingFailure({ outcome: 'promoted', active_id: 'm-1' })).toBeNull();
-    expect(landingFailure({ outcome: 'handed_off', payload: {} })).toBeNull();
+    // A hand-off with no landing confirms nothing: never read as a rule in force (codex r1).
+    expect(landingFailure({ outcome: 'handed_off', payload: {} })).toContain('did not say that the rule landed');
     expect(landingFailure({ outcome: 'handed_off', payload: {}, landing: { outcome: 'failed' } })).toBe('crew could not land the rule');
   });
 });
@@ -74,14 +75,14 @@ describe('Steering > Proposed: a policy whose rule did not land (studio#1337)', 
     await user.click(await screen.findByTestId('proposal-approve'));
 
     const why = await screen.findByTestId('proposal-not-landed');
-    expect(why).toHaveTextContent('the rule did not land, so no rule was added');
+    expect(why).toHaveTextContent('Not approved: crew could not land this rule as asked. Why: ');
     expect(why).toHaveTextContent('it names no known project');
-    expect(screen.getByTestId('proposals-section-note')).toHaveTextContent(/^Not approved, its rule did not land: Any change/);
+    expect(screen.getByTestId('proposals-section-note')).toHaveTextContent(/^Not approved, its rule did not land as asked: Any change/);
     expect(screen.getByTestId('proposals-section-note')).not.toHaveTextContent(/^Approved/);
-    // The proposal is still pending: its card stays, with crew's two ways forward.
+    // The proposal is still pending: its card stays, with crew's two ways forward and a retry at its own reach.
     const card = screen.getByTestId('proposal-card');
     expect(within(card).getByTestId('proposal-reject')).toBeEnabled();
-    expect(within(card).queryByTestId('proposal-approve')).toBeNull();
+    expect(within(card).getByTestId('proposal-approve')).toHaveTextContent('Try again');
     expect(onDecision).not.toHaveBeenCalled();
 
     await user.click(within(card).getByTestId('proposal-approve-everywhere'));
@@ -89,6 +90,28 @@ describe('Steering > Proposed: a policy whose rule did not land (studio#1337)', 
     expect(calls.filter((c) => c.path.endsWith('/approve')).map((c) => c.body)).toEqual([undefined, { reach: 'operator' }]);
     expect(onDecision).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.queryByTestId('proposal-card')).toBeNull());
+  });
+
+  it('Try again approves at the proposal\u2019s own reach (no body), and a second failure keeps the card', async () => {
+    const calls = wire();
+    render(<ProposalsSection kind="policy" heading="Rule proposals" />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByTestId('proposal-approve'));
+    await screen.findByTestId('proposal-not-landed');
+    await user.click(screen.getByTestId('proposal-approve'));
+    await waitFor(() => expect(calls.filter((c) => c.path.endsWith('/approve'))).toHaveLength(2));
+    expect(calls.filter((c) => c.path.endsWith('/approve')).map((c) => c.body)).toEqual([undefined, undefined]);
+    await waitFor(() => expect(screen.getByTestId('proposal-not-landed')).toBeInTheDocument());
+    expect(screen.getByTestId('proposal-card')).toBeInTheDocument();
+  });
+
+  it('a memory approve is never read as a landing', async () => {
+    const MEM = { ...POL, id: 'm-1', kind_type: 'memory', payload: { content: 'Tests sit beside the code.', tier: 'semantic' } };
+    apiFetch.mockImplementation((path: unknown) => Promise.resolve(String(path).endsWith('/approve') ? { outcome: 'promoted', active_id: 'a-1' } : { proposals: [MEM] }));
+    render(<ProposalsSection kind="memory" heading="Memory proposals" />);
+    await userEvent.setup().click(await screen.findByTestId('proposal-approve'));
+    await waitFor(() => expect(screen.getByTestId('proposals-section-note')).toHaveTextContent(/^Approved: Tests sit beside/));
+    expect(screen.queryByTestId('proposal-not-landed')).toBeNull();
   });
 
   it('Reject still rejects a proposal whose rule did not land', async () => {

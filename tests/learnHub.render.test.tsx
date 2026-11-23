@@ -224,7 +224,7 @@ describe('Learn: Style review', () => {
     const rulesAsk = await screen.findByTestId('style-rules');
     fireEvent.click(within(rulesAsk).getByTestId('ask-confirm'));
     await waitFor(() => expect(screen.getByTestId('style-rules-record').textContent).toBe('You adopted 1 of 2 rules · now in Steering'));
-    expect(screen.getByTestId('style-decide-error').textContent).toBe('1 rule did not land and is still proposed in Steering: it names no known project (the proposal is still pending)');
+    expect(screen.getByTestId('style-decide-error').textContent).toBe('1 rule did not land as asked; see Steering\u2019s Proposed rules. \u201cKeep sum tested.\u201d: it names no known project (the proposal is still pending)');
   });
 
   it('a source list launches one job per kind: team docs to steering-author, a repo to capture-learnings', async () => {

@@ -32,14 +32,17 @@ export type { ApproveProposalBody, ProposalState, Proposal, FileProposalBody };
 export type ProposalApproveOutcome = ApproveProposalResponse;
 
 /**
- * (studio#1337) Why an approved POLICY proposal's rule did NOT land, or null when it did (or the outcome is not a policy
- * landing). crew answers 200 either way: a failed landing is in-band (`landing.outcome: "failed"`, its loud `error`),
- * and the proposal stays pending, so a page must never say "Approved" for it.
+ * (studio#1337) Why an approved POLICY proposal's rule is NOT confirmed in force, or null when crew says it landed (or
+ * the outcome is not a policy hand-off: a memory is `promoted`). crew answers 200 either way: a failed landing is
+ * in-band (`landing.outcome: "failed"`, its loud `error`, usually with the proposal still pending), and a hand-off with
+ * no `landing` at all confirms nothing. A page never says "Approved" or "adopted" for either.
  */
 export function landingFailure(out: unknown): string | null {
   if (typeof out !== 'object' || out === null) return null;
   const o = out as { outcome?: unknown; landing?: { outcome?: unknown; error?: unknown } | null };
-  if (o.outcome !== 'handed_off' || typeof o.landing !== 'object' || o.landing === null || o.landing.outcome !== 'failed') return null;
+  if (o.outcome !== 'handed_off') return null;
+  if (typeof o.landing !== 'object' || o.landing === null) return 'crew did not say that the rule landed; look for it under Steering\u2019s rules';
+  if (o.landing.outcome === 'landed') return null;
   const error = typeof o.landing.error === 'string' ? o.landing.error.trim() : '';
   return error === '' ? 'crew could not land the rule' : error;
 }

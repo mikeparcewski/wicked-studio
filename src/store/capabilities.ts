@@ -149,11 +149,13 @@ export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
     inflight ??= import('../api/client.js').then(({ api }) => api.getHealth())
       .then((h) => {
         set(capsOf(h));
-        // studio#1332: the engine was still busy (booting), so what depends on it may be missing (`chatWorkflows`).
-        // Read once more after a short wait; that answer, if it arrives, is what the page keeps.
+        // studio#1332: the engine was still busy (booting), so the one capability that waits on it (`chatWorkflows`,
+        // crew#1767) may be missing. Read once more after a short wait and take only that from the answer: every other
+        // capability stays as the store has it (a launch's own fresh read may have set one since).
         if ((h as { ping?: unknown }).ping === 'busy') {
           setTimeout(() => {
-            void import('../api/client.js').then(({ api }) => api.getHealth()).then((again) => set(capsOf(again)), () => undefined);
+            void import('../api/client.js').then(({ api }) => api.getHealth())
+              .then((again) => set({ chatWorkflows: capsOf(again).chatWorkflows }), () => undefined);
           }, BUSY_REREAD_MS);
         }
       })

@@ -94,7 +94,7 @@ export function ProposalsSection({ kind, heading, onDecision, onSettled, editabl
       .then((out) => {
         // studio#1337: crew answered 200 but the rule did not land. Nothing was approved: the card stays, says why and
         // offers the ways forward; the queue is read again (crew may have approved it without a rule, which it says).
-        const failed = verb === 'approve' ? landingFailure(out) : null;
+        const failed = verb === 'approve' && proposal !== undefined && proposalKind(proposal) === 'policy' ? landingFailure(out) : null;
         setNotLanded((cur) => {
           if (failed === null && !cur.has(id)) return cur;
           const next = new Map(cur);
@@ -103,7 +103,7 @@ export function ProposalsSection({ kind, heading, onDecision, onSettled, editabl
           return next;
         });
         if (failed !== null) {
-          setNote(`Not approved, its rule did not land: ${title}`);
+          setNote(`Not approved, its rule did not land as asked: ${title}`);
           void loadProposals();
           return;
         }

@@ -116,16 +116,19 @@ function ProposalCard({ proposal, deciding, onApprove, onApproveEverywhere, onRe
       <div data-testid="proposal-facets"><TechDetails text={details} /></div>
       {notLanded !== null && (
         <p data-testid="proposal-not-landed" role="alert" className="wk-gk-note">
-          Not approved: the rule did not land, so no rule was added and this proposal is still pending. Why: {notLanded}
+          Not approved: crew could not land this rule as asked. Why: {notLanded}
         </p>
       )}
       <div className="wk-gk-actions">
         {draft === null ? <>
           <button data-testid="proposal-reject" type="button" disabled={deciding} onClick={() => onReject(proposal.id)} className="wk-btn wk-btn--secondary">Reject</button>
           {canEdit && <button data-testid="proposal-edit" type="button" disabled={deciding} onClick={() => setDraft(original)} className="wk-btn wk-btn--secondary">Edit</button>}
-          {notLanded !== null && kind === 'policy' && onApproveEverywhere !== undefined
-            ? <button data-testid="proposal-approve-everywhere" type="button" disabled={deciding} onClick={() => onApproveEverywhere(proposal.id)} className="wk-btn wk-btn--primary">Approve for every project</button>
-            : <button data-testid="proposal-approve" type="button" disabled={deciding} onClick={() => onApprove(proposal.id)} className="wk-btn wk-btn--primary">Approve</button>}
+          {/* studio#1337: after a failed landing, Try again keeps the proposal's own reach (a failure may be passing);
+              approving it for every project is the separate, explicit choice crew names. */}
+          {notLanded !== null && kind === 'policy' && onApproveEverywhere !== undefined && (
+            <button data-testid="proposal-approve-everywhere" type="button" disabled={deciding} onClick={() => onApproveEverywhere(proposal.id)} className="wk-btn wk-btn--secondary">Approve for every project</button>
+          )}
+          <button data-testid="proposal-approve" type="button" disabled={deciding} onClick={() => onApprove(proposal.id)} className="wk-btn wk-btn--primary">{notLanded !== null ? 'Try again' : 'Approve'}</button>
         </> : <>
           <button data-testid="proposal-edit-cancel" type="button" disabled={deciding} onClick={() => setDraft(null)} className="wk-btn wk-btn--secondary">Cancel</button>
           <button data-testid="proposal-approve-edited" type="button" disabled={deciding || !edited}
