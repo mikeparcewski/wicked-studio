@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SteeringGrid, draftRule, fmtWeight } from '../src/components/SteeringGrid.js';
-import { SteeringPage } from '../src/components/SteeringPage.js';
+import { SteerSurface } from '../src/components/steer/SteerSurface.js';
 import { ApiError } from '../src/api/errors.js';
 import { ruleIdIssue, ruleTypeOfId, type SteeringRule } from '../src/api/steering.js';
 
 /**
- * The steering SPREADSHEET's cell mechanics (SteeringGrid) + the shell's optimistic write
- * discipline (SteeringPage.commitRule). Pinned:
+ * The steering SPREADSHEET's cell mechanics (SteeringGrid) + the Steer page's optimistic write
+ * discipline in its Table layout (SteerSurface commitRule; studio#689 ruling b). Pinned:
  *  - click/Enter opens a cell's editor; a commit hands the FULL next rule (one field changed)
  *    to the per-row save — the exact upsert body;
  *  - Esc REVERTS the editor (no commit); Tab/blur commits;
@@ -16,7 +16,7 @@ import { ruleIdIssue, ruleTypeOfId, type SteeringRule } from '../src/api/steerin
  *  - the draft row's manual id runs the ENGINE's steering-scoped INV-C1 (PAT-/POL- is the
  *    reserved doc-ingest namespace) with an upsert-collision warning;
  *  - REMOVE = retire (the shared typed-confirmation + reason modal, DELETE wire); retired rows
- *    render struck/dimmed + read-only, toggled by the include_retired facet; NO un-retire
+ *    render struck/dimmed + read-only; the page's filters choose the rows (`idFilter`); NO un-retire
  *    affordance exists (no wire supports one — recon'd);
  *  - the shell applies a commit OPTIMISTICALLY, reverts the one row on error, and reloads for
  *    the server's answer on success.
@@ -33,6 +33,7 @@ vi.mock('../src/api/client.js', () => ({
     retireConformanceRule: (...a: unknown[]) => retireConformanceRule(...a),
     upsertConformanceRule: (...a: unknown[]) => upsertConformanceRule(...a),
     getRun: () => Promise.reject(new Error('no runs in this rig')),
+    listClaims: () => Promise.reject(new ApiError(404, 'not found')),
   },
   apiFetch: (...a: unknown[]) => apiFetch(...a),
 }));
@@ -61,7 +62,7 @@ interface Handlers {
   onSelect: Mock<(...args: unknown[]) => unknown>;
 }
 
-function grid(rules: SteeringRule[], over: Partial<{ addRequestTick: number }> = {}): Handlers {
+function grid(rules: SteeringRule[], over: Partial<{ addRequestTick: number; idFilter: readonly string[] | null }> = {}): Handlers {
   const h: Handlers = {
     onCommit: vi.fn(),
     onCreate: vi.fn().mockResolvedValue(undefined),
@@ -195,7 +196,7 @@ describe('SteeringGrid — inline cell editing', () => {
   });
 });
 
-describe('SteeringGrid — retired rows + the include_retired facet', () => {
+describe('SteeringGrid — retired rows + the page’s row choice', () => {
   it('retired rows render dimmed/struck, read-only, with NO un-retire affordance', async () => {
     grid([rule({ retired: true })]);
 
@@ -211,22 +212,11 @@ describe('SteeringGrid — retired rows + the include_retired facet', () => {
     expect(screen.queryByText(/un-?retire/i)).toBeNull();
   });
 
-  it('the include_retired toggle hides and re-shows retired rows', async () => {
-    const user = userEvent.setup();
-    grid([rule(), rule({ id: 'PAT-002', retired: true })]);
-
-    // Default ON: both rows, the retired one marked.
-    expect(screen.getAllByTestId('steering-grid-row')).toHaveLength(2);
-    const toggle = screen.getByTestId('steering-filter-retired');
-    expect(toggle).toHaveAttribute('aria-pressed', 'true');
-
-    await user.click(toggle);
-    const rows = screen.getAllByTestId('steering-grid-row');
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toHaveAttribute('data-rule-id', 'PAT-001');
-
-    await user.click(toggle);
-    expect(screen.getAllByTestId('steering-grid-row')).toHaveLength(2);
+  it('shows exactly the rows the page chose (idFilter), in the page’s order; it has no filter of its own', async () => {
+    grid([rule(), rule({ id: 'PAT-002', retired: true }), rule({ id: 'PAT-003' })], { idFilter: ['PAT-003', 'PAT-002'] });
+    expect(screen.getAllByTestId('steering-grid-row').map((r) => r.getAttribute('data-rule-id'))).toEqual(['PAT-003', 'PAT-002']);
+    expect(screen.queryByTestId('steering-grid-filter')).toBeNull();
+    expect(screen.queryByTestId('steering-filter-retired')).toBeNull();
   });
 
   it('Retire… opens the shared modal; confirming fires the DELETE wire and reports the reason', async () => {
@@ -324,7 +314,23 @@ describe('draftRule / ruleIdIssue — the draft body + the steering-scoped INV-C
   });
 });
 
-describe('SteeringPage — the optimistic commit discipline (the shell around the grid)', () => {
+/** The Steer page in its Table layout (`?view=table`), filtered to one type. */
+function table(): void {
+  render(<SteerSurface pathname="/steering/policies" search="?type=security&view=table" navigate={() => {}} runs={[]} />);
+}
+
+describe('SteerSurface Table layout — the optimistic commit discipline (studio#689 ruling b)', () => {
+  it('is a layout of the one Steer page: one heading, the grid in place of the list, the toggle on Table', async () => {
+    listConformanceRules.mockResolvedValue({ rules: [rule()] });
+    table();
+    await screen.findByTestId('steering-grid-row');
+    expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual(['Steering']);
+    expect(screen.queryByTestId('steering-page')).toBeNull();
+    expect(screen.getByTestId('steer-surface')).toContainElement(screen.getByTestId('steering-grid'));
+    expect(screen.queryByTestId('steer-rule-list')).toBeNull();
+    expect(screen.getByTestId('steer-layout-table')).toHaveAttribute('aria-checked', 'true');
+  });
+
   it('a cell commit posts the exact body, applies optimistically, and reloads for the server', async () => {
     const user = userEvent.setup();
     const r = rule();
@@ -332,7 +338,7 @@ describe('SteeringPage — the optimistic commit discipline (the shell around th
       .mockResolvedValueOnce({ rules: [r] })
       .mockResolvedValue({ rules: [{ ...r, severity: 'critical' }] });
     upsertConformanceRule.mockResolvedValue({ status: 'ok' });
-    render(<SteeringPage type="security" navigate={() => {}} />);
+    table();
 
     await screen.findByTestId('steering-grid-row');
     await user.selectOptions(screen.getByTestId('steering-cell-severity'), 'critical');
@@ -349,24 +355,58 @@ describe('SteeringPage — the optimistic commit discipline (the shell around th
     const r = rule();
     listConformanceRules.mockResolvedValue({ rules: [r] });
     upsertConformanceRule.mockRejectedValue(new ApiError(400, 'INV-S2: weight must be finite'));
-    render(<SteeringPage type="security" navigate={() => {}} />);
+    table();
 
     await screen.findByTestId('steering-grid-row');
     await user.selectOptions(screen.getByTestId('steering-cell-severity'), 'critical');
 
-    expect(await screen.findByTestId('steering-commit-error')).toHaveTextContent(/PAT-001: .*INV-S2/);
+    expect(await screen.findByTestId('steering-saved-note')).toHaveTextContent(/PAT-001.*INV-S2/);
     // Reverted: the select shows the server's value again, and no reload was fabricated.
     expect(screen.getByTestId('steering-cell-severity')).toHaveValue('error');
     expect(listConformanceRules).toHaveBeenCalledTimes(1);
   });
 
-  it('retire through the grid dims the row and echoes the reason note', async () => {
+  it('Add a rule opens the grid’s draft row; its save goes through the one upsert and reloads', async () => {
+    const user = userEvent.setup();
+    listConformanceRules.mockResolvedValue({ rules: [rule()] });
+    upsertConformanceRule.mockResolvedValue({ status: 'ok' });
+    table();
+    await screen.findByTestId('steering-grid-row');
+    await user.click(screen.getByTestId('steer-more-button'));
+    await user.click(screen.getByTestId('steer-add-rule'));
+    expect(screen.queryByTestId('steering-rule-form')).toBeNull();
+    const id = screen.getByTestId('steering-draft-id') as HTMLInputElement;
+    await user.clear(id);
+    await user.type(id, 'SEC-TABLE-1');
+    await user.type(screen.getByTestId('steering-draft-statement'), 'Pin every action to a sha{Enter}');
+    await waitFor(() => expect(upsertConformanceRule).toHaveBeenCalledWith(expect.objectContaining({ id: 'SEC-TABLE-1', statement: 'Pin every action to a sha', steering_type: 'security' })));
+    await waitFor(() => expect(listConformanceRules).toHaveBeenCalledTimes(2));
+  });
+
+  it('a refused draft save stays on the draft row with the engine reason, and nothing reloads', async () => {
+    const user = userEvent.setup();
+    listConformanceRules.mockResolvedValue({ rules: [rule()] });
+    upsertConformanceRule.mockRejectedValue(new ApiError(400, 'INV-C1: id must not be blank'));
+    table();
+    await screen.findByTestId('steering-grid-row');
+    await user.click(screen.getByTestId('steer-more-button'));
+    await user.click(screen.getByTestId('steer-add-rule'));
+    const id = screen.getByTestId('steering-draft-id') as HTMLInputElement;
+    await user.clear(id);
+    await user.type(id, 'SEC-TABLE-2');
+    await user.type(screen.getByTestId('steering-draft-statement'), 'Pin every action to a sha{Enter}');
+    expect(await screen.findByTestId('steering-draft-error')).toHaveTextContent(/INV-C1: id must not be blank/);
+    expect(screen.getByTestId('steering-draft-statement')).toHaveValue('Pin every action to a sha');
+    expect(listConformanceRules).toHaveBeenCalledTimes(1);
+  });
+
+  it('retire through the grid takes the row out of Active and echoes the reason note', async () => {
     const user = userEvent.setup();
     listConformanceRules
       .mockResolvedValueOnce({ rules: [rule()] })
       .mockResolvedValue({ rules: [rule({ retired: true })] });
     retireConformanceRule.mockResolvedValue({ status: 'retired', id: 'PAT-001' });
-    render(<SteeringPage type="security" navigate={() => {}} />);
+    table();
 
     await screen.findByTestId('steering-grid-row');
     await user.click(screen.getByTestId('steering-grid-retire'));
@@ -375,8 +415,8 @@ describe('SteeringPage — the optimistic commit discipline (the shell around th
     await user.click(screen.getByTestId('steering-retire-confirm'));
 
     await waitFor(() => expect(retireConformanceRule).toHaveBeenCalledWith('PAT-001'));
-    // The reload shows the SERVER's state: the row is now retired → dimmed/struck, still listed.
-    await waitFor(() => expect(screen.getByTestId('steering-grid-row')).toHaveAttribute('data-retired', 'true'));
-    expect(screen.getByTestId('steering-retired-note')).toHaveTextContent('wrong severity model');
+    // The reload shows the SERVER's state: the rule is retired, so Active no longer lists it.
+    await waitFor(() => expect(screen.queryByTestId('steering-grid-row')).toBeNull());
+    expect(screen.getByTestId('steering-saved-note')).toHaveTextContent('wrong severity model');
   });
 });

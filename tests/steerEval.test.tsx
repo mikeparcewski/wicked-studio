@@ -9,7 +9,6 @@ import { steerTotals } from '../src/board/steerModel.js';
 import { EvaluateSurface } from '../src/components/steer/EvaluateSurface.js';
 import { ruleFacets, SteerSurface } from '../src/components/steer/SteerSurface.js';
 import { groupEvalRuns } from '../src/components/EvalHistory.js';
-import { tableAddress } from '../src/components/steer/tableAddress.js';
 import { useEvalReportStore } from '../src/store/evalReport.js';
 import { useSteerDraft } from '../src/store/steerDraft.js';
 import { importRuleFile } from '../src/board/steerImport.js';
@@ -298,12 +297,6 @@ describe('codex r1 fixes', () => {
     expect(steerTotals([rule('W-1', 'warn'), rule('G-1')])).toEqual({ live: 2, retired: 0, gating: 1, blocks: 0, guidance: 1 });
   });
 
-  it('#7 the table editor’s own filter moves keep the table, on the Steer tab’s address', () => {
-    expect(tableAddress('/steering/policies?type=security')).toBe('/steering/policies?type=security&view=table');
-    expect(tableAddress('/steering/policies')).toBe('/steering/policies?view=table');
-    expect(tableAddress('/steering/proposals')).toBe('/steering/proposals');
-    expect(tableAddress('/s/run-1')).toBe('/s/run-1');
-  });
 
 });
 
@@ -519,12 +512,12 @@ describe('codex r3 fixes', () => {
     expect([...screen.getByTestId('steer-type-pick').querySelectorAll('option')].every((o) => !/\d/.test(o.textContent ?? ''))).toBe(true);
   });
 
-  it('#4 "Edit as a table" opens on the same type, MCP and unused filters', async () => {
+  it('#4 the Table layout keeps the same type, MCP and unused filters (studio#689 ruling b)', async () => {
     wire();
     const user = userEvent.setup();
     const navigate = vi.fn();
     render(<SteerSurface pathname="/steering/policies" search="?type=security&mcp=1&usage=unused" runs={[]} navigate={navigate} />);
-    await more(user, 'steer-table');
+    await user.click(await screen.findByTestId('steer-layout-table'));
     const q = new URL(String(navigate.mock.calls.at(-1)?.[0]), 'http://x').searchParams;
     expect([q.get('type'), q.get('mcp'), q.get('usage'), q.get('view')]).toEqual(['security', '1', 'unused', 'table']);
   });

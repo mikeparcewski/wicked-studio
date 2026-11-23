@@ -51,6 +51,8 @@ import { SteeringStoreHealth, type ScoreboardState } from '../SteeringHealth.js'
 import { SteeringRetireModal } from '../SteeringRetireModal.js';
 import { SteeringRuleDrawer } from '../SteeringRuleDrawer.js';
 import { SteeringRuleFormModal } from '../SteeringRuleForm.js';
+import { SteeringGrid, type GridDraft } from '../SteeringGrid.js';
+import { planCommit } from '../../board/steeringCommit.js';
 import { readFileText } from '../fileText.js';
 import { FilePick, StateBanner, TechDetails } from '../ui/index.js';
 import type { MenuItem } from '../ui/OverflowMenu.js';
@@ -79,7 +81,10 @@ function steerHref(type: SteeringType | null, mcp: boolean, unused: boolean, tab
  *  - the rule list: In force / Proposals (policy proposals only — memory is the Memory tab's) /
  *    Retired, a search, each rule as its sentence with its
  *    id, type, eval status and Retire. A rule opens in the existing drawer (origin, history, hold,
- *    edit, retire). "Edit as a table" opens the existing spreadsheet editor for inline edits.
+ *    edit, retire).
+ *  - the Table layout (`?view=table`, the List | Table toggle; studio#689 ruling b): the same rules,
+ *    filters and heading as a spreadsheet (SteeringGrid) for inline edits. It is a layout of this page,
+ *    never a second rules page.
  *
  * Every write goes through crew's API exactly as before (upsert, import, author, retire, proposal
  * approve/reject) — this surface adds no new write and no new wire.
@@ -91,6 +96,7 @@ const PAGE = 20;
 
 type ListView = 'live' | 'proposals' | 'not-accepted' | 'retired';
 const NOT_ACCEPTED = 'not-accepted';
+const TABLE = 'table';
 
 type RulesRead = { kind: 'loading' } | { kind: 'ok'; rules: SteeringRule[] } | { kind: 'failed'; error: unknown };
 
@@ -198,18 +204,22 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
   // the rules address without either.
   const askedProposals = pathname === steerProposalsPath();
   const askedNotAccepted = query.get('view') === NOT_ACCEPTED;
+  /** The Table layout (studio#689 ruling b): `?view=table` shows the rule lists (Active, Retired) as the grid. */
+  const tableAsked = query.get('view') === TABLE;
   const [view, setView] = useState<ListView>(askedNotAccepted ? 'not-accepted' : askedProposals ? 'proposals' : 'live');
   useEffect(() => {
     if (askedNotAccepted) setView('not-accepted');
     else if (askedProposals) setView('proposals');
     else setView((v) => (v === 'not-accepted' || v === 'proposals' ? 'live' : v));
   }, [askedNotAccepted, askedProposals]);
+  const tableLayout = tableAsked && (view === 'live' || view === 'retired');
   const pickView = (v: ListView): void => {
     setView(v);
     // The page's filters (type, MCP, unused) ride every pill's address, so Add a rule keeps the type and
     // Active comes back filtered as it was (review r4); only `view` changes.
     const n = new URLSearchParams(search);
-    if (v === 'not-accepted') n.set('view', NOT_ACCEPTED); else n.delete('view');
+    // The Table layout rides along between Active and Retired; the review pills are lists only.
+    if (v === 'not-accepted') n.set('view', NOT_ACCEPTED); else if (!(tableAsked && (v === 'live' || v === 'retired'))) n.delete('view');
     const qs = n.toString();
     // Proposed lives at its own path; leaving it goes to the rules list (the filtered one when a filter rides along).
     const base = v === 'proposals' ? steerProposalsPath() : askedProposals ? (qs === '' ? RULES_PATH : policiesPath()) : pathname;
@@ -277,15 +287,16 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
   });
 
   const selected = selectedId === null ? null : rules.find((r) => r.id === selectedId) ?? null;
-  /** A rule opens on an address: `/rules/:id` from the overview, `?rule=` on a filtered view (the filter stays). */
+  /** A rule opens on an address: `/rules/:id` from the overview, `?rule=` on a filtered view. Either way the
+   *  query (the layout and the filters) stays, so closing the drawer comes back to the same view (codex r1 #1340). */
   const openPath = (id: string): string => {
-    if (pathname === RULES_PATH || pathname.startsWith(`${RULES_PATH}/`)) return rulePath(id);
+    if (pathname === RULES_PATH || pathname.startsWith(`${RULES_PATH}/`)) return `${rulePath(id)}${search}`;
     const n = new URLSearchParams(search); n.set('rule', id);
     return `${pathname}?${n.toString()}`;
   };
   const closeDrawer = (): void => {
     setSelectedId(null);
-    if (pathname.startsWith(`${RULES_PATH}/`)) navigate(RULES_PATH);
+    if (pathname.startsWith(`${RULES_PATH}/`)) navigate(`${RULES_PATH}${search}`);
     else if (query.get('rule') !== null) { const n = new URLSearchParams(search); n.delete('rule'); const s = n.toString(); navigate(`${pathname}${s === '' ? '' : `?${s}`}`); }
   };
 
@@ -300,13 +311,51 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
     });
   };
 
+  // ── The Table layout's writes (moved from the retired table page, unchanged wires) ────────────────
+  /** A grid cell commit: OPTIMISTIC apply, a revert of exactly that row on error, the server's answer reloaded,
+   *  planned against the row as it is now (studio#476: never a stale copy sent or reverted to). */
+  const rulesRef = useRef(rules);
+  rulesRef.current = rules;
+  const setRules = (f: (rs: SteeringRule[]) => SteeringRule[]): void => setRead((cur) => (cur.kind === 'ok' ? { kind: 'ok', rules: f(cur.rules) } : cur));
+  const commitRule = (made: SteeringRule, prev: SteeringRule): void => {
+    setNote(null);
+    const plan = planCommit(made, prev, rulesRef.current.find((r) => r.id === prev.id));
+    if (plan.kind === 'nothing') return;
+    if (plan.kind === 'stale') {
+      setNote({ tone: 'fail', text: `${prev.id}: not saved — its ${plan.fields.join(', ')} changed since this edit began; the row shows the daemon's value, edit it again` });
+      return;
+    }
+    const { rule: next, revertTo } = plan;
+    // A read already in flight predates this edit: drop its answer, or it would put the old row back under the
+    // optimistic one and a next edit would send that stale copy (codex r1 #1340). The save's own reload follows.
+    seq.current += 1;
+    setRules((cur) => cur.map((r) => (r.id === prev.id ? next : r)));
+    void api.upsertConformanceRule(next)
+      .then(() => afterSaved(next.id, steeringTypeOf(next)))
+      .catch((e: unknown) => {
+        // Revert only the row this edit put there: a newer edit or a fresh read since then is the truth now.
+        setRules((cur) => cur.map((r) => (r === next ? revertTo : r)));
+        setNote({ tone: 'fail', text: `Couldn’t save that change to ${next.id}, so the cell went back to its saved value: ${e instanceof Error ? e.message : String(e)}` });
+      });
+  };
+  /** The grid's draft row save — the grid clears the draft when this resolves, and shows a refusal on the row. */
+  const createRule = async (rule: SteeringRule): Promise<void> => {
+    await api.upsertConformanceRule(rule);
+    afterSaved(rule.id, steeringTypeOf(rule));
+  };
+
   // A new rule's id is checked against the rules in force: until they have loaded there is nothing to
   // check against, and a suggested id could overwrite one (codex r1 #1).
   const addMcp = (): void => { if (read.kind === 'ok') setCreating({ type: 'security', token: ++opened.current, rule: { ...MCP_POLICY_TEMPLATE, id: nextMcpPolicyId(rules) } }); };
+  /** Bumped by Add a rule in the Table layout: the grid opens its draft row (a new row of the sheet). */
+  const [addTick, setAddTick] = useState(0);
+  /** The grid's draft row, held here so a List / Table round trip keeps what was typed (codex r1 #1340). */
+  const gridDraft = useState<GridDraft | null>(null);
   const addRule = (): void => {
     if (read.kind !== 'ok') return;
     // On the MCP choice a new rule is an MCP policy, as on a type it is a rule of that type.
     if (mcpOnly && type === null) { addMcp(); return; }
+    if (tableLayout) { setAddTick((t) => t + 1); return; }
     const t = pageType;
     setCreating({ type: t, token: ++opened.current, rule: { ...STEERING_RULE_TEMPLATE, steering_type: t, id: nextRuleId(rules, 'pattern') } });
   };
@@ -369,8 +418,6 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
     'not-accepted': null,
     retired: retiredRules.filter((r) => type === null || steeringTypeOf(r) === type).length,
   };
-  // The table opens on the same filters (type, MCP, unused) the list shows (codex r3 #4).
-  const tableHref = steerHref(type, mcpOnly, usageAsked, true);
   /** Bumped by Refresh, so an open Not accepted list reads the queue again. */
   const [rejectedRev, setRejectedRev] = useState(0);
   const refreshAll = (): void => { void load(); setReviewTick((t) => t + 1); setRejectedRev((r) => r + 1); latest.reload(); };
@@ -383,7 +430,6 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
     { id: 'chat', label: 'Add with chat', testId: 'steer-chat', onSelect: () => openChat() },
     { id: 'import', label: 'Import rules…', testId: 'steer-import', onSelect: () => setImporting(true) },
     { id: 'mcp', label: 'Add an MCP policy', testId: 'steering-add-mcp', onSelect: addMcp, disabled: read.kind === 'ok' ? null : 'Once the rules have loaded' },
-    { id: 'table', label: 'Edit as a table', testId: 'steer-table', onSelect: () => navigate(tableHref) },
     view === 'retired'
       ? { id: 'live', label: 'Show the rules in force', testId: 'steer-view-retired', onSelect: () => pickView('live') }
       : { id: 'retired', label: counts.retired !== null && counts.retired > 0 ? `Show retired rules (${counts.retired})` : 'Show retired rules', testId: 'steer-view-retired', onSelect: () => pickView('retired') },
@@ -406,7 +452,8 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
         onChange={(e) => {
           const v = e.target.value;
           if (v === 'type+mcp') return;
-          navigate(v === 'mcp' ? policiesPath(null, true) : policiesPath(v === 'all' ? null : (v as SteeringType), false));
+          // The layout rides along: picking a type in Table stays in Table (codex r1 #1340).
+          navigate(v === 'mcp' ? steerHref(null, true, false, tableAsked) : steerHref(v === 'all' ? null : (v as SteeringType), false, false, tableAsked));
         }}>
         {both && <option value="type+mcp">{`${STEERING_TYPE_LABELS[type]} · MCP${read.kind === 'ok' ? ` (${pickRules.filter((r) => steeringTypeOf(r) === type && isMcpRule(r)).length})` : ''}`}</option>}
         <option value="all">{view === 'retired' ? 'Retired · all types' : 'All rules'}</option>
@@ -452,16 +499,25 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
 
   // The rule filters (unused, MCP) narrow the rules in force and the retired ones, not the proposals.
   const listView = view === 'live' || view === 'retired';
+  // The List | Table toggle keeps every filter (type, MCP, unused); the address says which layout.
+  const pickLayout = (l: 'list' | 'table'): void => {
+    const n = new URLSearchParams(search);
+    if (l === 'table') n.set('view', TABLE); else n.delete('view');
+    n.delete('rule');
+    const base = pathname.startsWith(`${RULES_PATH}/`) ? RULES_PATH : pathname;
+    const qs = n.toString();
+    navigate(`${base}${qs === '' ? '' : `?${qs}`}`);
+  };
   const filterNotes = (
     <>
       {usageAsked && listView && (
         <CalmNote data-testid="steering-usage-filter-note">
           {unusedIds !== null ? `Only the ${unusedIds.length} rules no run has cited.` : 'Studio’s service can’t say which rules are unused yet, so all rules are shown.'}{' '}
-          <a href={at(steerHref(type, mcpOnly, false))} onClick={go(steerHref(type, mcpOnly, false))} className="wk-link" data-testid="steering-usage-filter-clear">Show all</a>
+          <a href={at(steerHref(type, mcpOnly, false, tableAsked))} onClick={go(steerHref(type, mcpOnly, false, tableAsked))} className="wk-link" data-testid="steering-usage-filter-clear">Show all</a>
         </CalmNote>
       )}
       {mcpOnly && listView && (
-        <CalmNote data-testid="steer-mcp-note">Only rules that govern MCP calls. <a href={at(steerHref(type, false, usageAsked))} onClick={go(steerHref(type, false, usageAsked))} className="wk-link" data-testid="steer-mcp-clear">Show all</a></CalmNote>
+        <CalmNote data-testid="steer-mcp-note">Only rules that govern MCP calls. <a href={at(steerHref(type, false, usageAsked, tableAsked))} onClick={go(steerHref(type, false, usageAsked, tableAsked))} className="wk-link" data-testid="steer-mcp-clear">Show all</a></CalmNote>
       )}
       {view === 'retired' && (
         <CalmNote data-testid="steer-retired-note">Retired rules: helpers no longer follow them; they stay listed here, never deleted. <button type="button" className="wk-link wk-se-linkbtn" onClick={() => pickView('live')}>Back to the rules in force</button></CalmNote>
@@ -486,6 +542,10 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
           startOpen={facet !== null}
           extra={facetPairs.length > 0 ? <FacetAutocomplete testId="steer-facet" options={facetPairs} value={facet} onChange={setFacet} label="Filter rules by tags" placeholder="Filter by tag" /> : undefined} />
       )}
+      {listView && (
+        <CalmSeg label="Show the rules as" value={tableLayout ? 'table' : 'list'} onChange={pickLayout} data-testid="steer-layout"
+          options={[{ value: 'list', label: 'List', testId: 'steer-layout-list' }, { value: 'table', label: 'Table', testId: 'steer-layout-table' }]} />
+      )}
       <CalmSeg label="Which rules" value={view} onChange={pickView} data-testid="steer-view"
         options={[
           { value: 'live', label: 'Active', testId: 'steer-view-live' },
@@ -493,6 +553,16 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
           { value: 'not-accepted', label: 'Not accepted', testId: 'steer-view-not-accepted' },
         ]} />
     </>
+  );
+
+  const unseededEmpty = (
+    <CalmEmpty data-testid="steering-unseeded" title="No steering rules yet."
+      body={<>
+        <p>Rules tell your helpers how this team works. Add one, import a doctrine doc, or describe them in a chat. Or seed from the runbook at{' '}
+          <a href={SEED_RUNBOOK_URL} target="_blank" rel="noreferrer" className="wk-link">{SEED_RUNBOOK_PATH}</a>.</p>
+        <TechDetails summary="Seed command" text={SEED_COMMAND} />
+      </>}
+      action={<CalmButton onClick={() => openChat()}>Describe them in a chat</CalmButton>} />
   );
 
   const list = (
@@ -509,14 +579,16 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
       ) : read.kind === 'failed' ? (
         <StateBanner data-testid="rules-error" kind={readErrorKind(read.error)} what="the rules"
           error={read.error instanceof Error ? read.error.message : String(read.error)} onRetry={() => { setRead({ kind: 'loading' }); void load(); }} />
+      ) : tableLayout ? (
+        <>
+          {unseeded && unseededEmpty}
+          <SteeringGrid rules={rules} type={type ?? 'all'} loading={false} error={null} selectedId={selectedId} unseeded={unseeded}
+            onSelect={(id) => navigate(openPath(id))} onCommit={commitRule} onCreate={createRule}
+            onRetired={(r, reason) => { setNote({ tone: 'ok', text: `Retired ${r.id}. Helpers no longer follow it; it stays listed under Retired. Your reason: “${reason}”` }); void load(); }}
+            addRequestTick={addTick} idFilter={listed.map((r) => r.id)} draftStore={gridDraft} />
+        </>
       ) : unseeded ? (
-        <CalmEmpty data-testid="steering-unseeded" title="No steering rules yet."
-          body={<>
-            <p>Rules tell your helpers how this team works. Add one, import a doctrine doc, or describe them in a chat. Or seed from the runbook at{' '}
-              <a href={SEED_RUNBOOK_URL} target="_blank" rel="noreferrer" className="wk-link">{SEED_RUNBOOK_PATH}</a>.</p>
-            <TechDetails summary="Seed command" text={SEED_COMMAND} />
-          </>}
-          action={<CalmButton onClick={() => openChat()}>Describe them in a chat</CalmButton>} />
+        unseededEmpty
       ) : listed.length === 0 ? (
         <CalmEmpty data-testid="steer-rules-empty"
           title={needle !== '' ? 'No rule matches that search.' : mcpOnly && type === null && facet === null && unusedIds === null && view === 'live' ? 'No MCP policies yet.' : facet !== null || mcpOnly || unusedIds !== null ? 'No rule matches these filters.' : view === 'retired' ? 'Nothing retired.' : type !== null ? `No ${STEERING_TYPE_LABELS[type]} rules yet.` : 'No rules in force.'}
@@ -525,7 +597,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
       ) : (
         <CalmRows data-testid="steer-rule-list" label="Rules">{listed.slice(0, shown).map(ruleRow)}</CalmRows>
       )}
-      {listView && read.kind === 'ok' && listed.length > shown && (
+      {listView && !tableLayout && read.kind === 'ok' && listed.length > shown && (
         <button type="button" className="wk-calm-more" data-testid="steer-show-all" onClick={() => setShown(listed.length)}>Show all {listed.length}</button>
       )}
       {read.kind === 'ok' && routedRule !== null && !rules.some((r) => r.id === routedRule) && (
@@ -547,7 +619,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
           <div><dt>Runs checked</dt><dd>{governed !== null && governed.pct !== null ? `${governed.pct}%` : '—'}</dd></div>
           <div><dt>Never used</dt><dd data-testid="steer-fact-unused">
             {usage !== null ? (usage.unusedIds.length > 0
-              ? <a href={at(steerHref(type, mcpOnly, true))} onClick={go(steerHref(type, mcpOnly, true))} className="wk-link" data-testid="steer-fact-unused-link">{usage.unusedIds.length}</a>
+              ? <a href={at(steerHref(type, mcpOnly, true, tableAsked))} onClick={go(steerHref(type, mcpOnly, true, tableAsked))} className="wk-link" data-testid="steer-fact-unused-link">{usage.unusedIds.length}</a>
               : 0) : '—'}
           </dd></div>
           <div><dt>Last evaluation</dt><dd data-testid="steer-stat-eval" title={otherStore ? 'The last eval was judged against a different rule store, not this daemon’s, so it did not test these rules.' : undefined}>
@@ -564,7 +636,7 @@ export function SteerSurface({ pathname, search, navigate: navigateRaw, runs = [
   return (
     <div className="wk-se wk-se--calm" data-testid="steer-surface" data-steering-type={type ?? 'all'}>
       <div className="wk-se-scroll wk-calm" ref={scrollRef}>
-        <div className="wk-calm-col">
+        <div className={tableLayout ? 'wk-calm-col wk-calm-col--table' : 'wk-calm-col'}>
           <CalmHead title={title ?? 'Steering'} titleAside={<PageAskButton kind="steering" testId="steer-page-ask" />} sentence={sentence} sentenceTestId={/* testid */ 'steer-sentence'} action={action} />
           {list}
           {health}

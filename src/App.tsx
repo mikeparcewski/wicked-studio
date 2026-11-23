@@ -33,7 +33,6 @@ import { AGENTS_PATH, AgentsPage } from './components/agents/AgentsPage.js';
 import { useFirstUseLanding } from './components/agents/useFirstUseLanding.js';
 import { McpToolsPage } from './components/McpToolsPage.js';
 import { SourcesPage } from './components/sources/SourcesPage.js';
-import { SteeringPage } from './components/SteeringPage.js';
 import { MemoryPage } from './components/memory/MemoryPage.js';
 import { TestingPage } from './components/TestingPage.js';
 import { LaunchPanel } from './components/LaunchPanel.js';
@@ -103,10 +102,8 @@ import { useWatchStore } from './store/watch.js';
 import { useWatchHydrate } from './hooks/useWatchFeed.js';
 import { WatchtowerPage } from './components/watch/WatchtowerPage.js';
 import { SteerSurface } from './components/steer/SteerSurface.js';
-import { tableAddress } from './components/steer/tableAddress.js';
 import { useNeedsNumber } from './hooks/useRankedNeeds.js';
 import type { CoreEvent, RepoEntry } from './api/types.js';
-import { readSteeringTypeFilter } from './api/steering.js';
 import { isTestingSubPage, readLaunchIntent } from './api/testing.js';
 import { api } from './api/client.js';
 import { useAppearanceStore } from './theming/appearance.js';
@@ -262,17 +259,8 @@ export function App(): React.ReactElement {
     if (r.panel === 'steering' && r.steeringSection === null) {
       return <RouteRedirect to={legacySteeringTarget(u.pathname, hs, project === null ? '/' : projectDetailPath(project))} navigate={navigate} />;
     }
-    // DES-steer-eval: every steering address is the one Steer surface; `?view=table` keeps the
-    // spreadsheet editor (inline cell edits).
-    if (r.steeringSection === 'policies' && new URLSearchParams(hs).get('view') === 'table') {
-      // The table's own filter moves stay in the table, on the Steer tab's address (tableAddress).
-      const tableNavigate: typeof navigate = (path, opts) => { if (opts === undefined) navigate(tableAddress(path)); else navigate(tableAddress(path), opts); };
-      return (
-        <div className="flex flex-1 overflow-hidden">
-          <SteeringPage type={readSteeringTypeFilter(hs)} navigate={tableNavigate} search={hs} runs={runs} />
-        </div>
-      );
-    }
+    // DES-steer-eval + studio#689 ruling (b): every steering address is the one Steer surface; `?view=table` is its
+    // Table layout, never a second rules page.
     // `address`: moves inside the surface stay on the Steer tab's own address (no redirect, no remount).
     // A project's Steer tab keeps its moves (a pill, a rule) in the project, as Memory does.
     const steerBase = project === null ? '/' : projectDetailPath(project);
