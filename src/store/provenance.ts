@@ -151,8 +151,9 @@ export interface CancelStory {
 
 /** studio#1364: the newest rejection for this run (a consent Decline sends none of its own words), and its gate's ord. */
 export function rejectionOf(entries: readonly AuditEntry[], runId: string): { ord: number | null } | null {
-  const e = entries.find((x) => x.action === 'gate.decided' && x.runId === runId && isRejection((x.detail ?? {}) as Record<string, unknown>));
-  if (e === undefined) return null;
+  // The run's LAST decision (GET /audit is newest-first): an earlier rejection the run went on past is not why it ended.
+  const e = entries.find((x) => x.action === 'gate.decided' && x.runId === runId);
+  if (e === undefined || !isRejection((e.detail ?? {}) as Record<string, unknown>)) return null;
   const ord = (e.detail ?? {})['ord'];
   return { ord: typeof ord === 'number' && Number.isInteger(ord) ? ord : null };
 }
@@ -214,6 +215,9 @@ interface ProvenanceStore {
   markLaunchedHere: (runId: string) => void;
   /** Runs whose one ended audit read has started (including failed reads). */
   endedRead: Record<string, true>;
+  /** studio#1364: runs whose ended audit read has ANSWERED (or failed): what it holds is the run's final record, not
+   *  an earlier live read that predates the stop. */
+  endedDone: Record<string, true>;
   /** One live audit read, plus one ended read to pick up the stop record; both deduped. */
   load: (runId: string, ended?: boolean) => void;
 }
@@ -228,6 +232,7 @@ export const useProvenanceStore = create<ProvenanceStore>((set, get) => ({
   baseNotices: {},
   launchedHere: {},
   endedRead: {},
+  endedDone: {},
 
   markLaunchedHere: (runId) => {
     writeSessionLaunch(runId);
@@ -268,6 +273,7 @@ export const useProvenanceStore = create<ProvenanceStore>((set, get) => ({
       })
       .finally(() => {
         inflight.delete(runId);
+        if (ended) set((s) => ({ endedDone: { ...s.endedDone, [runId]: true } }));
       });
     inflight.set(runId, read);
   },

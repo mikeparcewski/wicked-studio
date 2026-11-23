@@ -31,6 +31,7 @@ const { setCachedRoster } = await import('../src/store/rosterCache.js');
 const { clearRepoCache } = await import('../src/store/repoCache.js');
 const { jobProposal } = await import('./jobFixtures.js');
 const { installRecordOf, installWords, clisWords } = await import('../src/board/installOutcome.js');
+const { resetOutcomeReadsForTest } = await import('../src/components/session/JobPassage.js');
 
 const CHAT = 'chat-j';
 const RUN = 'run-1';
@@ -46,16 +47,19 @@ const P1 = { at: T0 + 2, turnId: 't1', kind: 'proposal', proposal: jobProposal()
 const DECIDED = { at: T0 + 5, turnId: 't1', kind: 'proposal_decided', pid: `${CHAT}:t1`, decision: 'go', result: { runId: RUN, artifactRef: null, adopted: false, stub: false } };
 
 let audit: unknown[] = [];
+let auditAnswer: (() => Promise<Response>) | null = null;
 let requirements: () => Response = () => ok({}, 404);
 let unitOutput: () => Response = () => ok({ output: null });
 const reads: string[] = [];
 
 beforeEach(() => {
   audit = [];
+  auditAnswer = null;
   reads.length = 0;
+  resetOutcomeReadsForTest();
   resetJobLocal();
   clearRepoCache();
-  useProvenanceStore.setState({ byRun: {}, rejectNotes: {}, cancelStories: {}, baseNotices: {}, endedRead: {} });
+  useProvenanceStore.setState({ byRun: {}, rejectNotes: {}, cancelStories: {}, baseNotices: {}, endedRead: {}, endedDone: {} });
   useCapabilities.setState({ loaded: true, gateActions: false, runChatId: true, askPath: false, chatProposals: true, chatList: true, chatJobProposals: true, reshapeRun: true });
   useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set(), creatorAccepted: {}, chatClosed: {}, turnGates: {}, replySeq: {}, paByChat: {}, retiredByChat: {}, answerOrds: {} });
   useGateStore.setState({ gates: {}, approaching: {} });
@@ -68,7 +72,7 @@ beforeEach(() => {
     if (path.startsWith('/chats/') && !path.includes('/considered')) {
       return Promise.resolve(ok({ chatId: CHAT, seats: ['claude'], scope: { kind: 'none' }, messages: [USER, P1, DECIDED] }));
     }
-    if (path === '/audit') return Promise.resolve(ok({ entries: audit }));
+    if (path === '/audit') return auditAnswer !== null ? auditAnswer() : Promise.resolve(ok({ entries: audit }));
     if (path === '/repos') return Promise.resolve(ok({ repos: [{ id: 'repo-crew', name: 'wicked-crew', path: '/src/wicked-crew' }] }));
     if (path.startsWith('/repos/repo-crew/requirements')) return Promise.resolve(requirements());
     if (path.startsWith(`/runs/${RUN}/units/`) && path.endsWith('/output')) return Promise.resolve(unitOutput());
@@ -86,12 +90,14 @@ const page = (runs: ReturnType<typeof makeView>[]) => render(<SessionPage sessio
 const DELIVER = makeUnit({ id: `${RUN}:deliver`, session_id: RUN, ord: 7, status: 'done', phase_ref: 'deliver', stage: 'deliver' as never });
 const PLAN = makeUnit({ id: `${RUN}:install-plan`, session_id: RUN, ord: 8, status: 'done', phase_ref: 'install-plan',
   tool_cmd: ['bash', '-c', 'exec "${WICKED_GARDEN_ROOT:?}/scripts/wicked-garden" run scripts/mcp/install.py --from-run --dry-run --json'] as never });
-const install = (status: 'pending' | 'done') => makeUnit({ id: `${RUN}:install`, session_id: RUN, ord: 9, status, phase_ref: 'install', gate: 'consent_before' as never,
+// A step with its own review gate before the delivery (a non-consent gate a reject can end the run at).
+const REVIEW = makeUnit({ id: `${RUN}:review`, session_id: RUN, ord: 5, status: 'done', phase_ref: 'review', gate: { human_confirm: { unconditional: true } } as never });
+const install = (status: 'pending' | 'done' | 'rejected') => makeUnit({ id: `${RUN}:install`, session_id: RUN, ord: 9, status, phase_ref: 'install', gate: 'consent_before' as never,
   tool_cmd: ['bash', '-c', 'exec "${WICKED_GARDEN_ROOT:?}/scripts/wicked-garden" run scripts/mcp/install.py --from-run --target "${WICKED_CONSENT_CHOICE:?}" --json'] as never });
-const mcpRun = (status: 'completed' | 'cancelled', installStatus: 'pending' | 'done') => makeView({
+const mcpRun = (status: 'completed' | 'cancelled', installStatus: 'pending' | 'done' | 'rejected', delivered = true) => makeView({
   id: RUN, status, workflow_id: 'mcp-server', unit_ix: 9, chat_id: CHAT, from_proposal: `${CHAT}:t1`, created_at: (T0 + 5) / 1000,
-  delivery: 'delivered', deliverUrl: PR,
-} as never, [DELIVER, PLAN, install(installStatus)]);
+  ...(delivered ? { delivery: 'delivered', deliverUrl: PR } : { delivery: 'none' }),
+} as never, [REVIEW, DELIVER, PLAN, install(installStatus)]);
 
 const human = { id: 'operator', kind: 'human' };
 const sendBack = { ts: T0 + 100, action: 'gate.decided', actor: human, runId: RUN, detail: { approve: false, choice: 'request_changes', amend: 'Rename the counter tool', action: 'request_changes', ord: 5, status: 'executing' } };
@@ -118,6 +124,60 @@ describe('studio#1364: Decline at the install consent', () => {
     expect(await screen.findByTestId('job-passage-try-again')).toBeTruthy();
     expect(screen.queryByTestId('job-passage-declined')).toBeNull();
   });
+
+  it('a reject at a non-consent gate (the review step) is a stop, not a declined install', async () => {
+    audit = [{ ...decline, detail: { ...decline.detail, ord: 5 } }, sendBack];
+    page([mcpRun('cancelled', 'pending')]);
+    expect(await screen.findByTestId('job-passage-try-again')).toBeTruthy();
+    expect(screen.queryByTestId('job-passage-declined')).toBeNull();
+  });
+
+  it('a person’s Stop wins over a consent rejection on record', async () => {
+    const stop = { ts: T0 + 950, action: 'run.cancelled', actor: human, runId: RUN, detail: { reason: 'Not this week' } };
+    audit = [stop, decline];
+    page([mcpRun('cancelled', 'pending')]);
+    expect(await screen.findByTestId('job-passage-try-again')).toBeTruthy();
+    expect(screen.queryByTestId('job-passage-declined')).toBeNull();
+  });
+
+  it('a reject after the install step ran (its own triage gate) is not a declined install', async () => {
+    audit = [decline];
+    page([mcpRun('cancelled', 'rejected')]);
+    expect(await screen.findByTestId('job-passage-try-again')).toBeTruthy();
+    expect(screen.queryByTestId('job-passage-declined')).toBeNull();
+  });
+
+  it('an earlier rejection the run went on past is not why it ended', async () => {
+    const approvedLater = { ts: T0 + 950, action: 'gate.decided', actor: human, runId: RUN, detail: { approve: true, choice: 'approve', ord: 9, status: 'executing' } };
+    audit = [approvedLater, decline];
+    page([mcpRun('cancelled', 'pending')]);
+    expect(await screen.findByTestId('job-passage-try-again')).toBeTruthy();
+    expect(screen.queryByTestId('job-passage-declined')).toBeNull();
+  });
+
+  it('with no delivery on record it says Not installed, never Delivered', async () => {
+    audit = [decline];
+    page([mcpRun('cancelled', 'pending', false)]);
+    const declined = await screen.findByTestId('job-passage-declined');
+    expect(declined.textContent).toMatch(/^Not installed\. You declined the install, so nothing was installed\./);
+    expect(declined.textContent).not.toContain('Delivered');
+  });
+
+  it('until the ended audit read answers, nothing says Stopped or offers Try again (no flash), even over a warm live read', async () => {
+    // A live read from while the job ran is in the store, with no rejection yet (codex r1).
+    useProvenanceStore.setState({ byRun: { [RUN]: { state: 'unknown' } }, cancelStories: { [RUN]: { rejectNote: null, sendBackNote: 'Rename the counter tool', rejected: null, engineTimedOut: false, stop: null } } });
+    let answer: (r: Response) => void = () => {};
+    auditAnswer = () => new Promise<Response>((res) => { answer = res; });
+    page([mcpRun('cancelled', 'pending')]);
+    await screen.findByTestId('job-passage');
+    await waitFor(() => expect(reads).toContain('GET /audit'));
+    expect(screen.queryByTestId('job-passage-stopped')).toBeNull();
+    expect(screen.queryByTestId('job-passage-try-again')).toBeNull();
+    expect(screen.getByTestId('job-passage').className).not.toContain('wk-pass--bad');
+    answer(ok({ entries: [decline, sendBack] }));
+    expect(await screen.findByTestId('job-passage-declined')).toBeTruthy();
+    expect(screen.queryByTestId('job-passage-try-again')).toBeNull();
+  });
 });
 
 describe('studio#1364: the run story', () => {
@@ -130,7 +190,7 @@ describe('studio#1364: the run story', () => {
     expect(screen.queryByTestId('failure-send-back-note')).toBeNull();
   });
 
-  it('a reject with no words at another gate is the reason; the older send-back is not quoted', async () => {
+  it('a reject with no words at another gate (the review step) is the reason; the older send-back is not quoted', async () => {
     const { RunStory } = await import('../src/components/session/RunRecord.js');
     audit = [{ ...decline, detail: { ...decline.detail, ord: 5 } }, sendBack];
     render(<RunStory view={mcpRun('cancelled', 'pending')} />);
@@ -151,7 +211,25 @@ describe('studio#1367: a finished MCP-server job says what its install did', () 
     expect(screen.getByTestId('job-passage-install-todo').textContent).toMatch(/^Add the server in MCP tools with Add existing/);
     expect(screen.getByTestId('job-passage-install-clis').textContent).toBe('Added to Claude Code and Codex. Not added to Pi (no MCP target).');
     expect(screen.getByTestId('job-passage-install-mcp').getAttribute('href')).toBe('/mcp');
+    expect(screen.getByTestId('job-passage-delivered').textContent).toMatch(/^Finished, but not registered\./);
     expect(reads).toContain(`GET /runs/${RUN}/units/install/output`);
+  });
+
+  it('reads the install record once per run: leaving and coming back reads nothing again', async () => {
+    unitOutput = output(registeredRecord);
+    const first = page([mcpRun('completed', 'done')]);
+    await waitFor(() => expect(screen.getByTestId('job-passage-install').dataset['state']).toBe('registered'), { timeout: 4000 });
+    first.unmount();
+    page([mcpRun('completed', 'done')]);
+    await waitFor(() => expect(screen.getByTestId('job-passage-install').dataset['state']).toBe('registered'));
+    expect(reads.filter((r) => r === `GET /runs/${RUN}/units/install/output`)).toHaveLength(1);
+  });
+
+  it('a home path in the installer’s words is shown as ~', async () => {
+    unitOutput = output({ ...pendingRecord, clis: [{ cli: 'codex', result: 'failed', target: '/home/alice/.codex/config.toml', detail: 'failed: cannot write /home/alice/.codex/config.toml' }] });
+    page([mcpRun('completed', 'done')]);
+    await waitFor(() => expect(screen.getByTestId('job-passage-install-clis').textContent).toContain('Not added to Codex (cannot write ~/.codex/config.toml).'), { timeout: 4000 });
+    expect(document.body.textContent).not.toContain('/home/alice');
   });
 
   it('registered: says so with its tools, and links to the server', async () => {
@@ -162,11 +240,32 @@ describe('studio#1367: a finished MCP-server job says what its install did', () 
     expect(screen.getByTestId('job-passage-install-mcp').getAttribute('href')).toBe('/mcp?server=acme-notes');
   });
 
-  it('the CLI configurations skipped: says they were not updated and why', () => {
+  it('the CLI configurations skipped: says they were not updated and what to do, the installer’s words behind details', () => {
     const w = installWords(installRecordOf(JSON.stringify(noVerbRecord))!);
     expect(w.registered).toBe(true);
-    expect(w.clis).toBe('The helpers’ CLI configurations were not updated: wicked-installer lacks the mcp verb (needs >= the release that adds it).');
-    expect(clisWords('failed: wicked-installer exited 1 without a JSON envelope')).toBe('The helpers’ CLI configurations were not updated: wicked-installer exited 1 without a JSON envelope.');
+    expect(w.clis).toEqual(['The helpers’ CLI configurations were not updated, so those CLIs can’t use it yet. Update wicked-installer, then run the install again.']);
+    expect(w.detail).toEqual(['wicked-installer lacks the mcp verb (needs >= the release that adds it)']);
+    expect(clisWords('skipped: --cli none')).toBeNull();
+  });
+
+  it('“Also install into my CLIs”: the person’s own CLIs are said too, failures included', () => {
+    const w = installWords(installRecordOf(JSON.stringify({ ...registeredRecord, target: 'operator',
+      operatorClis: [{ cli: 'claude', result: 'written', target: '~/.claude.json', detail: null }, { cli: 'codex', result: 'failed', target: '~/.codex/config.toml', detail: 'failed: config is read-only' }] }))!);
+    expect(w.clis).toEqual([
+      'Added to Claude Code and Codex. Not added to Pi (no MCP target).',
+      'Added to your own Claude Code. Not added to your own Codex (config is read-only).',
+    ]);
+  });
+
+  it('an updated server says so', () => {
+    expect(installWords(installRecordOf(JSON.stringify({ ...registeredRecord, registered: 'updated' }))!).line).toBe('Installed and updated in MCP tools: 2 tools.');
+  });
+
+  it('only garden’s record counts: other JSON lines (before or after it) are not read as one', () => {
+    const real = JSON.stringify(pendingRecord);
+    expect(installRecordOf(`${real}\n{"registered": true}\n{"ok": true, "note": "done"}`)!.registered).toBe(false);
+    expect(installRecordOf('{"registered": true}')).toBeNull();
+    expect(installRecordOf('{"ok": true, "key": "x", "registered": "maybe"}')).toBeNull();
   });
 
   it('a failed install record and output with no record are said, never a plain Done', () => {
@@ -190,14 +289,17 @@ describe('studio#1365: a finished domain mapping names what it found', () => {
     page([domainRun()]);
     await waitFor(() => expect(screen.getByTestId('job-passage-domain-result').dataset['state']).toBe('built'), { timeout: 4000 });
     expect(screen.getByTestId('job-passage-domain-result').textContent).toContain('Mapped 85% real requirements · minimum 80%, across 3 business domains.');
-    expect(screen.getByTestId('job-passage-delivered').textContent).toContain('Done. Finished mapping the requirements.');
+    expect(screen.getByTestId('job-passage-delivered').textContent).toMatch(/^Finished\./);
     expect(screen.getByTestId('job-passage-delivered').textContent).not.toMatch(/nothing to deliver/i);
     fireEvent.click(screen.getByTestId('job-passage-requirements-open'));
     expect(await screen.findByTestId('requirements-coverage-headline', {}, { timeout: 4000 })).toHaveTextContent('85% real requirements · minimum 80%');
   });
 
-  it('after “Finish with what was found” (a lowered minimum) the figure is the one the map was built at', async () => {
-    requirements = () => ok({ total: 1, corpus: 2410, offset: 0, limit: 1, items: [], source: 'store', coverage: { ...COVERAGE, realPct: 42, minPct: 42, real: 2410 }, businessDomains: DOMAINS.slice(0, 2) });
+  it('after “Finish with what was found” (a lowered minimum) the figure is the one the map was built at, not the store now', async () => {
+    const built = { ...COVERAGE, realPct: 42, minPct: 42, real: 2410 };
+    // a later mapping moved the store on (48%) without building: the job's map is still the 42% one
+    requirements = () => ok({ total: 1, corpus: 2410, offset: 0, limit: 1, items: [], source: 'store', coverage: { ...built, realPct: 48, real: 2760 },
+      graphBuild: { generation: 3, coverage: built, behind: true }, businessDomains: DOMAINS.slice(0, 2) });
     page([domainRun()]);
     await waitFor(() => expect(screen.getByTestId('job-passage-domain-result').textContent).toContain('Mapped 42% real requirements · minimum 42%, across 2 business domains.'));
   });
@@ -208,5 +310,26 @@ describe('studio#1365: a finished domain mapping names what it found', () => {
     await waitFor(() => expect(screen.getByTestId('job-passage-domain-result').dataset['state']).toBe('not-built'), { timeout: 4000 });
     expect(screen.getByTestId('job-passage-domain-result').textContent).toContain('The requirements map wasn’t built: 42% real requirements · minimum 80%.');
     expect(screen.getByTestId('job-passage-requirements-open')).toBeTruthy();
+  });
+
+  it('a run on a project (no repository) links to the project’s requirements, and is not left loading', async () => {
+    page([makeView({ ...domainRun().session, repo_ref: null, project_id: 'proj-1' } as never, domainRun().units)]);
+    const line = await screen.findByTestId('job-passage-domain-result');
+    expect(line.dataset['state']).toBe('project');
+    expect(screen.getByTestId('job-passage-requirements-open').getAttribute('href')).toBe('/projects/proj-1/requirements');
+  });
+
+  it('closing the requirements view reads the result again (a map built there is said)', async () => {
+    let built = false;
+    requirements = () => (built
+      ? ok({ total: 1, corpus: 2410, offset: 0, limit: 1, items: [], source: 'store', coverage: { ...COVERAGE, realPct: 42, minPct: 42, real: 2410 }, businessDomains: DOMAINS })
+      : ok({ error: 'No requirements graph yet for this repository', code: 'notGenerated', workflow: 'domain-extraction', coverage: { ...COVERAGE, realPct: 42, real: 2410 } }, 404));
+    page([domainRun()]);
+    await waitFor(() => expect(screen.getByTestId('job-passage-domain-result').dataset['state']).toBe('not-built'), { timeout: 4000 });
+    fireEvent.click(screen.getByTestId('job-passage-requirements-open'));
+    await screen.findByTestId('requirements-not-generated', {}, { timeout: 4000 });
+    built = true;
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.getByTestId('job-passage-domain-result').dataset['state']).toBe('built'), { timeout: 4000 });
   });
 });

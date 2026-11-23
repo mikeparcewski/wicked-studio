@@ -151,8 +151,8 @@ export function consentMissingOf(gate: OpenGate, events: readonly CoreEvent[] | 
 }
 
 /** studio#1364: what Decline at the install's consent does, said before it is pressed. The engine ends the job here; the
- *  pull request it already delivered stays. */
-export const DECLINE_INSTALL_TITLE = 'Don’t install now: nothing is installed and the job ends here. The pull request already delivered stays as it is.';
+ *  work it already delivered stays. */
+export const DECLINE_INSTALL_TITLE = 'Don’t install now: nothing is installed and the job ends here. Anything it already delivered stays as it is.';
 
 export function consentChoicesOf(gate: OpenGate, events: readonly CoreEvent[] | null): GateRowChoice[] | null {
   let frame: Record<string, unknown> | null = null;

@@ -8745,6 +8745,12 @@
       ]
     },
     {
+      "testId": "job-passage-install-detail",
+      "files": [
+        "src/components/session/JobPassage.tsx"
+      ]
+    },
+    {
       "testId": "job-passage-install-mcp",
       "files": [
         "src/components/session/JobPassage.tsx"
@@ -28333,6 +28339,7 @@
         "src/components/report/ReportPage.tsx",
         "src/components/session/AssuranceReceipt.tsx",
         "src/components/session/CodebaseDownload.tsx",
+        "src/components/session/JobPassage.tsx",
         "src/components/session/PowerMode.tsx",
         "src/components/session/RunConversation.tsx",
         "src/components/session/RunDataUse.tsx",

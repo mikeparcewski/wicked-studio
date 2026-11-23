@@ -350,5 +350,9 @@ export interface DomainJobResult {
 
 export function domainJobResultOf(page: unknown): DomainJobResult {
   const d = (page as { businessDomains?: unknown } | null)?.businessDomains;
-  return { coverage: coverageOf(page), domains: Array.isArray(d) ? d.length : null, built: true };
+  // The map as BUILT (its own coverage, crew 0.165.0 `graphBuild.coverage`), beside its own domains: the page's
+  // `coverage` counts the store now, which a later mapping can move on without building. An older daemon sends no
+  // build record: its one coverage is the best said.
+  const built = graphBuildOf(page)?.coverage ?? null;
+  return { coverage: built ?? coverageOf(page), domains: Array.isArray(d) ? d.length : null, built: true };
 }
