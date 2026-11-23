@@ -7,6 +7,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, apiWire } from '../api/client.js';
 import { qeRefusalOf } from '../board/qeRefusal.js';
 import { QeRefusalWarning } from './QeRefusalWarning.js';
+import { StandInChoice } from './StandInChoice.js';
+import { helperNamer, saveStandInsEveryJob, standInChoiceOf, standInRelaunchBody, type StandInChoiceId, type StandInChoiceRefusal } from '../board/standIn.js';
 import type { BaseSkillPosture, BaseSkillRefusedResponse, DeliverTargetResponse, EntityMode, LaunchBodyWithDeliver, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from './composerDefaults.js';
 import { isShortcutsPaletteOpen } from '../hooks/useGlobalShortcuts.js';
@@ -584,6 +586,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   /** The launch was refused because its workflow requires QE acceptance (crew's `qe_acceptance_required`). */
   const [qeRefusal, setQeRefusal] = useState<{ key: string; detail: string | null; forced: boolean } | null>(null);
   const qeAttempt = useRef(0);
+  /** DES-STANDIN-001 S0: crew asked how to check this job (too few helpers signed in); nothing started. */
+  const [standIn, setStandIn] = useState<{ refusal: StandInChoiceRefusal; body: LaunchBodyWithDeliver } | null>(null);
+  const [standInBusy, setStandInBusy] = useState<StandInChoiceId | null>(null);
   /** studio#404: the id this launch was sent under (client-minted), while its POST is outstanding. */
   const [pendingRunId, setPendingRunId] = useState<string | null>(null);
   /** studio#404: the pending run is already on the daemon — offered while the POST is still out. */
@@ -853,6 +858,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     }
     setBaseSkillRefusal(null);
     setQeRefusal(null);
+    setStandIn(null);
     setStartedRunId(null);
     openedEarly.current = null;
 
@@ -919,10 +925,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     const { power } = launchPosture({ ...postureInput, takesPower, previewAnswer }).payload;
     if (power !== undefined) body.power = power;
 
+    /** The body crew accepted (the retry without `deliver` when that was it): a relaunch sends the same. */
+    let sent = body;
     try {
       let launched;
-      /** The body crew accepted (the retry without `deliver` when that was it): a relaunch sends the same. */
-      let sent = body;
       try {
         launched = await api.launchRun(body);
       } catch (err) {
@@ -960,7 +966,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       if (openedEarly.current !== newRunId) onLaunched(newRunId);
     } catch (err) {
       const refused = baseSkillRefusalOf(err);
-      if (refused !== null) setBaseSkillRefusal(refused);
+      // Too few helpers to check it: the choice, not an error (nothing was created; DES-STANDIN-001 §4).
+      const choice = standInChoiceOf(err);
+      if (choice !== null) setStandIn({ refusal: choice, body: sent });
+      else if (refused !== null) setBaseSkillRefusal(refused);
       else if (qeRefusalOf(err) === 'launch') {
         qeAttempt.current += 1;
         setQeRefusal({ key: `launch:${qeAttempt.current}`, detail: apiWire(err), forced: body.forceQeAcceptance === true });
@@ -970,6 +979,33 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       setSubmitting(false);
       setPendingRunId(null);
       setStartedRunId(null);
+    }
+  }
+
+  // DES-STANDIN-001 §2.1 step 3: what each choice does. "This job" and "every job" re-send the same request.
+  async function chooseStandIn(id: StandInChoiceId): Promise<void> {
+    if (standIn === null || submitting) return;
+    if (id === 'cancel') { setStandIn(null); return; }
+    if (id === 'sign_in') { navigate?.(AGENTS_PATH); return; }
+    setSubmitting(true);
+    setStandInBusy(id);
+    setError(null);
+    try {
+      if (id === 'always') await saveStandInsEveryJob();
+      // "Every job" sends the request unchanged: crew takes consent from the setting (DES §4 consentFor).
+      const body = id === 'job' ? standInRelaunchBody(standIn.body, standIn.refusal) : standIn.body;
+      const { runId: newRunId } = await api.launchRun(body);
+      useProvenanceStore.getState().markLaunchedHere(newRunId);
+      setStandIn(null);
+      setProblem('');
+      onLaunched(newRunId);
+    } catch (err) {
+      const again = standInChoiceOf(err);
+      if (again !== null) setStandIn({ ...standIn, refusal: again });
+      else { setStandIn(null); setError(err instanceof Error ? err.message : String(err)); }
+    } finally {
+      setSubmitting(false);
+      setStandInBusy(null);
     }
   }
 
@@ -2195,6 +2231,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       {/* A launch refused because QE acceptance is required: why, and the way to the setting. */}
       {qeRefusal !== null && (
         <QeRefusalWarning kind="launch" refusalKey={qeRefusal.key} detail={qeRefusal.detail} forced={qeRefusal.forced} navigate={navigate} testId="launch-qe-refused" />
+      )}
+
+      {standIn !== null && (
+        <StandInChoice refusal={standIn.refusal} name={helperNamer(roster)} busy={standInBusy} testId="launch-standin"
+          onChoose={(id) => { void chooseStandIn(id); }} />
       )}
 
       {/* Error message */}

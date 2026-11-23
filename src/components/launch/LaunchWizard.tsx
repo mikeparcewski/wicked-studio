@@ -21,6 +21,9 @@ import { QeAcceptanceOptions, ReducedAssuranceOptIn } from '../session/Assurance
 import { REDUCED_RELAUNCH_WORDS } from '../session/GateRow.js';
 import { Switch } from '../ui/Switch.js';
 import { TechDetails } from '../ui/TechDetails.js';
+import { StandInChoice } from '../StandInChoice.js';
+import { helperNamer, saveStandInsEveryJob, standInChoiceOf, standInRelaunchBody, type StandInChoiceId, type StandInChoiceRefusal } from '../../board/standIn.js';
+import { AGENTS_PATH } from '../../hooks/useRoute.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { useSignInHere } from '../agents/useSignInHere.js';
 import { useLaunchPreview } from '../../hooks/useLaunchPlan.js';
@@ -180,6 +183,9 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   const [qeRefused, setQeRefused] = useState<{ key: string; detail: string | null; forced: boolean } | null>(null);
   const forcedRef = useRef(false);
   const attemptRef = useRef(0);
+  /** DES-STANDIN-001 S0: crew asked how to check this job (too few helpers signed in); nothing started. */
+  const [standIn, setStandIn] = useState<{ refusal: StandInChoiceRefusal; body: LaunchBodyWithDeliver; dest: string | null } | null>(null);
+  const [standInBusy, setStandInBusy] = useState<StandInChoiceId | null>(null);
   const drafting = draft.workflowId === DRAFT_EPICS_ID;
   const demoing = draft.workflowId === DEMO_VIDEO_ID;
   const [step, setStep] = useState<Step>(draft.workflowId === null ? 'workflow' : drafting ? 'requirements' : demoing ? 'demo' : 'what');
@@ -509,6 +515,9 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
     setError(null);
     // A QE refusal speaks for the attempt that drew it; this one is new (codex r1).
     setQeRefused(null);
+    setStandIn(null);
+    let sentBody: LaunchBodyWithDeliver | null = null;
+    let sentDest: string | null = null;
     try {
       const key = draft.composerKey;
       const chatId = launchChatId(key, chatIdOnLaunch);
@@ -534,6 +543,8 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
       }
       if (offerQe && force && (qeOff || !draft.skipQe)) body.forceQeAcceptance = true;
       forcedRef.current = body.forceQeAcceptance === true;
+      sentBody = body;
+      sentDest = chatId !== null ? sessionPath(chatId) : null;
       const out = await api.launchRun(body);
       const { runId } = out;
       useProvenanceStore.getState().markLaunchedHere(runId);
@@ -547,6 +558,9 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
       finish();
       navigate?.(dest);
     } catch (err) {
+      // Too few helpers to check it: the choice, not an error (nothing was created; DES §4).
+      const choice = sentBody !== null ? standInChoiceOf(err) : null;
+      if (choice !== null) { setStandIn({ refusal: choice, body: sentBody!, dest: sentDest }); return; }
       setError(err instanceof Error ? err.message : String(err));
       attemptRef.current += 1;
       setQeRefused(qeRefusalOf(err) === 'launch' ? { key: `launch:${attemptRef.current}`, detail: apiWire(err), forced: forcedRef.current } : null);
@@ -573,6 +587,35 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
     } finally {
       launchingRef.current = false;
       setLaunching(false);
+    }
+  };
+  // DES-STANDIN-001 §2.1 step 3: what each choice does. "This job" and "every job" re-send the same request.
+  const chooseStandIn = async (id: StandInChoiceId): Promise<void> => {
+    if (standIn === null || launchingRef.current) return;
+    if (id === 'cancel') { setStandIn(null); return; }
+    if (id === 'sign_in') { closeStore(); (navigate ?? goToPath)(AGENTS_PATH); return; }
+    launchingRef.current = true;
+    setLaunching(true);
+    setStandInBusy(id);
+    setError(null);
+    try {
+      if (id === 'always') await saveStandInsEveryJob();
+      // "Every job" sends the request unchanged: crew takes consent from the setting (DES §4 consentFor).
+      const body = id === 'job' ? standInRelaunchBody(standIn.body, standIn.refusal) : standIn.body;
+      const { runId } = await api.launchRun(body);
+      useProvenanceStore.getState().markLaunchedHere(runId);
+      if (draft.composerKey !== null) clearAboutChips(draft.composerKey);
+      setStandIn(null);
+      finish();
+      navigate?.(standIn.dest ?? sessionPath(`run:${runId}`));
+    } catch (err) {
+      const again = standInChoiceOf(err);
+      if (again !== null) setStandIn({ ...standIn, refusal: again });
+      else { setStandIn(null); setError(err instanceof Error ? err.message : String(err)); }
+    } finally {
+      launchingRef.current = false;
+      setLaunching(false);
+      setStandInBusy(null);
     }
   };
   const openLaunched = (): void => { if (launched === null || launchingRef.current) return; finish(); navigate?.(launched.dest); };
@@ -986,6 +1029,10 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
               navigate={(p) => { closeStore(); (navigate ?? goToPath)(p); }} />
           )}
           </>}
+          {standIn !== null && launched === null && (
+            <StandInChoice refusal={standIn.refusal} name={helperNamer(roster)} busy={standInBusy} testId="launch-wizard-standin"
+              onChoose={(id) => { void chooseStandIn(id); }} />
+          )}
           {error !== null && qeRefused === null && (
             <div role="alert" data-testid="launch-wizard-error" className="wk-composer-note wk-composer-note--bad">
               {launched !== null ? 'Couldn’t start it again. The first job is still running.' : 'Couldn’t launch this. Your choices are kept, so you can try again.'}
