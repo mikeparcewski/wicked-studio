@@ -29,6 +29,19 @@ function AllRunsLink({ navigate, filter }: { navigate: (path: string) => void; f
 }
 
 /**
+ * studio#1364: the run ended at a Decline at a consent gate (the MCP install after its pull request was delivered), read
+ * off the run's one ended audit read; null for any other run, or until that read answers. The page's other words for a
+ * cancelled run (its header badge, "Why it stopped", Start over) give way to it: a declined install is not a stopped job.
+ */
+export function useConsentDecline(view: SessionView | undefined): { install: boolean; ord: number } | null {
+  const runId = view?.session.id ?? null;
+  const cancelled = view?.session.status === 'cancelled';
+  useEffect(() => { if (cancelled && runId !== null) useProvenanceStore.getState().load(runId, true); }, [runId, cancelled]);
+  const story = useProvenanceStore((s) => (runId !== null ? s.cancelStories[runId] ?? null : null));
+  return view !== undefined && cancelled ? consentDeclineOf(view, story) : null;
+}
+
+/**
  * S16a-1c: why a finished run stopped, said in its thread — the run page's FailureBanner story,
  * words verbatim (tests/FailureBanner.test.tsx's pins carry over), one quiet line under the status
  * sentence instead of a banner. Off the ONE audit fetch per run (`useProvenanceStore.load`):

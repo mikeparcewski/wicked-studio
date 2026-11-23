@@ -198,6 +198,33 @@ describe('studio#1364: the run story', () => {
     expect(screen.getByTestId('failure-reject-note').textContent).toBe('You rejected it; no reason was given.');
     expect(screen.queryByTestId('failure-send-back-note')).toBeNull();
   });
+  it('the header badge says Not installed (calm), not a red Cancelled; a plain stop keeps Cancelled', async () => {
+    audit = [decline, sendBack];
+    const first = page([mcpRun('cancelled', 'pending')]);
+    await waitFor(() => expect(screen.getByTestId('session-status').textContent).toBe('Not installed'), { timeout: 4000 });
+    expect(screen.getByTestId('session-status').dataset['tone']).toBe('quiet');
+    first.unmount();
+    useProvenanceStore.setState({ byRun: {}, rejectNotes: {}, cancelStories: {}, baseNotices: {}, endedRead: {}, endedDone: {} });
+    audit = [sendBack];
+    page([mcpRun('cancelled', 'pending')]);
+    await screen.findByTestId('job-passage-try-again', {}, { timeout: 4000 });
+    expect(screen.getByTestId('session-status').textContent).toBe('Cancelled');
+    expect(screen.getByTestId('session-status').dataset['tone']).toBe('danger');
+  });
+
+  it('the run’s record offers no Start over after a declined install; a plain stop keeps it', async () => {
+    const { RecoveryRow } = await import('../src/components/session/RunConversation.js');
+    audit = [decline, sendBack];
+    const first = render(<RecoveryRow view={mcpRun('cancelled', 'pending')} navigate={() => {}} />);
+    await waitFor(() => expect(useProvenanceStore.getState().endedDone[RUN]).toBe(true));
+    await waitFor(() => expect(screen.queryByTestId('session-run-retry')).toBeNull());
+    first.unmount();
+    useProvenanceStore.setState({ byRun: {}, rejectNotes: {}, cancelStories: {}, baseNotices: {}, endedRead: {}, endedDone: {} });
+    audit = [sendBack];
+    render(<RecoveryRow view={mcpRun('cancelled', 'pending')} navigate={() => {}} />);
+    await waitFor(() => expect(useProvenanceStore.getState().endedDone[RUN]).toBe(true));
+    expect(screen.getByTestId('session-run-retry')).toBeTruthy();
+  });
 });
 
 describe('studio#1367: a finished MCP-server job says what its install did', () => {
