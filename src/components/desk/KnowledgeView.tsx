@@ -341,7 +341,8 @@ function ForgetSource({ onForgot }: { onForgot: () => void }): React.ReactElemen
       {asking !== null && (
         <div role="group" aria-label="Forget this source" data-testid="knowledge-forget-source-confirm">
           <p className="wk-gk-muted">Forget everything learned from “{asking}”? Agents stop recalling it and the knowledge store deletes it. This can’t be undone.{asking !== asking.trim() ? ' What you typed starts or ends with a space, and that space is part of the source.' : ''}</p>
-          <div className="wk-gk-row">
+          {/* Not a wk-gk-row: its last quiet button is pushed to the far edge, away from the one it pairs with. */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
             <button type="button" className="wk-btn wk-btn--danger wk-btn--sm" data-testid="knowledge-forget-source-go" disabled={busy} onClick={() => void forget(asking)}>{busy ? 'Forgetting…' : 'Forget everything from it'}</button>
             <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="knowledge-forget-source-cancel" disabled={busy} onClick={() => setAsking(null)}>Cancel</button>
           </div>
