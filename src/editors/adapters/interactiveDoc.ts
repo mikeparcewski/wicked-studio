@@ -26,12 +26,22 @@ export class InteractiveDocSurfaceAdapter extends InteractiveDocAdapter implemen
   private titleSeen: string | undefined;
   docTitle(): string | undefined { return this.titleSeen; }
   /** The first manifest read that finds no version leaves the head at 0, so nothing else says it was read: the card
-   *  is told, for its pill (crew#1745). */
+   *  is told, for its pill (crew#1745), whichever read it was (the card's refresh, or an editor's versions). */
+  private toldRead = false;
+  private tellRead(): void {
+    if (this.toldRead || !this.artifact().read) return;
+    this.toldRead = true;
+    for (const l of this.listeners) l();
+  }
   override async refresh(): ReturnType<InteractiveDocAdapter['refresh']> {
-    const was = this.artifact().read;
     const moved = await super.refresh();
-    if (!was && moved === null) for (const l of this.listeners) l();
+    this.tellRead();
     return moved;
+  }
+  override async versions(): ReturnType<InteractiveDocAdapter['versions']> {
+    const r = await super.versions();
+    this.tellRead();
+    return r;
   }
   override async read(version?: number): ReturnType<InteractiveDocAdapter['read']> {
     const result = await super.read(version);

@@ -100,6 +100,20 @@ describe('interactive-doc pills', () => {
     await doc.refresh();
     expect(told).not.toHaveBeenCalled();
   });
+
+  it('xreview r2 P3: a first read through versions() (an editor asking after a failed refresh) tells the card too', async () => {
+    vi.mocked(interactive.getVersions).mockRejectedValueOnce(new Error('502'));
+    const doc = new InteractiveDocSurfaceAdapter(binding());
+    const told = vi.fn();
+    doc.subscribe(told);
+    await doc.refresh().catch(() => null);
+    expect(doc.pills({ state: 'stopped' })[0]!.text).toBe('Reading…');
+    await doc.versions();
+    expect(told).toHaveBeenCalledTimes(1);
+    expect(doc.pills({ state: 'stopped' })[0]!.text).toBe('Stopped');
+    await doc.refresh();
+    expect(told).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('the document card', () => {
