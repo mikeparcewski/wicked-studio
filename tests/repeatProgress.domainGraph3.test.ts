@@ -49,7 +49,12 @@ describe('the progress line', () => {
     expect(repeatLineOf(thePage)).toMatch(/42% · target 80% · page 6 · about 41 min left$/);
     // the loop step ended without another pass; coverage (ord 12) runs, then the graph (ord 13)
     expect(repeatLineOf([...thePage, ev({ type: 'unitExecuting', ord: 12 })])).toBeNull();
-    expect(repeatLineOf([...thePage, ev({ type: 'unitDispatched', ord: 12, attempt: 0 }), ev({ type: 'unitExecuting', ord: 13 })])).toBeNull();
+    // dispatch alone (the step has not started executing yet) is enough
+    expect(repeatLineOf([...thePage, ev({ type: 'unitDispatched', ord: 12, attempt: 0 })])).toBeNull();
+    // the next step's own gate before it runs ("ask me before every step") is enough too
+    expect(repeatLineOf([...thePage, ev({ type: 'awaitingHuman', ord: 12, gateKind: 'def', prompt: 'Run coverage?' })])).toBeNull();
+    // re-dispatches and retries inside the loop's range keep the line
+    expect(repeatLineOf([...thePage, ev({ type: 'unitDispatched', ord: 8, attempt: 1 }), ev({ type: 'unitDispatched', ord: 11, attempt: 1 })])).toMatch(/about 41 min left$/);
     const runs = [{ session: { id: RUN, status: 'executing', created_at: 1 } }];
     expect(headlineProgress(runs, { [RUN]: [...thePage, ev({ type: 'unitExecuting', ord: 12 })] })).toBeNull();
   });
