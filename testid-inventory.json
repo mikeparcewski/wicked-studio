@@ -3795,6 +3795,12 @@
       ]
     },
     {
+      "testId": "composer-seat-role",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
       "testId": "composer-seats",
       "files": [
         "src/components/session/ChatHelpers.tsx",
@@ -6904,6 +6910,42 @@
     },
     {
       "testId": "evaluate-measures",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-memory",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-memory-coverage",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-memory-nostore",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-memory-summary",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-memory-unsurfaced",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "evaluate-memory-unsurfaced-row",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
       ]
@@ -10041,6 +10083,12 @@
       ]
     },
     {
+      "testId": "launch-wizard-seat-role",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
       "testId": "launch-wizard-shape",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
@@ -10090,6 +10138,12 @@
     },
     {
       "testId": "launch-wizard-unusable-note",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-workonly-note",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]
@@ -16879,6 +16933,18 @@
       ]
     },
     {
+      "testId": "repo-capture",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-capture-after",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repo-capture-error",
       "files": [
         "src/components/RepoDetailPage.tsx"
@@ -16888,6 +16954,18 @@
       "testId": "repo-capture-learnings",
       "files": [
         "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-capture-note",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-capture-off",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
       ]
     },
     {
@@ -24815,6 +24893,12 @@
     },
     {
       "testId": "testing-evals-gap-toggle",
+      "files": [
+        "src/components/steer/EvaluateSurface.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals-memory",
       "files": [
         "src/components/steer/EvaluateSurface.tsx"
       ]

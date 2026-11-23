@@ -163,6 +163,21 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     if (showRegister) loadProjects();
   }, [showRegister]);
 
+  // studio#1083 (crew#552): whether a Capture learnings job follows the onboarding. The daemon setting
+  // (`onboardingAutoCapture`, absent = on), unless the chosen project overrides it; null = not known (the settings read
+  // failed). The person can opt this one repository out (`autoCapture: false`); crew never captures on studio's say-so.
+  const [captureSetting, setCaptureSetting] = useState<boolean | null>(null);
+  const [captureAfter, setCaptureAfter] = useState(true);
+  useEffect(() => {
+    if (!showRegister) return undefined;
+    let live = true;
+    Promise.resolve()
+      .then(() => api.getSettings())
+      .then(({ settings }) => { if (live) setCaptureSetting(settings.onboardingAutoCapture !== false); })
+      .catch(() => { if (live) setCaptureSetting(null); });
+    return () => { live = false; };
+  }, [showRegister]);
+
   function loadProjects(): void {
     if (projectsRequested.current) return;
     projectsRequested.current = true;
@@ -286,6 +301,11 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     if (m.onboard.run !== null) reindexAsPrefill(m.onboard.run, m.repo.id, navigate);
   }
 
+  // The chosen project's own override wins over the daemon setting (crew's order, onboarding-capture.ts).
+  const projectCapture = selectedProjectId === null ? undefined : projects.find((p) => p.id === selectedProjectId)?.autoCapture;
+  /** true: a Capture learnings job follows; false: none does (the setting or the project is off); null: not known. */
+  const captureWillFollow: boolean | null = typeof projectCapture === 'boolean' ? projectCapture : captureSetting;
+
   async function registerRepo(): Promise<void> {
     const name = newName.trim();
     const isRemote = sourceMode === 'remote';
@@ -297,9 +317,11 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     setRegistering(true);
     try {
       const projectId = selectedProjectId ?? undefined;
+      // studio#1083: the opt-out rides only when the person cleared it (and a capture would otherwise follow).
+      const opts = captureWillFollow !== false && !captureAfter ? [{ autoCapture: false }] as const : [] as const;
       const registered = isRemote
-        ? await api.cloneAndRegisterRepo(name, target, checkoutPath.trim() || undefined, projectId)
-        : await api.registerRepo(name, target, projectId);
+        ? await api.cloneAndRegisterRepo(name, target, checkoutPath.trim() || undefined, projectId, ...opts)
+        : await api.registerRepo(name, target, projectId, ...opts);
       const { repo, onboardError } = registered;
       // crew-0182: crew attached it (or says why not). An older crew did not read projectId's attach: studio attaches it,
       // and a failed attach is named on the repository's page (the registration itself has already succeeded).
@@ -625,6 +647,26 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                   ? `Studio clones it to ${checkoutPath.trim() || `~/.wicked/repos/${newName || '<name>'}`}, then maps the code so work can find its way around. It runs as a tracked step you can watch and usually takes a few minutes.`
                   : 'Studio maps the code so work can find its way around. It runs as a tracked step you can watch and usually takes a few minutes.'}
               </p>
+
+              {captureWillFollow === false ? (
+                <p data-testid="repo-capture-off" className="wk-field-note">
+                  No Capture learnings job follows: automatic capture is off {typeof projectCapture === 'boolean' ? 'for this project' : 'in Settings'}.
+                </p>
+              ) : (
+                <div className="wk-pg-repo-field" data-testid="repo-capture">
+                  <label className="wk-pg-repo-check">
+                    <input type="checkbox" data-testid="repo-capture-after" aria-describedby="repo-capture-note" checked={captureAfter} onChange={(e) => setCaptureAfter(e.target.checked)} />
+                    <span>Then capture learnings from it</span>
+                  </label>
+                  <span id="repo-capture-note" className="wk-field-note" data-testid="repo-capture-note">
+                    {!captureAfter
+                      ? 'Only registered and mapped: no Capture learnings job runs on it.'
+                      : captureWillFollow === null
+                        ? 'When automatic capture is on, a Capture learnings job follows on your helpers; what it proposes waits for your review in Steering.'
+                        : 'A Capture learnings job follows on your helpers; what it proposes waits for your review in Steering.'}
+                  </span>
+                </div>
+              )}
 
               {registerError !== null && (
                 <StateBanner data-testid="repo-register-error" kind={readErrorKind(registerError)} what="the repository" said={plainRefusal(registerError, PLAIN_REGISTER_CODES)} error={errorText(registerError)} />

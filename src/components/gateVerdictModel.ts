@@ -991,6 +991,24 @@ export function reviewsOnly(seat: RosterSeat | undefined): boolean {
   return seat !== undefined && bag['work_eligible'] === false && bag['council_eligible'] === true;
 }
 
+/**
+ * A work-only seat as the daemon says it (studio#1311): out of the council pool (`enabled_for_council: false`) yet
+ * seated for work (`work_eligible: true`). New job and the composer list it OFF by default: crew warns that custom
+ * council-off seats became work-eligible on upgrade without anyone choosing it (crew `core/seat-work-default.ts`).
+ * An older daemon that reports no `work_eligible` has none.
+ */
+export function worksOnly(seat: RosterSeat | undefined): boolean {
+  const bag = (seat ?? {}) as Record<string, unknown>;
+  return seat !== undefined && bag['enabled_for_council'] === false && bag['work_eligible'] === true;
+}
+
+/** The words a reviewer-only helper's chip carries in New job and the composer (studio#1311), visible on a phone. */
+export const REVIEWS_ONLY_WORDS = 'reviews only';
+/** The words a work-only helper's chip carries (studio#1311). */
+export const WORKS_ONLY_WORDS = 'works only';
+/** The note beside the work-only helpers New job and the composer list off (studio#1311). */
+export const WORKS_ONLY_NOTE = 'does the work, never reviews; off unless you turn it on';
+
 /** A job whose helpers all only review has no one to do its steps (codex r1 on #1302): said before it is sent. */
 export const NO_WORKER_PICKED = 'Every helper turned on for this job only reviews — turn on one that takes work.';
 
