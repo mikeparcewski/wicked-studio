@@ -558,7 +558,7 @@ function withOperatorJudgment(r: AssuranceReceipt, unit: WorkUnit | undefined): 
  * stamped with the tree delivered), else — before the deliver phase has lifted, as at the deliver
  * gate — the same aggregate the engine builds (`deliver_lift.rs` `delivery_receipt`): the run's
  * contract, every instrument any gate ran, every one any gate skipped (first reason per
- * instrument). `who` lists the seats the gates name, so the card says who built and who checked.
+ * instrument; a not-due judge only when no gate ran or otherwise skipped one). `who` lists the seats the gates name, so the card says who built and who checked.
  */
 export function deliveryReceiptOf(
   view: SessionView | null | undefined,
@@ -587,10 +587,21 @@ export function deliveryReceiptOf(
   if (gates.length === 0) return null;
   const run = sessionAssurance(view, log) ?? { mode: gates[0]!.mode, required: gates[0]!.required };
   const out: AssuranceReceipt = { ...run, ran: [], skipped: [], ...who, tree: str((view?.session as unknown as { verified_tree?: unknown } | undefined)?.verified_tree), attempt: 0 };
+  // (core#1799, as `delivery_receipt` does) A gate where no judge was due (`not_applicable`: a scripted
+  // step, a review that changed no files) speaks for the delivery only when no gate ran a judge and none
+  // skipped one for another reason: a judged build beside a scripted test keeps "Independently accepted".
+  let judgeNotDue: SkippedInstrument | null = null;
   for (const g of gates) {
     for (const r of g.ran) if (!out.ran.includes(r)) out.ran.push(r);
-    for (const s of g.skipped) if (!out.skipped.some((k) => k.instrument === s.instrument)) out.skipped.push(s);
+    for (const s of g.skipped) {
+      if (s.instrument === 'judge' && s.reason === 'not_applicable') {
+        judgeNotDue ??= s;
+        continue;
+      }
+      if (!out.skipped.some((k) => k.instrument === s.instrument)) out.skipped.push(s);
+    }
   }
+  if (judgeNotDue !== null && !out.ran.includes('judge') && !out.skipped.some((k) => k.instrument === 'judge')) out.skipped.push(judgeNotDue);
   const fb = fallbacksOf(gates);
   const oj = judgmentsOf(gates, durableFloorOverrides(view));
   const rules = worstRules(gateRuleRows(view, log));
