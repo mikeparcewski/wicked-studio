@@ -23,22 +23,17 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 /**
- * The selector of each rule whose block reads `needle`, once per block, comments dropped. One pass of indexOf: the regex this
- * replaces, /([^{}]+)\{[^}]*var\(--font-display\)/, retried every start position of each brace-free run, which
- * cost about 1.2 s on the 885K characters of src/styles and ran past 5 s on a loaded runner (studio#1354).
+ * The selector of each rule whose own block reads `needle`, once per block. Comments go first (a mention is not a
+ * read), then one split on braces: the text before each `{` is a selector and the text after it, up to the next
+ * brace, is that block's own body. The regex this replaces, /([^{}]+)\{[^}]*var\(--font-display\)/, retried every
+ * start position of each brace-free run: about 1.2 s on the 885K characters of src/styles, past 5 s on a loaded
+ * runner (studio#1354).
  */
 function rulesUsing(css: string, needle: string): string[] {
+  const parts = css.replace(/\/\*[\s\S]*?\*\//gu, '').split(/([{}])/u);
   const out: string[] = [];
-  for (let at = css.indexOf(needle); at >= 0; ) {
-    const open = css.lastIndexOf('{', at);
-    if (open >= 0 && css.lastIndexOf('}', at) < open) {
-      const start = Math.max(css.lastIndexOf('{', open - 1), css.lastIndexOf('}', open - 1)) + 1;
-      out.push(css.slice(start, open).replace(/\/\*[\s\S]*?\*\//gu, '').trim());
-    }
-    // One name per block: the next read worth looking at is past this block's closing brace.
-    const close = css.indexOf('}', at);
-    if (close < 0) break;
-    at = css.indexOf(needle, close + 1);
+  for (let k = 2; k < parts.length; k += 2) {
+    if (parts[k - 1] === '{' && parts[k]!.includes(needle)) out.push(parts[k - 2]!.trim());
   }
   return out;
 }
@@ -49,6 +44,12 @@ describe('rulesUsing (studio#1354)', () => {
       + '@media (min-width: 1px) { .b { font: 1em var(--font-display) } }';
     expect(rulesUsing(css, 'var(--font-display)')).toEqual(['.wk-wordmark', '.b']);
     expect(rulesUsing('.a { color: red }', 'var(--font-display)')).toEqual([]);
+  });
+
+  it('a comment that mentions the variable is not a read and hides no later rule', () => {
+    const css = ".wk-wordmark { font-family: var(--font-display); }\n/* This heading uses var(--font-display). */\n"
+      + '.other-heading { font-family: var(--font-display); }\n.c { /* var(--font-display) */ color: red }';
+    expect(rulesUsing(css, 'var(--font-display)')).toEqual(['.wk-wordmark', '.other-heading']);
   });
 
   it('stays one pass on a long brace-free run (the old regex took about 7 s on this input)', () => {
