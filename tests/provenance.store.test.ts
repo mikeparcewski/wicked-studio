@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { waitFor } from '@testing-library/react';
 import * as client from '../src/api/client.js';
 import type { AuditEntry } from '../src/api/types.js';
-import { cancelStoryOf, deriveProvenance, ENGINE_TIMEOUT_AUDIT, rejectNoteOf, sendBackNoteOf, useProvenanceStore } from '../src/store/provenance.js';
+import { cancelStoryOf, deriveProvenance, ENGINE_TIMEOUT_AUDIT, rejectionOf, rejectNoteOf, sendBackNoteOf, useProvenanceStore } from '../src/store/provenance.js';
 
 /**
  * DES-UX-001 §3 — provenance derivation over the REAL audit wire shape
@@ -198,10 +198,35 @@ describe('rejectNoteOf', () => {
       ts: 4, action: ENGINE_TIMEOUT_AUDIT, actor: { id: 'crew.daemon', kind: 'system', trust: 'admin' }, runId: 'r-1', detail: { ord: 6 },
     };
     const entries = [timedOut, decided('r-1', { approve: false, action: 'request_changes', amend: 'Fix the reviewer\'s failing items' }, 3), launched('r-1')];
-    expect(cancelStoryOf(entries, 'r-1')).toEqual({ rejectNote: null, sendBackNote: 'Fix the reviewer\'s failing items', engineTimedOut: true, stop: null });
+    expect(cancelStoryOf(entries, 'r-1')).toEqual({ rejectNote: null, sendBackNote: 'Fix the reviewer\'s failing items', rejected: null, engineTimedOut: true, stop: null });
     // Another run's timeout is not this run's; a plain rejection reads as one.
-    expect(cancelStoryOf([{ ...timedOut, runId: 'r-2' }], 'r-1')).toEqual({ rejectNote: null, sendBackNote: null, engineTimedOut: false, stop: null });
-    expect(cancelStoryOf([decided('r-1', { approve: false, amend: 'not this week' })], 'r-1')).toEqual({ rejectNote: 'not this week', sendBackNote: null, engineTimedOut: false, stop: null });
+    expect(cancelStoryOf([{ ...timedOut, runId: 'r-2' }], 'r-1')).toEqual({ rejectNote: null, sendBackNote: null, rejected: null, engineTimedOut: false, stop: null });
+    expect(cancelStoryOf([decided('r-1', { approve: false, amend: 'not this week' })], 'r-1')).toEqual({ rejectNote: 'not this week', sendBackNote: null, rejected: { ord: null }, engineTimedOut: false, stop: null });
+  });
+
+  // studio#1364: a consent Decline is a rejection with no words; its gate's ord says which step was declined.
+  it('rejectionOf: the run\'s LAST decision, when it is a rejection, with the gate it answered', () => {
+    // the real Studio decline body (commitGateDecision sends ord) as crew's audit records it
+    const decline = decided('r-1', { approve: false, choice: 'decline', action: 'reject', ord: 9, status: 'cancelled' }, 5);
+    const sendBack = decided('r-1', { approve: false, choice: 'request_changes', action: 'request_changes', amend: 'Rename it', ord: 6, status: 'executing' }, 3);
+    expect(rejectionOf([decline, sendBack, launched('r-1')], 'r-1')).toEqual({ ord: 9 });
+    // a send-back is not a rejection, an approve after a reject means the run went on past it
+    expect(rejectionOf([sendBack], 'r-1')).toBeNull();
+    expect(rejectionOf([decided('r-1', { approve: true, choice: 'approve', ord: 9 }, 6), decline], 'r-1')).toBeNull();
+    // an older crew without ord: a rejection with no gate named; another run's decision is not this one's
+    expect(rejectionOf([decided('r-1', { approve: false })], 'r-1')).toEqual({ ord: null });
+    expect(rejectionOf([decided('r-2', { approve: false, ord: 9 })], 'r-1')).toBeNull();
+    expect(cancelStoryOf([decline, sendBack], 'r-1')).toMatchObject({ rejectNote: null, sendBackNote: 'Rename it', rejected: { ord: 9 } });
+  });
+
+  it('endedDone is set once the ended read has answered (not when it starts)', async () => {
+    let answer: (v: { entries: AuditEntry[] }) => void = () => {};
+    const spy = vi.spyOn(client.api, 'getAudit').mockReturnValue(new Promise((res) => { answer = res; }));
+    useProvenanceStore.getState().load('r-1364', true);
+    expect(useProvenanceStore.getState().endedDone['r-1364']).toBeUndefined();
+    answer({ entries: [launched('r-1364')] });
+    await waitFor(() => expect(useProvenanceStore.getState().endedDone['r-1364']).toBe(true));
+    spy.mockRestore();
   });
 
   it('the store keeps the cancel story beside the reject note, from the same one fetch', async () => {
@@ -211,7 +236,7 @@ describe('rejectNoteOf', () => {
       launched('r-537'),
     ] });
     useProvenanceStore.getState().load('r-537');
-    await waitFor(() => expect(useProvenanceStore.getState().cancelStories['r-537']).toEqual({ rejectNote: null, sendBackNote: 'step 4 is the whole of e2e/', engineTimedOut: true, stop: null }));
+    await waitFor(() => expect(useProvenanceStore.getState().cancelStories['r-537']).toEqual({ rejectNote: null, sendBackNote: 'step 4 is the whole of e2e/', rejected: null, engineTimedOut: true, stop: null }));
     expect(useProvenanceStore.getState().rejectNotes['r-537']).toBeNull();
     expect(spy).toHaveBeenCalledTimes(1);
     spy.mockRestore();

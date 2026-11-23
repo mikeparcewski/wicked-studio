@@ -89,6 +89,7 @@ import { panelPlaceOf } from '../../board/runPanelModel.js';
 import { useRunPanel } from '../../store/runPanel.js';
 import { RunHostProvider } from '../editorHost/RunHostContext.js';
 import { RunBlock } from './RunConversation.js';
+import { useConsentDecline } from './RunRecord.js';
 import { DecisionDockFrame, type DockItem, type DockReply } from './DecisionDock.js';
 import { takeRestoredNote, useUndoQueue } from '../../board/undoQueue.js';
 import { switchWords, useReplyRoute } from '../../board/replyRoute.js';
@@ -575,7 +576,11 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // Power mode (DES-POWER-MODE §2): the switch beside a run's name and its rigor chip — on a session of one run.
   const powerRun = mine.length === 1 ? mine[0]! : null;
   const power = usePower(powerRun);
-  const badge = mine.length > 0 ? (state === 'working' && powerRun !== null && power?.pause != null ? { word: 'Waiting', tone: 'gate' as const } : state === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : state === 'working' && floor !== null ? { word: floorBadge(floor), tone: 'run' as const } : headerBadge(mine, answeredOnly ? 'done' : state)) : null;
+  // studio#1364: the newest run ended at a consent Decline (the install, after its pull request was delivered): the
+  // badge says what that is, in a calm tone, never a red "Cancelled".
+  const declined = useConsentDecline(mine.length > 0 ? mine[mine.length - 1] : undefined);
+  const badge = declined !== null && state !== 'waiting' && state !== 'working' ? { word: declined.install ? 'Not installed' : 'Declined', tone: 'quiet' as const }
+    : mine.length > 0 ? (state === 'working' && powerRun !== null && power?.pause != null ? { word: 'Waiting', tone: 'gate' as const } : state === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : state === 'working' && floor !== null ? { word: floorBadge(floor), tone: 'run' as const } : headerBadge(mine, answeredOnly ? 'done' : state)) : null;
   // The banner takes this session's slice of the same source as the brand badge.
   const gates = useGateStore((s) => s.gates);
   useSystemPoll();

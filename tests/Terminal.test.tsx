@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import { Terminal } from '../src/components/Terminal.js';
 import * as client from '../src/api/client.js';
 
@@ -14,6 +14,13 @@ const h = vi.hoisted(() => ({
     write: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
     emitData: (d: string) => void;
+    lines: string[];
+    selection: string;
+    linkProviders: Array<{ provideLinks: (y: number, cb: (links: Array<{ text: string; range: unknown; activate: (e: unknown, t: string) => void }> | undefined) => void) => void }>;
+    registerLinkProvider: ReturnType<typeof vi.fn>;
+    osc: Map<number, (data: string) => boolean>;
+    keyHandler: ((ev: KeyboardEvent) => boolean) | null;
+    attachCustomKeyEventHandler: ReturnType<typeof vi.fn>;
   }>,
 }));
 
@@ -33,6 +40,30 @@ vi.mock('@xterm/xterm', () => {
     });
     emitData(d: string): void {
       for (const cb of this.dataCbs) cb(d);
+    }
+    // The link, OSC and key hooks studio#1362 uses, over a buffer of plain rows.
+    lines: string[] = [];
+    selection = '';
+    linkProviders: Array<{ provideLinks: (y: number, cb: (links: Array<{ text: string; range: unknown; activate: (e: unknown, t: string) => void }> | undefined) => void) => void }> = [];
+    osc = new Map<number, (data: string) => boolean>();
+    keyHandler: ((ev: KeyboardEvent) => boolean) | null = null;
+    registerLinkProvider = vi.fn((p: (typeof this.linkProviders)[number]) => { this.linkProviders.push(p); return { dispose: vi.fn() }; });
+    parser = { registerOscHandler: vi.fn((id: number, cb: (data: string) => boolean) => { this.osc.set(id, cb); return { dispose: vi.fn() }; }) };
+    attachCustomKeyEventHandler = vi.fn((cb: (ev: KeyboardEvent) => boolean) => { this.keyHandler = cb; });
+    hasSelection = (): boolean => this.selection !== '';
+    getSelection = (): string => this.selection;
+    get buffer(): unknown {
+      const lines = this.lines;
+      const cols = this.cols;
+      return {
+        active: {
+          get length() { return lines.length; },
+          getLine: (i: number) => (i < 0 || i >= lines.length ? undefined : {
+            isWrapped: false,
+            getCell: (x: number) => (x >= cols ? undefined : { getChars: () => lines[i]![x] ?? '', getWidth: () => 1 }),
+          }),
+        },
+      };
     }
     constructor(public options: Record<string, unknown> = {}) {
       h.terminals.push(this);
@@ -286,6 +317,111 @@ describe('Terminal (DES-TERMINAL-001 §6 — the web bridge)', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  describe('getting text out (studio#1362)', () => {
+    const LINK = 'https://claude.ai/oauth/authorize?code=true&client_id=00000000-0000-4000-8000-000000000000&response_type=code&state=abc';
+    // claude's own wrap at the width: the link cut into 80-column rows.
+    const wrapped = (s: string, w: number): string[] => Array.from({ length: Math.ceil(s.length / w) }, (_, i) => s.slice(i * w, (i + 1) * w));
+    const mounted = async () => {
+      render(<Terminal cwd="." />);
+      await waitFor(() => expect(h.terminals[0]?.registerLinkProvider).toHaveBeenCalled());
+      return h.terminals[0]!;
+    };
+    const linksAt = (term: (typeof h.terminals)[number], y: number) => {
+      let got: Array<{ text: string; range: unknown; activate: (e: unknown, t: string) => void }> | undefined;
+      term.linkProviders[0]!.provideLinks(y, (l) => { got = l; });
+      return got;
+    };
+
+    it('a sign-in link wrapped over rows is one link on each of its rows, and a click opens it in a new tab with no opener', async () => {
+      const term = await mounted();
+      term.lines = ['Browser didn\'t open? Use the url below to sign in:', '', ...wrapped(LINK, 80), '', 'Paste code here if prompted >'];
+      const open = vi.spyOn(window, 'open').mockReturnValue(null);
+      try {
+        for (const y of [3, 4]) {
+          const links = linksAt(term, y);
+          expect(links?.map((l) => l.text)).toEqual([LINK]);
+          expect(links?.[0]?.range).toEqual({ start: { x: 1, y: 3 }, end: { x: LINK.length - 80, y: 4 } });
+        }
+        expect(linksAt(term, 1)).toBeUndefined();
+        linksAt(term, 4)![0]!.activate(new MouseEvent('mouseup'), LINK);
+        expect(open).toHaveBeenCalledWith(LINK, '_blank', 'noopener,noreferrer');
+        // A drag that ends on the link, or an Option/Shift press (they select), does not open it (review r1).
+        const host = screen.getByTestId('terminal-host');
+        fireEvent.mouseDown(host, { clientX: 10, clientY: 10 });
+        linksAt(term, 4)![0]!.activate(new MouseEvent('mouseup', { clientX: 200, clientY: 10 }), LINK);
+        fireEvent.mouseDown(host, { clientX: 10, clientY: 10 });
+        linksAt(term, 4)![0]!.activate(new MouseEvent('mouseup', { clientX: 10, clientY: 10, altKey: true }), LINK);
+        expect(open).toHaveBeenCalledTimes(1);
+        // The program rewrote the link's last row after it was found: the old address is not opened (review r2).
+        const found = linksAt(term, 3)![0]!;
+        term.lines = [...term.lines.slice(0, 3), 'X'.repeat(LINK.length - 80), ...term.lines.slice(4)];
+        found.activate(new MouseEvent('mouseup'), LINK);
+        expect(open).toHaveBeenCalledTimes(1);
+      } finally {
+        open.mockRestore();
+      }
+    });
+
+    it('an OSC 52 copy is offered, never done on its own: Copy it copies, a refusal says how to copy by hand (review r1)', async () => {
+      const term = await mounted();
+      const writeText = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('NotAllowedError'));
+      vi.stubGlobal('navigator', { ...navigator, platform: 'MacIntel', clipboard: { writeText } });
+      try {
+        const handler = term.osc.get(52)!;
+        act(() => { expect(handler(`c;${btoa(LINK)}`)).toBe(true); });
+        expect(writeText).not.toHaveBeenCalled();
+        expect(screen.getByTestId('terminal-copy-ask')).toHaveTextContent(`The program in this terminal wants to copy ${LINK.length} characters to your clipboard.`);
+        // The text itself is never drawn (it can be a sign-in token).
+        expect(screen.getByTestId('terminal-copy-ask')).not.toHaveTextContent('claude.ai');
+        fireEvent.click(screen.getByTestId('terminal-copy-go'));
+        expect(writeText).toHaveBeenCalledWith(LINK);
+        await waitFor(() => expect(screen.getByTestId('terminal-copy-note')).toHaveTextContent('Copied to your clipboard.'));
+        act(() => { handler(`c;${btoa('made-up-value')}`); });
+        fireEvent.click(screen.getByTestId('terminal-copy-go'));
+        await waitFor(() => expect(screen.getByTestId('terminal-copy-note')).toHaveTextContent('Your browser didn’t allow the copy. To copy text from the terminal, hold Option (⌥) while you drag over it, then press ⌘C.'));
+        // Don't copy drops the offer; a read request is never answered.
+        act(() => { handler(`c;${btoa('another')}`); });
+        fireEvent.click(screen.getByTestId('terminal-copy-skip'));
+        expect(screen.queryByTestId('terminal-copy-ask')).toBeNull();
+        act(() => { handler('c;?'); });
+        expect(screen.queryByTestId('terminal-copy-ask')).toBeNull();
+        expect(writeText).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.unstubAllGlobals();
+        vi.stubGlobal('WebSocket', FakeWebSocket);
+        vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+      }
+    });
+
+    it('only the newest copy says how it went (review r1)', async () => {
+      const term = await mounted();
+      let rejectOld: (e: Error) => void = () => {};
+      const writeText = vi.fn()
+        .mockImplementationOnce(() => new Promise((_r, rej) => { rejectOld = rej; }))
+        .mockResolvedValueOnce(undefined);
+      vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+      try {
+        act(() => { term.osc.get(52)!(`c;${btoa('first')}`); });
+        fireEvent.click(screen.getByTestId('terminal-copy-go'));
+        act(() => { term.osc.get(52)!(`c;${btoa('second')}`); });
+        fireEvent.click(screen.getByTestId('terminal-copy-go'));
+        await waitFor(() => expect(screen.getByTestId('terminal-copy-note')).toHaveTextContent('Copied to your clipboard.'));
+        await act(async () => { rejectOld(new Error('late')); await Promise.resolve(); });
+        expect(screen.getByTestId('terminal-copy-note')).toHaveTextContent('Copied to your clipboard.');
+        expect(writeText.mock.calls).toEqual([['first'], ['second']]);
+      } finally {
+        vi.unstubAllGlobals();
+        vi.stubGlobal('WebSocket', FakeWebSocket);
+        vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+      }
+    });
+
+    it('takes no keys of its own: copying a selection is the browser’s (review r2)', async () => {
+      const term = await mounted();
+      expect(term.attachCustomKeyEventHandler).not.toHaveBeenCalled();
+    });
   });
 
   it('surfaces the ungoverned operator shell loudly in the UI (§7)', () => {

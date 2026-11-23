@@ -1,0 +1,31 @@
+{
+  "$comment": "DES EXAMPLE, NOT A WRITER'S OUTPUT. DES-STANDIN-001 rev 3: the section 5.2 StandInChoiceRefusal (crew 409 on POST /runs, section 4) carrying the section 3.9 IndependencePreflight for the section 2.1 journey (Claude Code only, a bug fix on a repo with rules in force; core test T-R2). SWAP: replace `body` with the 409 body crew K2a's POST /runs writes in its T-K1 test (one-seat roster, setting absent), keeping `status`; tests/standInChoice.test.tsx reads only this file.",
+  "status": 409,
+  "body": {
+    "code": "stand_in_choice",
+    "error": "Only Claude Code was signed in, so this job's checks need stand-ins. Choose how to go on.",
+    "preflight": {
+      "short": true,
+      "primary": null,
+      "roles": [
+        { "role": "evaluator", "needed": 1, "real": [], "shortBy": 1, "canStandIn": true, "standInFrom": { "cli": "claude", "models": ["sonnet"] }, "conditional": false, "why": null },
+        { "role": "judge", "needed": 1, "real": [], "shortBy": 1, "canStandIn": true, "standInFrom": { "cli": "claude", "models": ["sonnet"] }, "conditional": false, "why": null },
+        { "role": "qe_reviewer", "needed": 1, "real": [], "shortBy": 1, "canStandIn": true, "standInFrom": { "cli": "claude", "models": ["sonnet"] }, "conditional": false, "why": null },
+        { "role": "rule_judge", "needed": 1, "real": [], "shortBy": 1, "canStandIn": true, "standInFrom": { "cli": "claude", "models": ["sonnet"] }, "conditional": false, "why": null },
+        { "role": "council", "needed": 3, "real": [], "shortBy": 3, "canStandIn": true, "standInFrom": { "cli": "claude", "models": ["sonnet"] }, "conditional": true, "why": null }
+      ],
+      "reason": "only Claude Code was signed in",
+      "signedIn": ["claude"],
+      "benched": [],
+      "judges": [],
+      "diversity": { "providers": 1, "needed": 2, "neededWithFailover": 3, "sharing": [], "outsideHelper": null, "note": null }
+    },
+    "choices": [
+      { "id": "job", "label": "Use stand-ins for this job" },
+      { "id": "always", "label": "Use stand-ins for every job" },
+      { "id": "sign_in", "label": "Sign in another helper" },
+      { "id": "cancel", "label": "Cancel" }
+    ],
+    "retryWith": { "standIns": true }
+  }
+}
