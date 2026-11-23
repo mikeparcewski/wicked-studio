@@ -667,7 +667,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                 {sourceMode === 'remote'
                   // crew#1839 (W2): where a clone with no path goes depends on the daemon's state home, so the form
                   // never guesses a path; the registered repository shows where it went.
-                  ? `Studio clones it ${checkoutPath.trim() !== '' ? `to ${checkoutPath.trim()}` : `into this daemon’s repositories folder as ${newName.trim() || '<name>'}`}, then maps the code so work can find its way around. It runs as a tracked step you can watch and usually takes a few minutes.`
+                  ? `Studio clones it ${checkoutPath.trim() !== '' ? `to ${checkoutPath.trim()}` : `into Studio’s repositories folder as ${newName.trim() || '<name>'}`}, then maps the code so work can find its way around. It runs as a tracked step you can watch and usually takes a few minutes.`
                   : 'Studio maps the code so work can find its way around. It runs as a tracked step you can watch and usually takes a few minutes.'}
               </p>
 
