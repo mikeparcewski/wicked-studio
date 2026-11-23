@@ -1034,7 +1034,7 @@ export function rulesHoldAt(events: readonly CoreEvent[] | null, units: readonly
 }
 
 /** {@link escalationFor}, but `null` when the unit was dispatched again after its newest escalation. */
-function escalationSinceDispatch(events: readonly CoreEvent[] | null, ord: number | null | undefined): { condition: string; denialSource: string } | null {
+function escalationSinceDispatch(events: readonly CoreEvent[] | null, ord: number | null | undefined): { condition: string; denialSource: string; summary: string } | null {
   if (typeof ord !== 'number') return null;
   const log = events ?? [];
   for (let i = log.length - 1; i >= 0; i--) {
@@ -1045,6 +1045,7 @@ function escalationSinceDispatch(events: readonly CoreEvent[] | null, ord: numbe
     return {
       condition: typeof e['condition'] === 'string' ? e['condition'] : '',
       denialSource: typeof e['denialSource'] === 'string' ? e['denialSource'] : '',
+      summary: typeof e['verdictSummary'] === 'string' ? e['verdictSummary'] : '',
     };
   }
   return null;
@@ -1067,6 +1068,24 @@ export const REDUCED_OPT_IN_DISCLOSURE =
  * ("a team run never grades on its creator seat"), so only the distinct-evaluator wording offers
  * the reduced opt-in; a run already reduced never sees it.
  */
+/**
+ * (core#1719, studio#1329) The engine's dead end for a distinct-evaluator review: no seat among this run's helpers can
+ * review the work independently (an author, a seat calling an author's provider, one that failed or can't take the
+ * step: core `pipeline.rs` `no_distinct_reviewer`, said in the denial). `outside` is the helper outside the run the
+ * engine named as able to review it, or `null` when it named none. `null` when the engine did not say so (a retry on
+ * another helper of the job may still work).
+ */
+export function noDistinctReviewer(events: readonly CoreEvent[] | null, ord: number | null | undefined, prompt: string | undefined): { outside: string | null } | null {
+  // THIS attempt's escalation only (one from before the unit's newest dispatch is an earlier attempt's, review r1): its
+  // summary is the engine's whole denial. The gate prompt quotes it cut at 240 characters (core `reason_head`), so it
+  // is read only when there is no escalation of this attempt.
+  const esc = escalationSinceDispatch(events, ord);
+  const said = esc !== null ? esc.summary : prompt ?? '';
+  if (!/no distinct reviewer remains among this run's helpers/i.test(said)) return null;
+  const named = /`([^`]+)` could review it, but it is not one of this run's helpers/.exec(said)?.[1] ?? null;
+  return { outside: named };
+}
+
 export function creatorSeatRefusal(events: readonly CoreEvent[] | null, ord: number | null | undefined, prompt: string | undefined): boolean {
   const esc = escalationFor(events, ord);
   const said = `${esc?.summary ?? ''}\n${prompt ?? ''}`;

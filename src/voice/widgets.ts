@@ -219,10 +219,14 @@ export function stepWords(phase: string | null): string | null {
   return phase;
 }
 
-/** One load word for the dashboard and its spoken summary. */
+/**
+ * One load word for the dashboard and its spoken summary, on one scale that ranks with crew's state: calm < nearly full
+ * (ok, at 75% of the cores or more) < overloaded (degraded) < saturated (down). A worse state never reads calmer than a
+ * better one (studio#1274: degraded read "busy", calmer than an ok host's "nearly full").
+ */
 export function loadWord(row: Pick<SystemInfra, 'state' | 'load'> | undefined): string {
   if (row?.state === 'down') return 'saturated';
-  if (row?.state === 'degraded') return 'busy';
+  if (row?.state === 'degraded') return 'overloaded';
   if (row?.state !== 'ok') return 'not read';
   const load = row.load;
   return load !== null && load.cores !== null && load.cores > 0 && load.load1 / load.cores >= 0.75 ? 'nearly full' : 'calm';

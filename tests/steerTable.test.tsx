@@ -224,6 +224,10 @@ describe('Table layout — the grid + the drawer', () => {
     expect(within(drawer).getByTestId('steering-rule-excludes')).toHaveTextContent('—');
     expect(within(drawer).getByTestId('steering-rule-weight')).toHaveTextContent(/engine default 1\.0/);
     expect(within(drawer).getByTestId('steering-rule-effect')).toHaveTextContent('recall-only');
+    // studio#1314: an effect-less rule is still checked at review; the tooltip never says it cannot decide a gate.
+    const tip = within(drawer).getByTestId('steering-rule-effect').querySelector('[title]')?.getAttribute('title') ?? '';
+    expect(tip).toContain('review still checks work against it');
+    expect(tip).not.toMatch(/never decides|never blocks/);
     expect(within(drawer).getByTestId('steering-rule-evidence')).toHaveTextContent('—');
   });
 

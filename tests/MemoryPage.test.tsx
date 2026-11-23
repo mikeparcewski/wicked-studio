@@ -29,6 +29,7 @@ vi.mock('../src/api/client.js', () => ({
 const { MemoryPage } = await import('../src/components/memory/MemoryPage.js');
 const { ApiError } = await import('../src/api/errors.js');
 const { useProjectsStore } = await import('../src/store/projects.js');
+const { useCapabilities } = await import('../src/store/capabilities.js');
 type MemoryItem = import('../src/api/memory.js').MemoryItem;
 type Proposal = import('../src/api/proposals.js').Proposal;
 
@@ -39,8 +40,8 @@ const PP: Proposal = { id: 'pp1', kind_type: 'policy:testing', payload: { rule: 
 
 /** A stateful wire: memories, coverage over them, retire, edit, proposals (file / approve / reject; a decided
  *  proposal stays in the store with its state, as estate keeps it, and `?state=` filters). */
-function wire(initial: MemoryItem[], proposals: Proposal[] = []): { calls: string[]; bodies: Record<string, unknown[]> } {
-  let rows = [...initial];
+function wire(initial: MemoryItem[], proposals: Proposal[] = []): { calls: string[]; bodies: Record<string, unknown[]>; store: { rows: MemoryItem[] } } {
+  const store = { rows: [...initial] };
   let queue = [...proposals];
   const calls: string[] = [];
   const bodies: Record<string, unknown[]> = {};
@@ -51,30 +52,30 @@ function wire(initial: MemoryItem[], proposals: Proposal[] = []): { calls: strin
     if (body !== undefined) (bodies[s] ??= []).push(body);
     if (s.startsWith('/memory/coverage')) {
       const prefix = new URLSearchParams(s.split('?')[1] ?? '').get('scope_prefix') ?? '';
-      const inScope = rows.filter((m) => m.scope.startsWith(prefix));
+      const inScope = store.rows.filter((m) => m.scope.startsWith(prefix));
       const byTier: Record<string, number> = {};
       for (const m of inScope) byTier[m.tier] = (byTier[m.tier] ?? 0) + 1;
       return Promise.resolve({ total: inScope.length, by_tier: byTier, by_kind: {} });
     }
     if (s === '/memory/retire-item') {
-      const before = rows.length;
-      rows = rows.filter((m) => m.id !== body?.memory_id);
-      return before === rows.length ? Promise.reject(new ApiError(404, `no memory ${String(body?.memory_id)}`)) : Promise.resolve({ erased: 1 });
+      const before = store.rows.length;
+      store.rows = store.rows.filter((m) => m.id !== body?.memory_id);
+      return before === store.rows.length ? Promise.reject(new ApiError(404, `no memory ${String(body?.memory_id)}`)) : Promise.resolve({ erased: 1 });
     }
     if (s === '/memory/retire') {
-      const before = rows.length;
-      rows = rows.filter((m) => !m.scope.startsWith(String(body?.scope_prefix)));
-      return Promise.resolve({ erased: before - rows.length });
+      const before = store.rows.length;
+      store.rows = store.rows.filter((m) => !m.scope.startsWith(String(body?.scope_prefix)));
+      return Promise.resolve({ erased: before - store.rows.length });
     }
     if (s === '/memory/edit') {
-      const old = rows.find((m) => m.id === body?.memory_id);
+      const old = store.rows.find((m) => m.id === body?.memory_id);
       if (old === undefined) return Promise.reject(new ApiError(404, 'no such memory'));
-      rows = [...rows.filter((m) => m !== old), { ...old, id: `${old.id}-v2`, content: String(body?.content) }];
+      store.rows = [...store.rows.filter((m) => m !== old), { ...old, id: `${old.id}-v2`, content: String(body?.content) }];
       return Promise.resolve({ memory_id: `${old.id}-v2`, retired: old.id });
     }
     if (s.startsWith('/memory')) {
       const q = new URLSearchParams(s.split('?')[1] ?? '').get('query');
-      return Promise.resolve({ memories: q === null ? rows : rows.filter((m) => m.content.toLowerCase().includes(q.toLowerCase())) });
+      return Promise.resolve({ memories: q === null ? store.rows : store.rows.filter((m) => m.content.toLowerCase().includes(q.toLowerCase())) });
     }
     if (s === '/proposals' && init?.method === 'POST') {
       const id = `pref-${queue.length + 1}`;
@@ -89,12 +90,12 @@ function wire(initial: MemoryItem[], proposals: Proposal[] = []): { calls: strin
         // crew's accept-with-edit (api/capture.ts): an edited COPY naming the original is approved, the original rejected.
         const copy: Proposal = { ...p, id: `${p.id}-edit`, payload: { ...(p.payload as object), content: body.content, edited_from: p.id }, state: 'approved' };
         queue = [...queue.map((x) => (x === p ? { ...x, state: 'rejected' as const } : x)), copy];
-        rows = [...rows, { id: `proposal:${copy.id}`, content: body.content, tier: 'semantic', scope: '', facets: p.facets, created_at: 1_700_000_400 }];
+        store.rows = [...store.rows, { id: `proposal:${copy.id}`, content: body.content, tier: 'semantic', scope: '', facets: p.facets, created_at: 1_700_000_400 }];
         return Promise.resolve({ outcome: 'promoted', active_id: `proposal:${copy.id}`, edited: { from: p.id, to: copy.id } });
       }
       queue = queue.map((x) => (x === p ? { ...x, state: 'approved' as const } : x));
       const content = (p.payload as { content: string }).content;
-      rows = [...rows, { id: `proposal:${p.id}`, content, tier: 'semantic', scope: '', facets: p.facets, created_at: 1_700_000_400 }];
+      store.rows = [...store.rows, { id: `proposal:${p.id}`, content, tier: 'semantic', scope: '', facets: p.facets, created_at: 1_700_000_400 }];
       return Promise.resolve({ outcome: 'promoted', active_id: `proposal:${p.id}` });
     }
     const reject = /^\/proposals\/([^/]+)\/reject$/.exec(s);
@@ -105,7 +106,7 @@ function wire(initial: MemoryItem[], proposals: Proposal[] = []): { calls: strin
     }
     return Promise.reject(new ApiError(404, 'Not Found'));
   });
-  return { calls, bodies };
+  return { calls, bodies, store };
 }
 
 const navigate = vi.fn();
@@ -135,6 +136,8 @@ beforeEach(() => {
   apiFetch.mockReset();
   navigate.mockReset();
   useProjectsStore.setState({ projects: [{ id: 'p-wicked', name: 'Wicked' }] } as never);
+  // An older crew unless a test says otherwise: `retire-item` erases (no `capabilities.memoryRestore`).
+  useCapabilities.setState({ loaded: true, memoryRestore: false });
 });
 
 describe('MemoryPage — the store, read honestly', () => {
@@ -289,7 +292,7 @@ describe('MemoryPage — Edit and Retire', () => {
     const user = userEvent.setup();
     await openRowMenu((await screen.findAllByTestId('memory-row'))[0]!, 'Edit…');
     const dialog = await screen.findByTestId('memory-edit-dialog');
-    expect(dialog).toHaveTextContent('If this one can’t be retired, the new one is taken back out');
+    expect(dialog).toHaveTextContent('If this one can’t be deleted, the new one is taken back out');
     const box = within(dialog).getByTestId('memory-edit-text');
     expect(within(dialog).getByTestId('memory-edit-save')).toBeDisabled();
     await user.clear(box);
@@ -633,4 +636,258 @@ it('slice C: a missing memory service appears in one error banner', async () => 
   await screen.findByTestId('memories-error');
   await waitFor(() => expect(view.container.querySelectorAll('.wk-state-banner')).toHaveLength(1));
   expect(screen.getByRole('alert')).toHaveTextContent('Memory needs the code map service (wicked-estate), which isn’t installed or running.');
+});
+
+/**
+ * crew#1697 (studio#1248): on a crew that advertises `capabilities.memoryRestore`, `retire-item` is a SOFT retire. The
+ * wire below is that crew's: `GET /memory?retired=1` answers `{ memories: [{ id, content, tier, scope, facets,
+ * created_at, retired_at }] }` (crew `api/routes.ts` shapeMemoryItem + the `GET /memory` route, pinned in crew
+ * `tests/memory-route.test.ts` "lists retired memories via memory.list {retired: true}"), `retire-item` answers
+ * `{ retired: 1 }`, `unretire` `{ restored: 1 }` (404 for an id with no retired memory), `erase-item` `{ erased: 1 }`.
+ */
+function softWire(initial: MemoryItem[]): { calls: string[]; bodies: Record<string, unknown[]>; retired: (MemoryItem & { retired_at: number })[] } {
+  // ONE store for every route (codex r1 #1339): the live rows are `wire`'s, so coverage, edit and the subtree erase
+  // see each retire and restore; the retired rows live beside them, and the subtree erase takes those too (crew
+  // `POST /memory/retire` → `memory.erase {scope_prefix}` "hard-deletes EVERY memory" under the prefix).
+  const out = wire(initial);
+  const { store } = out;
+  const base = apiFetch.getMockImplementation()!;
+  const state = { retired: [] as (MemoryItem & { retired_at: number })[] };
+  apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) => {
+    const s = String(path);
+    const body = init?.body !== undefined ? JSON.parse(init.body) as { memory_id?: string; scope_prefix?: string } : undefined;
+    const record = (): void => { out.calls.push(s); if (body !== undefined) (out.bodies[s] ??= []).push(body); };
+    if (s === '/memory/retire-item') {
+      record();
+      const m = store.rows.find((x) => x.id === body?.memory_id);
+      if (m === undefined) return Promise.reject(new ApiError(404, 'no live memory'));
+      store.rows = store.rows.filter((x) => x !== m);
+      state.retired = [...state.retired, { ...m, retired_at: 1_700_100_000 }];
+      return Promise.resolve({ retired: 1 });
+    }
+    if (s === '/memory/unretire') {
+      record();
+      const m = state.retired.find((x) => x.id === body?.memory_id);
+      if (m === undefined) return Promise.reject(new ApiError(404, `no retired memory ${String(body?.memory_id)}`));
+      state.retired = state.retired.filter((x) => x !== m);
+      const back: MemoryItem & { retired_at?: number } = { ...m };
+      delete back.retired_at;
+      store.rows = [...store.rows, back];
+      return Promise.resolve({ restored: 1 });
+    }
+    if (s === '/memory/erase-item') {
+      record();
+      const before = store.rows.length + state.retired.length;
+      store.rows = store.rows.filter((x) => x.id !== body?.memory_id);
+      state.retired = state.retired.filter((x) => x.id !== body?.memory_id);
+      return before === store.rows.length + state.retired.length ? Promise.reject(new ApiError(404, 'no memory')) : Promise.resolve({ erased: 1 });
+    }
+    if (s === '/memory/retire') {
+      record();
+      const prefix = String(body?.scope_prefix);
+      const before = store.rows.length + state.retired.length;
+      store.rows = store.rows.filter((m) => !m.scope.startsWith(prefix));
+      state.retired = state.retired.filter((m) => !m.scope.startsWith(prefix));
+      return Promise.resolve({ erased: before - store.rows.length - state.retired.length });
+    }
+    if (s.startsWith('/memory?') && new URLSearchParams(s.split('?')[1]).get('retired') === '1') {
+      record();
+      const prefix = new URLSearchParams(s.split('?')[1]).get('scope_prefix') ?? '';
+      return Promise.resolve({ memories: state.retired.filter((m) => m.scope.startsWith(prefix)), store: { path: 'x' } });
+    }
+    return base(path, init);
+  });
+  return { calls: out.calls, bodies: out.bodies, get retired() { return state.retired; }, set retired(v) { state.retired = v; } };
+}
+
+async function openRetired(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(screen.getByTestId('memory-more-button'));
+  await user.click(screen.getByTestId('memory-add-retired'));
+}
+
+describe('MemoryPage — soft retire, Show retired, Restore and Delete for good (crew#1697, studio#1248)', () => {
+  beforeEach(() => { useCapabilities.setState({ loaded: true, memoryRestore: true }); });
+
+  it('Retire keeps the memory: Show retired lists it with when it was retired, and Restore brings it back by id', async () => {
+    const { bodies } = softWire([M1, M2]);
+    page();
+    const user = userEvent.setup();
+    await openRowMenu((await screen.findAllByTestId('memory-row'))[0]!, 'Retire');
+    const dialog = await screen.findByTestId('memory-retire-dialog');
+    expect(dialog).toHaveTextContent('It is kept: you can restore it from Show retired');
+    expect(dialog).not.toHaveTextContent('erased');
+    await user.click(within(dialog).getByTestId('memory-retire-confirm'));
+    expect(await screen.findByTestId('memories-note')).toHaveTextContent('Retired: gh account flips to a secondary → push 403. Restore it from Show retired.');
+    expect(bodies['/memory/retire-item']).toEqual([{ memory_id: 'm1' }]);
+    await waitFor(() => expect(screen.getAllByTestId('memory-row').map((r) => r.getAttribute('data-memory-id'))).toEqual(['m2']));
+
+    await openRetired(user);
+    const panel = await screen.findByTestId('memory-retired');
+    expect(within(panel).queryByTestId('memory-retired-erased')).toBeNull();
+    expect(within(panel).getByTestId('memory-retired-kept')).toHaveTextContent('hidden from helpers and kept');
+    const row = await within(panel).findByTestId('memory-retired-memory');
+    expect(row).toHaveAttribute('data-memory-id', 'm1');
+    expect(row).toHaveTextContent(`retired ${new Date(1_700_100_000 * 1000).toLocaleDateString()}`);
+    await user.click(within(row).getByTestId('memory-retired-restore'));
+    expect(await within(panel).findByTestId('memory-retired-restored-note')).toHaveTextContent('Restored: gh account flips');
+    // The retired list reads again: the restored memory has left it.
+    await waitFor(() => expect(within(panel).queryByTestId('memory-retired-memory')).toBeNull());
+    expect(bodies['/memory/unretire']).toEqual([{ memory_id: 'm1' }]);
+    await user.click(screen.getByTestId('memory-retired-close'));
+    await waitFor(() => expect(screen.getAllByTestId('memory-row').map((r) => r.getAttribute('data-memory-id')).sort()).toEqual(['m1', 'm2']));
+  });
+
+  it('Delete for good from Show retired erases it by id after a confirm, and the retired list reads again', async () => {
+    const { bodies } = softWire([M1]);
+    page();
+    const user = userEvent.setup();
+    await openRowMenu((await screen.findAllByTestId('memory-row'))[0]!, 'Retire');
+    await user.click(await screen.findByTestId('memory-retire-confirm'));
+    await screen.findByTestId('memories-note');
+    await openRetired(user);
+    const row = await screen.findByTestId('memory-retired-memory');
+    await user.click(within(row).getByTestId('memory-retired-erase'));
+    const dialog = await screen.findByTestId('memory-erase-dialog');
+    expect(dialog).toHaveTextContent('This can’t be undone.');
+    expect(bodies['/memory/erase-item']).toBeUndefined();
+    await user.click(within(dialog).getByTestId('memory-erase-confirm'));
+    expect(await screen.findByTestId('memories-note')).toHaveTextContent('Deleted for good: gh account flips to a secondary → push 403');
+    expect(bodies['/memory/erase-item']).toEqual([{ memory_id: 'm1' }]);
+    expect(await screen.findByTestId('memory-retired-none')).toHaveTextContent('No memory is retired.');
+  });
+
+  it('the row menu offers Delete for good beside Retire, and names the scope-wide move a delete for good', async () => {
+    const { bodies } = softWire([M1, M2]);
+    page();
+    const user = userEvent.setup();
+    const row = (await screen.findAllByTestId('memory-row'))[0]!;
+    await user.click(within(row).getByTestId('memory-actions-button'));
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Edit…', 'Retire', 'Delete for good…', 'Delete everything in this scope for good…']);
+    await user.click(screen.getByRole('menuitem', { name: 'Delete for good…' }));
+    await user.click(within(await screen.findByTestId('memory-erase-dialog')).getByTestId('memory-erase-confirm'));
+    expect(await screen.findByTestId('memories-note')).toHaveTextContent('Deleted for good:');
+    expect(bodies['/memory/erase-item']).toEqual([{ memory_id: 'm1' }]);
+    expect(bodies['/memory/retire-item']).toBeUndefined();
+  });
+
+  it('an estate that cannot list retired memories (501) says so; a restore of an id no longer retired says nothing changed', async () => {
+    softWire([M1]);
+    const base = apiFetch.getMockImplementation()!;
+    let listOk = false;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) => {
+      const s = String(path);
+      if (s.includes('retired=1') && !listOk) return Promise.reject(new ApiError(501, 'estate_upgrade_required'));
+      if (s.includes('retired=1')) return Promise.resolve({ memories: [{ ...M1, retired_at: 1_700_100_000 }] });
+      if (s === '/memory/unretire') return Promise.reject(new ApiError(404, 'no retired memory m1'));
+      return base(path, init);
+    });
+    const view = page();
+    const user = userEvent.setup();
+    await screen.findAllByTestId('memory-row');
+    await openRetired(user);
+    expect(await screen.findByTestId('memory-retired-unsupported')).toHaveTextContent('can’t list retired memories yet');
+    listOk = true;
+    view.unmount();
+    page();
+    await screen.findAllByTestId('memory-row');
+    await openRetired(user);
+    await user.click(await screen.findByTestId('memory-retired-restore'));
+    expect(await screen.findByTestId('memory-retired-restore-fail')).toHaveTextContent('no longer retired');
+  });
+
+  it('Restore rereads the retired list (the row leaves, the words stay in a note), and so does Refresh', async () => {
+    const wire = softWire([M1, M2]);
+    page();
+    const user = userEvent.setup();
+    await openRowMenu((await screen.findAllByTestId('memory-row'))[0]!, 'Retire');
+    await user.click(await screen.findByTestId('memory-retire-confirm'));
+    await screen.findByTestId('memories-note');
+    await openRetired(user);
+    const panel = await screen.findByTestId('memory-retired');
+    await user.click(await within(panel).findByTestId('memory-retired-restore'));
+    expect(await within(panel).findByTestId('memory-retired-restored-note')).toHaveTextContent('Restored: gh account flips to a secondary → push 403. It is back in your memories.');
+    expect(await within(panel).findByTestId('memory-retired-none')).toBeInTheDocument();
+    // Another client retires it again; the header Refresh reads the retired list again and offers Restore.
+    wire.retired = [{ ...M1, retired_at: 1_700_200_000 }];
+    await user.click(screen.getByTestId('memory-more-button'));
+    await user.click(screen.getByTestId('memories-refresh'));
+    const row = await within(panel).findByTestId('memory-retired-memory');
+    // The fresh read wins over the earlier local "Restored" mark: both actions are back.
+    expect(within(row).getByTestId('memory-retired-restore')).toBeEnabled();
+    expect(within(row).queryByTestId('memory-retired-restored')).toBeNull();
+  });
+
+  it('a long retired inventory stays reachable: 100 at a time, then Show more', async () => {
+    const wire = softWire([M1]);
+    wire.retired = Array.from({ length: 130 }, (_, i) => ({ ...M2, id: `old-${i}`, content: `old memory ${i}`, retired_at: 1_700_100_000 - i }));
+    page();
+    const user = userEvent.setup();
+    await screen.findAllByTestId('memory-row');
+    await openRetired(user);
+    await waitFor(() => expect(screen.getAllByTestId('memory-retired-memory')).toHaveLength(100));
+    expect(screen.getByTestId('memory-retired-more-line')).toHaveTextContent('Showing 100 of 130 retired memories.');
+    await user.click(screen.getByTestId('memory-retired-more'));
+    expect(screen.getAllByTestId('memory-retired-memory')).toHaveLength(130);
+    expect(screen.getAllByTestId('memory-retired-memory').at(-1)).toHaveAttribute('data-memory-id', 'old-129');
+    expect(screen.queryByTestId('memory-retired-more')).toBeNull();
+  });
+
+  it('the scope-wide delete counts the retired memories it also erases', async () => {
+    const third: MemoryItem = { ...M1, id: 'm3', content: 'ops note three' };
+    const wire = softWire([M1, third]);
+    page();
+    const user = userEvent.setup();
+    await openRowMenu((await screen.findAllByTestId('memory-row'))[0]!, 'Retire');
+    await user.click(await screen.findByTestId('memory-retire-confirm'));
+    await screen.findByTestId('memories-note');
+    await openRowMenu((await screen.findAllByTestId('memory-row'))[0]!, 'Delete everything in this scope for good…');
+    const dialog = await screen.findByTestId('memory-retire-dialog');
+    await waitFor(() => expect(dialog).toHaveTextContent(`Every memory filed at or under ${M1.scope} is deleted for good: 1 memory and 1 retired one. This can’t be undone.`));
+    await user.click(within(dialog).getByTestId('memory-retire-confirm'));
+    expect(await screen.findByTestId('memories-note')).toHaveTextContent(`Deleted everything in ${M1.scope} for good: 2 memories.`);
+    expect(wire.retired).toEqual([]);
+  });
+
+  it('Edit says the original is deleted for good, not kept under Show retired (crew /memory/edit erases it)', async () => {
+    softWire([M1]);
+    page();
+    await openRowMenu((await screen.findAllByTestId('memory-row'))[0]!, 'Edit…');
+    const dialog = await screen.findByTestId('memory-edit-dialog');
+    expect(dialog).toHaveTextContent('this one is deleted for good (it is not kept under Show retired)');
+    expect(dialog).not.toHaveTextContent('this one is retired');
+  });
+});
+
+describe('MemoryPage — the daemon\'s support not known (health pending or unreadable)', () => {
+  beforeEach(() => { useCapabilities.setState({ loaded: true, memoryRestore: null }); });
+
+  it('Retire promises neither outcome, the note reads what the daemon did, and Show retired never asks an older crew for retired=1', async () => {
+    const { calls } = softWire([M1, M2]);
+    page();
+    const user = userEvent.setup();
+    const row = (await screen.findAllByTestId('memory-row'))[0]!;
+    await user.click(within(row).getByTestId('memory-actions-button'));
+    // No Delete for good offered on a guess.
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Edit…', 'Retire', 'Delete everything in this scope for good…']);
+    await user.click(screen.getByRole('menuitem', { name: 'Retire' }));
+    const dialog = await screen.findByTestId('memory-retire-dialog');
+    expect(dialog).toHaveTextContent('couldn’t read what this daemon supports: a current one keeps it under Show retired, an older one erases it for good');
+    expect(dialog).not.toHaveTextContent('This can’t be undone.');
+    await user.click(within(dialog).getByTestId('memory-retire-confirm'));
+    // The daemon answered `{ retired: 1 }`: it kept it.
+    expect(await screen.findByTestId('memories-note')).toHaveTextContent('Restore it from Show retired.');
+    await openRetired(user);
+    expect(await screen.findByTestId('memory-retired-unknown')).toHaveTextContent('can’t tell whether retired memories are kept');
+    expect(screen.queryByTestId('memory-retired-erased')).toBeNull();
+    expect(calls.some((c) => c.includes('retired=1'))).toBe(false);
+  });
+
+  it('an older crew\'s `{ erased: 1 }` answer is reported as erased', async () => {
+    wire([M1, M2]);
+    page();
+    const user = userEvent.setup();
+    await openRowMenu((await screen.findAllByTestId('memory-row'))[0]!, 'Retire');
+    await user.click(within(await screen.findByTestId('memory-retire-dialog')).getByTestId('memory-retire-confirm'));
+    expect(await screen.findByTestId('memories-note')).toHaveTextContent('The store erased it; it can’t be restored.');
+  });
 });

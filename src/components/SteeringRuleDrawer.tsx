@@ -250,7 +250,7 @@ export function SteeringRuleDrawer({ rule, evidence, onClose, onEdit, onRetired,
               )}
             </span>
           ) : (
-            <span title="no effect — this rule informs recall, it never decides a gate">recall-only</span>
+            <span title="no effect of its own: helpers are told about it when it applies, and review still checks work against it (studio#1314)">recall-only</span>
           )}
         </DetailRow>
         {(rule.obligations?.length ?? 0) > 0 && (
