@@ -532,7 +532,7 @@ export const api = {
     }),
 
   /** Clone a remote git URL, register it, and launch an onboarding run.
-   *  `checkoutPath` (absolute) overrides the default ~/.wicked/repos/<name>. */
+   *  `checkoutPath` (absolute) overrides the daemon’s repositories folder (`<name>` in it). */
   cloneAndRegisterRepo: (name: string, gitUrl: string, checkoutPath?: string, projectId?: string, opts?: RegisterRepoOpts) =>
     apiFetch<RegisterRepoAnswer>('/repos', {
       method: 'POST',

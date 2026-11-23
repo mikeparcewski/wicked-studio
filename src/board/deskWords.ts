@@ -260,6 +260,9 @@ export function plainDeliverSentence(card: string | null | undefined, repo: stri
     return `${repo !== null && repo !== '' ? repo : 'This repository'} has no origin to push to, so nothing would be delivered. Add the remote first.`;
   }
   const gh = /^Pushes .+? to ([\w.-]+\/[\w.-]+) on GitHub and opens a pull request there/.exec(c)?.[1];
+  // crew#1839: an Azure DevOps origin (crew's `org/project/repo on Azure DevOps …` card; its names may hold spaces).
+  const ado = /^Pushes .+? to ([^/\n]+\/[^/\n]+\/[^/\n]+?) on Azure DevOps and opens a pull request there/.exec(c)?.[1];
+  if (ado !== undefined) return `Pushes your changes as a new branch to ${ado} on Azure DevOps and opens a pull request there. Merging stays yours.`;
   if (gh !== undefined) return `Pushes your changes as a new branch to ${gh} on GitHub and opens a pull request there. Merging stays yours.`;
   if (/\) — a local path, so no pull request/.test(c)) {
     return `Pushes your changes as a new branch to ${whose} on this machine. There is no pull request: the branch is the delivery.`;
@@ -271,7 +274,7 @@ export function plainDeliverSentence(card: string | null | undefined, repo: stri
   if (/^Pushes .+? to origin and opens a pull request/.test(c)) {
     return `Pushes your changes as a new branch to ${whose} and opens a pull request. Merging stays yours.`;
   }
-  return `Pushes your changes as a new branch to ${whose}; a pull request opens only if that origin is on GitHub.`;
+  return `Pushes your changes as a new branch to ${whose}; a pull request opens only if that origin is on GitHub or Azure DevOps.`;
 }
 
 /** A run's repository name as the registry knows it (`repo_ref`), when it is a plain name. */

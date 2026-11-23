@@ -1,6 +1,6 @@
 import type { SessionView } from '../api/types.js';
 import type { SeatRecordResponse } from '../api/seatRecord.js';
-import { deliveryOf, hasDeliveredRef } from '../components/delivery.js';
+import { deliveryOf, hasDeliveredRef, prNumberOf } from '../components/delivery.js';
 import { median } from './deskPulse.js';
 import { seatDeltas, type Bucket, type SeatDelta } from './deskInsights.js';
 import { createdAtMs } from './windowStats.js';
@@ -309,14 +309,14 @@ export interface ShippedRow {
 export function shippedRows(jobs: readonly SessionView[], title: (v: SessionView) => string): ShippedRow[] {
   return jobs.filter((v) => endingOf(v) === 'delivered').map((v): ShippedRow => {
     const d = deliveryOf(v);
-    const n = d.url === null ? null : /\/pull\/(\d+)/.exec(d.url);
+    const n = d.url === null ? null : prNumberOf(d.url);
     return {
       runId: v.session.id,
       title: title(v),
       repo: repoOf(v),
       kind: d.state === 'pushed' ? 'pushed' : d.url !== null ? 'pr' : 'delivered',
       url: d.url,
-      number: n === null ? null : Number(n[1]),
+      number: n,
       branch: d.pushed?.branch ?? null,
       endedAt: endedAtMs(v),
     };

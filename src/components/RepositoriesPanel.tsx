@@ -638,7 +638,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                     <input
                       className="wk-field"
                       data-testid="repo-checkout-path"
-                      placeholder={`~/.wicked/repos/${newName || '<name>'}`}
+                      placeholder="Empty: the default folder"
                       value={checkoutPath}
                       onChange={(e) => setCheckoutPath(e.target.value)}
                     />
@@ -665,7 +665,9 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                   units — index, then annotate (FINDING-068); don't re-add a third here. */}
               <p data-testid="action-preview" className="wk-field-note">
                 {sourceMode === 'remote'
-                  ? `Studio clones it to ${checkoutPath.trim() || `~/.wicked/repos/${newName || '<name>'}`}, then maps the code so work can find its way around. It runs as a tracked step you can watch and usually takes a few minutes.`
+                  // crew#1839 (W2): where a clone with no path goes depends on the daemon's state home, so the form
+                  // never guesses a path; the registered repository shows where it went.
+                  ? `Studio clones it ${checkoutPath.trim() !== '' ? `to ${checkoutPath.trim()}` : `into Studio’s repositories folder as ${newName.trim() || '<name>'}`}, then maps the code so work can find its way around. It runs as a tracked step you can watch and usually takes a few minutes.`
                   : 'Studio maps the code so work can find its way around. It runs as a tracked step you can watch and usually takes a few minutes.'}
               </p>
 

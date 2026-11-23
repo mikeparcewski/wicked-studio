@@ -75,6 +75,16 @@ describe('Add a repository: the chained Capture learnings job (studio#1083)', ()
     expect(client.api.cloneAndRegisterRepo).toHaveBeenCalledWith('my-repo', 'https://github.com/org/my-repo', undefined, undefined, { autoCapture: false });
   });
 
+  it('From a URL with no folder says where Studio clones it, in words a first-time user knows (crew#1839, coord round 2)', async () => {
+    const user = userEvent.setup();
+    render(<RepositoriesPanel navigate={vi.fn()} autoShowRegister />);
+    await user.click(await screen.findByRole('radio', { name: 'From a URL' }));
+    await user.type(screen.getByTestId('repo-git-url'), 'https://dev.azure.com/org/proj/_git/my-repo');
+    const preview = screen.getByTestId('action-preview');
+    await waitFor(() => expect(preview).toHaveTextContent('Studio clones it into Studio’s repositories folder as my-repo, then maps the code'));
+    expect(preview.textContent).not.toMatch(/daemon|~\/\.wicked/);
+  });
+
   it('with automatic capture off in Settings it says none follows, offers no box and sends nothing extra', async () => {
     vi.mocked(client.api.getSettings).mockResolvedValue(settings(false));
     const user = userEvent.setup();

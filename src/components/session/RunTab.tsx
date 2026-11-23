@@ -33,7 +33,7 @@ import { silentWords } from '../../board/silentStep.js';
 import { useRunningFloor } from '../../hooks/useRunningFloor.js';
 import { floorWords } from '../../board/floorRun.js';
 import { deliveryAssuranceOf, deliveryReceiptOf, passedWord, runRuleRows } from '../../board/assuranceModel.js';
-import { deliveryOf } from '../delivery.js';
+import { deliveryOf, prNumberOf } from '../delivery.js';
 import { useRunCoverage } from '../../hooks/useRunCoverage.js';
 import { endedAtMs, finishedAtMs } from '../../board/needsYou.js';
 import { ago } from '../AgeStamp.js';
@@ -182,7 +182,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   // is open, so a closed panel never doubles them (one live instance of each on the page you are reading).
   const narrow = useNarrow();
   const panelShown = useHostPanel((st) => (narrow ? st.overlay : !st.folded));
-  const prNumber = delivery.url === null ? null : (/\/pull\/(\d+)/.exec(delivery.url)?.[1] ?? null);
+  const prNumber = delivery.url === null ? null : ((n) => (n === null ? null : String(n)))(prNumberOf(delivery.url));
   const roster = useRoster();
   const stopping = useSheets((s) => s.stopping[id] !== undefined);
   const [confirmStop, setConfirmStop] = useState(false);
