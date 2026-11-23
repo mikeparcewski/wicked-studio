@@ -7,12 +7,14 @@ import { standInChoiceWords, type StandInChoiceId, type StandInChoiceRefusal } f
  * listed, each with what happens next. Nothing has started while this shows (DES §4: the refusal comes before any
  * write). The host form does what a choice means (`onChoose`).
  */
-export function StandInChoice({ refusal, name, busy, onChoose, testId }: {
+export function StandInChoice({ refusal, name, busy, error = null, onChoose, testId }: {
   refusal: StandInChoiceRefusal;
   /** A helper key as studio names it ("claude" → "Claude Code"). */
   name: (cli: string) => string;
   /** The choice being carried out (its button says so; every button waits). */
   busy: StandInChoiceId | null;
+  /** A choice that could not be carried out (the setting was not saved): said here, and the choices stay. */
+  error?: string | null;
   onChoose: (id: StandInChoiceId) => void;
   testId: string;
 }): React.ReactElement {
@@ -44,6 +46,9 @@ export function StandInChoice({ refusal, name, busy, onChoose, testId }: {
           );
         })}
       </ul>
+      {error !== null && error.trim() !== '' && (
+        <p role="alert" className="wk-standin-choice-text wk-standin-choice-error" data-testid={`${testId}-error`}>{error}</p>
+      )}
     </section>
   );
 }

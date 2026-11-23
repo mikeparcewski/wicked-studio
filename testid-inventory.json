@@ -27200,6 +27200,7 @@
     {
       "pattern": "*-error",
       "files": [
+        "src/components/StandInChoice.tsx",
         "src/components/sources/AgentAccess.tsx",
         "src/components/sources/AllowWritesSwitch.tsx",
         "src/components/sources/AskData.tsx",

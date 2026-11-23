@@ -227,29 +227,65 @@ describe('the launch wizard asks instead of failing', () => {
     await waitFor(() => expect(navigate).toHaveBeenCalled());
   });
 
-  it('"every job" on a service that does not keep the setting: nothing starts, and it says so', async () => {
+  it('"every job" on a service that does not keep the setting: nothing starts, the card stays and says so, and "this job" still works (codex r1)', async () => {
     settingsEcho = {};
     const navigate = await launchRefused();
     fireEvent.click(screen.getByTestId('launch-wizard-standin-always'));
-    await screen.findByTestId('launch-wizard-error');
-    expect(screen.getByTestId('launch-wizard-error-detail').textContent).toMatch(/did not save/);
+    await screen.findByTestId('launch-wizard-standin-error');
+    expect(screen.getByTestId('launch-wizard-standin-error').textContent).toMatch(/did not save/);
+    expect(screen.queryByTestId('launch-wizard-error')).toBeNull();
     expect(launches()).toHaveLength(1);
     expect(navigate).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByTestId('launch-wizard-standin-job')).toBeEnabled());
+    fireEvent.click(screen.getByTestId('launch-wizard-standin-job'));
+    await waitFor(() => expect(launches()).toHaveLength(2));
+    expect(launches()[1]).toEqual({ ...launches()[0], standIns: true });
+    await waitFor(() => expect(navigate).toHaveBeenCalled());
   });
 
-  it('"sign in another helper" opens Helpers and starts nothing; "cancel" starts nothing', async () => {
+  it('"cancel" starts nothing, writes nothing, and keeps the job as written (codex r1)', async () => {
     const navigate = await launchRefused();
     fireEvent.click(screen.getByTestId('launch-wizard-standin-cancel'));
     expect(screen.queryByTestId('launch-wizard-standin')).toBeNull();
-    cleanup();
-    launchAnswers = [{ status: 409, body: CHOICE.body }];
-    calls = [];
-    resetLaunchWizard();
-    const nav = await launchRefused();
-    fireEvent.click(screen.getByTestId('launch-wizard-standin-sign_in'));
-    expect(nav).toHaveBeenCalledWith('/agents');
+    await new Promise((r) => setTimeout(r, 50));
     expect(launches()).toHaveLength(1);
+    expect(calls.some((c) => c.path === '/settings')).toBe(false);
     expect(navigate).not.toHaveBeenCalled();
+    expect(screen.getByTestId('launch-wizard-review')).toHaveTextContent('fix the reader');
+  });
+
+  it('"sign in another helper" opens Helpers, starts nothing, and keeps the draft', async () => {
+    const navigate = await launchRefused();
+    fireEvent.click(screen.getByTestId('launch-wizard-standin-sign_in'));
+    expect(navigate).toHaveBeenCalledWith('/agents');
+    expect(launches()).toHaveLength(1);
+    expect(calls.some((c) => c.path === '/settings')).toBe(false);
+    act(() => { openLaunchWizard({ workflowId: 'bug', composerKey: 'desk' }); });
+    expect((await screen.findByTestId('launch-wizard-intent') as HTMLTextAreaElement).value).toBe('fix the reader');
+  });
+
+  it('an edit after the refusal drops the card: no choice sends a request the form no longer shows (codex r1)', async () => {
+    await launchRefused();
+    fireEvent.click(screen.getByTestId('launch-wizard-back'));
+    expect(screen.queryByTestId('launch-wizard-standin')).toBeNull();
+    while (screen.getByTestId('launch-wizard-step').dataset.step !== 'what') fireEvent.click(screen.getByTestId('launch-wizard-back'));
+    fireEvent.change(screen.getByTestId('launch-wizard-intent'), { target: { value: 'fix the writer instead' } });
+    for (let i = 0; i < 6 && screen.getByTestId('launch-wizard-step').dataset.step !== 'review'; i += 1) {
+      await waitFor(() => expect(screen.getByTestId('launch-wizard-next')).toBeEnabled());
+      fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    }
+    expect(screen.getByTestId('launch-wizard-step').dataset.step).toBe('review');
+    expect(screen.queryByTestId('launch-wizard-standin')).toBeNull();
+    expect(launches()).toHaveLength(1);
+  });
+
+  it('going back and forth without an edit keeps the card for the same request', async () => {
+    await launchRefused();
+    fireEvent.click(screen.getByTestId('launch-wizard-back'));
+    expect(screen.queryByTestId('launch-wizard-standin')).toBeNull();
+    await waitFor(() => expect(screen.getByTestId('launch-wizard-next')).toBeEnabled());
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    expect(screen.getByTestId('launch-wizard-standin')).toBeTruthy();
   });
 
   it('another refusal is still an error line, not the card', async () => {
@@ -295,6 +331,17 @@ describe('the /runs/new launch form asks too', () => {
     await waitFor(() => expect(onLaunched).toHaveBeenCalledWith('r-new'));
     expect(launch.mock.calls[1]![0]).toEqual({ ...launch.mock.calls[0]![0], standIns: true });
     expect(screen.queryByTestId('launch-standin')).toBeNull();
+  });
+  it('an edit to the words after the refusal drops the card (codex r1)', async () => {
+    vi.spyOn(client.api, 'launchRun').mockRejectedValueOnce(refusalError());
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    fireEvent.change(screen.getByTestId('launch-problem'), { target: { value: 'fix the reader' } });
+    await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
+    fireEvent.click(screen.getByTestId('launch-submit'));
+    await screen.findByTestId('launch-standin');
+    fireEvent.change(screen.getByTestId('launch-problem'), { target: { value: 'fix the writer instead' } });
+    await waitFor(() => expect(screen.queryByTestId('launch-standin')).toBeNull());
+    expect(client.api.launchRun).toHaveBeenCalledTimes(1);
   });
 });
 

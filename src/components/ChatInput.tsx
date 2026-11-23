@@ -562,6 +562,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const formPosture = launchPosture({ ...postureInput, previewAnswer: { status: 'none' } });
   const previewFields = formPosture.payload.fields;
   const posturePreview = usePosturePreview(previewFields, powerChoice, healthSettled);
+  /** What a Send from here would ask for, as the person set it (the stand-in card answers only this request). */
+  const requestKey = JSON.stringify([launchProblem, [...selectedClis].sort(), entityMode, previewFields, linkedExclude, retryOf,
+    groupAttach, reducedAssurance, skipQe, skipQeReason, forceQe, powerChoice]);
+  const requestKeyNow = useRef(requestKey);
+  requestKeyNow.current = requestKey;
   const { shown, payload } = launchPosture({ ...postureInput, previewAnswer: posturePreview.answer });
 
   function loadProjects(): void {
@@ -587,8 +592,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const [qeRefusal, setQeRefusal] = useState<{ key: string; detail: string | null; forced: boolean } | null>(null);
   const qeAttempt = useRef(0);
   /** DES-STANDIN-001 S0: crew asked how to check this job (too few helpers signed in); nothing started. */
-  const [standIn, setStandIn] = useState<{ refusal: StandInChoiceRefusal; body: LaunchBodyWithDeliver } | null>(null);
+  // `key` is the request it answers (codex r1 on #1361): an edit after the refusal drops the card.
+  const [standIn, setStandIn] = useState<{ refusal: StandInChoiceRefusal; body: LaunchBodyWithDeliver; key: string } | null>(null);
   const [standInBusy, setStandInBusy] = useState<StandInChoiceId | null>(null);
+  const [standInError, setStandInError] = useState<string | null>(null);
+  useEffect(() => { if (standIn !== null && standIn.key !== requestKey) { setStandIn(null); setStandInError(null); } }, [standIn, requestKey]);
   /** studio#404: the id this launch was sent under (client-minted), while its POST is outstanding. */
   const [pendingRunId, setPendingRunId] = useState<string | null>(null);
   /** studio#404: the pending run is already on the daemon — offered while the POST is still out. */
@@ -859,6 +867,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     setBaseSkillRefusal(null);
     setQeRefusal(null);
     setStandIn(null);
+    setStandInError(null);
+    const keyAtLaunch = requestKeyNow.current;
     setStartedRunId(null);
     openedEarly.current = null;
 
@@ -968,7 +978,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       const refused = baseSkillRefusalOf(err);
       // Too few helpers to check it: the choice, not an error (nothing was created; DES-STANDIN-001 §4).
       const choice = standInChoiceOf(err);
-      if (choice !== null) setStandIn({ refusal: choice, body: sent });
+      if (choice !== null) setStandIn({ refusal: choice, body: sent, key: keyAtLaunch });
       else if (refused !== null) setBaseSkillRefusal(refused);
       else if (qeRefusalOf(err) === 'launch') {
         qeAttempt.current += 1;
@@ -984,14 +994,18 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
 
   // DES-STANDIN-001 §2.1 step 3: what each choice does. "This job" and "every job" re-send the same request.
   async function chooseStandIn(id: StandInChoiceId): Promise<void> {
-    if (standIn === null || submitting) return;
-    if (id === 'cancel') { setStandIn(null); return; }
+    if (standIn === null || submitting || standIn.key !== requestKeyNow.current) return;
+    if (id === 'cancel') { setStandIn(null); setStandInError(null); return; }
     if (id === 'sign_in') { navigate?.(AGENTS_PATH); return; }
     setSubmitting(true);
     setStandInBusy(id);
     setError(null);
+    setStandInError(null);
     try {
-      if (id === 'always') await saveStandInsEveryJob();
+      if (id === 'always') {
+        // A setting not saved launches nothing and keeps the choices (another one, "this job", still works).
+        try { await saveStandInsEveryJob(); } catch (err) { setStandInError(err instanceof Error ? err.message : String(err)); return; }
+      }
       // "Every job" sends the request unchanged: crew takes consent from the setting (DES §4 consentFor).
       const body = id === 'job' ? standInRelaunchBody(standIn.body, standIn.refusal) : standIn.body;
       const { runId: newRunId } = await api.launchRun(body);
@@ -2233,8 +2247,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         <QeRefusalWarning kind="launch" refusalKey={qeRefusal.key} detail={qeRefusal.detail} forced={qeRefusal.forced} navigate={navigate} testId="launch-qe-refused" />
       )}
 
-      {standIn !== null && (
-        <StandInChoice refusal={standIn.refusal} name={helperNamer(roster)} busy={standInBusy} testId="launch-standin"
+      {standIn !== null && standIn.key === requestKey && (
+        <StandInChoice refusal={standIn.refusal} name={helperNamer(roster)} busy={standInBusy} error={standInError} testId="launch-standin"
           onChoose={(id) => { void chooseStandIn(id); }} />
       )}
 
