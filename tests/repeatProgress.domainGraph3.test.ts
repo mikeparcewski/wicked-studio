@@ -40,6 +40,28 @@ describe('the progress line', () => {
     expect(repeatLineOf(answered)).toMatch(/page 3 · about 3 h left$/);
   });
 
+  // studio#1366 (train 12 run 94fa39f3): the page that reached 85% sends no frame (the engine emits stepRepeated only
+  // when it loops), so the header kept the last page's "42% · about 41 min left" through the coverage and graph steps.
+  it('says nothing once the loop step is over and a later step runs (no stale percent or time left)', () => {
+    const PAGE = ev({ type: 'stepRepeated', ord: 11, fromOrd: 7, pass: 5, line: 'Mapping wicked-crew · 3% → … → 42% · target 80% · page 6 · about 41 min left' });
+    const thePage = [PAGE, ev({ type: 'unitExecuting', ord: 7 }), ev({ type: 'unitExecuting', ord: 11 })];
+    // still on the loop (its range runs again): the line stands
+    expect(repeatLineOf(thePage)).toMatch(/42% · target 80% · page 6 · about 41 min left$/);
+    // the loop step ended without another pass; coverage (ord 12) runs, then the graph (ord 13)
+    expect(repeatLineOf([...thePage, ev({ type: 'unitExecuting', ord: 12 })])).toBeNull();
+    expect(repeatLineOf([...thePage, ev({ type: 'unitDispatched', ord: 12, attempt: 0 }), ev({ type: 'unitExecuting', ord: 13 })])).toBeNull();
+    const runs = [{ session: { id: RUN, status: 'executing', created_at: 1 } }];
+    expect(headlineProgress(runs, { [RUN]: [...thePage, ev({ type: 'unitExecuting', ord: 12 })] })).toBeNull();
+  });
+
+  it('after an answered ask that finishes with what was found, the old line does not come back', () => {
+    const finish = [PAGE1, PAGE2, ASK, ev({ type: 'resumed', ord: 11 }), ev({ type: 'unitExecuting', ord: 11 }), ev({ type: 'unitExecuting', ord: 12 })];
+    expect(repeatLineOf(finish)).toBeNull();
+    // "Map more": the run goes back into the loop's range, so the newest page's line stands
+    const more = [PAGE1, PAGE2, ASK, ev({ type: 'resumed', ord: 11 }), ev({ type: 'unitExecuting', ord: 11 }), ev({ type: 'unitExecuting', ord: 7 })];
+    expect(repeatLineOf(more)).toMatch(/page 3 · about 3 h left$/);
+  });
+
   it('the headline speaks for the newest run still going, never a finished one', () => {
     const runs = [
       { session: { id: 'old', status: 'cancelled', created_at: 1 } },
