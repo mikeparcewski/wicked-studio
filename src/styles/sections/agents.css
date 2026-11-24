@@ -29,6 +29,11 @@
 .wk-agents-setup-n { width: 28px; height: 28px; border-radius: var(--radius-full); display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border-strong); color: var(--ink-body); font-size: var(--text-sm); font-weight: var(--weight-semi); }
 .wk-agents-setup-step--done .wk-agents-setup-n { background: var(--status-ok-dim); border-color: transparent; color: var(--status-ok); }
 .wk-agents-setup-moves { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0; }
+/* studio#1388: step 5's git author, typed by the person; the commands are built from it. */
+.wk-agents-setup-author { margin-top: var(--space-2); }
+.wk-agents-setup-author-fields { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
+.wk-agents-setup-author-fields label { flex: 1 1 14rem; margin: 0; }
+.wk-agents-setup-author-fields .wk-field { display: block; width: 100%; margin-top: var(--space-1); padding: 4px var(--control-px); font-weight: var(--weight-normal); }
 .wk-agents-setup-foot { display: flex; gap: var(--space-2); margin-top: var(--space-2); }
 .wk-agents-setup-aside { display: flex; flex-direction: column; gap: var(--space-2); padding-left: var(--space-6); border-left: 1px solid var(--border); color: var(--ink-body); font-size: var(--text-sm); }
 .wk-agents-setup-aside b { color: var(--ink-high); }

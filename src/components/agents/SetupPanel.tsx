@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useNewWorkSeats } from '../../store/newWorkSeats.js';
 import { Check } from 'lucide-react';
 import { setPickedForNewWork } from './useAgentRows.js';
-import { deliveryStep, goodEnough, newWorkHelpers, setupAgents, setupMove, setupSteps, skillsWords, withRowRuntime } from '../../board/firstUse.js';
+import { deliveryStep, gitAuthorCommands, goodEnough, newWorkHelpers, setupAgents, setupMove, setupSteps, skillsWords, withRowRuntime } from '../../board/firstUse.js';
 import { authOf, commandDisplay, type AgentRow } from '../../board/agentsModel.js';
 import { helperRuntimeCommand, runtimeStart, runtimeStep } from '../../board/agentsCopy.js';
 import { displayText } from '../../board/homePath.js';
@@ -78,6 +78,10 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
   const prefsPersist = useComposerPrefsStore((s) => s.persist);
   const setDeliverPr = useComposerPrefsStore((s) => s.update);
   const deliver = deliveryStep(delivery === undefined ? null : delivery, deliverPr);
+  // studio#1388: the git author the person types, for step 5's two commands.
+  const [authorName, setAuthorName] = useState('');
+  const [authorEmail, setAuthorEmail] = useState('');
+  const authorCommands = gitAuthorCommands(authorName, authorEmail);
   const deliveryChecking = !prefsLoaded || deliverPr && delivery === undefined;
 
   const checks = withRowRuntime(f.checks, rows);
@@ -166,7 +170,24 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
             <span data-testid="agents-setup-delivery" role="status">{deliveryChecking ? 'Checking your GitHub sign-in…' : deliver.words}</span>
             {!deliveryChecking && deliver.detail !== null && <span className="wk-agents-sub"> {displayText(deliver.detail)}</span>}
             {!deliveryChecking && deliver.fix !== null && <span className="wk-agents-sub"> {displayText(deliver.fix)}</span>}
-            {!deliveryChecking && deliver.state === 'blocked' && deliver.commands.map((c) => <CopyLine key={c} line={c} label={c.startsWith('gh ') ? 'GitHub sign-in' : c.includes('user.name') ? 'git author name' : 'git author email'} />)}
+            {!deliveryChecking && deliver.state === 'blocked' && deliver.commands.map((c) => <CopyLine key={c} line={c} label="GitHub sign-in" />)}
+            {/* studio#1388: the commands carry the name and email the person types, never a placeholder to copy as offered. */}
+            {!deliveryChecking && deliver.state === 'blocked' && deliver.author && (
+              <div className="wk-agents-setup-author" data-testid="agents-setup-delivery-author">
+                <span className="wk-agents-sub">Type the name and email your commits should carry, then run the two commands in a terminal.</span>
+                <div className="wk-agents-setup-author-fields">
+                  <label className="wk-field-label">Your name
+                    <input type="text" className="wk-field" data-testid="agents-setup-author-name" autoComplete="name" value={authorName} onChange={(e) => setAuthorName(e.target.value)} />
+                  </label>
+                  <label className="wk-field-label">Your email
+                    <input type="email" className="wk-field" data-testid="agents-setup-author-email" autoComplete="email" value={authorEmail} onChange={(e) => setAuthorEmail(e.target.value)} />
+                  </label>
+                </div>
+                {/* Keyed by the line: a corrected value is a new command, so an earlier Copied never stands for it (review r1b). */}
+                {authorCommands.commands.map((c) => <CopyLine key={c.line} line={c.line} label={c.label} />)}
+                {authorCommands.note !== null && <span className="wk-agents-sub" data-testid="agents-setup-author-note" role="status">{authorCommands.note}</span>}
+              </div>
+            )}
             {deliverPr && (deliveryChecking || deliver.state === 'blocked' || deliver.state === 'unknown') && (
               <div className="wk-agents-setup-moves">
                 <button type="button" data-testid="agents-setup-delivery-local" className="wk-btn wk-btn--secondary" disabled={!prefsLoaded} onClick={() => setDeliverPr({ deliverPr: false })}>Use local delivery</button>

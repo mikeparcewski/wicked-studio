@@ -339,6 +339,24 @@
       ]
     },
     {
+      "testId": "agents-setup-author-email",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup-author-name",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup-author-note",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
       "testId": "agents-setup-change",
       "files": [
         "src/components/agents/SetupPanel.tsx"
@@ -352,6 +370,12 @@
     },
     {
       "testId": "agents-setup-delivery",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup-delivery-author",
       "files": [
         "src/components/agents/SetupPanel.tsx"
       ]
