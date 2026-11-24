@@ -4,6 +4,7 @@ import type { ProjectGraphRefreshResult, ProjectGraphRefreshState, ProjectGraphS
 import { elapsedWords } from '../board/liveTurn.js';
 import { relTime } from '../board/relTime.js';
 import { TechDetails } from './ui/TechDetails.js';
+import { ProjectCrossings } from './ProjectCrossings.js';
 
 /**
  * studio#802 — the project page's code-graph control. crew names it in its own advice ("This
@@ -338,6 +339,8 @@ export function ProjectCodeGraph({ projectId, repoCount }: Props): React.ReactEl
         <TechDetails text={buildError} />
       </div>}
       {readError !== null && <TechDetails text={readError} />}
+      {/* studio#1079: the cross-repo questions, once the graph holds two or more repositories. */}
+      {status?.state === 'ready' && <ProjectCrossings projectId={projectId} />}
     </div>
   );
 }

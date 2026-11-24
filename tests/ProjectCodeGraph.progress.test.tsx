@@ -10,11 +10,14 @@ import type { ProjectGraphRefreshResult, ProjectGraphRefreshState, ProjectGraphS
 
 const getProjectGraph = vi.fn();
 const refreshProjectGraph = vi.fn();
+const getProjectGraphBoundaries = vi.fn((...a: unknown[]) => { void a; return new Promise(() => undefined); });
 
 vi.mock('../src/api/client.js', () => ({
   api: {
     getProjectGraph: (...a: unknown[]) => getProjectGraph(...a),
     refreshProjectGraph: (...a: unknown[]) => refreshProjectGraph(...a),
+    // studio#1079: a built graph of 2+ repositories mounts the Across repositories card, which reads the links.
+    getProjectGraphBoundaries: (...a: unknown[]) => getProjectGraphBoundaries(...a),
   },
 }));
 
@@ -62,6 +65,20 @@ async function buildWith(answer: ProjectGraphRefreshResult): Promise<HTMLElement
   fireEvent.click(await screen.findByTestId('project-graph-build'));
   return screen.findByTestId('project-graph-result');
 }
+
+describe('the Across repositories card (studio#1079)', () => {
+  it('mounts once the graph holds two or more repositories, and not for one', async () => {
+    getProjectGraph.mockResolvedValue({ status: status({}) });
+    render(<ProjectCodeGraph projectId="proj-1" repoCount={2} />);
+    expect(await screen.findByTestId('project-crossings')).toBeInTheDocument();
+    expect(getProjectGraphBoundaries).toHaveBeenCalledWith('proj-1');
+    cleanup();
+    getProjectGraph.mockResolvedValue({ status: status({ state: 'ready-single-repo', repos: REPOS.slice(0, 1) }) });
+    render(<ProjectCodeGraph projectId="proj-1" repoCount={1} />);
+    await waitFor(() => expect(screen.getByTestId('project-graph')).toHaveAttribute('data-state', 'ready-single-repo'));
+    expect(screen.queryByTestId('project-crossings')).toBeNull();
+  });
+});
 
 describe('a build whose cross-repo links were not rebuilt (studio#1104)', () => {
   it('a link error never reads "Built": it says the links were not rebuilt, with the error in the details', async () => {

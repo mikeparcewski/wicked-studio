@@ -15642,6 +15642,156 @@
       ]
     },
     {
+      "testId": "project-crossings",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-ask",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-blast",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-blast-changed",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-blast-error",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-blast-stale",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-crossing",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-crossings",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-from",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-hop",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-links",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-links-error",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-name",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-none",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-path",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-path-error",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-possible",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-possible-all",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-repo",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-route",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-stale",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-to",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-unlinked",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-unplaced",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-via",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
       "testId": "project-danger-zone",
       "files": [
         "src/components/desk/ProjectSettings.tsx"
