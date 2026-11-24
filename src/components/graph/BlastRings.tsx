@@ -120,7 +120,8 @@ export function BlastRings({ blast, onOpen, onBack }: {
           onSelect={select} onActivate={activate}
           ariaLabel={`Blast radius of ${blast.target}: ${blast.dependents.length} dependents by hop. Tap a file group or a summary to open it. Every dependent is also in the list below.`} />
       </div>
-      <div className="shrink-0 border-t px-3 py-2 flex flex-col gap-1.5 text-xs" style={{ borderColor: 'var(--surface-raised)' }}>
+      {/* The footer scrolls within half the panel, so an open list never squeezes the canvas away (a phone's short panel). */}
+      <div data-testid="blast-rings-footer" className="shrink-0 max-h-[50%] overflow-y-auto border-t px-3 py-2 flex flex-col gap-1.5 text-xs" style={{ borderColor: 'var(--surface-raised)' }}>
         {dep !== undefined && (
           <div data-testid="blast-rings-picked" className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
             <span className="font-mono" style={{ color: 'var(--ink-high)' }}>{dep.name}</span>
@@ -151,7 +152,7 @@ export function BlastRings({ blast, onOpen, onBack }: {
           {listed ? 'Hide the list' : `List all ${blast.dependents.length} dependents`}
         </button>
         {listed && (
-          <ul id="blast-rings-list" data-testid="blast-rings-list" className="max-h-48 overflow-auto flex flex-col divide-y" style={{ borderColor: 'var(--surface-raised)' }}>
+          <ul id="blast-rings-list" data-testid="blast-rings-list" className="flex flex-col divide-y" style={{ borderColor: 'var(--surface-raised)' }}>
             {list.map((d) => {
               const k = depthOf.get(d.id) ?? null;
               return (
