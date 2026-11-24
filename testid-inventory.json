@@ -101,13 +101,13 @@
     {
       "testId": "agents-command",
       "files": [
-        "src/components/agents/AgentModal.tsx"
+        "src/components/agents/CommandLine.tsx"
       ]
     },
     {
       "testId": "agents-copy",
       "files": [
-        "src/components/agents/AgentModal.tsx"
+        "src/components/agents/CommandLine.tsx"
       ]
     },
     {
@@ -351,6 +351,30 @@
       ]
     },
     {
+      "testId": "agents-setup-delivery",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup-delivery-check",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup-delivery-local",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup-delivery-unsaved",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
       "testId": "agents-setup-desk",
       "files": [
         "src/components/agents/SetupPanel.tsx"
@@ -400,6 +424,12 @@
     },
     {
       "testId": "agents-setup-step-defaults",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
+      "testId": "agents-setup-step-delivery",
       "files": [
         "src/components/agents/SetupPanel.tsx"
       ]
@@ -22468,6 +22498,12 @@
     },
     {
       "testId": "skills-engine-finding",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-engine-status",
       "files": [
         "src/components/SkillsPage.tsx"
       ]

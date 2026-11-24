@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useNewWorkSeats } from '../../store/newWorkSeats.js';
 import { createPortal } from 'react-dom';
 import { AlertCircle, AlertTriangle, Info } from 'lucide-react';
-import { helperNotInstalled, helperRuntimeDown, issueCopy, SEVERITY_WORD, type CopyCommand } from '../../board/agentsCopy.js';
+import { crewCommand, helperNotInstalled, helperRuntimeDown, issueCopy, SEVERITY_WORD, type CopyCommand } from '../../board/agentsCopy.js';
 import { authOf, commandDisplay, countWords, rowForKey, type AgentIssue, type AgentRow } from '../../board/agentsModel.js';
 import { healthText } from '../../board/rowHeadline.js';
 import { hookOffers, SignInNotCompleted, useAgentLogin, useAuthOps } from './agentLogin.js';
@@ -20,6 +20,7 @@ import { ApiError } from '../../api/errors.js';
 import { displayText, homeDirsIn } from '../../board/homePath.js';
 import { Switch } from '../ui/Switch.js';
 import { Terminal } from '../Terminal.js';
+import { Command } from './CommandLine.js';
 
 /**
  * Deposit ONE agent's fresh reading into the shared roster (codex S4 r12): a re-check answers for the agent
@@ -96,8 +97,19 @@ function hasRefusalCode(error: unknown): boolean {
   return error instanceof ApiError && error.body !== null && typeof error.body === 'object' && typeof (error.body as Record<string, unknown>)['code'] === 'string';
 }
 
+/** The setup command a coded refusal names (crew#1844 cluster setup, core#1845 a helper's install), offered with Copy. */
+const COMMAND_CODES: Record<string, string> = { cli_not_installed: 'install', no_cluster: 'cluster setup', controller_missing: 'cluster setup', image_unavailable: 'image build' };
+
 /** Crew's frozen refusal codes choose the lead and next move; its plain sentence stays intact. */
-function signInFailure(name: string, error: unknown): { lead: string; tone: 'fail'; line: string; action?: string } {
+function signInFailure(name: string, error: unknown): { lead: string; tone: 'fail'; line: string; action?: string; command?: CopyCommand } {
+  const failure = signInFailureWords(name, error);
+  const body = error instanceof ApiError && error.body !== null && typeof error.body === 'object' ? error.body as Record<string, unknown> : {};
+  const label = typeof body['code'] === 'string' ? COMMAND_CODES[body['code']] : undefined;
+  const line = label !== undefined && typeof body['error'] === 'string' ? crewCommand(body['error']) : null;
+  return line === null || label === undefined ? failure : { ...failure, command: { line, display: commandDisplay(line), label } };
+}
+
+function signInFailureWords(name: string, error: unknown): { lead: string; tone: 'fail'; line: string; action?: string } {
   const body = error instanceof ApiError && error.body !== null && typeof error.body === 'object'
     ? error.body as Record<string, unknown> : {};
   const raw = error instanceof ApiError ? error.wire : error instanceof Error ? error.message : '';
@@ -116,7 +128,7 @@ function signInFailure(name: string, error: unknown): { lead: string; tone: 'fai
   }
   // The k8s runner's refusals (crew maps wicked-core's kinds; its sentence names the repair).
   if (code === 'cluster_unreachable') return result('Kubernetes needs to be started.', 'Start Rancher Desktop with Kubernetes on, then try again.', line);
-  if (code === 'no_cluster' || code === 'controller_missing') return result('This computer’s cluster isn’t set up for helpers yet.', 'Run wicked-core cluster install --admin-context <your cluster context> --home <this daemon’s state home>, then try again.', line);
+  if (code === 'no_cluster' || code === 'controller_missing') return result('This computer’s cluster isn’t set up for helpers yet.', 'Nerve Center → Infra names the command that sets it up; run it, then try again.', line);
   if (code === 'pids_unlimited') return result('The cluster needs a process limit first.', 'Set the kubelet’s pod-max-pids to 4096, then try again.', line);
   if (code === 'policy_refused') {
     return crewSaid ? result('The cluster refused the sign-in.', 'Fix what it names, then try again.', line)
@@ -163,35 +175,6 @@ function outcomeOf(fresh: readonly RosterSeat[], key: string, answer: 'probed' |
 function SeverityIcon({ issue }: { issue: AgentIssue }): React.ReactElement {
   const Icon = issue.severity === 'problem' ? AlertCircle : issue.severity === 'warning' ? AlertTriangle : Info;
   return <Icon aria-hidden size={16} className={`wk-agents-sev-icon wk-agents-sev--${issue.severity}`} />;
-}
-
-function Command({ c }: { c: CopyCommand }): React.ReactElement {
-  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mounted = useRef(true);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; if (timer.current !== null) clearTimeout(timer.current); }; }, []);
-  const copy = (): void => {
-    const clip = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
-    const flash = (s: 'copied' | 'failed'): void => {
-      if (!mounted.current) return;
-      setState(s);
-      if (timer.current !== null) clearTimeout(timer.current);
-      timer.current = setTimeout(() => setState('idle'), 2000);
-    };
-    if (clip === undefined || typeof clip.writeText !== 'function') { flash('failed'); return; }
-    clip.writeText(c.line).then(() => flash('copied'), () => flash('failed'));
-  };
-  // One line that scrolls sideways (codex r9 WRAP): a command never breaks mid-path or mid-flag (§8),
-  // and the characters stay the real ones, so a hand-selected copy still runs.
-  return (
-    <div className="wk-agents-cmd">
-      <code data-testid="agents-command">{c.display}</code>
-      <button type="button" data-testid="agents-copy" data-command-kind={c.label} data-state={state} onClick={copy}
-        aria-label={`Copy the ${c.label} command`} className="wk-btn wk-btn--secondary wk-agents-copy">
-        {state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : 'Copy'}
-      </button>
-    </div>
-  );
 }
 
 export function AgentModal({ agentKey, onClose, intent }: {
@@ -360,8 +343,10 @@ export function AgentModal({ agentKey, onClose, intent }: {
 
   if (row === undefined && rosterState === 'ok') return null; // the effect above closes it
   const name = row?.name ?? '';
-  const result = outcome.kind === 'idle' ? null : outcome.kind === 'signin-failed' ? signInFailure(name, outcome.error)
+  const failed = outcome.kind === 'signin-failed' ? signInFailure(name, outcome.error) : null;
+  const result = outcome.kind === 'idle' ? null : failed !== null ? failed
     : OUTCOME_WORDS[outcome.kind](name, outcome.kind === 'signin-refused' ? displayText(outcome.detail) : '');
+  const resultCommand = failed?.command;
   const resultLine = result === null ? null : (
     <div data-testid="agents-check-result" data-state={outcome.kind} role="status" className="wk-agents-result">
       <span className={`wk-agents-word wk-agents-word--${result.tone}`}>
@@ -370,6 +355,7 @@ export function AgentModal({ agentKey, onClose, intent }: {
       </span>
       {result.line !== null && <span>{result.line}</span>}
       {'action' in result && typeof result.action === 'string' && <span>{result.action}</span>}
+      {resultCommand !== undefined && <Command c={resultCommand} />}
       {/* Crew's coded refusal is already its plain sentence above; older crews' raw text stays under Technical details. */}
       {outcome.kind === 'signin-failed' && !hasRefusalCode(outcome.error) && <TechDetails summary="Technical details" text={displayText(outcome.error instanceof Error ? outcome.error.message : String(outcome.error))} />}
     </div>
