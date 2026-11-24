@@ -36,6 +36,55 @@ export interface SetupChecks {
   estate: boolean | null;
   runtime: boolean | null;
   runtimeRequired: boolean | null;
+  /** studio#1363: what crew's skills seam is doing, for step 2's words (absent when diagnostics carried no skills block). */
+  skillsReading?: SkillsReading;
+}
+
+/**
+ * studio#1363: crew's skills state (`GET /diagnostics` `skills`) as step 2 and the Skills page say it. `publishing`: crew
+ * publishes at boot, so there is nothing to do; `install`: wicked-garden is missing (`skills.fallback`) or too old
+ * (`skills.garden`), with crew's install command; `published`: done; `todo`: anything else that still needs a publish.
+ */
+export type SkillsStage = 'published' | 'publishing' | 'install' | 'todo';
+export interface SkillsReading {
+  stage: SkillsStage;
+  /** `install` only: crew's own command from its finding (`npx wicked-installer install wicked-garden`). */
+  command: string | null;
+  /** `install` only: no wicked-garden at all (`missing`), or one older than crew needs (`old`). */
+  garden: 'missing' | 'old' | null;
+}
+
+/** crew's garden install or update command, as its finding words it (`plugin-source.ts` GARDEN_INSTALL_COMMAND /
+ *  GARDEN_UPDATE_COMMAND). */
+const GARDEN_COMMAND_RE = /\b(?:npx wicked-installer (?:install|update) wicked-garden|npm (?:i|install) -g wicked-garden(?:@[\w.-]+)?)/;
+
+export function skillsReading(skills: unknown): SkillsReading | null {
+  if (skills === null || typeof skills !== 'object') return null;
+  const o = skills as Record<string, unknown>;
+  const state = typeof o['state'] === 'string' ? o['state'] : null;
+  if (state === null) return null;
+  const findings = (Array.isArray(o['findings']) ? o['findings'] : [])
+    .filter((f): f is Record<string, unknown> => f !== null && typeof f === 'object');
+  if (state === 'publishing') return { stage: 'publishing', command: null, garden: null };
+  const garden = findings.find((f) => f['kind'] === 'skills.fallback' || f['kind'] === 'skills.garden' && f['severity'] === 'error');
+  const command = garden !== undefined && typeof garden['message'] === 'string' ? GARDEN_COMMAND_RE.exec(garden['message'])?.[0] ?? null : null;
+  if (garden !== undefined && command !== null) return { stage: 'install', command, garden: garden['kind'] === 'skills.fallback' ? 'missing' : 'old' };
+  if (state === 'published' && o['current'] !== null && o['current'] !== undefined && !findings.some((f) => f['severity'] === 'error')) {
+    return { stage: 'published', command: null, garden: null };
+  }
+  return { stage: 'todo', command: null, garden: null };
+}
+
+/** Step 2's and the Skills page's words for one reading (one source, so the two never disagree). */
+export function skillsWords(r: SkillsReading): string {
+  switch (r.stage) {
+    case 'published': return 'Done. Skills are published and ready for work.';
+    case 'publishing': return 'Publishing now. Studio’s service publishes skills when it starts; this finishes on its own.';
+    case 'install': return r.garden === 'missing'
+      ? 'Not done. The skills package (wicked-garden) isn’t installed. Install it with this command, then on the Skills page choose Refresh baseline, then Publish.'
+      : 'Not done. The skills package (wicked-garden) is older than studio needs. Update it with this command, then on the Skills page choose Refresh baseline, then Publish.';
+    case 'todo': return 'Not done. Publish skills before starting work.';
+  }
 }
 
 export const UNCHECKED_SETUP: SetupChecks = { skills: null, estate: null, runtime: null, runtimeRequired: null };
@@ -73,9 +122,11 @@ export function setupChecks(snapshot: SystemSnapshot | null, health?: unknown, d
   const estate = estateMissing || estateVersion === null ? false : typeof estateVersion === 'string' && estateVersion.trim() !== '' ? true : null;
   const skillsReady = skillState === null ? state('skills')
     : skillState !== 'published' ? false : skills['current'] === undefined ? null : skills['current'] !== null;
+  const reading = skillsReading(d['skills']);
   return {
     skills: skillsBlocked || state('skills') === false ? false : skillsReady,
     estate, runtime, runtimeRequired,
+    ...(reading !== null ? { skillsReading: reading } : {}),
   };
 }
 
@@ -120,6 +171,52 @@ export function newWorkHelpers(rows: readonly AgentRow[], defaultPick: boolean):
   const crewHasOrdinary = rows.some((r) => !r.optIn && r.jobWork && authOf(r.seat) !== 'signed_out');
   if (defaultPick && !crewHasOrdinary) return { using: ready.filter((r) => r.optIn), off: ready.filter((r) => !r.optIn) };
   return { using: ready.filter((r) => r.picked), off: ready.filter((r) => !r.picked) };
+}
+
+/**
+ * crew#1527: the delivery step, from crew's `GET /setup/known` `delivery` (`DeliveryReadiness`, api-types 0.214.0) and
+ * studio's own "Open a PR when a build run finishes" preference (studio's composer always says which it wants).
+ * `done`: pull requests can open, or studio delivers locally. `commands`: what to run when GitHub sign-in or the git
+ * author is what stops it. Never gates setup: local delivery is a real choice.
+ */
+export interface DeliveryStep {
+  done: boolean;
+  /** `ready`: PRs open; `local`: no PR is asked for; `blocked`: a PR job would stop at its deliver step; `unknown`: not checked. */
+  state: 'ready' | 'local' | 'blocked' | 'unknown';
+  words: string;
+  /** crew's own sentence (what it checked), shown beside studio's words; `null` when there is none. */
+  detail: string | null;
+  commands: string[];
+}
+
+interface DeliveryReadinessLike {
+  ready?: unknown;
+  reason?: unknown;
+  github?: { status?: unknown } | null;
+}
+
+export function deliveryStep(delivery: unknown, deliverPr: boolean): DeliveryStep {
+  if (!deliverPr) {
+    return { done: true, state: 'local', words: 'Done. Finished work stays on its branch in your repository; studio opens no pull request. Change it in Settings.', detail: null, commands: [] };
+  }
+  const d = delivery !== null && typeof delivery === 'object' ? delivery as DeliveryReadinessLike : null;
+  const reason = typeof d?.reason === 'string' && d.reason.trim() !== '' ? d.reason.trim() : null;
+  if (d === null || d.ready === null || d.ready === undefined) {
+    return { done: false, state: 'unknown', words: 'Not checked yet.', detail: d === null ? null : reason, commands: [] };
+  }
+  if (d.ready === true) return { done: true, state: 'ready', words: 'Done. Finished work opens a pull request on GitHub.', detail: reason, commands: [] };
+  // The commands for the blockers crew's sentence names (setup/delivery-readiness.ts deliveryReadiness): a GitHub
+  // sign-in delivery refuses (a missing gh is said in crew's words, with no command), and no git author.
+  const commands: string[] = [];
+  if (d.github?.status === 'missing' && !/\bgh is not installed\b/.test(reason ?? '')) commands.push('gh auth login');
+  if (/\bno git (?:author|committer)\b[^.;]*\bidentity\b/.test(reason ?? '')) {
+    commands.push('git config --global user.name "Your Name"', 'git config --global user.email you@example.com');
+  }
+  return {
+    done: false, state: 'blocked',
+    words: 'Not done. Sign in to GitHub for pull requests, or choose local delivery.',
+    detail: reason, commands,
+  };
 }
 
 /** Projects that count: the synthesized "Unfiled" default (`id: 'default'`) never does. */
