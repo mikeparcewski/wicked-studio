@@ -165,7 +165,7 @@ export function ProjectCrossings({ projectId }: { projectId: string }): React.Re
         </>
       )}
 
-      <form className="wk-pg-proj-actions" onSubmit={askBlast}>
+      <form className="wk-pg-proj-actions" style={{ alignItems: 'flex-end' }} onSubmit={askBlast}>
         <label className="wk-pg-proj-field">What depends on this symbol, in every repository
           <input data-testid="project-crossings-name" className="wk-field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Exact symbol name" />
         </label>
@@ -180,14 +180,15 @@ export function ProjectCrossings({ projectId }: { projectId: string }): React.Re
             {!isRouteUnsupported(blast.error) && <TechDetails text={techOf(blast.error)} />}
           </div>
         )}
-        {blast.state === 'done' && <BlastAnswer answer={blast.value} />}
+        {blast.state === 'done' && <BlastAnswer answer={blast.value} staleSaid={b?.stale === true} />}
       </div>
 
-      <form className="wk-pg-proj-actions" onSubmit={askPath}>
-        <label className="wk-pg-proj-field">How one symbol reaches another: from
+      <p className="wk-list-row-meta">How one symbol reaches another, across repositories</p>
+      <form className="wk-pg-proj-actions" style={{ alignItems: 'flex-end' }} onSubmit={askPath}>
+        <label className="wk-pg-proj-field">From
           <input data-testid="project-crossings-from" className="wk-field" value={from} onChange={(e) => setFrom(e.target.value)} placeholder="Exact symbol name" />
         </label>
-        <label className="wk-pg-proj-field">to
+        <label className="wk-pg-proj-field">To
           <input data-testid="project-crossings-to" className="wk-field" value={to} onChange={(e) => setTo(e.target.value)} placeholder="Exact symbol name" />
         </label>
         <button type="submit" data-testid="project-crossings-route" className="wk-btn wk-btn--secondary wk-btn--sm" disabled={from.trim() === '' || to.trim() === '' || path.state === 'busy'}>
@@ -201,13 +202,14 @@ export function ProjectCrossings({ projectId }: { projectId: string }): React.Re
             {!isRouteUnsupported(path.error) && <TechDetails text={techOf(path.error)} />}
           </div>
         )}
-        {path.state === 'done' && <PathAnswer answer={path.value} />}
+        {path.state === 'done' && <PathAnswer answer={path.value} staleSaid={b?.stale === true} />}
       </div>
     </section>
   );
 }
 
-function BlastAnswer({ answer: a }: { answer: ProjectBlastRadiusWire }): React.ReactElement {
+/** `staleSaid`: the links card above already says the links are stale, so the answer does not repeat it. */
+function BlastAnswer({ answer: a, staleSaid }: { answer: ProjectBlastRadiusWire; staleSaid: boolean }): React.ReactElement {
   if (a.resolved === false) {
     return <p data-testid="project-crossings-blast" data-resolved="false" className="wk-field-note">No symbol is named {a.target} in this project. The name must match exactly.</p>;
   }
@@ -236,7 +238,7 @@ function BlastAnswer({ answer: a }: { answer: ProjectBlastRadiusWire }): React.R
 
   return (
     <div data-testid="project-crossings-blast" data-linkage={a.linkage} className="wk-pg-proj-stack">
-      {a.link_stale === true && <p data-testid="project-crossings-blast-stale" className="wk-field-note">{staleWords(a.link_stale_labels)}</p>}
+      {a.link_stale === true && !staleSaid && <p data-testid="project-crossings-blast-stale" className="wk-field-note">{staleWords(a.link_stale_labels)}</p>}
       {changed !== null && <p data-testid="project-crossings-blast-changed" className="wk-field-note">{changed}</p>}
       <p className="wk-list-row-meta">
         {a.dependents.length === 0
@@ -244,7 +246,8 @@ function BlastAnswer({ answer: a }: { answer: ProjectBlastRadiusWire }): React.R
           : `${plural(a.dependents.length, 'dependent', 'dependents')} of ${a.target} in ${plural(byRepo.size, 'repository', 'repositories')}: ${a.byRepo.map((r) => `${r.repo} ${r.count}`).join(' · ')}`}
       </p>
       {crossings.length > 0 ? (
-        <ul data-testid="project-crossings-crossings" className="wk-list-row-meta">
+        <ul data-testid="project-crossings-crossings" className="wk-list-row-meta" aria-label="Package crossings">
+          <li className="wk-list-row-title">Package crossings</li>
           {crossings.map((c) => <li key={c.id} data-testid="project-crossings-crossing">{crossingWords(c)}</li>)}
         </ul>
       ) : (
@@ -274,7 +277,7 @@ function BlastAnswer({ answer: a }: { answer: ProjectBlastRadiusWire }): React.R
   );
 }
 
-function PathAnswer({ answer: p }: { answer: ProjectGraphPath }): React.ReactElement {
+function PathAnswer({ answer: p, staleSaid }: { answer: ProjectGraphPath; staleSaid: boolean }): React.ReactElement {
   const limits = p.depth_bounded || p.node_bounded;
   if (!p.found) {
     const why = p.unresolved !== null
@@ -284,7 +287,7 @@ function PathAnswer({ answer: p }: { answer: ProjectGraphPath }): React.ReactEle
         : `No route from ${p.from} to ${p.to} in this project.${limits ? ' The search stopped at its depth or size limit, so a longer route may still exist.' : ''}`;
     return (
       <div data-testid="project-crossings-path" data-found="false">
-        {p.link_stale === true && <p className="wk-field-note">{staleWords(p.link_stale_labels)}</p>}
+        {p.link_stale === true && !staleSaid && <p className="wk-field-note">{staleWords(p.link_stale_labels)}</p>}
         <p className="wk-field-note">{why}</p>
         {p.missingRepos.length > 0 && <p className="wk-field-note">Not searched: {p.missingRepos.join(', ')}.</p>}
       </div>
@@ -292,7 +295,7 @@ function PathAnswer({ answer: p }: { answer: ProjectGraphPath }): React.ReactEle
   }
   return (
     <div data-testid="project-crossings-path" data-found="true" className="wk-pg-proj-stack">
-      {p.link_stale === true && <p className="wk-field-note">{staleWords(p.link_stale_labels)}</p>}
+      {p.link_stale === true && !staleSaid && <p className="wk-field-note">{staleWords(p.link_stale_labels)}</p>}
       <ol className="wk-list-row-meta">
         {p.hops.map((h, i) => (
           <li key={i} data-testid="project-crossings-hop" data-crosses={h.source.repo !== h.target.repo ? 'true' : 'false'}>

@@ -113,6 +113,7 @@ describe('what depends on a symbol across repositories', () => {
     expect(getProjectBlastRadius).toHaveBeenCalledWith('p1', 'listRuns');
     expect(ans).toHaveAttribute('data-linkage', 'linked');
     expect(ans.textContent).toContain('3 dependents of listRuns in 2 repositories: api 1 · web 2');
+    expect(within(screen.getByTestId('project-crossings-crossings')).getAllByRole('listitem')[0]!.textContent).toBe('Package crossings');
     expect(screen.getByTestId('project-crossings-crossing').textContent).toBe('web → api through package wicked-api (matched by path, confidence 0.95)');
     const web = screen.getAllByTestId('project-crossings-repo').find((r) => r.dataset.repo === 'web')!;
     expect(within(web).getAllByRole('listitem')[0]!.textContent).toBe('loadBoard src/board.ts:30 · through a package link · file modified since indexed');
@@ -121,7 +122,9 @@ describe('what depends on a symbol across repositories', () => {
   it('says what it could not place, that the links are stale and that files changed', async () => {
     render(<ProjectCrossings projectId="p1" />);
     await ask('listRuns');
-    expect(screen.getByTestId('project-crossings-blast-stale').textContent).toContain('(web changed since)');
+    // The links card already says the links are stale (BOUNDARIES.stale): the answer does not repeat it.
+    expect(screen.getByTestId('project-crossings-stale')).toBeInTheDocument();
+    expect(screen.queryByTestId('project-crossings-blast-stale')).toBeNull();
     expect(screen.getByTestId('project-crossings-blast-changed').textContent).toBe('1 file has changed since it was indexed, so this answer may be out of date.');
     expect(within(screen.getByTestId('project-crossings-unplaced')).getAllByRole('listitem').map((l) => l.textContent)).toEqual([
       'Not searched: docs (not in the project graph yet; refresh it).',
@@ -130,6 +133,14 @@ describe('what depends on a symbol across repositories', () => {
       'The search stopped at 3 hops; more dependents lie beyond it.',
       '2 references to it couldn’t be placed on any symbol, so the impact may be larger.',
     ]);
+  });
+
+  it('stale links are said on the answer when the links card could not say them', async () => {
+    getProjectGraphBoundaries.mockRejectedValue(new TypeError('Failed to fetch'));
+    render(<ProjectCrossings projectId="p1" />);
+    await screen.findByTestId('project-crossings-links-error');
+    await ask('listRuns');
+    expect(screen.getByTestId('project-crossings-blast-stale').textContent).toContain('(web changed since)');
   });
 
   it('a co-located answer says no crossing was taken; an unknown name says it must match exactly', async () => {
