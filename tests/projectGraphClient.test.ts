@@ -59,12 +59,13 @@ describe('the project graph client (studio#1079 A)', () => {
     expect(url()).toBe('http://127.0.0.1:7788/api/v1/projects/p%201/graph/blast-radius?name=a%2Fb');
   });
 
-  it('getProjectGraphPath sends from and to encoded, and maxDepth only when given', async () => {
+  it('getProjectGraphPath sends the project, from and to encoded, and maxDepth only when given', async () => {
     answer(PATH);
     answer(PATH);
-    expect(await api.getProjectGraphPath('p1', 'x&y', 'z', 6)).toEqual(PATH);
+    // A raw '&', '#' or '/' in any of them would bend the route or the query (codex r1 P3).
+    expect(await api.getProjectGraphPath('p/1', 'x&y', 'b&maxDepth=1#s', 6)).toEqual(PATH);
     await api.getProjectGraphPath('p1', 'a', 'b');
-    expect(url(0)).toBe('http://127.0.0.1:7788/api/v1/projects/p1/graph/path?from=x%26y&to=z&maxDepth=6');
+    expect(url(0)).toBe('http://127.0.0.1:7788/api/v1/projects/p%2F1/graph/path?from=x%26y&to=b%26maxDepth%3D1%23s&maxDepth=6');
     expect(url(1)).toBe('http://127.0.0.1:7788/api/v1/projects/p1/graph/path?from=a&to=b');
   });
 
