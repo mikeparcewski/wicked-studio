@@ -86,6 +86,26 @@ describe('studio#1383: the run panel after a consent Decline', () => {
   it('a plain Stop still says Cancelled', async () => {
     audit = [stop];
     await panel(mcpRun());
-    expect(words()).toEqual(['Cancelled', 'Cancelled · 3 of 4 done', 'Cancelled']);
+    await waitFor(() => expect(words()).toEqual(['Cancelled', 'Cancelled · 3 of 4 done', 'Cancelled']));
+  });
+
+  it('until the ended audit read answers, the panel says only Ended (never a Cancelled that a Decline replaces)', async () => {
+    let answer!: (v: unknown) => void;
+    vi.mocked(client.api.getAudit).mockImplementation(() => new Promise((r) => { answer = r; }) as never);
+    await act(async () => { render(<RunTab runs={[mcpRun()]} sessionId="chat-j" title="An MCP server for Acme Notes" />); });
+    expect(words()).toEqual(['Ended', 'Ended · 3 of 4 done', 'Ended']);
+    await act(async () => { answer({ entries: [decline] }); });
+    await waitFor(() => expect(words()).toEqual(['Not installed', 'Not installed · 3 of 4 done', 'Not installed']));
+  });
+
+  it('a live read from before the end (no rejection yet) is not the answer: Ended until the ended read, then Cancelled for a Stop', async () => {
+    // The live read a running page made: its story holds no rejection, and the ended read is still to come.
+    useProvenanceStore.setState({ byRun: { [RUN]: { state: 'unknown' } }, cancelStories: { [RUN]: { rejectNote: null, sendBackNote: null, rejected: null, engineTimedOut: false, stop: null } } } as never);
+    let answer!: (v: unknown) => void;
+    vi.mocked(client.api.getAudit).mockImplementation(() => new Promise((r) => { answer = r; }) as never);
+    await act(async () => { render(<RunTab runs={[mcpRun()]} sessionId="chat-j" title="An MCP server for Acme Notes" />); });
+    expect(words()).toEqual(['Ended', 'Ended · 3 of 4 done', 'Ended']);
+    await act(async () => { answer({ entries: [stop] }); });
+    await waitFor(() => expect(words()).toEqual(['Cancelled', 'Cancelled · 3 of 4 done', 'Cancelled']));
   });
 });

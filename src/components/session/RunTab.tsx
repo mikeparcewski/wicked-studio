@@ -24,6 +24,7 @@ import { RulesChecked, RunAssuranceLabel } from './AssuranceReceipt.js';
 import { CodebaseDownload, DeliverCredentialsNotice } from './CodebaseDownload.js';
 import { AssuranceReceipt, DeliveryAssuranceLines } from './AssuranceReceipt.js';
 import { consentDeclineWord, RunRecordLines, RunStory, useConsentDecline } from './RunRecord.js';
+import { useProvenanceStore } from '../../store/provenance.js';
 import { RecoveryRow } from './RunConversation.js';
 import { SheetRunActions } from './RunActions.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
@@ -190,6 +191,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   const [glanceStop, setGlanceStop] = useState(false);
   // studio#1364: a declined install is said as what happened, not why a job stopped.
   const declined = useConsentDecline(view);
+  const endedKnown = useProvenanceStore((st) => view.session.status !== 'cancelled' || st.endedDone[view.session.id] === true);
   const stop = (): void => {
     if (stopping) return;
     const reason = stopReason.trim();
@@ -288,8 +290,10 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   // The panel's rows: the core sections at their places (Now first), the run plugins' sections between them by their
   // manifest's `order`, a pinned plugin section at the top (DES-LEARN §1.2).
   // studio#1383: a run a consent Decline ended reads as the header does (Not installed / Declined), never Cancelled: the
-  // engine cancels the run on any gate's reject, so its status alone can't tell a Decline from a Stop.
-  const declinedWord = declined !== null ? consentDeclineWord(declined) : null;
+  // engine cancels the run on any gate's reject, so its status alone can't tell a Decline from a Stop. Until the run's
+  // ended audit read answers (or fails), a cancelled run says only that it ended: a Cancelled a Decline then replaces is
+  // the wrong word on screen (codex r1).
+  const declinedWord = declined !== null ? consentDeclineWord(declined) : !endedKnown ? 'Ended' : null;
   const nowWord = declinedWord ?? (held ? chatStatusWord([shown]).word : silent !== null ? silentWords(silent) : floor !== null ? floorWords(floor) : chatStatusWord([view]).word);
   const statusLine = statusSentence(shown, chain, gate, action, silent?.minutes ?? null);
   const shownStatus = declinedWord !== null ? statusLine.replace(/^Cancelled\b/, declinedWord) : statusLine;
