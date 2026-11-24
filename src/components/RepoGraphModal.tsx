@@ -4,6 +4,7 @@ import { api } from '../api/client.js';
 import type { RepoEntry, CodeGraphNode, CodeGraphEdge, CodeGraphData, DomainGraph } from '../api/types.js';
 import { coverageOf, requirementsNotGenerated, type RequirementsCoverage } from '../board/requirementsState.js';
 import { RequirementsCoverageSummary } from './RequirementsCoverageSummary.js';
+import { BlastRings } from './graph/BlastRings.js';
 import { CytoGraph } from './CytoGraph.js';
 import { HotspotsView } from './HotspotsView.js';
 import { useModalEscape } from './Modal.js';
@@ -74,7 +75,6 @@ function NodeDetailPanel({
   blast,
   blastBusy,
   expandBusy,
-  onFocusDependent,
 }: {
   node: CodeGraphNode;
   edges: CodeGraphEdge[];
@@ -84,7 +84,6 @@ function NodeDetailPanel({
   blast?: import('../api/types.js').BlastRadius | null;
   blastBusy?: boolean;
   expandBusy?: boolean;
-  onFocusDependent?: (dep: { id: string; name: string }) => void;
 }): React.ReactElement {
   const calledBy = edges.filter((e) => e.tgt === node.id);
   const calls = edges.filter((e) => e.src === node.id);
@@ -97,7 +96,7 @@ function NodeDetailPanel({
 
   return (
     <div
-      className="w-64 shrink-0 flex flex-col border-l overflow-hidden"
+      className="w-full max-h-[45%] md:w-64 md:max-h-none shrink-0 flex flex-col md:border-l overflow-hidden"
       style={{ background: T.canvas2, borderColor: T.hairline }}
     >
       <div
@@ -166,24 +165,10 @@ function NodeDetailPanel({
             {blast.unresolved === -1 && (
               <span className="text-xs" style={{ color: T.deny }}>Couldn’t work out the blast radius</span>
             )}
-            <ul className="flex flex-col gap-0.5 max-h-48 overflow-y-auto">
-              {blast.dependents.slice(0, 30).map((d) => (
-                <li key={d.id}>
-                  <button
-                    type="button"
-                    onClick={() => onFocusDependent?.(d)}
-                    className="w-full text-left text-xs font-mono truncate hover:underline"
-                    style={{ color: T.link }}
-                    title={`${d.file}:${d.line}`}
-                  >
-                    {d.name} <span style={{ color: T.faint }}>({d.kind})</span>
-                  </button>
-                </li>
-              ))}
-              {blast.dependents.length > 30 && (
-                <li className="text-xs" style={{ color: T.faint }}>+{blast.dependents.length - 30} more</li>
-              )}
-            </ul>
+            {/* studio#1290: every dependent is drawn as rings by hop in the graph panel (BlastRings), not listed here. */}
+            {blast.dependents.length > 0 && blast.unresolved !== -1 && (
+              <span data-testid="blast-rings-pointer" className="text-xs" style={{ color: T.faint }}>Drawn as rings by hop in the Graph tab.</span>
+            )}
           </div>
         )}
         {node.kind && (
@@ -788,7 +773,8 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus, initi
               </p>
             </div>
           ) : (
-            <div className="h-full flex p-4 gap-4">
+            <div className="h-full flex flex-col md:flex-row p-4 gap-4">
+              {/* studio#1290: on a phone the detail panel goes under the graph, so the canvas (and the rings) keep the width. */}
               {/* ── Left: graph panel + hotspots ─────────────────────────── */}
               <div className="flex-1 flex flex-col gap-3 min-w-0 overflow-hidden">
 
@@ -821,12 +807,18 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus, initi
                   </div>
                   {/* Graph canvas */}
                   <div className="flex-1 overflow-hidden" style={{ background: T.canvas }}>
-                    <CytoGraph
-                      nodes={localNodes}
-                      edges={codeData!.edges}
-                      externalSelectedId={highlightId}
-                      onNodeSelect={handleNodeSelect}
-                    />
+                    {/* Mounted only while the Graph tab shows: a canvas laid out in a hidden panel fits to nothing
+                        (a Blast radius asked from Hotspots draws when Graph opens). */}
+                    {tab === 'graph' && blast != null && blast.dependents.length > 0 && blast.unresolved !== -1 ? (
+                      <BlastRings blast={blast} onOpen={focusDependent} onBack={() => setBlast(null)} />
+                    ) : (
+                      <CytoGraph
+                        nodes={localNodes}
+                        edges={codeData!.edges}
+                        externalSelectedId={highlightId}
+                        onNodeSelect={handleNodeSelect}
+                      />
+                    )}
                   </div>
                 </div>
 
@@ -871,7 +863,6 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus, initi
                   blast={blast}
                   blastBusy={blastBusy}
                   expandBusy={expandBusy}
-                  onFocusDependent={focusDependent}
                 />
               )}
             </div>

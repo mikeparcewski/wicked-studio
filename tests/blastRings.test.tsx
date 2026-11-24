@@ -85,7 +85,9 @@ describe('the code graph\'s Blast radius as rings (studio#1290)', () => {
     // The rings replace the code canvas while the answer is shown.
     expect(screen.queryByTestId('code-canvas')).toBeNull();
     const m = lastModel!;
-    expect(m.counts.placed).toBe(45);
+    // Every dependent is placed on its hop's ring (none unplaced), 20 on the first and 25 on the second.
+    expect(m.levels.filter((l) => l.k > 0).map((l) => [l.k, l.placed])).toEqual([[1, 20], [2, 25]]);
+    expect(m.counts.unplaced).toBe(0);
     const rings = screen.getByTestId('blast-rings');
     expect(within(rings).getByTestId('blast-rings-levels').textContent).toBe('1 hop · 20 · 2 hops · 25');
   });
@@ -133,5 +135,18 @@ describe('the code graph\'s Blast radius as rings (studio#1290)', () => {
     expect(await screen.findByText('Blast radius: 0 dependents')).toBeInTheDocument();
     expect(screen.queryByTestId('blast-rings')).toBeNull();
     expect(screen.getByTestId('code-canvas')).toBeInTheDocument();
+  });
+
+  it('asked from the Hotspots tab, the rings are drawn once Graph opens (never laid out in a hidden panel)', async () => {
+    getBlastRadius.mockResolvedValue({ target: 'computeTotal', dependents: [dep(1, 1)], unresolved: 0, searched_depth: 5 });
+    render(<RepoGraphModal repo={repo} onClose={() => {}} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'node computeTotal' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Hotspots' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Blast radius' }));
+    expect(await screen.findByText('Blast radius: 1 dependent')).toBeInTheDocument();
+    expect(screen.getByTestId('blast-rings-pointer').textContent).toBe('Drawn as rings by hop in the Graph tab.');
+    expect(screen.queryByTestId('blast-rings')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Graph' }));
+    expect(await screen.findByTestId('blast-rings')).toBeInTheDocument();
   });
 });
