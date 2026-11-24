@@ -746,6 +746,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     }),
+  /** (studio#1386, crew#1858) Retire a requirement whose code was deleted (crew lists it `uncounted: 'unindexed'`): the
+   *  engine drops it from the stored graph and never reuses its id. 409 `{error}` when crew or the engine refuses. */
+  retireRequirement: (repoId: string, key: string) =>
+    apiFetch<{ retired: string }>(`/repos/${encodeURIComponent(repoId)}/requirements/${encodeURIComponent(key)}/retire`, { method: 'POST' }),
   /** The requirements_graph.json domain model; `graph` is null when not generated yet. */
   getDomainGraph: () => apiFetch<{ graph: import('./types.js').DomainGraph | null }>('/domain-graph'),
 
