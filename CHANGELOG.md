@@ -12,9 +12,9 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
-## [0.16.17] — 2026-11-23
+## [0.16.17] — 2026-11-24
 
-Patch release on the train-12 re-cut 4 3f1a93b8, carrying 49 PRs since 0.16.16: #1287, #1286, #1288, #1292, #1293, #1291, #1299, #1303, #1307, #1306, #1297, #1298, #1308, #1300, #1309, #1304, #1302, #1313, #1310, #1315, #1316, #1317, #1318, #1320, #1325, #1328, #1326, #1321, #1323, #1322, #1336, #1333, #1334, #1339, #1338, #1340, #1341, #1343, #1345, #1349, #1350, #1351, #1355, #1356, #1352, #1353, #1358, #1359, #1360.
+Patch release on the train-13 cut a44ec547, carrying 61 PRs since 0.16.16: #1287, #1286, #1288, #1292, #1293, #1291, #1299, #1303, #1307, #1306, #1297, #1298, #1308, #1300, #1309, #1304, #1302, #1313, #1310, #1315, #1316, #1317, #1318, #1320, #1325, #1328, #1326, #1321, #1323, #1322, #1336, #1333, #1334, #1339, #1338, #1340, #1341, #1343, #1345, #1349, #1350, #1351, #1355, #1356, #1352, #1353, #1358, #1359, #1360, #1361, #1375, #1374, #1373, #1377, #1376, #1381, #1378, #1380, #1379, #1385, #1387.
 
 ### Added
 
@@ -26,6 +26,8 @@ Patch release on the train-12 re-cut 4 3f1a93b8, carrying 49 PRs since 0.16.16: 
 - Say crew's launch assuranceNotice on the job's session, with the confirmed reduced-assurance relaunch (#1345)
 - Capture opt-out on Add a repository, work-only helpers in job pickers, the eval memory axis (#1083, #1311, #1301) (#1349)
 - The held plan says each step's controls; Draft epics promises no publish (core#1259, crew#372 words) (#1352)
+- A short launch asks how to check the job instead of failing (stand-in choice, DES-STANDIN-001 S0) (#1361)
+- Forget everything learned from one source (studio#1248) (#1375)
 
 ### Changed
 
@@ -83,6 +85,16 @@ Patch release on the train-12 re-cut 4 3f1a93b8, carrying 49 PRs since 0.16.16: 
 - An Azure DevOps PR shows its link and Revise this PR; ADO hand-over and clone-path words (studio#1357, crew#1839) (#1358)
 - The pill says Stopped or Not made, and why, instead of Building… forever (crew#1745) (#1359)
 - A step two helpers work in files each one's tool rows under its name (studio#935 item 5) (#1360)
+- The sign-in link opens on click, copies reach the clipboard, the window says how to copy (studio#1362) (#1374)
+- A hand-off step whose gate waits on you says so, not "running" (studio#1372) (#1373)
+- A finished job says what it came to: domain coverage, a declined install, an MCP install's registration (#1377)
+- A finished mapping loop drops its stale percent and time left (studio#1366) (#1376)
+- A quiet seat's heartbeat never resets a stall clock; Desk, project and Jobs rows say crew's silence (studio#1368) (#1381)
+- A one-seat review schedule offers reduced assurance and keeps the accept (crew#1837) (#1378)
+- Answered asks leave Working now and carry their question (#1380)
+- Mark citations, name helpers, close a helper's abandoned reply (#1369, #1370) (#1379)
+- A floor whose checks did not run for low disk reads as that, never a failed check (wicked-core#1846) (#1385)
+- First-run setup follows crew's skills state, shows the delivery choice, and offers crew's setup commands with Copy (#1387)
 
 ## [0.16.16] — 2026-11-22
 
