@@ -1,5 +1,6 @@
 import type { SessionView } from '../api/types.js';
 import { deliverUnit, deliveryOf } from '../components/delivery.js';
+import { isFloorNotRun } from '../components/gateVerdictModel.js';
 import { humanTitle, onboardTitle } from '../components/runIdentity.js';
 import { refusalOffers } from './gateOffers.js';
 import { repeatQuestion } from './repeatProgress.js';
@@ -139,6 +140,12 @@ function pausedStepQuestion(p: string, gateKind: string | undefined): string | n
       return 'The reviewer said FAIL — send it back?';
     }
     return 'The step did not pass review — how should it go on?';
+  }
+  // wicked-core#1846: the checks never ran because the computer is short of disk space. Nothing failed.
+  if (isFloorNotRun(p)) {
+    return /disk|GiB free/i.test(p)
+      ? 'The checks did not run: this computer is low on disk space. Free some space, then retry?'
+      : 'The checks did not run on this computer. Fix what the gate names, then retry?';
   }
   if (/^\s*Unit\s+\d+\s+failed its deterministic floor\b/i.test(p)) return 'A required check failed — how should the step go on?';
   // A governance denial is said as its plain cause on every surface (the dock, the rows, the toast, the desktop

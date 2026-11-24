@@ -39,7 +39,7 @@ import {
   type RequirementsMinimum,
 } from '../board/requirementsState.js';
 import { workflowLabel } from '../board/workflowNames.js';
-import { isLiveStatus, repeatLineOf } from '../board/repeatProgress.js';
+import { isLiveStatus, REPEAT_LINE_EVENTS, repeatLineOf } from '../board/repeatProgress.js';
 import { RequirementsCoverageSummary } from './RequirementsCoverageSummary.js';
 
 const T = {
@@ -93,7 +93,7 @@ async function liveMappingJob(repoId: string): Promise<MappingJob> {
     .sort((a, b) => (b.session.created_at ?? 0) - (a.session.created_at ?? 0));
   const run = live[0];
   if (run === undefined) return null;
-  const { events } = await api.getRunEvents(run.session.id, ['stepRepeated', 'awaitingHuman', 'resumed', 'unitExecuting'])
+  const { events } = await api.getRunEvents(run.session.id, [...REPEAT_LINE_EVENTS])
     .catch(() => ({ events: [] }));
   return { runId: run.session.id, line: repeatLineOf(events) };
 }

@@ -7,7 +7,8 @@ import { relTime } from './relTime.js';
  * interpolations are the allowlist of §4.3 — agent and binary names, version strings, counts and
  * relative times. Error prose goes to `tech` (Technical details); the stopped-runtime status
  * is shown directly after masking paths. Copy
- * buttons copy only `login_invocation`, `logout_invocation` or `<binary> --version` (§4.4).
+ * buttons copy only `login_invocation`, `logout_invocation`, `<binary> --version` (§4.4), or a setup command
+ * crew's service named in its own words ({@link crewCommand}: the cluster setup, a helper's install).
  */
 
 export interface CopyCommand {
@@ -87,20 +88,69 @@ export function helperNotInstalled(row: AgentRow): boolean {
   return row.seat['sign_in_on'] === 'host' && authOf(row.seat) !== 'signed_in';
 }
 
-/** A stopped runtime prevents the sign-in probe itself, rather than reporting a signed-out helper. */
+/** crew#1844: crew's words for a state home whose Kubernetes cluster was never set up (crew `NO_CLUSTER_LEAD`). */
+const NO_CLUSTER_RE = /^No Kubernetes cluster is set up\b/i;
+
+/** A stopped runtime, or a cluster never set up, prevents the sign-in probe itself, rather than reporting a signed-out
+ *  helper. The words are short enough for a list row's status: for no cluster, crew's lead sentence only (its command
+ *  and state-home path are read from the raw words by {@link helperRuntimeCommand}, coord r2 on #1387). */
 export function helperRuntimeDown(row: AgentRow): string | null {
   const health = row.seat.health;
   const message = health?.status === 'inactive' ? health.message ?? row.seat.council_ineligible_reason : null;
-  return typeof message === 'string' && /^(?:Docker(?: Desktop)?|Rancher(?: Desktop)?|Kubernetes) (?:isn.t|is not) running[.!]?$/i.test(message.trim())
-    ? displayText(message) : null;
+  if (typeof message !== 'string') return null;
+  const text = message.trim();
+  if (NO_CLUSTER_RE.test(text)) return displayText(/^[^.`\n]*/.exec(text)![0].trim());
+  return /^(?:Docker(?: Desktop)?|Rancher(?: Desktop)?|Kubernetes) (?:isn.t|is not) running[.!]?$/i.test(text) ? displayText(message) : null;
 }
 
-/** What is stopped and how to start it, from crew's runtime-down words: the k8s runner's seats need
- *  Kubernetes ("Kubernetes isn't running"); the container runtime's need Docker or Rancher. */
-export function runtimeStart(message: string): { what: string; button: string; step: string } {
+/** A command shape studio offers with Copy: the engine CLI (by path or name), an `npx` / `npm install -g` install, or the
+ *  GitHub and git setup commands; never a placeholder (`<…>`) or a stray shell character. */
+const COMMAND_SHAPE = /^(?:(?:[^\s']*|[^\s']*'[^']*)wicked-core'? (?:cluster|seat-image) \S|npx \S|npm (?:install|i) (?:-g|--global) \S|gh auth login\b|git config --global \S)/;
+const UNSAFE = /[<>|;&$`\\]/;
+
+/**
+ * The one setup command crew's own sentence names, so studio can offer it with Copy: the first backticked span that is a
+ * command (crew#1844: the cluster setup, filled in with this computer's engine and state home; an image build), else a
+ * helper's `npm install -g …` (core#1845: the package the seats run). Spans that are names, tags, examples or templates
+ * with `<placeholders>` are passed over. `null` when the sentence names none. Read it from crew's RAW words: the copied
+ * line must be crew's, not the display masking of it.
+ */
+export function crewCommand(text: string): string | null {
+  for (const m of text.matchAll(/`([^`\n]{3,400})`/g)) {
+    const span = (m[1] ?? '').trim();
+    if (COMMAND_SHAPE.test(span) && !UNSAFE.test(span.replace(/'[^']*'/g, "''"))) return span;
+  }
+  return /\bnpm (?:install|i) (?:-g|--global) [@a-z0-9_./-]*[a-z0-9]/i.exec(text)?.[0] ?? null;
+}
+
+/** The setup command a runtime-down helper's raw roster words name (crew#1844's cluster setup), for Copy. */
+export function helperRuntimeCommand(row: AgentRow): string | null {
+  const health = row.seat.health;
+  const message = health?.status === 'inactive' ? health.message ?? row.seat.council_ineligible_reason : null;
+  return typeof message === 'string' && NO_CLUSTER_RE.test(message.trim()) ? crewCommand(message) : null;
+}
+
+/** What is stopped (or missing) and how to fix it, from crew's runtime-down words: the k8s runner's seats need
+ *  Kubernetes ("Kubernetes isn't running"), or a cluster set up for them first (crew#1844, with crew's command); the
+ *  container runtime's need Docker or Rancher. */
+export function runtimeStart(message: string): { title: string; what: string; button: string; step: string; noCluster: boolean } {
+  if (NO_CLUSTER_RE.test(message.trim())) {
+    return {
+      title: 'Kubernetes isn’t set up for helpers yet',
+      what: 'no Kubernetes cluster is set up for helpers',
+      button: 'Set up Kubernetes',
+      step: 'With Rancher Desktop running and Kubernetes on, run the setup command once in a terminal (Nerve Center names it),',
+      noCluster: true,
+    };
+  }
   return /kubernetes/i.test(message)
-    ? { what: 'Kubernetes is stopped', button: 'Start Kubernetes', step: 'Start Rancher Desktop with Kubernetes on,' }
-    : { what: 'Docker or Rancher is stopped', button: 'Start Docker or Rancher', step: 'Start Rancher Desktop,' };
+    ? { title: message, what: 'Kubernetes is stopped', button: 'Start Kubernetes', step: 'Start Rancher Desktop with Kubernetes on,', noCluster: false }
+    : { title: message, what: 'Docker or Rancher is stopped', button: 'Start Docker or Rancher', step: 'Start Rancher Desktop,', noCluster: false };
+}
+
+/** The step for a runtime-down helper: with crew's command, "run this"; without one, where to find it. */
+export function runtimeStep(start: ReturnType<typeof runtimeStart>, command: string | null): string {
+  return start.noCluster && command !== null ? 'With Rancher Desktop running and Kubernetes on, run this once in a terminal,' : start.step;
 }
 
 /**
@@ -109,20 +159,32 @@ export function runtimeStart(message: string): { what: string; button: string; s
  */
 export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly AgentRow[], now: number, containerSignIn = false): IssueCopy {
   const runtime = helperRuntimeDown(row);
-  if (runtime !== null) return {
-    title: runtime,
-    what: `Studio can’t check ${row.name} while ${runtimeStart(runtime).what}.`,
-    why: 'This helper can’t take work yet.',
-    fix: [step(runtimeStart(runtime).step, 'then check again.')],
-    tech: null,
-  };
-  if (helperNotInstalled(row)) return {
-    title: `${row.name} isn’t installed on this computer`,
-    what: `Studio can’t start ${row.name} here yet.`,
-    why: 'It can’t take work until it is installed.',
-    fix: [step(`Install ${row.name} on this computer,`, 'or turn it off in the helpers choice.')],
-    tech: null,
-  };
+  if (runtime !== null) {
+    const start = runtimeStart(runtime);
+    const command = helperRuntimeCommand(row);
+    return {
+      title: start.title,
+      what: `Studio can’t check ${row.name} while ${start.what}.`,
+      why: 'This helper can’t take work yet.',
+      fix: [step(runtimeStep(start, command), 'then check again.', cmd(command, 'cluster setup'))],
+      tech: null,
+    };
+  }
+  if (helperNotInstalled(row)) {
+    // core#1845: a container helper whose sign-in runs this computer's own program can still press Sign in: crew's
+    // refusal then names the install command, which the result line offers with Copy.
+    const signable = containerSignIn && row.seat.sign_in === 'container';
+    return {
+      title: `${row.name} isn’t installed on this computer`,
+      what: `Studio can’t start ${row.name} here yet.`,
+      why: 'It can’t take work until it is installed.',
+      fix: signable
+        ? [step(`Install ${row.name} on this computer,`, 'or turn it off in the helpers choice.'),
+          { ...step('Then sign in here.', `If ${row.name} is still missing, studio shows the command that installs it, with Copy.`), signIn: true, check: true }]
+        : [step(`Install ${row.name} on this computer,`, 'or turn it off in the helpers choice.')],
+      tech: null,
+    };
+  }
   const code = issue.code;
   const name = row.name;
   // The bench facts come from the issue itself (crew's params), so a folded reviewer's issue speaks for its own

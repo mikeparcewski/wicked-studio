@@ -114,6 +114,8 @@ export interface RunRow {
   /** The chart's outcome word (Report's), kept for `data-outcome`. */
   outcome: Outcome | 'Unknown';
   word: JobWord;
+  /** studio#1368: a Working job crew calls quiet or stalled says so ("No output for 21 min") in the word's place. */
+  silent: string | null;
   tone: JobTone;
   group: JobGroup;
   project: string;
@@ -141,7 +143,7 @@ export interface RunsView {
   beyond: number;
 }
 
-function rowOf(v: SessionView, title: (v: SessionView) => string, holds: ReadonlyMap<string, NeedHold>): RunRow {
+function rowOf(v: SessionView, title: (v: SessionView) => string, holds: ReadonlyMap<string, NeedHold>, silentOf?: (v: SessionView) => string | null): RunRow {
   const units = v.units ?? [];
   const ended = (v.session as { ended_at?: number | null }).ended_at;
   const outcome = outcomeOf(v);
@@ -155,6 +157,7 @@ function rowOf(v: SessionView, title: (v: SessionView) => string, holds: Readonl
     title: title(v),
     outcome: outcome ?? 'Unknown',
     word,
+    silent: word === 'Working' ? (silentOf?.(v) ?? null) : null,
     tone: TONE[word],
     group,
     project: projectOf(v),
@@ -171,7 +174,7 @@ function rowOf(v: SessionView, title: (v: SessionView) => string, holds: Readonl
 
 /** Lower-case words of a row that a search matches (title, id, workflow, repo, project and agent names). */
 function haystack(r: RunRow, names: { project: (id: string) => string; agent: (cli: string) => string }): string {
-  return [r.title, r.id, r.workflow, r.repo ?? '', names.project(r.project), ...r.agents.map(names.agent)].join(' ').toLowerCase();
+  return [r.title, r.id, r.workflow, r.repo ?? '', r.silent ?? '', names.project(r.project), ...r.agents.map(names.agent)].join(' ').toLowerCase();
 }
 
 const newestFirst = (a: RunRow, b: RunRow): number => (b.startedAt ?? 0) - (a.startedAt ?? 0);
@@ -185,13 +188,15 @@ export function runsView(runs: readonly SessionView[], refine: Refine, opts: {
   group: JobGroup; status: RunStatusFilter; query: string; now: number; allTime?: boolean;
   title: (v: SessionView) => string; names: { project: (id: string) => string; agent: (cli: string) => string };
   holds?: ReadonlyMap<string, NeedHold>;
+  /** studio#1368 (`useRowSilence`): a Working job crew calls quiet or stalled says how long it has been silent. */
+  silentOf?: (v: SessionView) => string | null;
 }): RunsView {
-  const { group, status, query, now, title, names, allTime = false } = opts;
+  const { group, status, query, now, title, names, allTime = false, silentOf } = opts;
   const holds = opts.holds ?? new Map<string, NeedHold>();
-  const everyDate = refineRuns(runs, refine, now, true).kept.map((v) => rowOf(v, title, holds));
+  const everyDate = refineRuns(runs, refine, now, true).kept.map((v) => rowOf(v, title, holds, silentOf));
   const active = everyDate.filter((r) => r.group === 'active' && !archived(runs, r.id));
   const windowed = refineRuns(runs, refine, now, false);
-  const finishedWin = windowed.kept.map((v) => rowOf(v, title, holds)).filter((r) => r.group === 'finished');
+  const finishedWin = windowed.kept.map((v) => rowOf(v, title, holds, silentOf)).filter((r) => r.group === 'finished');
   const finishedAll = everyDate.filter((r) => r.group === 'finished');
   const finished = allTime ? finishedAll : finishedWin;
   const count = (rs: readonly RunRow[], w: readonly JobWord[]): number => rs.filter((r) => w.includes(r.word)).length;

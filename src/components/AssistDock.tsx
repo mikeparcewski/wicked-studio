@@ -15,6 +15,10 @@ import { readFileText } from './fileText.js';
 import { splitAskContext } from '../board/askPack.js';
 import { useCapabilities } from '../store/capabilities.js';
 import { Markdown } from './Markdown.js';
+import type { ChatCitations } from '../api/chat-wire.js';
+import { CitationStrip, citationLabel, citationMarks } from './citations.js';
+import { cliName } from '../board/pagePrompts.js';
+import { getCachedRoster } from '../store/rosterCache.js';
 import { NarratorFeed, phaseName } from './NarratorFeed.js';
 import { NowBar } from './NowBar.js';
 import { LiveActivity } from './session/LiveActivity.js';
@@ -267,8 +271,16 @@ interface DockChatMsg {
   /** When it began: a seat's first frame, or an operator turn's send (orders a question before a reply that streamed
    *  in before its send was acknowledged). */
   at?: number;
-  /** Not a bubble: the dock's own line under an operator turn (a send that failed, in the fail ink). */
+  /** Not a bubble: the dock's own line under an operator turn (a send that failed, in the fail ink), or about a helper
+   *  (one that could not answer, `seatLine`). */
   note?: true;
+  /** A note about a helper the engine gave up on: one per helper and turn (a failed step, its re-pick and a failed
+   *  session are one line). */
+  seatLine?: true;
+  /** The helper was re-picked away from this turn: its later frames for the turn are not drawn. */
+  retires?: true;
+  /** The daemon's citation verdicts for this reply (a `chatCitations` frame, or a replayed `citations` record). */
+  citations?: ChatCitations;
 }
 
 /** A follow-up turn, drawn inside its chat block so it sits above its own answer. `at`: when its send began. `failed`:
@@ -292,6 +304,17 @@ function replayDockTranscript(records: readonly unknown[]): DockChatMsg[] {
   const out: DockChatMsg[] = [];
   for (const r of records) {
     const rec = r as { kind?: string; cliKey?: string; text?: string; ok?: boolean; turnId?: string };
+    if (rec.kind === 'citations') {
+      // The verdicts land after their reply (append-only): fold them onto the reply of the same turn and helper. A record
+      // with no reply to fold onto is dropped, never shown alone (the session page's rule).
+      for (let i = out.length - 1; i >= 0; i -= 1) {
+        const m = out[i]!;
+        if (m.cliKey !== rec.cliKey || m.turnId !== rec.turnId) continue;
+        out[i] = { ...m, citations: citationsOf(r) };
+        break;
+      }
+      continue;
+    }
     if (typeof rec.text !== 'string') continue;
     if (rec.kind === 'user') {
       const files = (r as { attachments?: Array<{ name?: unknown }> }).attachments;
@@ -302,6 +325,112 @@ function replayDockTranscript(records: readonly unknown[]): DockChatMsg[] {
     }
   }
   return out;
+}
+
+/** A `chatCitations` frame or a transcript `citations` record, as the reply carries it. */
+function citationsOf(r: unknown): ChatCitations {
+  const c = r as Partial<ChatCitations>;
+  return {
+    verified: c.verified ?? 0, unverifiable: c.unverifiable ?? 0, corrected: c.corrected ?? 0, unchecked: c.unchecked ?? 0,
+    items: Array.isArray(c.items) ? c.items : [],
+  };
+}
+
+/** Where a live verdict is kept: the reply's helper and turn. */
+const verdictKey = (cliKey: string, turnId: string | undefined): string => `${cliKey}|${turnId ?? ''}`;
+
+/** A helper's name as the roster gives it ("Claude Code"), never its key. */
+const seatName = (key: string): string => cliName(key, getCachedRoster());
+
+/** Why the engine gave up on a helper, in plain words: a re-pick's `reason` (wicked-core `actor.rs`: `timed_out`,
+ *  `failed`, or the seat-refusal reason) or a failed answer step's `status`. */
+function couldNotAnswerWhy(reason: string | null): string {
+  switch (reason) {
+    case 'timed_out': return 'it did not answer in time';
+    case 'not_logged_in': return 'it is not signed in';
+    case 'quota_exhausted': return 'it has run out of usage';
+    case 'not_installed': return 'it is not installed on this machine';
+    case 'approval_unavailable': return 'its account does not let it run commands here';
+    case 'failed': case null: case '': return 'it stopped with an error';
+    default: return `it stopped (${reason.replace(/_/g, ' ')})`;
+  }
+}
+
+/** A team row (`teamEvent`) that says a helper stopped answering this chat's run: a re-pick, or an answer step that
+ *  did not complete. `session`: the helper's session failed (`chatSessionFailed`), whatever turn it was in. */
+interface SeatStop { id: number | null; runId: string; seat: string; why: string; to: string | null; session?: true }
+
+/** A helper's reply that did not finish well: still typing, or ended in a failure. */
+const isOpenReply = (m: DockChatMsg, seat: string): boolean => m.note !== true && m.cliKey === seat && (m.pending || !m.ok);
+
+/** The helper's "could not answer" line for the turn (`retiring`: only one that re-picked it away). A line whose turn was
+ *  not known retires nothing. */
+const hasSeatLine = (msgs: readonly DockChatMsg[], seat: string, turnId: string | undefined, retiring: boolean): boolean =>
+  msgs.some((m) => m.seatLine === true && m.cliKey === seat && m.turnId === turnId && (!retiring || (m.retires === true && m.turnId !== undefined)));
+
+/** The turn being answered: the newest question's. Crew refuses a new question while a turn is open (`turn_in_flight`),
+ *  so a helper stopping always stops on it. */
+const answeringTurn = (msgs: readonly DockChatMsg[], firstTurnId: string | undefined): string | undefined =>
+  [...msgs].reverse().find((m) => m.cliKey === 'you' && m.note !== true && m.turnId !== undefined)?.turnId ?? firstTurnId;
+
+/** Folds a stop into the thread (pure): the helper's unfinished reply in the turn becomes one line saying who could not
+ *  answer, why, and who answers instead. One line per helper and turn: a later row rewrites it when it says more (a
+ *  re-pick names who answers now). A failed session closes the helper's typing replies in any turn, and says nothing when
+ *  there were none. */
+function foldSeatStop(prev: DockChatMsg[], stop: SeatStop, name: (k: string) => string, firstTurnId: string | undefined): DockChatMsg[] {
+  const typing = (m: DockChatMsg): boolean => m.note !== true && m.cliKey === stop.seat && m.pending;
+  let turnId: string | undefined;
+  let drop: (m: DockChatMsg) => boolean;
+  if (stop.session === true) {
+    const open = prev.find(typing);
+    if (open === undefined) return prev;
+    turnId = open.turnId;
+    drop = typing;
+  } else {
+    turnId = answeringTurn(prev, firstTurnId);
+    drop = (m) => isOpenReply(m, stop.seat) && m.turnId === turnId;
+  }
+  const text = `${name(stop.seat)} could not answer: ${stop.why}.${stop.to !== null ? ` ${name(stop.to)} answers instead.` : ''}`;
+  const lineAt = prev.findIndex((m) => m.seatLine === true && m.cliKey === stop.seat && m.turnId === turnId);
+  if (lineAt >= 0) {
+    const line = prev[lineAt]!;
+    const next = prev.map((m, i) => (i === lineAt && stop.to !== null ? { ...line, text, retires: true as const } : m));
+    return next.filter((m) => !drop(m));
+  }
+  const open = prev.findIndex(drop);
+  // Where it goes: where the reply it closes was; else above the turn's first answer by another helper (the one that
+  // answers instead may have begun before this row arrived); else at the end.
+  const firstOther = prev.findIndex((m) => m.note !== true && m.cliKey !== 'you' && m.cliKey !== stop.seat && turnId !== undefined && m.turnId === turnId);
+  const anchor = open >= 0 ? open : firstOther;
+  const line: DockChatMsg = {
+    cliKey: stop.seat, text, pending: false, ok: false, note: true, seatLine: true,
+    at: anchor >= 0 ? prev[anchor]!.at ?? Date.now() : Date.now(),
+    ...(turnId !== undefined ? { turnId } : {}),
+    ...(stop.to !== null ? { retires: true as const } : {}),
+  };
+  const next = prev.filter((m) => !drop(m));
+  const at = anchor >= 0 ? prev.slice(0, anchor).filter((m) => !drop(m)).length : next.length;
+  next.splice(at, 0, line);
+  return next;
+}
+
+function seatStopOf(ev: unknown): SeatStop | null {
+  const row = (ev as { event?: { event_id?: unknown; event_type?: unknown; payload?: Record<string, unknown> } }).event;
+  const p = row?.payload ?? {};
+  const s = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
+  const runId = s(p['run_id']);
+  if (runId === null || typeof row?.event_id !== 'number') return null;
+  if (row.event_type === 'wicked.team.path.repicked') {
+    const from = s(p['from']);
+    return from === null ? null : { id: row.event_id, runId, seat: from, why: couldNotAnswerWhy(s(p['reason'])), to: s(p['to']) };
+  }
+  if (row.event_type === 'wicked.team.step.completed' && typeof p['step_id'] === 'string' && /^answer-\d+$/.test(p['step_id'])) {
+    const status = s(p['status']);
+    const by = s(p['by']);
+    if (status === null || status === 'ok' || by === null) return null;
+    return { id: row.event_id, runId, seat: by, why: couldNotAnswerWhy(status), to: null };
+  }
+  return null;
 }
 
 /** Replay and an acknowledged local turn may describe the same question. */
@@ -365,6 +494,11 @@ function DockChat({ chatId, firstTurnId, resumed = false, onResumeProbe, onStatu
   footRef.current = answerFooter;
   const [seats, setSeats] = useState<Record<string, DockSeatState>>({});
   const [msgs, setMsgs] = useState<DockChatMsg[]>([]);
+  /** The thread as last drawn: only the tray's status reads it (a re-picked helper's late frames say nothing there). */
+  const msgsSeen = useRef(msgs);
+  msgsSeen.current = msgs;
+  /** Live citation verdicts (`chatCitations`), by helper and turn. */
+  const [verdicts, setVerdicts] = useState<Record<string, ChatCitations>>({});
   /** The chat's ask run (its `path`, once the first message launched it): its working step shows live below. */
   const [pathRun, setPathRun] = useState<string | null>(null);
   const [pathPa, setPathPa] = useState<string | null>(null);
@@ -462,6 +596,8 @@ function DockChat({ chatId, firstTurnId, resumed = false, onResumeProbe, onStatu
   /** Match the turn when present; older daemons' untagged chunks use FIFO. */
   const append = (cliKey: string, text: string, turnId?: string): void => {
     setMsgs((prev) => {
+      // A helper re-picked away from this turn: its late frames are not a bubble (studio#1370).
+      if (hasSeatLine(prev, cliKey, turnId, true)) return prev;
       const next = [...prev];
       for (let i = 0; i < next.length; i += 1) {
         const m = next[i];
@@ -482,6 +618,12 @@ function DockChat({ chatId, firstTurnId, resumed = false, onResumeProbe, onStatu
    *  a block that mounted mid-stream, intact). */
   const finalize = (cliKey: string, text: string, ok: boolean, turnId?: string): void => {
     setMsgs((prev) => {
+      // A helper re-picked away from this turn, or a failure the turn's "could not answer" line already says: no bubble,
+      // and nothing of that helper's left typing in the turn (studio#1370).
+      if (hasSeatLine(prev, cliKey, turnId, true) || (!ok && hasSeatLine(prev, cliKey, turnId, false))) {
+        const next = prev.filter((m) => !(m.note !== true && m.cliKey === cliKey && m.pending && m.turnId === turnId));
+        return next.length === prev.length ? prev : next;
+      }
       const next = [...prev];
       for (let i = 0; i < next.length; i += 1) {
         const m = next[i];
@@ -497,6 +639,32 @@ function DockChat({ chatId, firstTurnId, resumed = false, onResumeProbe, onStatu
       return next;
     });
   };
+
+  // studio#1370: a helper the engine gave up on (a re-pick, or an answer step that did not complete) leaves one line —
+  // who could not answer, why, and who answers instead — where its half-typed bubble was; never a bubble stuck on "…".
+  // A helper re-picked away from a turn is not drawn again in that turn: the engine never hands an answer step back to
+  // a seat that failed it (wicked-core actor.rs, `worker_failed_clis`). After a failed step with no re-pick the same
+  // helper tries again, so its new frames are drawn. Team rows name the chat's RUN, which is read a moment after the
+  // chat opens: rows that arrive first wait for it, by run.
+  const stopsSeen = useRef(new Set<number>());
+  const stopsWaiting = useRef(new Map<string, SeatStop[]>());
+  const firstTurnRef = useRef(firstTurnId);
+  firstTurnRef.current = firstTurnId;
+  const seatStopped = (stop: SeatStop): void => {
+    if (stop.id !== null) {
+      if (stopsSeen.current.has(stop.id)) return;
+      stopsSeen.current.add(stop.id);
+    }
+    // The live line under the answer names who is working on it now.
+    if (stop.to !== null) setPathPa(stop.to);
+    setMsgs((prev) => foldSeatStop(prev, stop, seatName, firstTurnRef.current));
+  };
+  useEffect(() => {
+    if (pathRun === null) return;
+    const ready = stopsWaiting.current.get(pathRun) ?? [];
+    stopsWaiting.current.clear();
+    for (const st of ready) seatStopped(st);
+  }, [pathRun]);
 
   // A follow-up joins the block where it was asked: after what had streamed when its send began. Its reply's frames
   // can arrive before the send is acknowledged (the turn lands here only then), so a seat's message that began at or
@@ -526,26 +694,55 @@ function DockChat({ chatId, firstTurnId, resumed = false, onResumeProbe, onStatu
 
   useEventStream((ev: CoreEvent) => {
     const frame = ev as { type: string; chat?: string; cliKey?: string; text?: string; ok?: boolean; reason?: string; turn_id?: string };
+    if (frame.type === 'teamEvent') {
+      const stop = seatStopOf(ev);
+      if (stop === null) return;
+      if (pathRun === null) {
+        // Not yet known which run is this chat's (only an ask-path daemon ever names it): keep the rows by run until it
+        // is, at most a few per run and a bounded number of runs.
+        if (!useCapabilities.getState().askPath) return;
+        const waiting = stopsWaiting.current;
+        waiting.set(stop.runId, [...(waiting.get(stop.runId) ?? []).slice(-7), stop]);
+        if (waiting.size > 64) waiting.delete(waiting.keys().next().value!);
+      } else if (stop.runId === pathRun) {
+        seatStopped(stop);
+      }
+      return;
+    }
     if (frame.chat !== chatId) return;
     switch (frame.type) {
       case 'chatSessionReady':
         if (frame.cliKey !== undefined) setSeats((s) => ({ ...s, [frame.cliKey!]: 'ready' }));
         break;
       case 'chatSessionFailed':
-        if (frame.cliKey !== undefined) setSeats((s) => ({ ...s, [frame.cliKey!]: 'failed' }));
+        if (frame.cliKey !== undefined) {
+          setSeats((s) => ({ ...s, [frame.cliKey!]: 'failed' }));
+          // A reply it had begun is closed with a line, not left on "…" (studio#1370).
+          seatStopped({ id: null, runId: '', seat: frame.cliKey, why: 'its session ended', to: null, session: true });
+        }
         onStatusRef.current?.('ready');
         break;
       case 'chatDelta':
         if (frame.cliKey !== undefined && frame.text !== undefined && frame.text !== '') {
           append(frame.cliKey, frame.text, frame.turn_id);
-          onStatusRef.current?.('thinking');
+          // A helper re-picked away from the turn is not working on it: the tray keeps what it said.
+          if (!hasSeatLine(msgsSeen.current, frame.cliKey, frame.turn_id, true)) onStatusRef.current?.('thinking');
         }
         break;
       case 'chatReply':
         if (frame.cliKey !== undefined) {
           finalize(frame.cliKey, frame.text ?? '', frame.ok ?? false, frame.turn_id);
           // A failed turn is not an answer: the tray goes back to "ready", never "answer ready".
-          onStatusRef.current?.(frame.ok === true ? 'answered' : 'ready');
+          if (!hasSeatLine(msgsSeen.current, frame.cliKey, frame.turn_id, true)) onStatusRef.current?.(frame.ok === true ? 'answered' : 'ready');
+        }
+        break;
+      case 'chatCitations':
+        // studio#1369: the verdicts arrive after their reply (or before a resumed chat's history has loaded it); they
+        // are kept by helper and turn and mark that reply wherever it comes from.
+        if (frame.cliKey !== undefined) {
+          const key = verdictKey(frame.cliKey, frame.turn_id);
+          const citations = citationsOf(ev);
+          setVerdicts((v) => ({ ...v, [key]: citations }));
         }
         break;
       default:
@@ -601,19 +798,26 @@ function DockChat({ chatId, firstTurnId, resumed = false, onResumeProbe, onStatu
             Sent — the helpers answer here as their replies stream in.
           </p>
         ) : (
-          repliesByTurn(msgs, firstTurnId).map((m, i) => m.note === true ? (
-            // The dock's own line, the way the thread says it (a send that failed stays under its question).
-            <p key={i} data-testid="assist-note" data-tone="fail" className="font-mono text-xs leading-relaxed" style={{ color: TONE_COLOR.fail }}>
-              · {m.text}
-            </p>
+          repliesByTurn(msgs, firstTurnId).map((m) => (m.note === true || m.cliKey === 'you' ? m : { ...m, citations: m.citations ?? verdicts[verdictKey(m.cliKey, m.turnId)] })).map((m, i) => m.note === true ? (
+            m.seatLine !== undefined ? (
+              // A helper that could not answer: who, why, and who answers instead (studio#1370).
+              <p key={i} data-testid="assist-seat-line" data-agent={m.cliKey} data-tone="gate" className="font-mono text-xs leading-relaxed" style={{ color: TONE_COLOR.gate }}>
+                · {m.text}
+              </p>
+            ) : (
+              // The dock's own line, the way the thread says it (a send that failed stays under its question).
+              <p key={i} data-testid="assist-note" data-tone="fail" className="font-mono text-xs leading-relaxed" style={{ color: TONE_COLOR.fail }}>
+                · {m.text}
+              </p>
+            )
           ) : (
             // A helper's reply is a bubble on the left (operator 2026-10-16), the operator's own on the right.
             <div key={i} data-testid="assist-chat-msg" data-agent={m.cliKey} data-pending={m.pending} className={m.cliKey === 'you' ? 'wk-assist-you self-end max-w-[88%] rounded-2xl rounded-tr-md px-3 py-2' : 'self-start max-w-[92%] rounded-2xl rounded-tl-md px-3 py-2'} style={{ background: m.cliKey === 'you' ? 'var(--accent-subtle)' : 'var(--surface-raised)' }}>
               {m.chip !== undefined && <span className="wk-assist-chip" data-testid="assist-msg-chip">{m.chip}</span>}
               {/* A flowing block's own question needs no "you" label: it reads like the first one, on the right. */}
               {!(flow && m.cliKey === 'you') && (
-                <span className="font-mono text-xs font-semibold" style={{ color: 'var(--accent)' }}>
-                  {m.cliKey}
+                <span data-testid="assist-chat-msg-who" className="font-mono text-xs font-semibold" style={{ color: 'var(--accent)' }}>
+                  {m.cliKey === 'you' ? 'you' : seatName(m.cliKey)}
                 </span>
               )}
               {!m.pending && !m.ok ? (
@@ -628,9 +832,17 @@ function DockChat({ chatId, firstTurnId, resumed = false, onResumeProbe, onStatu
                 // GFM; raw HTML is never parsed, so nothing injects), not
                 // dumped as ##-visible raw text.
                 <div className="text-xs leading-relaxed">
-                  <Markdown>{m.cliKey === 'you' && userText !== undefined ? userText(m.text) : m.text}</Markdown>
+                  {/* studio#1369: the daemon's verdicts mark the citations in place, the way the session page does. */}
+                  <Markdown marks={m.cliKey === 'you' ? undefined : citationMarks(m.citations)}>{m.cliKey === 'you' && userText !== undefined ? userText(m.text) : m.text}</Markdown>
                   {m.pending && <span aria-hidden className="animate-pulse"> …</span>}
                 </div>
+              )}
+              {/* The reply's citation count, and the flagged ones under it (the session page's strip). */}
+              {!m.pending && m.cliKey !== 'you' && m.citations !== undefined && m.citations.items.length > 0 && (
+                <details data-testid="seat-citations-details" className="wk-tech-details wk-session-citations">
+                  <summary data-testid="seat-citations-toggle" className="wk-tech-details-summary">Citations: {citationLabel(m.citations)}</summary>
+                  <CitationStrip citations={m.citations} />
+                </details>
               )}
               {!m.pending && m.ok && m.cliKey !== 'you' && m.foot !== undefined && m.foot !== null && (
                 <p data-testid="assist-answer-footer" className="wk-assist-answer-foot">{m.foot}</p>

@@ -1,9 +1,9 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { getKnowledgeMap, type KnowledgeMapEdge, type KnowledgeMapNode, type KnowledgeMapResponse } from '../../api/knowledgeShapes.js';
 import { readErrorKind } from '../../api/errors.js';
 import { sourcesPath } from '../../api/sources.js';
 import { useTrackerLinksSupported } from '../../api/trackers.js';
-import { forgetFailureWords, forgetKnowledge, forgettableKnowledgeId } from '../../api/knowledgeForget.js';
+import { forgetFailureWords, forgetKnowledge, forgetSourceWords, forgettableKnowledgeId } from '../../api/knowledgeForget.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { ProposalsSection } from '../ProposalsSection.js';
 import { EmptyState, Skeleton, StateBanner } from '../ui/index.js';
@@ -285,7 +285,75 @@ export function KnowledgeView(): React.ReactElement {
           </>
         )}
       </section>
+
+      {canForget && <ForgetSource onForgot={load} />}
     </div>
+  );
+}
+
+/**
+ * Forget everything learned from one source (crew#1697 `POST /knowledge/forget {source}`, studio#1248): a file or web
+ * address added to the knowledge store, matched exactly as it was added. After a confirm; says how many pieces went
+ * and how many were a live data source's structure (left in place: it is refreshed through its source).
+ */
+function ForgetSource({ onForgot }: { onForgot: () => void }): React.ReactElement {
+  const [source, setSource] = useState('');
+  const [asking, setAsking] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ tone: 'ok' | 'fail'; text: string } | null>(null);
+  const inputId = useId();
+  const typed = source.trim();
+  const forget = async (target: string): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const out = await forgetKnowledge({ source: target });
+      setNote(forgetSourceWords(target, out));
+      if (out.forgotten > 0) { setSource(''); onForgot(); }
+    } catch (e) {
+      setNote({ tone: 'fail', text: forgetFailureWords(e) });
+    } finally {
+      setBusy(false);
+      setAsking(null);
+    }
+  };
+  return (
+    <section className="wk-know-map" aria-labelledby={`${inputId}-title`} data-testid="knowledge-forget-source">
+      <h2 id={`${inputId}-title`} className="wk-section-title">Forget a source</h2>
+      <p className="wk-gk-muted">Agents recall what was learned from the files and web pages added to the knowledge store. To forget everything one of them taught, type it exactly as it was added.</p>
+      <form
+        className="wk-gk-row"
+        onSubmit={(e) => { e.preventDefault(); if (typed !== '') { setNote(null); setAsking(source); } }}
+      >
+        <label htmlFor={inputId} className="wk-gk-muted">File path or web address</label>
+        <input
+          id={inputId}
+          className="wk-field"
+          style={{ flex: '1 1 260px', minWidth: 0, minHeight: 'var(--control-h)', padding: '0 var(--space-3)' }}
+          data-testid="knowledge-forget-source-input"
+          value={source}
+          placeholder="e.g. docs/handbook.md"
+          disabled={busy || asking !== null}
+          onChange={(e) => setSource(e.target.value)}
+        />
+        <button type="submit" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="knowledge-forget-source-ask" disabled={typed === '' || busy || asking !== null}>Forget…</button>
+      </form>
+      {asking !== null && (
+        <div role="group" aria-label="Forget this source" data-testid="knowledge-forget-source-confirm">
+          <p className="wk-gk-muted">Forget everything learned from “{asking}”? Agents stop recalling it and the knowledge store deletes it. This can’t be undone.{asking !== asking.trim() ? ' What you typed starts or ends with a space, and that space is part of the source.' : ''}</p>
+          {/* Not a wk-gk-row: its last quiet button is pushed to the far edge, away from the one it pairs with. */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+            <button type="button" className="wk-btn wk-btn--danger wk-btn--sm" data-testid="knowledge-forget-source-go" disabled={busy} onClick={() => void forget(asking)}>{busy ? 'Forgetting…' : 'Forget everything from it'}</button>
+            <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="knowledge-forget-source-cancel" disabled={busy} onClick={() => setAsking(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {note !== null && (
+        <p className={note.tone === 'fail' ? 'wk-gk-muted wk-learn-bad' : 'wk-gk-muted'} role="status" data-testid="knowledge-forget-source-note">
+          {note.text} <button type="button" className="wk-link wk-se-x" onClick={() => setNote(null)} aria-label="Dismiss">Dismiss</button>
+        </p>
+      )}
+    </section>
   );
 }
 

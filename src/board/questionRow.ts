@@ -1,6 +1,6 @@
 import type { CoreEvent, GateDecision, WorkUnit } from '../api/types.js';
 import { proposalKindOf } from './proposalCard.js';
-import { gateFrameFor, gateVerdictFor, isEscalationGate, isLandedTerminal, isLaunchRefusal, isRestoredRetry } from '../components/gateVerdictModel.js';
+import { gateFrameFor, gateVerdictFor, isEscalationGate, isFloorNotRun, isLandedTerminal, isLaunchRefusal, isRestoredRetry } from '../components/gateVerdictModel.js';
 import type { OpenGate } from '../store/gates.js';
 
 /**
@@ -72,6 +72,9 @@ export function classifyRowGate(input: {
   if (events !== null && isRestoredRetry(gateVerdictFor(events, gate.ord, gate.prompt), gate.ord)) {
     return { kind: 'card', reason: 'retry' };
   }
+  // wicked-core#1846: a floor the computer stopped (short of disk) arrives as an escalation too, but
+  // nothing failed and no other seat fixes it: a RETRY card (Retry / Stop), read before the kind.
+  if (isFloorNotRun(gate.prompt)) return { kind: 'card', reason: 'retry' };
   // The engine's own word (`awaitingHuman.gateKind: 'escalation'`, wicked-core#464), or the
   // escalation spellings, are enough on their own; the rest needs the event log.
   if (kind === 'escalation' || /^\s*Unit\s+\d+\s+(?:failed and triage escalated|verdict is NOT PASS)/i.test(gate.prompt)) {

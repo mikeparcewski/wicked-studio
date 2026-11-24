@@ -5,7 +5,9 @@ import { useTrackerLinksSupported } from '../api/trackers.js';
 import type { CodeGraphData, GitCommit, GitContributor, RepoEntry, SessionView } from '../api/types.js';
 import { readErrorKind } from '../api/errors.js';
 import { relTime } from '../board/relTime.js';
-import { jobTitle } from '../board/deskWords.js';
+import { fullRunTitle, jobTitle, plainRunTitle } from '../board/deskWords.js';
+import { outcomeOf } from '../board/deskInsights.js';
+import { splitAskContext } from '../board/askPack.js';
 import { statusWord } from '../board/statusWords.js';
 import { repoGraphState, repoGraphWords } from '../board/repoGraphState.js';
 import { knowledgeMarks } from '../board/repoKnowledge.js';
@@ -304,7 +306,8 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   }
 
   const now = Date.now();
-  const active = runs.filter(v => !TERMINAL_STATUSES.has(v.session.status) && !isHeldRun(v.session));
+  // studio#1371: an answered ask waits at its turn gate (not terminal) but is not work going on: it is not "Working now".
+  const active = runs.filter(v => !TERMINAL_STATUSES.has(v.session.status) && !isHeldRun(v.session) && outcomeOf(v) !== 'Answered');
   const graphGap = repoGraphGap(repo);
   const onboard = repoOnboard(runs, repo.id);
   const capture = repoCapture(runs, repo.id);
@@ -602,7 +605,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                   items={[
                     { label: runs.length === 1 ? 'job' : 'jobs', value: runs.length },
                     { label: 'working now', value: active.length },
-                    { label: 'finished', value: runs.filter(v => v.session.status === 'completed').length },
+                    { label: 'finished', value: runs.filter(v => outcomeOf(v) === 'Finished' || outcomeOf(v) === 'Answered').length },
                     { label: 'failed or cancelled', value: runs.filter(v => v.session.status === 'failed' || v.session.status === 'cancelled').length },
                   ]}
                 />
@@ -906,6 +909,24 @@ function HistoryTab({ repoId, repoName, gitUrl }: { repoId: string; repoName: st
   );
 }
 
+/** A run's title on this page. An ask's run is titled by the question asked (crew#823 puts it in `problem`), cut where a
+ *  sentence ends rather than at its first comma (crew's short title made every "In <repo>, …" question read "In <repo>",
+ *  studio#1371); any other run keeps its job title. */
+export function repoRunTitle(session: SessionView['session']): string {
+  const ask = (session as { ask_path?: unknown }).ask_path === true;
+  const problem = (session.problem ?? '').trim();
+  if (ask && problem !== '') return plainRunTitle(problem);
+  return session.problem || (session as { title?: unknown }).title ? jobTitle(session) : 'Untitled run';
+}
+
+/** The row's hover text: an ask's whole question (without the context Ask appended for the helper), else the run's
+ *  full title; none for a run with no words. */
+export function repoRunHover(session: SessionView['session']): string | undefined {
+  const problem = (session.problem ?? '').trim();
+  if (problem === '') return undefined;
+  return (session as { ask_path?: unknown }).ask_path === true ? splitAskContext(problem).typed.trim() : fullRunTitle(problem);
+}
+
 /** One run on this repository: its title, one status word, and when (UI-CONTRACT §4.6 list row). */
 function RunRow({ view, onSelect }: { view: SessionView; onSelect: (id: string) => void }): React.ReactElement {
   const { session } = view;
@@ -916,7 +937,7 @@ function RunRow({ view, onSelect }: { view: SessionView; onSelect: (id: string) 
     <button type="button" data-testid="run-link" data-run-id={session.id} className="wk-list-row wk-pg-repo-run" onClick={() => onSelect(session.id)}>
       <span className="wk-list-row-status"><span className="wk-status-dot" data-status={status.tone} aria-hidden /></span>
       <span className="wk-pg-repo-run-text">
-        <span className="wk-list-row-title">{session.problem || (session as { title?: unknown }).title ? jobTitle(session) : 'Untitled run'}</span>
+        <span className="wk-list-row-title" title={repoRunHover(session)}>{repoRunTitle(session)}</span>
         <span className="wk-list-row-meta">
           {status.word}{at !== undefined ? <> · <span title={new Date(at).toLocaleString()}>{relTime(at)}</span></> : null}
         </span>

@@ -134,6 +134,8 @@ export interface ProgressRow {
   done: number;
   total: number;
   line: string;
+  /** studio#1368: a working job crew calls quiet or stalled says so ("No output for 21 min", `useRowSilence`), never "Working". */
+  silent: string | null;
 }
 
 const STAGE_WORDS: Record<string, string> = { recon: 'Looking around', build: 'Building', test: 'Testing', review: 'Reviewing', deliver: 'Delivering' };
@@ -142,7 +144,7 @@ const STAGE_WORDS: Record<string, string> = { recon: 'Looking around', build: 'B
  * Jobs in progress: unarchived runs whose word is Working or Waiting on you (a held run reads
  * Waiting on you, never Working). Working first, then waiting, newest first in each; at most `max`.
  */
-export function progressRows(runs: readonly SessionView[], { max, agentName }: { max: number; agentName: (cli: string) => string }): { rows: ProgressRow[]; total: number } {
+export function progressRows(runs: readonly SessionView[], { max, agentName, silentOf }: { max: number; agentName: (cli: string) => string; silentOf?: (v: SessionView) => string | null }): { rows: ProgressRow[]; total: number } {
   const live = runs
     .filter((v) => v.session.archived_at == null)
     .map((v) => ({ v, sw: statusWord(v) }))
@@ -166,6 +168,7 @@ export function progressRows(runs: readonly SessionView[], { max, agentName }: {
       done,
       total: units.length,
       line: [step, doing, who].filter((x): x is string => x !== null && x !== '').join(' · '),
+      silent: tone === 'run' ? (silentOf?.(v) ?? null) : null,
     };
   });
   return { rows, total: live.length };

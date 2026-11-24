@@ -7,6 +7,7 @@ import type { SystemAttention, SystemSnapshot } from '../../api/system.js';
 import { actionPath } from '../../board/rankedNeeds.js';
 import { toResolveWords } from '../../board/nerveCenter.js';
 import { HEALTH_RECHECKED } from '../../store/systemSnapshot.js';
+import { useRowSilence } from '../../hooks/useCrewSilence.js';
 import { BATCH_KEY, batchFailureWords, runBatchDecision, useBatchGateStore } from '../../board/batchGates.js';
 import { InlineUndo } from '../InlineUndo.js';
 import { TechDetails } from '../ui/TechDetails.js';
@@ -118,7 +119,9 @@ export function DeskHome({
   const moreWaiting = Math.max(0, waiting - (shownNeed !== null || shownRanked !== null ? 1 : 0));
   const resolveCount = ranked?.unresolved?.length ?? 0;
 
-  const progress = useMemo(() => progressRows(runs, { max: PROGRESS_MAX, agentName }), [runs, agentName]);
+  // studio#1368: crew's liveness per run, so a silent job never reads "Working".
+  const silentOf = useRowSilence(now);
+  const progress = useMemo(() => progressRows(runs, { max: PROGRESS_MAX, agentName, silentOf }), [runs, agentName, silentOf]);
   const allJobs = everythingPath({ tab: 'sessions' });
 
   const start = (e: React.FormEvent): void => {
@@ -208,14 +211,16 @@ export function DeskHome({
               {progress.rows.map((r) => {
                 const path = pathOfRun(r.runId);
                 const pct = r.total === 0 ? 0 : Math.round((r.done / r.total) * 100);
+                // A silent job reads in the waiting colour throughout, never the working one (studio#1368).
+                const tone = r.silent !== null ? 'gate' : r.tone;
                 return (
                   <li key={r.runId}>
-                    <a href={path} onClick={go(path)} className="wk-home-job" data-testid="desk-progress-row" data-run-id={r.runId} data-tone={r.tone}>
+                    <a href={path} onClick={go(path)} className="wk-home-job" data-testid="desk-progress-row" data-run-id={r.runId} data-tone={tone} data-silent={r.silent !== null}>
                       <span className="wk-home-job-top">
                         <span className="wk-home-job-title">{r.title}</span>
-                        <span className="wk-home-job-word" data-tone={r.tone}>{r.word}</span>
+                        <span className="wk-home-job-word" data-tone={tone}>{r.silent ?? r.word}</span>
                       </span>
-                      <span className="wk-home-bar" aria-hidden><span className="wk-home-bar-fill" data-tone={r.tone} style={{ width: `${pct}%` }} /></span>
+                      <span className="wk-home-bar" aria-hidden><span className="wk-home-bar-fill" data-tone={tone} style={{ width: `${pct}%` }} /></span>
                       <span className="wk-home-job-line">{r.line}</span>
                     </a>
                   </li>

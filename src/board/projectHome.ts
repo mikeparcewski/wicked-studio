@@ -24,17 +24,23 @@ export function projectHomeSentence({ known, waiting, running, repos }: { known:
 }
 
 /** One job in progress on the home: its title, the repository and step x of y. */
-export interface HomeProgressRow { runId: string; title: string; line: string }
+export interface HomeProgressRow {
+  runId: string;
+  title: string;
+  line: string;
+  /** studio#1368: crew calls the job quiet or stalled ("No output for 21 min"); null while it works. */
+  silent: string | null;
+}
 
 /** The project's working jobs (a job waiting on you is under Needs you, not here), newest first. */
-export function homeProgress(runs: readonly SessionView[], max: number): { rows: HomeProgressRow[]; total: number } {
-  const all = progressRows(runs, { max: Number.MAX_SAFE_INTEGER, agentName: () => '' }).rows.filter((r) => r.tone === 'run');
+export function homeProgress(runs: readonly SessionView[], max: number, silentOf?: (v: SessionView) => string | null): { rows: HomeProgressRow[]; total: number } {
+  const all = progressRows(runs, { max: Number.MAX_SAFE_INTEGER, agentName: () => '', ...(silentOf !== undefined ? { silentOf } : {}) }).rows.filter((r) => r.tone === 'run');
   const byId = new Map(runs.map((v) => [v.session.id, v]));
   const rows = all.slice(0, max).map((r) => {
     const v = byId.get(r.runId);
     const repo = v === undefined ? null : repoNameOf(v);
     const step = r.total === 0 ? 'planning' : `step ${Math.min(r.total, r.done + 1)} of ${r.total}`;
-    return { runId: r.runId, title: r.title, line: [repo, step].filter((x): x is string => x !== null && x !== '').join(' · ') };
+    return { runId: r.runId, title: r.title, line: [repo, step].filter((x): x is string => x !== null && x !== '').join(' · '), silent: r.silent };
   });
   return { rows, total: all.length };
 }

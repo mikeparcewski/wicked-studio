@@ -88,6 +88,21 @@ const NAMED_WORDS: Readonly<Record<string, readonly [string, string]>> = {
   edit_plan: ['Change something', 'Edit the plan, then run it.'],
 };
 
+/**
+ * DES-STANDIN-001 §3.10 / §5.2 (studio S0, merges before core C3): a check whose helpers all dropped out mid-run
+ * (gate class `stand_in_needed`) lists `use_stand_ins`; its answer carries the consent's scope
+ * (`GateAnswer += { action: 'use_stand_ins'; scope: 'job' | 'always' }`). One listed answer draws both scopes (the
+ * DES §2.3 card). Local until studio pins the api-types release that has it (K1).
+ */
+export const USE_STAND_INS = 'use_stand_ins';
+export type StandInScope = 'job' | 'always';
+const STAND_IN_SCOPE_WORDS: ReadonlyArray<readonly [StandInScope, string, string]> = [
+  ['job', 'Use a stand-in for this job',
+    'A fresh session of a signed-in helper does only the missing check: it sees the work but none of the builder\'s reasoning. The job, the gate and the delivery say a stand-in did it. Later checks in this job use stand-ins too if a helper is missing.'],
+  ['always', 'Use stand-ins for every job',
+    'The same for this check, and later jobs use stand-ins whenever a helper is missing, without asking. You can change this in Settings.'],
+];
+
 /** The key a row control is known by in `GateRow` (its note box, focus and receipts key off these). */
 const KEYS: Readonly<Record<string, string>> = {
   request_changes: 'send-back', reject: 'stop', retry_qe: QE_REDO_KEY, rejudge: 'rejudge', retry_rules: 'retry-rules',
@@ -150,6 +165,12 @@ export function choicesForAction(a: GateAction, seatLabel: (cli: string) => stri
       key: 'skip-rules', label: ids.length === 1 ? `Skip ${ids[0]!}` : `Skip ${ids.length} rules`, decision: decisionFor(a), note: a.note,
       skipRuleIds: ids, title: `Skip ${ids.join(', ')}, each with your reason. Recorded as skipped by you, on the run, the gate and the delivery.`,
     }];
+  }
+  if (a.action === USE_STAND_INS) {
+    return STAND_IN_SCOPE_WORDS.map(([scope, label, title]) => ({
+      key: `stand-ins:${scope}`, label, note: a.note, title,
+      decision: { approve: true, action: USE_STAND_INS, scope } as unknown as GateAnswer,
+    }));
   }
   if (a.action.startsWith('consent:')) {
     const id = a.action.slice('consent:'.length);

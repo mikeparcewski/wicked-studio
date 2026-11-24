@@ -18,6 +18,7 @@ import { useGateStore, type OpenGate } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useProjectsStore } from '../store/projects.js';
 import { activityEvidence, stalledRuns } from '../board/stalls.js';
+import { lastActivityAt, lastLoggedActivity } from '../board/silentStep.js';
 import { HOME_FRESH_MS, useNeedsSources } from '../store/needsSources.js';
 import { useRuntimeStore } from '../store/runtime.js';
 
@@ -434,7 +435,9 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
       void Promise.resolve()
         .then(() => api.getRunEvents(id))
         .then(({ events }) => {
-          const ts = events[events.length - 1]?.ts;
+          // The newest frame that did something: a quiet seat's persisted heartbeats are not activity (studio#1368). A
+          // trail of heartbeats only dates the silence from its first frame.
+          const ts = lastActivityAt(events) ?? events[0]?.ts;
           if (typeof ts === 'number') useActivityClocks.getState().merge({ [id]: ts });
         })
         .catch(() => { /* no durable log — no evidence, no stall claim */ });
@@ -450,10 +453,8 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
       // gate change already recompute this memo, and subscribing to `logs` would
       // re-render the whole board once per streamed frame.
       const logs = useRuntimeStore.getState().logs;
-      const logTail = (id: string): number | undefined => {
-        const log = logs[id];
-        return log !== undefined && log.length > 0 ? log[log.length - 1]?.ts : undefined;
-      };
+      // The daemon's own stall talk is not activity (studio#1368).
+      const logTail = (id: string): number | undefined => lastLoggedActivity(logs[id]);
       return projects
         .map((project): BoardProject => {
           const b = bindings[project.id] ?? EMPTY;

@@ -54,7 +54,7 @@ import { startRetry } from './RunActions.js';
 import { RunArtifacts } from './RunArtifacts.js';
 import { useArtifactAddress } from './ArtifactAddress.js';
 import { artifactKey, artifactSizeOf, useArtifactSizes } from '../../store/artifactSizes.js';
-import { RunBaseNote, RunRecordLines, RunStory } from './RunRecord.js';
+import { RunBaseNote, RunRecordLines, RunStory, useConsentDecline } from './RunRecord.js';
 import { StrandedCard } from './StrandedCard.js';
 import { RunQuestions } from './ThreadQuestions.js';
 import { TurnWho } from './TurnWho.js';
@@ -655,8 +655,10 @@ export function RecoveryRow({ view, navigate }: { view: RunView; navigate?: Navi
   /** The refusal was the daemon draining for maintenance: its words replace the generic line. */
   const [drained, setDrained] = useState<string | null>(null);
   useEffect(() => { setSent('idle'); setError(null); setDrained(null); }, [id, status]);
+  // studio#1364: a declined install is the person's own choice, not a job to start over (it would redo the build).
+  const declined = useConsentDecline(view);
   const canResume = status === 'failed' && view.session.archived_at == null;
-  const canStartOver = navigate !== undefined && (status === 'failed' || status === 'cancelled');
+  const canStartOver = navigate !== undefined && (status === 'failed' || status === 'cancelled') && declined === null;
   if (!canResume && !canStartOver) return null;
   const resume = (): void => {
     setSent('sending');

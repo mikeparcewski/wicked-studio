@@ -423,10 +423,27 @@ describe('RequirementsModal', () => {
       render(<RequirementsModal repoId="r1" repoName="wicked-crew" onClose={() => {}} onOpenRun={onOpenRun} />);
       const job = await screen.findByTestId('requirements-mapping-job');
       expect(job).toHaveTextContent('Mapping wicked-crew · 3% → 9% → 15% → 21% · target 80% · page 4 · about 3 h left');
-      expect(getRunEvents).toHaveBeenCalledWith('job-1', ['stepRepeated', 'awaitingHuman', 'resumed', 'unitExecuting']);
+      expect(getRunEvents).toHaveBeenCalledWith('job-1', ['stepRepeated', 'awaitingHuman', 'resumed', 'unitExecuting', 'unitDispatched']);
       expect(screen.queryByRole('button', { name: /Generate it|Keep mapping/ })).not.toBeInTheDocument();
       await user.click(screen.getByTestId('requirements-open-mapping-job'));
       expect(onOpenRun).toHaveBeenCalledWith('job-1');
+    });
+
+    // studio#1366 (codex r1): the view asks for a subset of the trail; a loop that ended and dispatched its next step
+    // (dispatch alone) must be in that subset, or the old page line stands.
+    it('a job whose mapping loop is over shows no stale page line', async () => {
+      listRequirements.mockRejectedValue(notGenerated);
+      listRuns.mockResolvedValueOnce({ runs: [
+        { session: { id: 'job-1', repo_ref: 'r1', workflow_id: 'domain-extraction', status: 'executing', created_at: 7 }, units: [] },
+      ] });
+      const trail = [
+        { type: 'stepRepeated', session: 'job-1', ord: 11, fromOrd: 7, pass: 5, line: 'Mapping wicked-crew · 3% → … → 42% · target 80% · page 6 · about 41 min left' },
+        { type: 'unitDispatched', session: 'job-1', ord: 12, attempt: 0 },
+      ];
+      getRunEvents.mockImplementationOnce(async (_id: string, types?: readonly string[]) => ({ events: trail.filter((e) => types === undefined || types.includes(e.type)) }));
+      render(<RequirementsModal repoId="r1" repoName="wicked-crew" onClose={() => {}} onOpenRun={() => {}} />);
+      await screen.findByTestId('requirements-mapping-job');
+      expect(screen.getByTestId('requirements-mapping-job')).not.toHaveTextContent('about 41 min left');
     });
 
     it('with no job seen mapping, the view reads the requirements once and stands', async () => {

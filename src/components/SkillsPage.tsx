@@ -34,6 +34,9 @@ import { StatLine } from './ui/StatLine.js';
 import { StateBanner, EmptyState, Skeleton } from './ui/StateBanner.js';
 import { TechDetails } from './ui/TechDetails.js';
 import { relTime } from '../board/relTime.js';
+import { skillsReading, skillsWords } from '../board/firstUse.js';
+import { commandDisplay } from '../board/agentsModel.js';
+import { Command } from './agents/CommandLine.js';
 import { SkillDrawer } from './SkillDrawer.js';
 import { SkillFilesMapModal } from './SkillFilesMapModal.js';
 import { SkillFindings } from './SkillFindings.js';
@@ -96,6 +99,9 @@ const PAGE_VERB_LABEL: Record<PageVerb, string> = {
   analyze: 'Analyze',
   publish: 'Publish',
 };
+
+/** How often the page re-reads crew's skills state while crew is publishing at boot (studio#1363). */
+const PUBLISHING_POLL_MS = 4_000;
 
 export function SkillsPage({ navigate, search = '' }: {
   navigate: (path: string) => void;
@@ -484,6 +490,29 @@ export function SkillsPage({ navigate, search = '' }: {
     </button>
   );
   const error = recovery.error ?? pageError ?? stale ?? (state.kind === 'failed' || state.kind === 'unavailable' ? state.message : null);
+  /** studio#1363: crew publishes at boot and says so; while it does, the page re-reads it (every few seconds) and, once it
+   *  is done, the catalog too, so "Publishing now" never outlives the publish. */
+  const publishingNow = engine?.state === 'publishing';
+  const wasPublishing = useRef(false);
+  useEffect(() => {
+    if (publishingNow) {
+      wasPublishing.current = true;
+      const t = setInterval(() => { void loadEngine(); }, PUBLISHING_POLL_MS);
+      return () => clearInterval(t);
+    }
+    if (wasPublishing.current && engine !== null) { wasPublishing.current = false; void load(); }
+    return undefined;
+  }, [publishingNow, engine, load, loadEngine]);
+  /** studio#1363: crew's skills state, said in the same words as setup step 2 when it is not the catalog's to tell
+   *  (publishing at boot, or wicked-garden missing or too old, with crew's install command). */
+  const reading = skillsReading(engine);
+  const engineSays = reading !== null && (reading.stage === 'publishing' || reading.stage === 'install') ? reading : null;
+  const engineLine = engineSays === null ? null : (
+    <div data-testid="skills-engine-status" data-stage={engineSays.stage}>
+      <p>{skillsWords(engineSays)}</p>
+      {engineSays.command !== null && <Command c={{ line: engineSays.command, display: commandDisplay(engineSays.command), label: 'skills install' }} />}
+    </div>
+  );
   const statsKnown = state.kind === 'loaded' && stale === null && pageError === null;
 
   return (
@@ -502,7 +531,7 @@ export function SkillsPage({ navigate, search = '' }: {
         {error !== null && <StateBanner data-testid={recovery.error !== null ? 'skills-recovery-error' : pageError !== null ? 'skills-page-error' : stale !== null ? 'skills-stale' : state.kind === 'unavailable' ? 'skills-unavailable' : 'skills-error'}
           kind={stale !== null ? 'stale' : state.kind === 'failed' || state.kind === 'unavailable' ? state.errorKind : readErrorKind(error)} what="skills" error={error} onRetry={() => { setPageError(null); void load(); }} />}
         {catalog !== null && <div className="wk-pg-skills-status">
-          <p title={published?.at}>{unpublished > 0 || unpublishedSupportFiles.length > 0 ? 'Changes ready to publish' : current === null ? 'Ready to publish' : drift?.state === 'behind' ? 'Update available' : drift?.state === 'unknown' ? 'Update status unavailable' : 'Up to date'}{published !== null && ` · published ${relTime(Date.parse(published.at))}`}</p>
+          {engineLine ?? <p title={published?.at}>{unpublished > 0 || unpublishedSupportFiles.length > 0 ? 'Changes ready to publish' : current === null ? 'Ready to publish' : drift?.state === 'behind' ? 'Update available' : drift?.state === 'unknown' ? 'Update status unavailable' : 'Up to date'}{published !== null && ` · published ${relTime(Date.parse(published.at))}`}</p>}
           {/* One disclosure for every internal fact (UI-CONTRACT §4.3); the hidden spans keep the
               machine-readable state hooks tests and journeys read. */}
           <TechDetails data-testid="skills-root" text={[
@@ -522,7 +551,7 @@ export function SkillsPage({ navigate, search = '' }: {
         ) : state.kind === 'unavailable' ? (
           <section data-testid="skills-recovery" className="wk-card">
             <SectionTitle>Restore skills</SectionTitle>
-            <p>Refresh the installed skills, then publish to make them available again.</p>
+            {engineLine ?? <p>Refresh the installed skills, then publish to make them available again.</p>}
             {engine === null ? <p data-testid="skills-recovery-no-diagnostics">Service details are unavailable. You can still try restoring skills.</p> : <>
               <div data-testid="skills-recovery-state" data-state={engine.state}><TechDetails text={`engine: ${engine.state} — ${SKILLS_ENGINE_STATE_COPY[engine.state]} · input ${engine.engineInput ?? 'unset'}`} /></div>
               {engine.findings.map((f,i) => <div key={i} data-testid="skills-recovery-finding" data-kind={f.kind} data-severity={f.severity}><TechDetails text={`${f.kind} · ${f.severity} · ${f.message}`} /></div>)}

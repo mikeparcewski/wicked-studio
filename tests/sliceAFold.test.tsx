@@ -167,13 +167,17 @@ describe('frozen sign-in refusals and next actions', () => {
     expect(result).toHaveTextContent('Start Rancher Desktop with Kubernetes on, then try again.');
     expect(result).not.toHaveTextContent(/Docker Desktop/);
   });
-  it.each([['no_cluster'], ['controller_missing']])('a coded %s without crew sentence gives the whole install command', async (code) => {
+  // crew#1844: only crew's filled-in command is offered; without crew's sentence studio says where to find it, never a
+  // template with placeholders.
+  it.each([['no_cluster'], ['controller_missing']])('a coded %s without crew sentence says where the setup command is', async (code) => {
     refusal = { status: 503, body: { code, error: '' } };
     page('?fix=claude');
     fireEvent.click(await screen.findByTestId('agents-signin'));
     const result = await screen.findByTestId('agents-check-result');
     await waitFor(() => expect(result).toHaveAttribute('data-state', 'signin-failed'));
-    expect(result).toHaveTextContent('wicked-core cluster install --admin-context <your cluster context> --home <this daemon’s state home>');
+    expect(result).toHaveTextContent('Nerve Center → Infra names the command that sets it up; run it, then try again.');
+    expect(result).not.toHaveTextContent(/<[^>]+>/);
+    expect(within(result).queryByTestId('agents-command')).toBeNull();
   });
   it.each([[''], ['   '], [undefined]])('a policy refusal with no sentence (%j) says so and where to look', async (error) => {
     refusal = { status: 503, body: { code: 'policy_refused', ...(error !== undefined ? { error } : {}) } };

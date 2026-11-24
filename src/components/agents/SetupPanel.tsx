@@ -1,9 +1,14 @@
-import { useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useNewWorkSeats } from '../../store/newWorkSeats.js';
 import { Check } from 'lucide-react';
 import { setPickedForNewWork } from './useAgentRows.js';
-import { goodEnough, newWorkHelpers, setupAgents, setupMove, setupSteps, withRowRuntime } from '../../board/firstUse.js';
-import { authOf, type AgentRow } from '../../board/agentsModel.js';
+import { deliveryStep, goodEnough, newWorkHelpers, setupAgents, setupMove, setupSteps, skillsWords, withRowRuntime } from '../../board/firstUse.js';
+import { authOf, commandDisplay, type AgentRow } from '../../board/agentsModel.js';
+import { helperRuntimeCommand, runtimeStart, runtimeStep } from '../../board/agentsCopy.js';
+import { displayText } from '../../board/homePath.js';
+import { getSetupKnown } from '../../api/learn.js';
+import { useComposerPrefsStore } from '../../store/composerPrefs.js';
+import { Command } from './CommandLine.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useFirstUseReads } from '../../store/firstUseReads.js';
 import { NewProjectModal } from '../NewProjectModal.js';
@@ -25,9 +30,18 @@ function pickForNewWork(rows: readonly AgentRow[], key: string): void {
   setPickedForNewWork(rows, key, true);
 }
 
-function Step({ n, done, testId, children }: { n: number; done: boolean; testId: string; children: React.ReactNode }): React.ReactElement {
+/** A command crew named, with Copy (the Agents modal's own command line). */
+function CopyLine({ line, label }: { line: string; label: string }): React.ReactElement {
+  return <Command c={{ line, display: commandDisplay(line), label }} />;
+}
+
+/** crew#1527: crew's delivery readiness (`GET /setup/known` `delivery`): `undefined` while read, `null` when it could
+ *  not be read (an older service, or a read that failed). */
+type DeliveryRead = unknown;
+
+function Step({ n, done, testId, state, children }: { n: number; done: boolean; testId: string; state?: string; children: React.ReactNode }): React.ReactElement {
   return (
-    <li data-testid={testId} data-done={done} className={`wk-agents-setup-step${done ? ' wk-agents-setup-step--done' : ''}`}>
+    <li data-testid={testId} data-done={done} {...(state !== undefined ? { 'data-state': state } : {})} className={`wk-agents-setup-step${done ? ' wk-agents-setup-step--done' : ''}`}>
       <span aria-hidden className="wk-agents-setup-n">{done ? <Check size={14} /> : n}</span>
       <div>{children}</div>
     </li>
@@ -46,7 +60,32 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
   const newWorkSeats = useNewWorkSeats();
   const [creating, setCreating] = useState(false);
 
+  // crew#1527: whether a pull request can open before the first job, read once here and on Check again. Only the newest
+  // read lands (a slow first check never overwrites a newer one), and none after unmount.
+  const [delivery, setDelivery] = useState<DeliveryRead | undefined>(undefined);
+  const deliverySeq = useRef(0);
+  const readDelivery = useCallback((): void => {
+    const seq = (deliverySeq.current += 1);
+    setDelivery(undefined);
+    const land = (v: DeliveryRead): void => { if (deliverySeq.current === seq) setDelivery(v); };
+    getSetupKnown().then((k) => land((k as { delivery?: unknown }).delivery ?? null), () => land(null));
+  }, []);
+  useEffect(() => { readDelivery(); return () => { deliverySeq.current += 1; }; }, [readDelivery]);
+  // studio's own "Open a PR" preference decides whether a PR is asked for: read it before saying anything.
+  const prefsLoaded = useComposerPrefsStore((s) => s.loaded);
+  useEffect(() => { if (!prefsLoaded) void useComposerPrefsStore.getState().load(); }, [prefsLoaded]);
+  const deliverPr = useComposerPrefsStore((s) => s.prefs.deliverPr);
+  const prefsPersist = useComposerPrefsStore((s) => s.persist);
+  const setDeliverPr = useComposerPrefsStore((s) => s.update);
+  const deliver = deliveryStep(delivery === undefined ? null : delivery, deliverPr);
+  const deliveryChecking = !prefsLoaded || deliverPr && delivery === undefined;
+
   const checks = withRowRuntime(f.checks, rows);
+  // crew#1844: a cluster never set up is its own step, with crew's command read from the helpers' RAW roster words.
+  const noCluster = checks.downReason !== null && runtimeStart(checks.downReason).noCluster ? runtimeStart(checks.downReason) : null;
+  const clusterCommand = noCluster === null ? null : rows.map(helperRuntimeCommand).find((c) => c !== null) ?? null;
+  const runtimeDown = checks.runtimeRequired === true && checks.runtime === false;
+  const skills = f.checks.skillsReading;
   const facts = { rows, repos: f.repos, projects: f.projects, checks };
   const steps = setupSteps(facts);
   const counted = setupAgents(rows);
@@ -98,10 +137,14 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
               </>
             )}
           </Step>
-          <Step n={2} done={f.checks.skills === true} testId="agents-setup-step-skills">
+          <Step n={2} done={f.checks.skills === true} testId="agents-setup-step-skills" {...(skills !== undefined ? { state: skills.stage === 'published' && f.checks.skills !== true ? 'todo' : skills.stage } : {})}>
             <b>Get skills ready.</b>{' '}
-            {f.checks.skills === null ? 'Not checked yet.' : f.checks.skills ? 'Done. Skills are published and ready for work.' : 'Not done. Publish skills before starting work.'}{' '}
+            {/* studio#1363: crew's own skills state decides the words (publishing at boot is not a to-do). */}
+            {f.checks.skills === true ? skillsWords({ stage: 'published', command: null, garden: null })
+              : skills !== undefined && skills.stage !== 'published' ? skillsWords(skills)
+              : f.checks.skills === null ? 'Not checked yet.' : 'Not done. Publish skills before starting work.'}{' '}
             <button type="button" className="wk-btn wk-btn--link" onClick={() => navigate('/skills')}>Open Skills</button>
+            {f.checks.skills !== true && skills?.stage === 'install' && skills.command !== null && <CopyLine line={skills.command} label="skills install" />}
           </Step>
           <Step n={3} done={f.checks.estate === true} testId="agents-setup-step-estate">
             <b>Set up the code map service.</b>{' '}
@@ -113,16 +156,33 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
             {checks.runtimeRequired === false ? 'Done. Helpers run on this computer without containers.'
               : checks.runtime === null || checks.runtimeRequired === null ? 'Not checked yet.'
               : checks.runtime ? 'Done. The container runtime is running.'
+              : noCluster !== null ? `Not done. ${noCluster.title}. ${runtimeStep(noCluster, clusterCommand)} then check again.`
               : `Not done. ${checks.downReason !== null ? `${checks.downReason.replace(/[.!]$/, '')}: start it` : 'Start Rancher Desktop'}, then check again.`}{' '}
             <button type="button" className="wk-btn wk-btn--link" onClick={() => navigate('/watch')}>Open Nerve Center</button>
+            {runtimeDown && noCluster !== null && clusterCommand !== null && <CopyLine line={clusterCommand} label="cluster setup" />}
           </Step>
-          <Step n={5} done={false} testId="agents-setup-step-defaults">
+          <Step n={5} done={!deliveryChecking && deliver.done} testId="agents-setup-step-delivery" state={deliveryChecking ? 'checking' : deliver.state}>
+            <b>Choose how finished work is delivered.</b>{' '}
+            <span data-testid="agents-setup-delivery" role="status">{deliveryChecking ? 'Checking your GitHub sign-in…' : deliver.words}</span>
+            {!deliveryChecking && deliver.detail !== null && <span className="wk-agents-sub"> {displayText(deliver.detail)}</span>}
+            {!deliveryChecking && deliver.fix !== null && <span className="wk-agents-sub"> {displayText(deliver.fix)}</span>}
+            {!deliveryChecking && deliver.state === 'blocked' && deliver.commands.map((c) => <CopyLine key={c} line={c} label={c.startsWith('gh ') ? 'GitHub sign-in' : c.includes('user.name') ? 'git author name' : 'git author email'} />)}
+            {deliverPr && (deliveryChecking || deliver.state === 'blocked' || deliver.state === 'unknown') && (
+              <div className="wk-agents-setup-moves">
+                <button type="button" data-testid="agents-setup-delivery-local" className="wk-btn wk-btn--secondary" disabled={!prefsLoaded} onClick={() => setDeliverPr({ deliverPr: false })}>Use local delivery</button>
+                <button type="button" data-testid="agents-setup-delivery-check" className="wk-btn wk-btn--link" disabled={deliveryChecking} onClick={readDelivery}>Check again</button>
+              </div>
+            )}
+            {!deliverPr && prefsPersist === 'dropped' && <span className="wk-agents-sub" data-testid="agents-setup-delivery-unsaved" role="status"> Studio’s service didn’t store this choice, so it applies to this session only. Choose it again in Settings to retry.</span>}
+            {!deliverPr && <button type="button" className="wk-btn wk-btn--link" onClick={() => navigate('/system')}>Open Settings</button>}
+          </Step>
+          <Step n={6} done={false} testId="agents-setup-step-defaults">
             <b>Choose the helpers new work uses</b> (optional).{' '}
             {picked.length > 0 ? `Right now: ${names(picked)}.` : 'Right now: none.'}
             {off.length > 0 ? ` ${names(off)} ${off.length === 1 ? 'is' : 'are'} off until you pick ${off.length === 1 ? 'it' : 'them'}.` : ''}{' '}
             <button type="button" data-testid="agents-setup-change" className="wk-btn wk-btn--link" onClick={() => navigate('/system')}>Change</button>
           </Step>
-          <Step n={6} done={placeKnown && steps.placeDone} testId="agents-setup-step-project">
+          <Step n={7} done={placeKnown && steps.placeDone} testId="agents-setup-step-project">
             <b>Create your first project.</b>{' '}
             {!placeKnown
               ? <span data-testid="agents-setup-place-reading" data-state={placeFailed ? 'failed' : 'reading'} role="status">

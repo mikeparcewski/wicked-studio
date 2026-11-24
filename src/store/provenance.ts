@@ -137,12 +137,25 @@ export const ENGINE_TIMEOUT_AUDIT = 'run.turn.timedout';
  *  - `sendBackNote`    — the operator's last send-back to the creator (acted on; not a rejection);
  *  - `stop`            — the newest recorded stop, its reason and whether a person stopped it;
  *  - `engineTimedOut`  — the daemon recorded a worker turn hitting the engine's time ceiling.
+ *  - `rejected`        — studio#1364: the newest REJECTION on record, words or not, and the gate it answered (`ord`,
+ *                        when the decision carried one). A gate's reject ends the run, so a rejection on record is why it
+ *                        stopped: an older send-back is never offered as the reason beside it.
  */
 export interface CancelStory {
   rejectNote: string | null;
   sendBackNote: string | null;
+  rejected: { ord: number | null } | null;
   engineTimedOut: boolean;
   stop: { reason: string | null; byPerson: boolean } | null;
+}
+
+/** studio#1364: the newest rejection for this run (a consent Decline sends none of its own words), and its gate's ord. */
+export function rejectionOf(entries: readonly AuditEntry[], runId: string): { ord: number | null } | null {
+  // The run's LAST decision (GET /audit is newest-first): an earlier rejection the run went on past is not why it ended.
+  const e = entries.find((x) => x.action === 'gate.decided' && x.runId === runId);
+  if (e === undefined || !isRejection((e.detail ?? {}) as Record<string, unknown>)) return null;
+  const ord = (e.detail ?? {})['ord'];
+  return { ord: typeof ord === 'number' && Number.isInteger(ord) ? ord : null };
 }
 
 export function cancelStoryOf(entries: readonly AuditEntry[], runId: string): CancelStory {
@@ -152,6 +165,7 @@ export function cancelStoryOf(entries: readonly AuditEntry[], runId: string): Ca
     stop: stopped !== undefined ? { reason: typeof reason === 'string' && reason.trim() !== '' ? reason.trim() : null, byPerson: stopped.actor.kind === 'human' } : null,
     rejectNote: rejectNoteOf(entries, runId),
     sendBackNote: sendBackNoteOf(entries, runId),
+    rejected: rejectionOf(entries, runId),
     engineTimedOut: entries.some((e) => e.action === ENGINE_TIMEOUT_AUDIT && e.runId === runId),
   };
 }
@@ -201,6 +215,9 @@ interface ProvenanceStore {
   markLaunchedHere: (runId: string) => void;
   /** Runs whose one ended audit read has started (including failed reads). */
   endedRead: Record<string, true>;
+  /** studio#1364: runs whose ended audit read has ANSWERED (or failed): what it holds is the run's final record, not
+   *  an earlier live read that predates the stop. */
+  endedDone: Record<string, true>;
   /** One live audit read, plus one ended read to pick up the stop record; both deduped. */
   load: (runId: string, ended?: boolean) => void;
 }
@@ -215,6 +232,7 @@ export const useProvenanceStore = create<ProvenanceStore>((set, get) => ({
   baseNotices: {},
   launchedHere: {},
   endedRead: {},
+  endedDone: {},
 
   markLaunchedHere: (runId) => {
     writeSessionLaunch(runId);
@@ -255,6 +273,7 @@ export const useProvenanceStore = create<ProvenanceStore>((set, get) => ({
       })
       .finally(() => {
         inflight.delete(runId);
+        if (ended) set((s) => ({ endedDone: { ...s.endedDone, [runId]: true } }));
       });
     inflight.set(runId, read);
   },

@@ -7,6 +7,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, apiWire } from '../api/client.js';
 import { qeRefusalOf } from '../board/qeRefusal.js';
 import { QeRefusalWarning } from './QeRefusalWarning.js';
+import { StandInChoice } from './StandInChoice.js';
+import { helperNamer, saveStandInsEveryJob, standInChoiceOf, standInRelaunchBody, type StandInChoiceId, type StandInChoiceRefusal } from '../board/standIn.js';
 import type { BaseSkillPosture, BaseSkillRefusedResponse, DeliverTargetResponse, EntityMode, LaunchBodyWithDeliver, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from './composerDefaults.js';
 import { isShortcutsPaletteOpen } from '../hooks/useGlobalShortcuts.js';
@@ -584,6 +586,13 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   /** The launch was refused because its workflow requires QE acceptance (crew's `qe_acceptance_required`). */
   const [qeRefusal, setQeRefusal] = useState<{ key: string; detail: string | null; forced: boolean } | null>(null);
   const qeAttempt = useRef(0);
+  /** DES-STANDIN-001 S0: crew asked how to check this job (too few helpers signed in); nothing started. */
+  // A choice sends the job as the form shows it THEN, through `submit` itself (codex r1+delta on #1361): nothing is
+  // replayed from the refused attempt, so an edit made after the refusal (or during the settings save) is what is sent.
+  // `override`: the refused Send had overridden the no-repo preflight (the choice keeps that answer).
+  const [standIn, setStandIn] = useState<{ refusal: StandInChoiceRefusal; override: boolean } | null>(null);
+  const [standInBusy, setStandInBusy] = useState<StandInChoiceId | null>(null);
+  const [standInError, setStandInError] = useState<string | null>(null);
   /** studio#404: the id this launch was sent under (client-minted), while its POST is outstanding. */
   const [pendingRunId, setPendingRunId] = useState<string | null>(null);
   /** studio#404: the pending run is already on the daemon — offered while the POST is still out. */
@@ -808,8 +817,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   }
 
   // ── Submit ─────────────────────────────────────────────────────────────────
-  async function submit(preflightOverride = false): Promise<void> {
-    if (!problem.trim() || selectedClis.size === 0 || submitting) return;
+  /** `standInChoice`: the person answered the stand-in card ("this job" adds crew's `retryWith`; "every job" saved the
+   *  setting first and sends the request unflagged, DES-STANDIN-001 §4 consentFor). */
+  async function submit(preflightOverride = false, standInChoice?: { refusal: StandInChoiceRefusal; scope: 'job' | 'always' }): Promise<void> {
+    // A stand-in choice holds `submitting` through its settings save and hands it on here (codex delta 2 on #1361).
+    if (!problem.trim() || selectedClis.size === 0 || (submitting && standInChoice === undefined)) return;
     // (studio#1150) What the form shows as Send is pressed: crew's answer for these fields, captured now (never re-read
     // after the awaits below, when another answer may have landed).
     const postureKeyAtSend = posturePreview.key;
@@ -853,6 +865,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     }
     setBaseSkillRefusal(null);
     setQeRefusal(null);
+    // The card stays up while its own choice is carried out; any other Send replaces it.
+    if (standInChoice === undefined) { setStandIn(null); setStandInError(null); }
     setStartedRunId(null);
     openedEarly.current = null;
 
@@ -918,11 +932,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       ? postureAtSend : { status: 'none' as const };
     const { power } = launchPosture({ ...postureInput, takesPower, previewAnswer }).payload;
     if (power !== undefined) body.power = power;
+    if (standInChoice?.scope === 'job') Object.assign(body, standInRelaunchBody(body, standInChoice.refusal));
 
+    /** The body crew accepted (the retry without `deliver` when that was it): a relaunch sends the same. */
+    let sent = body;
     try {
       let launched;
-      /** The body crew accepted (the retry without `deliver` when that was it): a relaunch sends the same. */
-      let sent = body;
       try {
         launched = await api.launchRun(body);
       } catch (err) {
@@ -956,10 +971,16 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       const notice = assuranceNoticeOf(launched);
       if (notice !== null) useLaunchNotices.getState().put({ runId: newRunId, notice, body: sent }, sent.chatId ?? null);
       setProblem('');
+      setStandIn(null);
       // Opened early from the "your run started" offer: the operator is already there.
       if (openedEarly.current !== newRunId) onLaunched(newRunId);
     } catch (err) {
       const refused = baseSkillRefusalOf(err);
+      // Too few helpers to check it: the choice, not an error (nothing was created; DES-STANDIN-001 §4).
+      const choice = standInChoiceOf(err);
+      setStandIn(choice !== null ? { refusal: choice, override: preflightOverride } : null);
+      setStandInError(null);
+      if (choice !== null) return;
       if (refused !== null) setBaseSkillRefusal(refused);
       else if (qeRefusalOf(err) === 'launch') {
         qeAttempt.current += 1;
@@ -970,6 +991,47 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       setSubmitting(false);
       setPendingRunId(null);
       setStartedRunId(null);
+    }
+  }
+
+  // The Send as THIS render builds it: a choice awaiting the settings save calls the one current when it lands, so an
+  // edit made meanwhile is what is sent (codex delta on #1361).
+  const submitNow = useRef(submit);
+  submitNow.current = submit;
+  const choosingRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
+  // DES-STANDIN-001 §2.1 step 3: what each choice does. A launching choice holds `submitting` from the click (Send
+  // waits), so the settings save and the Send are one step (codex delta 2 on #1361).
+  async function chooseStandIn(id: StandInChoiceId): Promise<void> {
+    if (standIn === null || submitting || choosingRef.current) return;
+    if (id === 'cancel') { setStandIn(null); setStandInError(null); return; }
+    if (id === 'sign_in') { navigate?.(AGENTS_PATH); return; }
+    // The form's own Send blockers, checked BEFORE the settings save, so a choice that cannot launch changes nothing
+    // (codex delta 3 on #1361). `submit` checks them again when it runs.
+    if (!problem.trim() || selectedClis.size === 0) { setStandInError('Say what the job is and pick a helper first.'); return; }
+    if (targetRequired || deliverWaits || noCarryingSeatReason(selectedClis, roster) !== null
+      || (offerQe && !qeOff && skipQe && skipQeReason.trim() === '')) {
+      setStandInError('The form above can’t start this job yet. Fix what it says, then choose again.');
+      return;
+    }
+    choosingRef.current = true;
+    setSubmitting(true);
+    setStandInBusy(id);
+    setStandInError(null);
+    try {
+      if (id === 'always') {
+        // A setting not saved launches nothing and keeps the choices (another one, "this job", still works).
+        try { await saveStandInsEveryJob(); } catch (err) { setStandInError(err instanceof Error ? err.message : String(err)); return; }
+      }
+      if (!mountedRef.current) return;
+      // A failure before the launch's own handling (the gate preview) is said on the card, not dropped.
+      await submitNow.current(standIn.override, { refusal: standIn.refusal, scope: id })
+        .catch((err: unknown) => { setStandInError(err instanceof Error ? err.message : String(err)); });
+    } finally {
+      choosingRef.current = false;
+      setStandInBusy(null);
+      setSubmitting(false);
     }
   }
 
@@ -2195,6 +2257,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       {/* A launch refused because QE acceptance is required: why, and the way to the setting. */}
       {qeRefusal !== null && (
         <QeRefusalWarning kind="launch" refusalKey={qeRefusal.key} detail={qeRefusal.detail} forced={qeRefusal.forced} navigate={navigate} testId="launch-qe-refused" />
+      )}
+
+      {standIn !== null && (
+        <StandInChoice refusal={standIn.refusal} name={helperNamer(roster)} busy={standInBusy} error={standInError} testId="launch-standin"
+          onChoose={(id) => { void chooseStandIn(id); }} />
       )}
 
       {/* Error message */}
