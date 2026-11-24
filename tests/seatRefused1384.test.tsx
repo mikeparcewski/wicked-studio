@@ -1,0 +1,79 @@
+// studio#1384: core#1850 (core#1674) denies a code-writing step under the source `seat_refused` when its own seat (its
+// CLI sandbox, a read-only mount, file permissions) refused writes inside the project that the step never made
+// afterwards. Studio had no words for it: the gate said "denied by seat_refused: …" and the step card said only
+// "<step> failed." with the generic advice. The denial below is the engine's own: `seat_refused_reason`
+// (wicked-core src/pipeline.rs, core#1850) over `tool_activity::SeatRefusal { path, why }` rows, and actor.rs
+// `denial_class` books the source under its `_` arm, `verdict_not_pass`.
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as client from '../src/api/client.js';
+import type { CoreEvent } from '../src/api/types.js';
+import { RunStory } from '../src/components/session/RunRecord.js';
+import { useProvenanceStore } from '../src/store/provenance.js';
+import { makeUnit, makeView } from './factories.js';
+import { escalationCopy, parseDenial, stepDenialAdvice, stepDenialHeadline, denialHeadline, denialAdvice } from '../src/components/denialCopy.js';
+import { denialSourceLabel, gateVerdict } from '../src/components/gateVerdictModel.js';
+import { GateVerdict } from '../src/components/GateVerdict.js';
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+  vi.spyOn(client.api, 'getAudit').mockResolvedValue({ entries: [] } as never);
+  useProvenanceStore.setState({ byRun: {}, rejectNotes: {}, cancelStories: {} } as never);
+});
+afterEach(cleanup);
+
+/** core `seat_refused_reason` with one refused write (`format!("`{}` ({})", r.path, r.why)`). */
+const ONE = "the agent's own sandbox refused 1 write(s) inside the project that this step never made afterwards: `src/notes.ts` (Operation not permitted). The step's work is not complete as built. Send it back to try again, or reassign the step to another agent";
+/** The same with more than SHOWN (5) refusals: five named, then "and N more". */
+const SEVEN = "the agent's own sandbox refused 7 write(s) inside the project that this step never made afterwards: `a.ts` (read-only file system), `b.ts` (read-only file system), `c.ts` (read-only file system), `d.ts` (read-only file system), `e.ts` (read-only file system), and 2 more. The step's work is not complete as built. Send it back to try again, or reassign the step to another agent";
+
+describe('studio#1384: a seat-refused denial is said in plain words', () => {
+  it('the gate names the layer in words, never the raw token', () => {
+    expect(denialSourceLabel('seat_refused')).toBe('the agent’s own sandbox');
+    expect(denialSourceLabel('seat_refused')).not.toContain('seat_refused');
+  });
+
+  it('the step card names the blocked writes and offers send back or reassign', () => {
+    const one = parseDenial(ONE, { source: 'seat_refused' });
+    expect(one.kind).toBe('seat-refused');
+    expect(stepDenialHeadline(one, 'Build')).toBe('Build’s own sandbox blocked a write inside the project (src/notes.ts), so its work isn’t complete.');
+    expect(stepDenialAdvice(one)).toBe('Send the step back to try again, or reassign it to another helper.');
+    const seven = parseDenial(SEVEN, { source: 'seat_refused' });
+    expect(stepDenialHeadline(seven, 'Build')).toBe('Build’s own sandbox blocked 7 writes inside the project (a.ts, b.ts, c.ts and 4 more), so its work isn’t complete.');
+    // Without the engine's count or paths (a later engine's other words), the sentence still holds.
+    expect(stepDenialHeadline(parseDenial('blocked', { source: 'seat_refused' }), 'Build')).toBe('Build’s own sandbox blocked its writes inside the project, so its work isn’t complete.');
+    // The unit-numbered twins say the same.
+    expect(denialHeadline(one, 3)).toBe('Unit #3’s own sandbox blocked a write inside the project (src/notes.ts), so its work isn’t complete.');
+    expect(denialAdvice(one)).toBe('Send it back to try again, or reassign it to a different CLI.');
+  });
+
+  it('the escalation row knows the pair (verdict_not_pass × seat_refused)', () => {
+    const c = escalationCopy('verdict_not_pass', 'seat_refused', { ord: 2, verdictSummary: ONE });
+    expect(c.known).toBe(true);
+    expect(c.headline).toBe('Unit #2: its own sandbox blocked a write inside the project (src/notes.ts), so its work isn’t complete');
+  });
+
+  it('the gate card reads "denied by the agent’s own sandbox", with the engine’s words after it', () => {
+    const events = [
+      { type: 'gateEvaluated', session: 'r', ord: 2, passed: false, denial: { source: 'seat_refused', reason: ONE }, denialReason: ONE, ts: 1, seq: 1 },
+    ] as unknown as CoreEvent[];
+    const view = gateVerdict(events, 2)!;
+    render(<GateVerdict view={view} phase="build" />);
+    const line = screen.getByTestId('gate-verdict-denial').textContent ?? '';
+    expect(line.startsWith('denied by the agent’s own sandbox: ')).toBe(true);
+    expect(line).not.toContain('seat_refused');
+  });
+
+  it('the run’s story says it on the refused step, the engine’s words behind Technical details', () => {
+    // The unit record as core serializes it (domain.rs WorkUnit: `denial_reason` + the structured `denial`).
+    const view = makeView({ id: 'r-sr', status: 'failed' }, [
+      makeUnit({ id: 'r-sr:build', session_id: 'r-sr', ord: 1, status: 'rejected', phase_ref: 'build', denial_reason: ONE,
+        denial: { source: 'seat_refused', reason: ONE } } as never),
+    ]);
+    render(<RunStory view={view} />);
+    const plain = screen.getByTestId('failure-plain');
+    expect(plain.querySelector('.wk-session-run-story-line')!.textContent).toMatch(/own sandbox blocked a write inside the project \(src\/notes\.ts\), so its work isn’t complete\.$/);
+    expect(plain.textContent).toContain('Send the step back to try again, or reassign it to another helper.');
+    expect(screen.getByTestId('failure-engine-detail').textContent).toContain('Operation not permitted');
+  });
+});
