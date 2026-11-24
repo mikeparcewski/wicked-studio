@@ -81,6 +81,7 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
   // studio#1388: the git author the person types, for step 5's two commands.
   const [authorName, setAuthorName] = useState('');
   const [authorEmail, setAuthorEmail] = useState('');
+  const authorCommands = gitAuthorCommands(authorName, authorEmail);
   const deliveryChecking = !prefsLoaded || deliverPr && delivery === undefined;
 
   const checks = withRowRuntime(f.checks, rows);
@@ -182,7 +183,8 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
                     <input type="email" className="wk-field" data-testid="agents-setup-author-email" autoComplete="email" value={authorEmail} onChange={(e) => setAuthorEmail(e.target.value)} />
                   </label>
                 </div>
-                {gitAuthorCommands(authorName, authorEmail).map((c) => <CopyLine key={c} line={c} label={c.includes('user.name') ? 'git author name' : 'git author email'} />)}
+                {authorCommands.commands.map((c) => <CopyLine key={c.label} line={c.line} label={c.label} />)}
+                {authorCommands.note !== null && <span className="wk-agents-sub" data-testid="agents-setup-author-note" role="status">{authorCommands.note}</span>}
               </div>
             )}
             {deliverPr && (deliveryChecking || deliver.state === 'blocked' || deliver.state === 'unknown') && (

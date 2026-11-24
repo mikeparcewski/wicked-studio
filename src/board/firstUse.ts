@@ -237,17 +237,29 @@ export function deliveryStep(delivery: unknown, deliverPr: boolean): DeliverySte
 }
 
 /**
- * studio#1388: the two git author commands for the name and email the person typed, each value single-quoted for the
- * shell. None until both are filled in, and none for a value with a control character (git refuses those as an
- * identity, crew `usableGitIdent`).
+ * studio#1388: the two git author commands for the name and email the person typed (`name`, then `email`). Each value
+ * is double-quoted, which a POSIX shell, Git Bash, PowerShell and cmd.exe all read as one literal argument as long as
+ * it holds none of the characters one of them treats as code inside double quotes: `"` and PowerShell's other double
+ * quotes, `$`, a backtick, `\`, `!` (bash history) and `%` (cmd variables). A value with one of those, or with a
+ * control character (git refuses those as an identity, crew `usableGitIdent`), or that starts with `-` (git would read
+ * an option), gets a note instead of a command.
+ * Nothing until both are filled in.
  */
-export function gitAuthorCommands(name: string, email: string): string[] {
+export function gitAuthorCommands(name: string, email: string): { commands: { line: string; label: string }[]; note: string | null } {
   const n = name.trim();
   const e = email.trim();
-  const ctl = /[\u0000-\u001f\u007f-\u009f]/u;
-  if (n === '' || e === '' || ctl.test(n) || ctl.test(e)) return [];
-  const quote = (s: string): string => `'${s.replaceAll("'", "'\\''")}'`;
-  return [`git config --global user.name ${quote(n)}`, `git config --global user.email ${quote(e)}`];
+  if (n === '' || e === '') return { commands: [], note: null };
+  const unsafe = /["\u201c\u201d\u201e$`\\!%]|[\u0000-\u001f\u007f-\u009f]/u;
+  if (unsafe.test(n) || unsafe.test(e) || n.startsWith('-') || e.startsWith('-')) {
+    return { commands: [], note: 'A terminal would read part of that name or email as code (" $ ` \\ ! or %), so there is no command to copy for it. Set it yourself with git config --global user.name and user.email.' };
+  }
+  return {
+    commands: [
+      { line: `git config --global user.name "${n}"`, label: 'git author name' },
+      { line: `git config --global user.email "${e}"`, label: 'git author email' },
+    ],
+    note: null,
+  };
 }
 
 /** Projects that count: the synthesized "Unfiled" default (`id: 'default'`) never does. */

@@ -351,6 +351,12 @@
       ]
     },
     {
+      "testId": "agents-setup-author-note",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
       "testId": "agents-setup-change",
       "files": [
         "src/components/agents/SetupPanel.tsx"

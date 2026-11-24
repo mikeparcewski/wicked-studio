@@ -208,7 +208,7 @@ describe('crew#1527: the setup steps show the GitHub-or-local delivery choice be
     expect(deliveryStep(DELIVERY_SIGNED_OUT, true)).toMatchObject({ done: false, state: 'blocked', words: 'Not done. Sign in to GitHub for pull requests, or choose local delivery.', commands: ['gh auth login'] });
     expect(deliveryStep(DELIVERY_SIGNED_OUT, true).fix).toBe('To open pull requests, sign in to GitHub: gh auth login (or export GH_TOKEN for studio’s service).');
     expect(deliveryStep(DELIVERY_NO_GH, true)).toMatchObject({ commands: [], words: 'Not done. Install the GitHub CLI (gh) and sign in for pull requests, or choose local delivery.' });
-    // studio#1388: the git author is the person's own, so it is an instruction to fill in, never a command to copy.
+    // studio#1388: the git author is the person's own, so step 5 builds its commands only from what the person types.
     expect(deliveryStep(DELIVERY_NO_AUTHOR, true)).toMatchObject({
       words: 'Not done. Set your git author for pull requests, or choose local delivery.',
       commands: [],
@@ -265,17 +265,27 @@ describe('crew#1527: the setup steps show the GitHub-or-local delivery choice be
     // One field filled is not a command yet.
     fireEvent.change(within(author).getByTestId('agents-setup-author-name'), { target: { value: 'Ada O\'Neil' } });
     expect(commandLines()).toEqual(['gh auth login']);
-    fireEvent.change(within(author).getByTestId('agents-setup-author-email'), { target: { value: 'ada@lovelace.dev' } });
-    expect(commandLines()).toEqual(['gh auth login', "git config --global user.name 'Ada O'\\''Neil'", "git config --global user.email 'ada@lovelace.dev'"]);
-    expect(within(step).getAllByTestId('agents-copy')).toHaveLength(3);
+    // An address holding "user.name" still gets the email command's own label (review r1).
+    fireEvent.change(within(author).getByTestId('agents-setup-author-email'), { target: { value: 'user.name@lovelace.dev' } });
+    expect(commandLines()).toEqual(['gh auth login', 'git config --global user.name "Ada O\'Neil"', 'git config --global user.email "user.name@lovelace.dev"']);
+    expect(within(step).getAllByTestId('agents-copy').map((b) => b.getAttribute('data-command-kind'))).toEqual(['GitHub sign-in', 'git author name', 'git author email']);
     noPlaceholder();
+    // A value a terminal would read as code gets a note, never a command.
+    fireEvent.change(within(author).getByTestId('agents-setup-author-name'), { target: { value: 'Ada $(id)' } });
+    expect(commandLines()).toEqual(['gh auth login']);
+    expect(within(author).getByTestId('agents-setup-author-note')).toHaveTextContent('Set it yourself with git config');
   });
-  it('studio#1388: the git author commands quote what was typed and refuse what a shell line cannot carry', () => {
-    expect(gitAuthorCommands('', 'a@b.dev')).toEqual([]);
-    expect(gitAuthorCommands('Ada', '  ')).toEqual([]);
-    expect(gitAuthorCommands('Ada\nrm -rf ~', 'a@b.dev')).toEqual([]);
-    expect(gitAuthorCommands(' Ada Lovelace ', 'ada@lovelace.dev')).toEqual(["git config --global user.name 'Ada Lovelace'", "git config --global user.email 'ada@lovelace.dev'"]);
-    expect(gitAuthorCommands('$(id) `id`', 'x@y.dev')[0]).toBe("git config --global user.name '$(id) `id`'");
+  it('studio#1388: the git author commands hold the typed values as one literal argument in every terminal, or none', () => {
+    const lines = (n: string, e: string) => gitAuthorCommands(n, e).commands.map((c) => c.line);
+    expect(gitAuthorCommands('', 'a@b.dev')).toEqual({ commands: [], note: null });
+    expect(gitAuthorCommands('Ada', '  ')).toEqual({ commands: [], note: null });
+    expect(lines(' Ada Lovelace ', 'ada@lovelace.dev')).toEqual(['git config --global user.name "Ada Lovelace"', 'git config --global user.email "ada@lovelace.dev"']);
+    // Apostrophes (straight and curly), accents and other scripts are literal inside double quotes in sh, PowerShell and cmd.
+    expect(lines('Seán O\u2019Brien-D\'Arcy 李', 'sean@x.dev')[0]).toBe('git config --global user.name "Seán O\u2019Brien-D\'Arcy 李"');
+    for (const bad of ['Ada\nrm -rf ~', 'Ada "Ace"', 'Ada \u201cAce\u201d', 'Ada $(id)', 'Ada `id`', 'Ada\\x', 'Ada!', '100%', '-Ada']) {
+      expect(gitAuthorCommands(bad, 'a@b.dev'), bad).toMatchObject({ commands: [], note: expect.stringContaining('git config') });
+    }
+    expect(gitAuthorCommands('Ada', 'a$b@x.dev').commands).toEqual([]);
   });
   it('a ready GitHub is done; an older service that sends no readiness is not checked, never done', async () => {
     known = { ...known, delivery: DELIVERY_READY };
