@@ -14,7 +14,7 @@ npm publish dates. Every version listed here exists on
 
 ## [0.16.17] — 2026-11-24
 
-Patch release on the train-13 cut a44ec547, carrying 61 PRs since 0.16.16: #1287, #1286, #1288, #1292, #1293, #1291, #1299, #1303, #1307, #1306, #1297, #1298, #1308, #1300, #1309, #1304, #1302, #1313, #1310, #1315, #1316, #1317, #1318, #1320, #1325, #1328, #1326, #1321, #1323, #1322, #1336, #1333, #1334, #1339, #1338, #1340, #1341, #1343, #1345, #1349, #1350, #1351, #1355, #1356, #1352, #1353, #1358, #1359, #1360, #1361, #1375, #1374, #1373, #1377, #1376, #1381, #1378, #1380, #1379, #1385, #1387.
+Patch release on the train-13 cut 26eaf7c6, carrying 62 PRs since 0.16.16: #1287, #1286, #1288, #1292, #1293, #1291, #1299, #1303, #1307, #1306, #1297, #1298, #1308, #1300, #1309, #1304, #1302, #1313, #1310, #1315, #1316, #1317, #1318, #1320, #1325, #1328, #1326, #1321, #1323, #1322, #1336, #1333, #1334, #1339, #1338, #1340, #1341, #1343, #1345, #1349, #1350, #1351, #1355, #1356, #1352, #1353, #1358, #1359, #1360, #1361, #1375, #1374, #1373, #1377, #1376, #1381, #1378, #1380, #1379, #1385, #1387, #1389.
 
 ### Added
 
@@ -95,6 +95,7 @@ Patch release on the train-13 cut a44ec547, carrying 61 PRs since 0.16.16: #1287
 - Mark citations, name helpers, close a helper's abandoned reply (#1369, #1370) (#1379)
 - A floor whose checks did not run for low disk reads as that, never a failed check (wicked-core#1846) (#1385)
 - First-run setup follows crew's skills state, shows the delivery choice, and offers crew's setup commands with Copy (#1387)
+- Step 5 shows the git author as an instruction to fill in, never a placeholder with Copy (studio#1388) (#1389)
 
 ## [0.16.16] — 2026-11-22
 
