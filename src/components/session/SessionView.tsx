@@ -588,6 +588,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const badge = declined !== null && settledHere ? { word: declined.install ? 'Not installed' : 'Declined', tone: 'quiet' as const }
     : installed === 'not-registered' && settledHere ? { word: 'Not registered', tone: 'gate' as const }
     : installed === 'failed' && settledHere ? { word: 'Install failed', tone: 'danger' as const }
+    // While the install's record is read, Finished claims no success colour (codex r1).
+    : installed === 'loading' && settledHere ? { word: 'Finished', tone: 'quiet' as const }
     : mine.length > 0 ? (state === 'working' && powerRun !== null && power?.pause != null ? { word: 'Waiting', tone: 'gate' as const } : state === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : state === 'working' && floor !== null ? { word: floorBadge(floor), tone: 'run' as const } : headerBadge(mine, answeredOnly ? 'done' : state)) : null;
   // The banner takes this session's slice of the same source as the brand badge.
   const gates = useGateStore((s) => s.gates);

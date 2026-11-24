@@ -577,7 +577,10 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
             ? <>Moved to {moved.where}: {v.proposal.what.label} · <button type="button" className="wk-pass-inl" data-testid="job-passage-moved-open" onClick={() => openChat(moved.chatId)}>Open it</button></>
             : declined !== null && run !== null ? `${declinedLead(run, declined.install)} ${v.proposal.what.label}${pr !== null ? ` · ${pr}` : ''}`
               : !stoppedKnown ? `${v.proposal.what.label}${pr !== null ? ` · ${pr}` : ''}`
-                : settledLine(v, { pr })}
+                // studio#1382: an older job whose install registered nothing keeps saying so; while that is read, no "Done".
+                : installShown === 'not-registered' || installShown === 'failed' ? `${installLead(installShown, true)}. ${v.proposal.what.label}${pr !== null ? ` · ${pr}` : ''}`
+                  : installShown === 'loading' ? `${v.proposal.what.label}${pr !== null ? ` · ${pr}` : ''}`
+                    : settledLine(v, { pr })}
           {runId !== null && <> · <button type="button" className="wk-pass-inl" data-testid="job-passage-details" onClick={() => openSheet({ kind: 'session', sessionId: `run:${runId}` })}>Details ›</button></>}
         </p>
         <div aria-live="polite" className="wk-visually-hidden" data-testid="job-passage-live">{announce}</div>
@@ -590,6 +593,8 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   // studio#1382: a delivered job whose install registered nothing is not a plain success: it waits on the person (a token
   // to add), and a failed install is a failure. The same kept read the delivery's own lines say it from.
   const tone = v.needsYou ? ' wk-pass--needs' : installShown === 'not-registered' ? ' wk-pass--needs' : installShown === 'failed' ? ' wk-pass--bad'
+    // While the install's record is read, the edge claims nothing (codex r1): not the green of a success it may not be.
+    : installShown === 'loading' ? ''
     : v.phase === 'delivered' || declined !== null ? ' wk-pass--ok' : v.phase === 'failed' || (v.phase === 'stopped' && stoppedKnown) ? ' wk-pass--bad'
     : v.phase === 'revising' || v.phase === 'swapPending' || v.phase === 'planning' || v.phase === 'replanning' || v.phase === 'starting' ? ' wk-pass--busy' : '';
   // studio#1335: crew sends every repository in scope as a choice; the card shows the named ones and enough to fill the
@@ -1125,14 +1130,14 @@ function Delivered({ run, navigate }: { run: SessionView; navigate?: Navigate })
   // delivery and the install in one ("Delivered, but not registered · Pull request #7", studio#1382), never "Finished"
   // twice.
   const unregistered = standing === 'not-registered' || standing === 'failed';
-  const what = standing === 'failed' ? 'the install failed' : 'not registered';
-  const lead = unregistered
-    ? (handed !== null ? `Delivered, but ${what}` : `Finished, but ${what}.`)
-    : (domain || install !== null) && handed === null ? 'Finished.' : 'Done.';
+  // While the record is read, the lead claims no "Done" (codex r1): "Delivered" over the pull request, else "Finished.".
+  const lead = unregistered ? (handed !== null ? installLead(standing, true) : `${installLead(standing, false)}.`)
+    : standing === 'loading' ? (handed !== null ? 'Delivered' : 'Finished.')
+      : (domain || install !== null) && handed === null ? 'Finished.' : 'Done.';
   return (
     <div data-testid="job-passage-delivered" className="wk-pass-done">
       <p className="wk-pass-sub">
-        <b>{lead}</b>{unregistered || ((domain || install !== null) && handed === null) ? null : <> {outcomeLine(run)}</>}
+        <b>{lead}</b>{unregistered || standing === 'loading' || ((domain || install !== null) && handed === null) ? null : <> {outcomeLine(run)}</>}
         {handed?.href != null && <> · <a href={handed.href} target="_blank" rel="noreferrer">{pr ?? 'the pull request'}</a></>}
         {handed?.href == null && handed?.branch != null && <> · branch <code>{handed.branch}</code></>}
       </p>
@@ -1154,6 +1159,11 @@ function InPlaceLink({ href, navigate, testId, children }: { href: string; navig
       {children}
     </a>
   );
+}
+
+/** studio#1382: the lead over an install that registered nothing or failed, said once ("Delivered, but not registered"). */
+function installLead(standing: 'not-registered' | 'failed', delivered: boolean): string {
+  return `${delivered ? 'Delivered' : 'Finished'}, but ${standing === 'failed' ? 'the install failed' : 'not registered'}`;
 }
 
 /** studio#1364: the lead of a job ended by a consent Decline: "Delivered" only over a recorded pull request or branch. */
