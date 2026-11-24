@@ -760,6 +760,19 @@ export function conversationStep(units: readonly WorkUnit[] | undefined, ord: nu
 }
 
 /**
+ * Whether this gate's floor never ran its checks because of the machine, not the work (wicked-core#1846): the engine's
+ * own words, "Unit N's checks did not run: <cause>" (or "did not finish", when the disk stopped it part way), or an older
+ * engine's "Unit N failed its deterministic floor (…):
+ * repo checks floor could not run: environment: <cause>". The cause is the floor's (the disk was short of space). Nothing
+ * failed, so no seat, send-back or override fixes it: free the space, then retry.
+ */
+export function isFloorNotRun(prompt: string | undefined): boolean {
+  if (prompt === undefined) return false;
+  return /^\s*Unit\s+\d+['’]s checks did not (?:run|finish):/i.test(prompt)
+    || /^\s*Unit\s+\d+\s+failed its deterministic floor\s*\([^)]*\):\s*repo checks floor could not run:\s*environment:/i.test(prompt);
+}
+
+/**
  * Whether this gate's failure is one NO seat can fix (studio#315, F-RC2-003): the unit's LAUNCH was
  * refused before any work ran — the engine's environment-refusal arm (`stepFailed.failureKind:
  * environmentRefused` on the gate's unit, or its prompt "Unit N (cli) refused its environment…"),
@@ -770,6 +783,9 @@ export function conversationStep(units: readonly WorkUnit[] | undefined, ord: nu
  */
 export function isLaunchRefusal(prompt: string | undefined, events: readonly CoreEvent[], ord: number | undefined): boolean {
   if (prompt !== undefined) {
+    // wicked-core#1846: the floor's checks never ran on this machine (the disk was short of space). Another seat
+    // meets the same machine, and nothing about the work failed.
+    if (isFloorNotRun(prompt)) return true;
     if (/^\s*Unit\s+\d+\s+\([^)]*\)\s+refused its environment\b/i.test(prompt)) return true;
     if (/^\s*Unit\s+\d+\s+failed again on attempt\s+\d+\s+before its work was judged/i.test(prompt)) return true;
   }
