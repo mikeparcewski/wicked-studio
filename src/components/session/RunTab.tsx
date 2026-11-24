@@ -6,7 +6,8 @@ import type { ChainModel, ChainStep } from '../../board/chainModel.js';
 import { jobTitle } from '../../board/deskWords.js';
 import { deriveRunCost } from '../runIdentity.js';
 import { workflowLabel } from '../../board/workflowNames.js';
-import { chatStatusWord } from '../../board/statusWords.js';
+import { chatStatusWord, statusWord } from '../../board/statusWords.js';
+import { useInstallOutcome } from './outcomeReads.js';
 import { seatLabel } from '../../board/seatNames.js';
 import { ORPHANED_LINE, orphanedOf } from '../../board/sessionModel.js';
 import { finishedDeliveryArm, proposalKindOf } from '../../board/proposalCard.js';
@@ -23,7 +24,8 @@ import { useRunChain } from './ChainLine.js';
 import { RulesChecked, RunAssuranceLabel } from './AssuranceReceipt.js';
 import { CodebaseDownload, DeliverCredentialsNotice } from './CodebaseDownload.js';
 import { AssuranceReceipt, DeliveryAssuranceLines } from './AssuranceReceipt.js';
-import { RunRecordLines, RunStory, useConsentDecline } from './RunRecord.js';
+import { consentDeclineWord, RunRecordLines, RunStory, useConsentDecline } from './RunRecord.js';
+import { useProvenanceStore } from '../../store/provenance.js';
 import { RecoveryRow } from './RunConversation.js';
 import { SheetRunActions } from './RunActions.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
@@ -190,6 +192,10 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   const [glanceStop, setGlanceStop] = useState(false);
   // studio#1364: a declined install is said as what happened, not why a job stopped.
   const declined = useConsentDecline(view);
+  const endedKnown = useProvenanceStore((st) => view.session.status !== 'cancelled' || st.endedDone[view.session.id] === true);
+  // studio#1382 (coord r2): a finished MCP-server job whose install registered nothing, or failed, says so here too, as
+  // the header and the passage do: the one kept read of the install's record (outcomeReads.ts), never a second.
+  const installed = useInstallOutcome(view.session.status === 'completed' && statusWord(view).word !== 'Archived' ? view : null).standing;
   const stop = (): void => {
     if (stopping) return;
     const reason = stopReason.trim();
@@ -287,12 +293,21 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
 
   // The panel's rows: the core sections at their places (Now first), the run plugins' sections between them by their
   // manifest's `order`, a pinned plugin section at the top (DES-LEARN §1.2).
-  const nowWord = held ? chatStatusWord([shown]).word : silent !== null ? silentWords(silent) : floor !== null ? floorWords(floor) : chatStatusWord([view]).word;
+  // studio#1383: a run a consent Decline ended reads as the header does (Not installed / Declined), never Cancelled: the
+  // engine cancels the run on any gate's reject, so its status alone can't tell a Decline from a Stop. Until the run's
+  // ended audit read answers (or fails), a cancelled run says only that it ended: a Cancelled a Decline then replaces is
+  // the wrong word on screen (codex r1).
+  const declinedWord = declined !== null ? consentDeclineWord(declined) : !endedKnown ? 'Ended' : null;
+  const installWord = installed === 'not-registered' ? 'Not registered' : installed === 'failed' ? 'Install failed' : null;
+  const nowWord = declinedWord ?? installWord ?? (held ? chatStatusWord([shown]).word : silent !== null ? silentWords(silent) : floor !== null ? floorWords(floor) : chatStatusWord([view]).word);
+  const statusLine = statusSentence(shown, chain, gate, action, silent?.minutes ?? null);
+  const shownStatus = declinedWord !== null ? statusLine.replace(/^Cancelled\b/, declinedWord)
+    : installWord !== null ? statusLine.replace(/^Finished\b/, installWord) : statusLine;
   const core: Record<PanelSectionId, React.ReactElement> = {
     now: (
       <Section id="now" {...fold} summary={nowWord}>
         <div data-testid="run-tab-now" className="wk-run-tab-block">
-          <p data-testid="run-tab-status" role="status" className="wk-run-tab-line">{statusSentence(shown, chain, gate, action, silent?.minutes ?? null)}</p>
+          <p data-testid="run-tab-status" role="status" className="wk-run-tab-line">{shownStatus}</p>
           {(started !== null || ended !== null) && (
             <p data-testid="run-tab-times" className="wk-run-tab-muted">
               {started !== null && `Started ${ago(started)} ago`}{started !== null && ended !== null && ' · '}{ended !== null && `ended ${ago(ended)} ago`}
@@ -304,7 +319,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         </div>
         <div data-testid="run-tab-workflow" className="wk-run-tab-block">
           <p className="wk-run-tab-line">{workflowLabel(session.workflow_id)}{' '}
-            <span className="wk-run-tab-pill" data-testid="run-tab-pill">{silent !== null && !held ? silentWords(silent) : chatStatusWord([shown]).word}</span>
+            <span className="wk-run-tab-pill" data-testid="run-tab-pill">{declinedWord ?? installWord ?? (silent !== null && !held ? silentWords(silent) : chatStatusWord([shown]).word)}</span>
           </p>
           {typeof session.repo_ref === 'string' && session.repo_ref.trim() !== '' && (
             <p data-testid="run-tab-repo" className="wk-run-tab-line"><code>{session.repo_ref}</code></p>

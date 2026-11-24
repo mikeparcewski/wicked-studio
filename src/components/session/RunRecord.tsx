@@ -5,7 +5,8 @@ import type { CoreEvent, SessionView } from '../../api/types.js';
 import { endedAtMs, finishedAtMs } from '../../board/needsYou.js';
 import { useProvenanceStore } from '../../store/provenance.js';
 import { useRunEventStore } from '../../store/events.js';
-import { parseDenial, stepDenialAdvice, stepDenialHeadline, type StructuredDenial } from '../denialCopy.js';
+import { parseDenial, sandboxOwner, stepDenialAdvice, stepDenialHeadline, type StructuredDenial } from '../denialCopy.js';
+import { getCachedRoster } from '../../store/rosterCache.js';
 import { degradedCouncil } from '../RunDegradedNote.js';
 import { unitStepName } from '../../board/chainModel.js';
 import { TechDetails } from '../ui/TechDetails.js';
@@ -39,6 +40,11 @@ export function useConsentDecline(view: SessionView | undefined): { install: boo
   useEffect(() => { if (cancelled && runId !== null) useProvenanceStore.getState().load(runId, true); }, [runId, cancelled]);
   const story = useProvenanceStore((s) => (runId !== null ? s.cancelStories[runId] ?? null : null));
   return view !== undefined && cancelled ? consentDeclineOf(view, story) : null;
+}
+
+/** studio#1383: the one word for a run a consent Decline ended, on every surface that would say "Cancelled". */
+export function consentDeclineWord(declined: { install: boolean }): 'Not installed' | 'Declined' {
+  return declined.install ? 'Not installed' : 'Declined';
 }
 
 /**
@@ -126,7 +132,7 @@ export function RunStory({ view, navigate, events = EMPTY }: {
         const facts = parseDenial(u.denial_reason, (u as unknown as { denial?: StructuredDenial }).denial ?? null);
         return (
           <div key={u.id} data-testid="failure-plain" className="wk-session-run-story-note">
-            <p className="wk-session-run-story-line">{stepDenialHeadline(facts, unitStepName(u))}</p>
+            <p className="wk-session-run-story-line">{stepDenialHeadline(facts, unitStepName(u), sandboxOwner(u.assigned_cli, getCachedRoster()))}</p>
             <p>
               {stepDenialAdvice(facts)}
               {navigate !== undefined && facts.ruleIds.map((id) => (
