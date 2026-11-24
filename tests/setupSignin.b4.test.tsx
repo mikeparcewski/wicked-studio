@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import type { RosterSeat } from '../src/api/types.js';
 import { agentRows } from '../src/board/agentsModel.js';
 import { crewCommand, helperRuntimeCommand, helperRuntimeDown, issueCopy, runtimeStart } from '../src/board/agentsCopy.js';
-import { deliveryStep, skillsReading, skillsWords } from '../src/board/firstUse.js';
+import { deliveryStep, gitAuthorCommands, skillsReading, skillsWords } from '../src/board/firstUse.js';
 
 /**
  * The first-run setup and sign-in words (crew#1844, crew#1527, studio#1363, core#1845). Every crew answer below is
@@ -242,26 +242,40 @@ describe('crew#1527: the setup steps show the GitHub-or-local delivery choice be
     expect(step).toHaveAttribute('data-done', 'true');
     expect(useComposerPrefsStore.getState().prefs.deliverPr).toBe(false);
   });
-  it('studio#1388: a missing git author is an instruction with the person’s own name and email, never a placeholder with Copy', async () => {
+  it('studio#1388: a missing git author asks for the person’s own name and email, and no Copy ever holds a placeholder', async () => {
     known = { ...known, delivery: DELIVERY_SIGNED_OUT_NO_AUTHOR };
     page('?setup=1');
     const step = await screen.findByTestId('agents-setup-step-delivery');
     await waitFor(() => expect(step).toHaveAttribute('data-state', 'blocked'));
-    // The one command with Copy is the sign-in; no command line in step 5 holds a placeholder.
+    const commandLines = (): string[] => within(step).getAllByTestId('agents-command').map((c) => c.textContent ?? '');
+    const noPlaceholder = (): void => {
+      for (const line of commandLines()) {
+        expect(line).not.toContain('Your Name');
+        expect(line).not.toContain('you@example.com');
+      }
+      expect(step.textContent).not.toContain('Your Name');
+      expect(step.textContent).not.toContain('you@example.com');
+    };
+    // Before anything is typed, the one command with Copy is the sign-in.
     expect(within(step).getAllByTestId('agents-copy')).toHaveLength(1);
-    const lines = within(step).getAllByTestId('agents-command').map((c) => c.textContent ?? '');
-    expect(lines).toEqual(['gh auth login']);
-    for (const line of lines) {
-      expect(line).not.toContain('Your Name');
-      expect(line).not.toContain('you@example.com');
-    }
-    expect(step.textContent).not.toContain('Your Name');
-    expect(step.textContent).not.toContain('you@example.com');
+    expect(commandLines()).toEqual(['gh auth login']);
+    noPlaceholder();
     const author = within(step).getByTestId('agents-setup-delivery-author');
-    expect(author).toHaveTextContent('with your own name and email');
-    expect(author).toHaveTextContent('git config --global user.name "<your name>"');
-    expect(author).toHaveTextContent('git config --global user.email "<your email>"');
-    expect(within(author).queryByRole('button')).toBeNull();
+    expect(author).toHaveTextContent('Type the name and email your commits should carry');
+    // One field filled is not a command yet.
+    fireEvent.change(within(author).getByTestId('agents-setup-author-name'), { target: { value: 'Ada O\'Neil' } });
+    expect(commandLines()).toEqual(['gh auth login']);
+    fireEvent.change(within(author).getByTestId('agents-setup-author-email'), { target: { value: 'ada@lovelace.dev' } });
+    expect(commandLines()).toEqual(['gh auth login', "git config --global user.name 'Ada O'\\''Neil'", "git config --global user.email 'ada@lovelace.dev'"]);
+    expect(within(step).getAllByTestId('agents-copy')).toHaveLength(3);
+    noPlaceholder();
+  });
+  it('studio#1388: the git author commands quote what was typed and refuse what a shell line cannot carry', () => {
+    expect(gitAuthorCommands('', 'a@b.dev')).toEqual([]);
+    expect(gitAuthorCommands('Ada', '  ')).toEqual([]);
+    expect(gitAuthorCommands('Ada\nrm -rf ~', 'a@b.dev')).toEqual([]);
+    expect(gitAuthorCommands(' Ada Lovelace ', 'ada@lovelace.dev')).toEqual(["git config --global user.name 'Ada Lovelace'", "git config --global user.email 'ada@lovelace.dev'"]);
+    expect(gitAuthorCommands('$(id) `id`', 'x@y.dev')[0]).toBe("git config --global user.name '$(id) `id`'");
   });
   it('a ready GitHub is done; an older service that sends no readiness is not checked, never done', async () => {
     known = { ...known, delivery: DELIVERY_READY };

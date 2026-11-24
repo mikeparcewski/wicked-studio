@@ -176,8 +176,9 @@ export function newWorkHelpers(rows: readonly AgentRow[], defaultPick: boolean):
 /**
  * crew#1527: the delivery step, from crew's `GET /setup/known` `delivery` (`DeliveryReadiness`, api-types 0.214.0) and
  * studio's own "Open a PR when a build run finishes" preference (studio's composer always says which it wants).
- * `done`: pull requests can open, or studio delivers locally. `commands`: what to run when GitHub sign-in or the git
- * author is what stops it. Never gates setup: local delivery is a real choice.
+ * `done`: pull requests can open, or studio delivers locally. `commands`: what to run when GitHub sign-in is what stops
+ * it. `author`: the git author stops it; that is the person's own name and email, so step 5 builds those commands from
+ * what the person types, never from a placeholder (studio#1388). Never gates setup: local delivery is a real choice.
  */
 export interface DeliveryStep {
   done: boolean;
@@ -189,7 +190,12 @@ export interface DeliveryStep {
   /** crew's fix for pull requests (its `fix`, without the local-delivery half studio offers as a button); `null` when none. */
   fix: string | null;
   commands: string[];
+  /** No git author or committer is configured: step 5 asks for the person's own name and email and builds the commands. */
+  author: boolean;
 }
+
+/** crew's author fix (`setup/delivery-readiness.ts` AUTHOR_FIX): its placeholder values are never offered. */
+const CREW_AUTHOR_FIX = /\bset the git author: git config --global user\.name "Your Name" and git config --global user\.email you@example\.com/;
 
 interface DeliveryReadinessLike {
   ready?: unknown;
@@ -200,15 +206,15 @@ interface DeliveryReadinessLike {
 
 export function deliveryStep(delivery: unknown, deliverPr: boolean): DeliveryStep {
   if (!deliverPr) {
-    return { done: true, state: 'local', words: 'Done. Finished work stays on its branch in your repository; studio opens no pull request. Change it in Settings.', detail: null, fix: null, commands: [] };
+    return { done: true, state: 'local', words: 'Done. Finished work stays on its branch in your repository; studio opens no pull request. Change it in Settings.', detail: null, fix: null, commands: [], author: false };
   }
   const d = delivery !== null && typeof delivery === 'object' ? delivery as DeliveryReadinessLike : null;
   const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
   const reason = text(d?.reason);
   if (d === null || d.ready === null || d.ready === undefined) {
-    return { done: false, state: 'unknown', words: 'Not checked yet.', detail: d === null ? null : reason, fix: null, commands: [] };
+    return { done: false, state: 'unknown', words: 'Not checked yet.', detail: d === null ? null : reason, fix: null, commands: [], author: false };
   }
-  if (d.ready === true) return { done: true, state: 'ready', words: 'Done. Finished work opens a pull request on GitHub.', detail: reason, fix: null, commands: [] };
+  if (d.ready === true) return { done: true, state: 'ready', words: 'Done. Finished work opens a pull request on GitHub.', detail: reason, fix: null, commands: [], author: false };
   // The blockers crew's sentence names (setup/delivery-readiness.ts deliveryReadiness): no gh, a GitHub credential
   // delivery refuses (an exported token is fixed by exporting a valid one, not by gh's sign-in), and no git author.
   const said = reason ?? '';
@@ -218,7 +224,6 @@ export function deliveryStep(delivery: unknown, deliverPr: boolean): DeliverySte
   const author = /\bno git (?:author|committer)\b[^.;]*\bidentity\b/.test(said);
   const commands: string[] = [];
   if (github && !noGh && !token) commands.push('gh auth login');
-  if (author) commands.push('git config --global user.name "Your Name"', 'git config --global user.email you@example.com');
   const need = [
     noGh ? 'Install the GitHub CLI (gh) and sign in' : github ? 'Sign in to GitHub' : null,
     author ? (github || noGh ? 'set your git author' : 'Set your git author') : null,
@@ -226,8 +231,23 @@ export function deliveryStep(delivery: unknown, deliverPr: boolean): DeliverySte
   const words = need.length === 0 ? 'Not done. Fix what is below for pull requests, or choose local delivery.'
     : `Not done. ${need.join(' and ')} for pull requests, or choose local delivery.`;
   // crew's fix up to its local-delivery half (studio offers that as a button, in its own words).
-  const fix = text(d.fix)?.split(/;\s*or deliver locally\b/)[0]?.replace(/\bthe daemon\b/g, 'studio’s service').replace(/[.;\s]+$/, '') ?? null;
-  return { done: false, state: 'blocked', words, detail: reason, fix: fix === null || fix === '' ? null : `${fix}.`, commands };
+  const fix = text(d.fix)?.split(/;\s*or deliver locally\b/)[0]?.replace(/\bthe daemon\b/g, 'studio’s service')
+    .replace(CREW_AUTHOR_FIX, 'set your git author, with your own name and email (below)').replace(/[.;\s]+$/, '') ?? null;
+  return { done: false, state: 'blocked', words, detail: reason, fix: fix === null || fix === '' ? null : `${fix}.`, commands, author };
+}
+
+/**
+ * studio#1388: the two git author commands for the name and email the person typed, each value single-quoted for the
+ * shell. None until both are filled in, and none for a value with a control character (git refuses those as an
+ * identity, crew `usableGitIdent`).
+ */
+export function gitAuthorCommands(name: string, email: string): string[] {
+  const n = name.trim();
+  const e = email.trim();
+  const ctl = /[\u0000-\u001f\u007f-\u009f]/u;
+  if (n === '' || e === '' || ctl.test(n) || ctl.test(e)) return [];
+  const quote = (s: string): string => `'${s.replaceAll("'", "'\\''")}'`;
+  return [`git config --global user.name ${quote(n)}`, `git config --global user.email ${quote(e)}`];
 }
 
 /** Projects that count: the synthesized "Unfiled" default (`id: 'default'`) never does. */
