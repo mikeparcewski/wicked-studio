@@ -2,6 +2,7 @@ import { PAGE_NAMES } from '../board/pageNames.js';
 import { readSettingsTab, settingsPath, type SettingsTab } from '../board/settingsTabs.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import { MaintenanceSettings } from './MaintenanceSettings.js';
+import { StartOnLoginSettings } from './StartOnLoginSettings.js';
 import { SystemSettings } from './SystemSettings.js';
 import { ThemeSettings } from './ThemePage.js';
 import { PageFrame } from './ui/PageFrame.js';
@@ -35,8 +36,8 @@ export function SettingsPage({ navigate, search }: { navigate: Navigate; search:
       />
       <div id="settings-panel" role="tabpanel" aria-labelledby={`settings-tab-${tab}`} data-testid="settings-panel" data-tab={tab}>
         {tab === 'general' ? (
-          // (crew#1475) Maintenance follows the General settings, one gap apart.
-          <div className="wk-pg-set-content"><SystemSettings navigate={navigate} /><MaintenanceSettings navigate={navigate} /></div>
+          // (crew#1475) Maintenance follows the General settings, one gap apart; (studio#1324) Start at login just before it.
+          <div className="wk-pg-set-content"><SystemSettings navigate={navigate} /><StartOnLoginSettings /><MaintenanceSettings navigate={navigate} /></div>
         ) : <ThemeSettings navigate={navigate} />}
       </div>
     </PageFrame>
