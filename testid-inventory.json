@@ -23675,6 +23675,60 @@
       ]
     },
     {
+      "testId": "start-on-login-command",
+      "files": [
+        "src/components/StartOnLoginSettings.tsx"
+      ]
+    },
+    {
+      "testId": "start-on-login-read-error",
+      "files": [
+        "src/components/StartOnLoginSettings.tsx"
+      ]
+    },
+    {
+      "testId": "start-on-login-reread",
+      "files": [
+        "src/components/StartOnLoginSettings.tsx"
+      ]
+    },
+    {
+      "testId": "start-on-login-reread-error",
+      "files": [
+        "src/components/StartOnLoginSettings.tsx"
+      ]
+    },
+    {
+      "testId": "start-on-login-retry",
+      "files": [
+        "src/components/StartOnLoginSettings.tsx"
+      ]
+    },
+    {
+      "testId": "start-on-login-settings",
+      "files": [
+        "src/components/StartOnLoginSettings.tsx"
+      ]
+    },
+    {
+      "testId": "start-on-login-status",
+      "files": [
+        "src/components/StartOnLoginSettings.tsx"
+      ]
+    },
+    {
+      "testId": "start-on-login-unit",
+      "files": [
+        "src/components/StartOnLoginSettings.tsx"
+      ]
+    },
+    {
+      "testId": "start-on-login-unsupported",
+      "files": [
+        "src/components/StartOnLoginSettings.tsx"
+      ]
+    },
+    {
       "testId": "stat-campaign-pass-rate",
       "files": [
         "src/components/CampaignsPage.tsx"

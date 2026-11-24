@@ -860,6 +860,10 @@ export const api = {
   /** Read persisted system settings (defaults applied server-side). */
   getSettings: () => apiFetch<import('./types.js').SettingsResponse>('/settings'),
 
+  /** (studio#1324, crew#1829) Whether this daemon's port starts when the person signs in, and the commands that set it.
+   *  Read only: installing and removing are CLI steps. */
+  getStartOnLogin: () => apiFetch<import('./startOnLogin-wire.js').StartOnLoginStatus>('/settings/start-on-login'),
+
   /** Persist a partial settings update; returns the merged result. */
   updateSettings: (patch: Partial<import('./types.js').SystemSettings>) =>
     apiFetch<{ settings: import('./types.js').SystemSettings }>('/settings', {
