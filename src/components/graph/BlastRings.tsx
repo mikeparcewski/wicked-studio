@@ -103,7 +103,7 @@ export function BlastRings({ blast, onOpen, onBack }: {
 
   return (
     <div data-testid="blast-rings" className="h-full flex flex-col min-h-0">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 border-b shrink-0" style={{ borderColor: 'var(--surface-raised)' }}>
+      <div data-testid="blast-rings-header" className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 border-b shrink-0 max-h-[35%] overflow-y-auto" style={{ borderColor: 'var(--surface-raised)' }}>
         <span className="text-xs font-medium" style={{ color: 'var(--ink-high)' }}>
           Blast radius of <span className="font-mono">{blast.target}</span>
         </span>
@@ -115,13 +115,14 @@ export function BlastRings({ blast, onOpen, onBack }: {
           <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" onClick={onBack}>Back to the code graph</button>
         </span>
       </div>
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-[min(120px,30%)]">
         <RingGraph model={model} view="rings" selectedId={picked === null ? null : `n:${picked}`} hoverLevel={null}
           onSelect={select} onActivate={activate}
           ariaLabel={`Blast radius of ${blast.target}: ${blast.dependents.length} dependents by hop. Tap a file group or a summary to open it. Every dependent is also in the list below.`} />
       </div>
-      {/* The footer scrolls within half the panel, so an open list never squeezes the canvas away (a phone's short panel). */}
-      <div data-testid="blast-rings-footer" className="shrink-0 max-h-[50%] overflow-y-auto border-t px-3 py-2 flex flex-col gap-1.5 text-xs" style={{ borderColor: 'var(--surface-raised)' }}>
+      {/* Header, canvas and footer always fit the panel (codex r1-r2, a phone's short panel): the header scrolls within
+          a third of it, the canvas keeps 120px (or 30% of a shorter panel), and the footer takes at most half and shrinks and scrolls in what is left. */}
+      <div data-testid="blast-rings-footer" className="shrink min-h-0 max-h-[50%] overflow-y-auto border-t px-3 py-2 flex flex-col gap-1.5 text-xs" style={{ borderColor: 'var(--surface-raised)' }}>
         {dep !== undefined && (
           <div data-testid="blast-rings-picked" className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
             <span className="font-mono" style={{ color: 'var(--ink-high)' }}>{dep.name}</span>
