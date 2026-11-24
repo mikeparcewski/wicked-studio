@@ -10,7 +10,7 @@
     "Forwarded ids count: a literal handed to a component through a testId-like prop or key (`testId`, `testid`, `tid`, `triggerTestId`), a parameter typed as a union of id literals, or a string literal marked `/* testid */` is listed as static/dynamic at the call site — the component renders it — so static + dynamic is the whole denominator of ids a surface can show."
   ],
   "version": 1,
-  "studioVersion": "0.16.16",
+  "studioVersion": "0.16.17",
   "static": [
     {
       "testId": "accent-lgt",
@@ -18728,6 +18728,42 @@
       ]
     },
     {
+      "testId": "requirement-retire",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirement-retire-cancel",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirement-retire-confirm",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirement-retire-error",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirement-retire-go",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
+      "testId": "requirement-retire-start",
+      "files": [
+        "src/components/RequirementsModal.tsx"
+      ]
+    },
+    {
       "testId": "requirement-row",
       "files": [
         "src/components/RequirementsModal.tsx"
@@ -23840,6 +23876,72 @@
       "testId": "standing-orders-toggle",
       "files": [
         "src/components/StandingOrdersPanel.tsx"
+      ]
+    },
+    {
+      "testId": "start-on-login-command",
+      "files": [
+        "src/components/StartOnLoginSettings.tsx"
+      ]
+    },
+    {
+      "testId": "start-on-login-howto",
+      "files": [
+        "src/components/StartOnLoginSettings.tsx"
+      ]
+    },
+    {
+      "testId": "start-on-login-options",
+      "files": [
+        "src/components/StartOnLoginSettings.tsx"
+      ]
+    },
+    {
+      "testId": "start-on-login-read-error",
+      "files": [
+        "src/components/StartOnLoginSettings.tsx"
+      ]
+    },
+    {
+      "testId": "start-on-login-reread",
+      "files": [
+        "src/components/StartOnLoginSettings.tsx"
+      ]
+    },
+    {
+      "testId": "start-on-login-reread-error",
+      "files": [
+        "src/components/StartOnLoginSettings.tsx"
+      ]
+    },
+    {
+      "testId": "start-on-login-retry",
+      "files": [
+        "src/components/StartOnLoginSettings.tsx"
+      ]
+    },
+    {
+      "testId": "start-on-login-settings",
+      "files": [
+        "src/components/StartOnLoginSettings.tsx"
+      ]
+    },
+    {
+      "testId": "start-on-login-status",
+      "files": [
+        "src/components/StartOnLoginSettings.tsx"
+      ]
+    },
+    {
+      "testId": "start-on-login-unit",
+      "files": [
+        "src/components/StartOnLoginSettings.tsx"
+      ]
+    },
+    {
+      "testId": "start-on-login-unsupported",
+      "files": [
+        "src/components/StartOnLoginSettings.tsx"
       ]
     },
     {

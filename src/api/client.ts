@@ -746,6 +746,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     }),
+  /** (studio#1386, crew#1858) Retire a requirement whose code was deleted (crew lists it `uncounted: 'unindexed'`): the
+   *  engine drops it from the stored graph and never reuses its id. 409 `{error}` when crew or the engine refuses. */
+  retireRequirement: (repoId: string, key: string) =>
+    apiFetch<{ retired: string }>(`/repos/${encodeURIComponent(repoId)}/requirements/${encodeURIComponent(key)}/retire`, { method: 'POST' }),
   /** The requirements_graph.json domain model; `graph` is null when not generated yet. */
   getDomainGraph: () => apiFetch<{ graph: import('./types.js').DomainGraph | null }>('/domain-graph'),
 
@@ -859,6 +863,10 @@ export const api = {
 
   /** Read persisted system settings (defaults applied server-side). */
   getSettings: () => apiFetch<import('./types.js').SettingsResponse>('/settings'),
+
+  /** (studio#1324, crew#1829) Whether this daemon's port starts when the person signs in, and the commands that set it.
+   *  Read only: installing and removing are CLI steps. */
+  getStartOnLogin: () => apiFetch<import('./startOnLogin-wire.js').StartOnLoginStatus>('/settings/start-on-login'),
 
   /** Persist a partial settings update; returns the merged result. */
   updateSettings: (patch: Partial<import('./types.js').SystemSettings>) =>
