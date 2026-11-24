@@ -13,6 +13,7 @@ import { deliveryStep, skillsReading, skillsWords } from '../src/board/firstUse.
  * - CLI_MISSING / NO_CLUSTER_SIGNIN: `api/seat-container-login.ts` signInFailure, fed wicked-core's refusal
  *   (`seat_login.rs` host_cli_missing, core#1845) and a `no_cluster` kind.
  * - DELIVERY_*: `setup/delivery-readiness.ts` deliveryReadiness (crew#1527), the `GET /setup/known` `delivery` block.
+ *   DELIVERY_SIGNED_OUT_NO_AUTHOR: its answer for gh signed out (`outcome: 'missing'`) and no git author or committer.
  * - FALLBACK / TOO_OLD / PUBLISHING: `skills/store.ts` SkillsSourceUnavailableError, `skills/runtime.ts`
  *   gardenTooOldFinding and PUBLISHING_FINDING, the `GET /diagnostics` `skills` findings.
  */
@@ -27,6 +28,7 @@ const LOCAL = '; or deliver locally, with no pull request (studio Settings: turn
 const DELIVERY_SIGNED_OUT = { deliverDefault: 'pr', github: MISSING_GH, pushAs: null, gitAuthor: ident, ready: false, reason: 'A job that opens a pull request would stop at its deliver step: gh is not signed in to github.com.', fix: `To open pull requests, sign in to GitHub: gh auth login (or export GH_TOKEN for the daemon)${LOCAL}` };
 const DELIVERY_NO_GH = { ...DELIVERY_SIGNED_OUT, reason: 'A job that opens a pull request would stop at its deliver step: gh is not installed (delivery opens the pull request with it).', fix: `To open pull requests, install the GitHub CLI (gh) and sign in: gh auth login${LOCAL}` };
 const DELIVERY_NO_AUTHOR = { ...DELIVERY_READY, gitAuthor: null, ready: false, reason: 'A job that opens a pull request would stop at its deliver step: no git author or committer identity is configured, so the commit would be refused.', fix: `To open pull requests, set the git author: git config --global user.name "Your Name" and git config --global user.email you@example.com${LOCAL}` };
+const DELIVERY_SIGNED_OUT_NO_AUTHOR = { ...DELIVERY_SIGNED_OUT, gitAuthor: null, reason: 'A job that opens a pull request would stop at its deliver step: gh is not signed in to github.com; no git author or committer identity is configured, so the commit would be refused.', fix: `To open pull requests, sign in to GitHub: gh auth login (or export GH_TOKEN for the daemon), and set the git author: git config --global user.name "Your Name" and git config --global user.email you@example.com${LOCAL}` };
 const DELIVERY_TOKEN = { ...DELIVERY_SIGNED_OUT, reason: 'A job that opens a pull request would stop at its deliver step: GitHub refuses the exported GH_TOKEN (expired or revoked).', fix: `To open pull requests, export a valid GH_TOKEN, or unset it${LOCAL}` };
 const DELIVERY_UNKNOWN = { ...DELIVERY_READY, github: { provider: 'github', status: 'unknown', source: null, missing: [], message: 'GitHub credentials: could not be checked.' }, pushAs: null, ready: null, reason: 'Whether a pull request can be opened is not known yet: the GitHub credential could not be checked (gh did not answer in time, or GitHub could not be reached).', fix: 'Re-check in a moment.' };
 const FALLBACK = { kind: 'skills.fallback', severity: 'warning', message: 'no wicked-garden plugin source: no installed plugin found — install wicked-garden >= 12.68.0 first: npx wicked-installer install wicked-garden (or npm i -g wicked-garden)' };
@@ -206,10 +208,20 @@ describe('crew#1527: the setup steps show the GitHub-or-local delivery choice be
     expect(deliveryStep(DELIVERY_SIGNED_OUT, true)).toMatchObject({ done: false, state: 'blocked', words: 'Not done. Sign in to GitHub for pull requests, or choose local delivery.', commands: ['gh auth login'] });
     expect(deliveryStep(DELIVERY_SIGNED_OUT, true).fix).toBe('To open pull requests, sign in to GitHub: gh auth login (or export GH_TOKEN for studio’s service).');
     expect(deliveryStep(DELIVERY_NO_GH, true)).toMatchObject({ commands: [], words: 'Not done. Install the GitHub CLI (gh) and sign in for pull requests, or choose local delivery.' });
+    // studio#1388: the git author is the person's own, so it is an instruction to fill in, never a command to copy.
     expect(deliveryStep(DELIVERY_NO_AUTHOR, true)).toMatchObject({
       words: 'Not done. Set your git author for pull requests, or choose local delivery.',
-      commands: ['git config --global user.name "Your Name"', 'git config --global user.email you@example.com'],
+      commands: [],
+      author: true,
+      fix: 'To open pull requests, set your git author, with your own name and email (below).',
     });
+    expect(deliveryStep(DELIVERY_SIGNED_OUT_NO_AUTHOR, true)).toMatchObject({
+      words: 'Not done. Sign in to GitHub and set your git author for pull requests, or choose local delivery.',
+      commands: ['gh auth login'],
+      author: true,
+      fix: 'To open pull requests, sign in to GitHub: gh auth login (or export GH_TOKEN for studio’s service), and set your git author, with your own name and email (below).',
+    });
+    expect(deliveryStep(DELIVERY_SIGNED_OUT, true)).toMatchObject({ author: false });
     // An exported token GitHub refuses is fixed by exporting a valid one: gh's sign-in would not change it (review r1).
     expect(deliveryStep(DELIVERY_TOKEN, true)).toMatchObject({ state: 'blocked', commands: [], fix: 'To open pull requests, export a valid GH_TOKEN, or unset it.' });
     expect(deliveryStep(DELIVERY_UNKNOWN, true)).toMatchObject({ done: false, state: 'unknown' });
@@ -229,6 +241,27 @@ describe('crew#1527: the setup steps show the GitHub-or-local delivery choice be
     await waitFor(() => expect(step).toHaveAttribute('data-state', 'local'));
     expect(step).toHaveAttribute('data-done', 'true');
     expect(useComposerPrefsStore.getState().prefs.deliverPr).toBe(false);
+  });
+  it('studio#1388: a missing git author is an instruction with the person’s own name and email, never a placeholder with Copy', async () => {
+    known = { ...known, delivery: DELIVERY_SIGNED_OUT_NO_AUTHOR };
+    page('?setup=1');
+    const step = await screen.findByTestId('agents-setup-step-delivery');
+    await waitFor(() => expect(step).toHaveAttribute('data-state', 'blocked'));
+    // The one command with Copy is the sign-in; no command line in step 5 holds a placeholder.
+    expect(within(step).getAllByTestId('agents-copy')).toHaveLength(1);
+    const lines = within(step).getAllByTestId('agents-command').map((c) => c.textContent ?? '');
+    expect(lines).toEqual(['gh auth login']);
+    for (const line of lines) {
+      expect(line).not.toContain('Your Name');
+      expect(line).not.toContain('you@example.com');
+    }
+    expect(step.textContent).not.toContain('Your Name');
+    expect(step.textContent).not.toContain('you@example.com');
+    const author = within(step).getByTestId('agents-setup-delivery-author');
+    expect(author).toHaveTextContent('with your own name and email');
+    expect(author).toHaveTextContent('git config --global user.name "<your name>"');
+    expect(author).toHaveTextContent('git config --global user.email "<your email>"');
+    expect(within(author).queryByRole('button')).toBeNull();
   });
   it('a ready GitHub is done; an older service that sends no readiness is not checked, never done', async () => {
     known = { ...known, delivery: DELIVERY_READY };
