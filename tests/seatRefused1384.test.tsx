@@ -63,6 +63,7 @@ describe('studio#1384: a seat-refused denial is said in plain words', () => {
     const line = screen.getByTestId('gate-verdict-denial').textContent ?? '';
     expect(line.startsWith('denied by the agent’s own sandbox: ')).toBe(true);
     expect(line).not.toContain('seat_refused');
+    expect(screen.getByTestId('gate-verdict').querySelector('.wk-verdict-head')!.textContent).toBe('Build’s own sandbox blocked its writes');
   });
 
   it('the run’s story says it on the refused step, the engine’s words behind Technical details', () => {
@@ -92,6 +93,9 @@ describe('studio#1384: a seat-refused denial is said in plain words', () => {
     const roster = [{ key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true }] as never;
     const c = gateCause({ view, gate, events, model: { choices: [], overflow: [], recommended: null } as never, roster });
     expect(c.headline).toBe('Codex’s own sandbox blocked its writes inside the project, so the step isn’t complete');
+    // A roster that names the seat in lower case still opens the sentence with a capital.
+    expect(gateCause({ view, gate, events, model: { choices: [], overflow: [], recommended: null } as never, roster: [{ key: 'codex', display_name: 'codex', binary: 'codex', enabled_for_council: true }] as never }).headline)
+      .toBe('Codex’s own sandbox blocked its writes inside the project, so the step isn’t complete');
     // Another denial on the same gate keeps its own words.
     const other = events.map((e) => (e.type === 'gateEscalated' ? { ...e, denialSource: 'agent_validator' } : e)) as CoreEvent[];
     expect(gateCause({ view, gate, events: other, model: { choices: [], overflow: [], recommended: null } as never, roster }).headline).toBeNull();

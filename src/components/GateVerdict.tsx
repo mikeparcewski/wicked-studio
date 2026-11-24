@@ -45,7 +45,9 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
   const word = outcome === 'fail' ? 'DENIED' : outcome === 'pass' ? 'PASS' : 'UNGATED';
   const vacuous = view.evaluatorPolicies.length === 0 && view.evaluatorPass === true;
   const step = phase;
-  const headline = outcome === 'fail' ? `${step} was stopped by a check`
+  // studio#1384: the step's own seat refused its writes (core#1850 `seat_refused`): no check stopped it.
+  const headline = outcome === 'fail' && view.denial?.source === 'seat_refused' ? `${step}’s own sandbox blocked its writes`
+    : outcome === 'fail' ? `${step} was stopped by a check`
     : outcome === 'ungated' && view.hasDeterministicFloor
       ? `Repository checks ran for ${step} — no independent review ran`
       : outcome === 'ungated' && view.evaluatorPolicies.length > 0 ? `${step} passed its automatic checks — no independent review ran`

@@ -16,6 +16,9 @@ import { isHelperSeat } from './responder.js';
  */
 
 /** The seat's name in the Desk's words: the roster's, else its key with a capital ("Copilot"). */
+/** A name that opens a sentence starts with a capital ("codex" -> "Codex"). */
+const upperFirst = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+
 export function seatName(cli: string, label: string | null): string {
   if (label !== null && label !== '') return label;
   const base = cli.split('#')[0] ?? cli;
@@ -165,7 +168,7 @@ export function gateCause({ view, gate, events, model, roster, pool = runPoolOf(
   const blockedCli = gate !== undefined && escalationFor(events, gate.ord)?.denialSource === 'seat_refused'
     ? view.units.find((u) => u.ord === gate.ord)?.assigned_cli ?? '' : null;
   const blocked = blockedCli === null ? null
-    : `${blockedCli === '' ? 'The helper' : seatName(blockedCli, (roster ?? []).find((r) => r.key === blockedCli)?.display_name ?? null)}’s own sandbox blocked its writes inside the project, so the step isn’t complete`;
+    : `${blockedCli === '' ? 'The helper' : upperFirst(seatName(blockedCli, (roster ?? []).find((r) => r.key === blockedCli)?.display_name ?? null))}’s own sandbox blocked its writes inside the project, so the step isn’t complete`;
   // The failures only this change has come before a missing judge (J4 0.16.6: a fix gate with both led with the judge).
   const headline = blocked !== null ? blocked : seatRefusal ? (judges?.inJob !== undefined ? `${seatName(judges.inJob.cli, judges.inJob.label)} can review this instead`
       : judges?.outside !== undefined ? `${seatName(judges.outside.key, judges.outside.display_name ?? null)} could review this, but isn’t one of this job’s helpers`
