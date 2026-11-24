@@ -11,6 +11,7 @@ import type { ProjectGraphRefreshResult, ProjectGraphRefreshState, ProjectGraphS
 const getProjectGraph = vi.fn();
 const refreshProjectGraph = vi.fn();
 const getProjectGraphBoundaries = vi.fn((...a: unknown[]) => { void a; return new Promise(() => undefined); });
+const getProjectBlastRadius = vi.fn((...a: unknown[]): Promise<unknown> => { void a; return new Promise(() => undefined); });
 
 vi.mock('../src/api/client.js', () => ({
   api: {
@@ -18,6 +19,7 @@ vi.mock('../src/api/client.js', () => ({
     refreshProjectGraph: (...a: unknown[]) => refreshProjectGraph(...a),
     // studio#1079: a built graph of 2+ repositories mounts the Across repositories card, which reads the links.
     getProjectGraphBoundaries: (...a: unknown[]) => getProjectGraphBoundaries(...a),
+    getProjectBlastRadius: (...a: unknown[]) => getProjectBlastRadius(...a),
   },
 }));
 
@@ -51,6 +53,7 @@ function built(over: Partial<ProjectGraphRefreshResult>): ProjectGraphRefreshRes
 beforeEach(() => {
   resetProjectGraphBuilds();
   getProjectGraphBoundaries.mockClear();
+  getProjectBlastRadius.mockClear();
   getProjectGraph.mockReset();
   refreshProjectGraph.mockReset();
 });
@@ -81,19 +84,25 @@ describe('the Across repositories card (studio#1079)', () => {
   });
 });
 
-describe('the Across repositories card after a refresh (studio#1079 codex r1, agy r1)', () => {
-  it('a refresh of a built graph rereads the links and drops an answer asked before it', async () => {
+describe('the Across repositories card after a refresh (studio#1079 codex r1-r2, agy r1)', () => {
+  it('a refresh that only relinks (same updatedAt) rereads the links, and an answer asked before it never lands', async () => {
+    let late: (v: unknown) => void = () => undefined;
+    getProjectBlastRadius.mockImplementationOnce(() => new Promise((r) => { late = r; }));
     getProjectGraph.mockResolvedValue({ status: status({ updatedAt: 1 }) });
-    refreshProjectGraph.mockResolvedValueOnce(built({ status: status({ updatedAt: 2 }) }));
+    refreshProjectGraph.mockResolvedValueOnce(built({ status: status({ updatedAt: 1 }), indexed: [], skipped: ['svc-a', 'tiny-tip'] }));
     render(<ProjectCodeGraph projectId="proj-1" repoCount={2} />);
     await screen.findByTestId('project-crossings');
     expect(getProjectGraphBoundaries).toHaveBeenCalledTimes(1);
     fireEvent.change(screen.getByTestId('project-crossings-name'), { target: { value: 'listRuns' } });
-    expect(screen.getByTestId('project-crossings-name')).toHaveValue('listRuns');
+    fireEvent.click(screen.getByTestId('project-crossings-ask'));
+    expect(getProjectBlastRadius).toHaveBeenCalledTimes(1);
     fireEvent.click(await screen.findByTestId('project-graph-build'));
     await screen.findByTestId('project-graph-result');
     await waitFor(() => expect(getProjectGraphBoundaries).toHaveBeenCalledTimes(2));
-    // A fresh card: the question typed before the refresh is gone with its answer.
+    // The pre-refresh question resolves now: the renewed card never shows it.
+    late({ projectId: 'proj-1', target: 'listRuns', dependents: [], byRepo: [], unresolved: 0, reposSearched: [], missingRepos: [], linkage: 'co-located', note: '' });
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.queryByTestId('project-crossings-blast')).toBeNull();
     expect(screen.getByTestId('project-crossings-name')).toHaveValue('');
   });
 });

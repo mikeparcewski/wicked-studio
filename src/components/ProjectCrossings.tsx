@@ -74,8 +74,11 @@ function staleWords(labels: readonly string[] | undefined): string {
 
 /** What one answer knows about the links: from the answer's own coverage, else the links card. */
 interface LinkView {
-  /** The links are built (the card read `linked`, or the answer carries estate's coverage); `null` = unknown. */
+  /** The links were published (a link generation above 0); `false` = never; `null` = unknown. */
   built: boolean | null;
+  /** Every member's coverage carries estate's own link counts and none is incomplete. Rows crew fills in without
+   *  estate's numbers (a member estate did not report) prove nothing, so they leave this false. */
+  complete: boolean;
   incomplete: string[];
   /** The links card already said they are stale. */
   staleSaid: boolean;
@@ -83,10 +86,18 @@ interface LinkView {
   members: ReadonlyMap<string, ProjectGraphRepo>;
 }
 
+const counted = (m: ProjectGraphMemberCoverage): boolean => typeof m.links_in === 'number' || typeof m.links_out === 'number';
+
 function linkViewOf(answerCoverage: ProjectGraphMemberCoverage[] | undefined, b: ProjectGraphBoundaries | null, members: ReadonlyMap<string, ProjectGraphRepo>): LinkView {
-  const coverage = answerCoverage ?? (b?.linked === true ? b.members : undefined);
-  const built = answerCoverage !== undefined || b?.linked === true ? true : b !== null ? false : null;
-  return { built, incomplete: (coverage ?? []).filter((m) => m.incomplete === true).map((m) => m.repo), staleSaid: b?.stale === true, members };
+  const coverage = answerCoverage ?? (b?.linked === true ? b.members : undefined) ?? [];
+  // codex r2: crew answers `linked: true` for any link status estate holds, and estate records generation 0 after a
+  // first link that published nothing. Built means a generation above 0 (or counted coverage on the answer itself).
+  const built = b !== null
+    ? b.linked && typeof b.generation === 'number' ? b.generation > 0 : b.linked ? (coverage.some(counted) ? true : null) : false
+    : coverage.some(counted) ? true : null;
+  const incomplete = coverage.filter((m) => m.incomplete === true).map((m) => m.repo);
+  const complete = coverage.length > 0 && coverage.every((m) => counted(m) && m.incomplete !== true);
+  return { built, complete, incomplete, staleSaid: b?.stale === true, members };
 }
 
 /** `missingRepos` are member ids; each is said with its label and crew's own cause and remedy for it. */
@@ -250,7 +261,26 @@ function linkGaps(l: LinkView): string[] {
   if (l.built === false) out.push('The repositories aren’t linked, so nothing reached through another repository could be followed.');
   if (l.built === null) out.push('Whether the repositories are linked couldn’t be read, so a crossing may be missing.');
   if (l.incomplete.length > 0) out.push(`Linking is incomplete for ${l.incomplete.join(', ')}, so a crossing may be missing.`);
+  else if (l.built === true && !l.complete) out.push('Whether linking covered every repository isn’t known, so a crossing may be missing.');
   return out;
+}
+
+/** Why the index may be behind what is on disk (estate's freshness). */
+function freshnessWords(fresh: ProjectBlastRadiusWire['freshness']): string[] {
+  const out: string[] = [];
+  if (fresh === undefined) return out;
+  // codex r2: crew sums the total over answer pages, so one file can count more than once.
+  if (fresh.stale_files_total > 0) out.push(`Files have changed since they were indexed (${fresh.stale_files_total_partial === true ? 'up to ' : ''}${fresh.stale_files_total} counted; a file can count more than once).`);
+  if (typeof fresh.unindexed_files === 'number' && fresh.unindexed_files > 0) out.push(`${plural(fresh.unindexed_files, 'file isn’t', 'files aren’t')} indexed yet, so symbols and dependents in ${fresh.unindexed_files === 1 ? 'it' : 'them'} are missing.`);
+  if (typeof fresh.commits_behind === 'number' && fresh.commits_behind > 0) out.push(`The index is ${plural(fresh.commits_behind, 'commit', 'commits')} behind.`);
+  // codex r2: estate's marker stays after an interrupted index too.
+  if (Array.isArray(fresh.indexing) && fresh.indexing.length > 0) out.push(`Indexing is running or was interrupted for ${fresh.indexing.join(', ')}.`);
+  return out;
+}
+
+function Changed({ fresh }: { fresh: ProjectBlastRadiusWire['freshness'] }): React.ReactElement | null {
+  const words = freshnessWords(fresh);
+  return words.length === 0 ? null : <p data-testid="project-crossings-blast-changed" className="wk-field-note">{words.join(' ')} This answer may be out of date; refresh the code graph.</p>;
 }
 
 function BlastAnswer({ answer: a, links }: { answer: ProjectBlastRadiusWire; links: LinkView }): React.ReactElement {
@@ -260,6 +290,7 @@ function BlastAnswer({ answer: a, links }: { answer: ProjectBlastRadiusWire; lin
   if (a.resolved === false) {
     return (
       <div data-testid="project-crossings-blast" data-resolved="false">
+        <Changed fresh={a.freshness} />
         <p className="wk-field-note">No symbol is named {a.target} in the repositories searched{searched}. The name must match exactly.</p>
         {a.missingRepos.length > 0 && <p data-testid="project-crossings-blast-missing" className="wk-field-note">{missingWords(a.missingRepos, links.members)}</p>}
         {stale}
@@ -274,7 +305,7 @@ function BlastAnswer({ answer: a, links }: { answer: ProjectBlastRadiusWire; lin
   const reachedThrough = (d: ProjectGraphHitWire): boolean => d.via_crossing !== undefined || d.via_crossing_omitted === true;
   const omittedVia = a.dependents.filter((d) => d.via_crossing_omitted === true || (d.via_crossing !== undefined && !listedCrossings.has(d.via_crossing))).length;
   // "Nothing crosses" is said only when the links are built and complete, none was taken, and none is unlisted.
-  const noneCrossed = crossingsTotal === 0 && a.crossings_truncated !== true && !a.dependents.some(reachedThrough) && links.built === true && links.incomplete.length === 0;
+  const noneCrossed = crossingsTotal === 0 && a.crossings_truncated !== true && !a.dependents.some(reachedThrough) && links.built === true && links.complete;
 
   const unplaced: string[] = [];
   if (a.missingRepos.length > 0) unplaced.push(missingWords(a.missingRepos, links.members));
@@ -288,19 +319,10 @@ function BlastAnswer({ answer: a, links }: { answer: ProjectBlastRadiusWire; lin
   if (typeof a.truncated_dependents === 'number' && a.truncated_dependents > 0) unplaced.push(`${plural(a.truncated_dependents, 'more dependent was', 'more dependents were')} left out of the answer to fit its size.`);
   if (a.unresolved > 0) unplaced.push(`${plural(a.unresolved, 'reference', 'references')} to it couldn’t be placed on any symbol, so the impact may be larger.`);
 
-  const fresh = a.freshness;
-  const changed: string[] = [];
-  if (fresh !== undefined) {
-    if (fresh.stale_files_total > 0) changed.push(`${fresh.stale_files_total_partial === true ? 'Up to ' : ''}${plural(fresh.stale_files_total, 'file has', 'files have')} changed since ${fresh.stale_files_total === 1 ? 'it was' : 'they were'} indexed.`);
-    if (typeof fresh.unindexed_files === 'number' && fresh.unindexed_files > 0) changed.push(`${plural(fresh.unindexed_files, 'file isn’t', 'files aren’t')} indexed yet, so dependents in ${fresh.unindexed_files === 1 ? 'it' : 'them'} are missing.`);
-    if (typeof fresh.commits_behind === 'number' && fresh.commits_behind > 0) changed.push(`The index is ${plural(fresh.commits_behind, 'commit', 'commits')} behind.`);
-    if (Array.isArray(fresh.indexing) && fresh.indexing.length > 0) changed.push(`Being indexed now: ${fresh.indexing.join(', ')}.`);
-  }
-
   return (
     <div data-testid="project-crossings-blast" data-linkage={a.linkage} className="wk-pg-proj-stack">
       {stale}
-      {changed.length > 0 && <p data-testid="project-crossings-blast-changed" className="wk-field-note">{changed.join(' ')} This answer may be out of date; refresh the code graph.</p>}
+      <Changed fresh={a.freshness} />
       <p className="wk-list-row-meta">
         {a.dependents.length === 0
           ? `Nothing found that depends on ${a.target} in the repositories searched${searched}.`

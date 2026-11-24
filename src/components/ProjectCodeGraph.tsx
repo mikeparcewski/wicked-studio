@@ -123,6 +123,8 @@ export function ProjectCodeGraph({ projectId, repoCount }: Props): React.ReactEl
   /** crew's refresh state (studio#1099), kept apart from `status` so a progress read never moves the standing. */
   const [refresh, setRefresh] = useState<ProjectGraphRefreshState | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  /** studio#1079: builds this page saw end (ours or one it re-attached to): each one renews the Across repositories card. */
+  const [builds, setBuilds] = useState(0);
   /** The project this control shows now. */
   const live = useRef(projectId);
   /** Bumped by a build's answer or refusal: a read that started before it is stale and dropped. */
@@ -211,6 +213,7 @@ export function ProjectCodeGraph({ projectId, repoCount }: Props): React.ReactEl
         if (building.get(forProject) === run) building.delete(forProject);
         if (live.current !== forProject) return;
         setPending(false);
+        setBuilds((n) => n + 1);
         // (codex r2) A failed build leaves the standing unknown to a mount that re-attached to it
         // (its own read was dropped while the build ran): read it again, so Build is offered.
         if (failed) void read(forProject);
@@ -341,7 +344,15 @@ export function ProjectCodeGraph({ projectId, repoCount }: Props): React.ReactEl
       {readError !== null && <TechDetails text={readError} />}
       {/* studio#1079: the cross-repo questions, once the graph holds two or more repositories. Keyed by the build, so a
           refresh rereads the links and drops every earlier answer (a question asked before it never lands after). */}
-      {status?.state === 'ready' && <ProjectCrossings key={`${projectId}\u0000${status.updatedAt ?? 'never'}`} projectId={projectId} repos={status.repos} />}
+      {status?.state === 'ready' && (
+        <ProjectCrossings
+          // codex r2: `updatedAt` is the newest member index, unchanged by a refresh that only relinks; the end of a
+          // refresh (crew's `finishedAt`, or a build this page saw end) renews the card too.
+          key={`${projectId}\u0000${status.updatedAt ?? 'never'}\u0000${refresh?.finishedAt ?? 'none'}\u0000${builds}`}
+          projectId={projectId}
+          repos={status.repos}
+        />
+      )}
     </div>
   );
 }

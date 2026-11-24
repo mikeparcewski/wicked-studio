@@ -137,7 +137,7 @@ describe('what depends on a symbol across repositories', () => {
     // The links card already says the links are stale (BOUNDARIES.stale): the answer does not repeat it.
     expect(screen.getByTestId('project-crossings-stale')).toBeInTheDocument();
     expect(screen.queryByTestId('project-crossings-blast-stale')).toBeNull();
-    expect(screen.getByTestId('project-crossings-blast-changed').textContent).toBe('1 file has changed since it was indexed. This answer may be out of date; refresh the code graph.');
+    expect(screen.getByTestId('project-crossings-blast-changed').textContent).toBe('Files have changed since they were indexed (1 counted; a file can count more than once). This answer may be out of date; refresh the code graph.');
     expect(within(screen.getByTestId('project-crossings-unplaced')).getAllByRole('listitem').map((l) => l.textContent)).toEqual([
       // codex r1: crew's missingRepos are member ids; each is named with crew's own cause and remedy.
       'Not searched: docs (attached since the last refresh). Refresh the code graph to index it.',
@@ -165,7 +165,7 @@ describe('what depends on a symbol across repositories', () => {
     render(<ProjectCrossings projectId="p1" />);
     await ask('listRuns');
     expect(screen.getByTestId('project-crossings-none')).toBeInTheDocument();
-    getProjectBlastRadius.mockResolvedValueOnce({ ...BLAST, resolved: false, target: 'nope', dependents: [], byRepo: [] });
+    getProjectBlastRadius.mockResolvedValueOnce({ ...BLAST, resolved: false, target: 'nope', dependents: [], byRepo: [], freshness: undefined });
     fireEvent.change(screen.getByTestId('project-crossings-name'), { target: { value: 'nope' } });
     fireEvent.click(screen.getByTestId('project-crossings-ask'));
     await waitFor(() => expect(screen.getByTestId('project-crossings-blast')).toHaveAttribute('data-resolved', 'false'));
@@ -177,7 +177,7 @@ describe('what depends on a symbol across repositories', () => {
     getProjectBlastRadius.mockResolvedValueOnce({ ...BLAST, dependents: [], byRepo: [], freshness: { stale_files_total: 0, unindexed_files: 1, checked_files: 40, not_file_backed: 0 } });
     render(<ProjectCrossings projectId="p1" />);
     await ask('listRuns');
-    expect(screen.getByTestId('project-crossings-blast-changed').textContent).toBe('1 file isn’t indexed yet, so dependents in it are missing. This answer may be out of date; refresh the code graph.');
+    expect(screen.getByTestId('project-crossings-blast-changed').textContent).toBe('1 file isn’t indexed yet, so symbols and dependents in it are missing. This answer may be out of date; refresh the code graph.');
     expect(screen.getByTestId('project-crossings-blast').textContent).toContain('Nothing found that depends on listRuns in the repositories searched (api, web).');
   });
 
@@ -195,6 +195,32 @@ describe('what depends on a symbol across repositories', () => {
     await ask('listRuns');
     expect(screen.queryByTestId('project-crossings-none')).toBeNull();
     expect(screen.getByTestId('project-crossings-unplaced').textContent).toContain('The repositories aren’t linked, so nothing reached through another repository could be followed.');
+  });
+
+  it('codex r2: a miss keeps the freshness that explains it (the symbol may be in a file not indexed yet)', async () => {
+    getProjectBlastRadius.mockResolvedValueOnce({ ...BLAST, resolved: false, target: 'brandNew', dependents: [], byRepo: [], missingRepos: [], freshness: { stale_files_total: 0, unindexed_files: 2, indexing: ['web'], checked_files: 40, not_file_backed: 0 } });
+    render(<ProjectCrossings projectId="p1" />);
+    await ask('brandNew');
+    expect(screen.getByTestId('project-crossings-blast-changed').textContent).toBe('2 files aren’t indexed yet, so symbols and dependents in them are missing. Indexing is running or was interrupted for web. This answer may be out of date; refresh the code graph.');
+  });
+
+  it('codex r2: a first link that published nothing (generation 0) is not built, and member rows without counts prove nothing', async () => {
+    getProjectGraphBoundaries.mockResolvedValue({ ...BOUNDARIES, generation: 0, stale: false, members: [{ repoId: 'r-api', repo: 'api' }, { repoId: 'r-web', repo: 'web' }] });
+    getProjectBlastRadius.mockResolvedValueOnce({ ...BLAST, crossings: [], crossings_total: 0, crossings_truncated: undefined, linkage: 'co-located', dependents: BLAST.dependents.slice(0, 1), link_stale: undefined });
+    render(<ProjectCrossings projectId="p1" />);
+    await screen.findByTestId('project-crossings-links');
+    await ask('listRuns');
+    expect(screen.queryByTestId('project-crossings-none')).toBeNull();
+    expect(screen.getByTestId('project-crossings-unplaced').textContent).toContain('The repositories aren’t linked');
+    cleanup();
+    // Built, but crew's rows carry no estate counts: completeness is unknown, so "no crossing" is not said either.
+    getProjectGraphBoundaries.mockResolvedValue({ ...BOUNDARIES, stale: false, members: [{ repoId: 'r-api', repo: 'api' }, { repoId: 'r-web', repo: 'web' }] });
+    getProjectBlastRadius.mockResolvedValueOnce({ ...BLAST, crossings: [], crossings_total: 0, crossings_truncated: undefined, linkage: 'co-located', dependents: BLAST.dependents.slice(0, 1), link_stale: undefined });
+    render(<ProjectCrossings projectId="p1" />);
+    await screen.findByTestId('project-crossings-links');
+    await ask('listRuns');
+    expect(screen.queryByTestId('project-crossings-none')).toBeNull();
+    expect(screen.getByTestId('project-crossings-unplaced').textContent).toContain('Whether linking covered every repository isn’t known');
   });
 
   it('a graph that cannot answer shows crew\'s own standing sentence', async () => {
