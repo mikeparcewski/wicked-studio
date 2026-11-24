@@ -95,7 +95,7 @@ const rowOf = (seat: RosterSeat) => agentRows({ roster: [seat], defaults: null, 
 describe('crew#1844: a cluster never set up reads its own reason and crew’s command', () => {
   it('is never "Kubernetes is stopped": its card names crew’s filled-in command with Copy', () => {
     const row = rowOf(noCluster());
-    expect(helperRuntimeDown(row)).toBe(NO_CLUSTER);
+    expect(helperRuntimeDown(row)).toBe('No Kubernetes cluster is set up for these helpers yet');
     expect(runtimeStart(NO_CLUSTER)).toMatchObject({ title: 'Kubernetes isn’t set up for helpers yet', button: 'Set up Kubernetes', noCluster: true });
     expect(helperRuntimeCommand(row)).toBe(CORE);
     const copy = issueCopy({ code: 'signed_out', severity: 'problem', safety: false }, row, [row], Date.now(), true);
@@ -109,6 +109,18 @@ describe('crew#1844: a cluster never set up reads its own reason and crew’s co
     const shared = rowOf(noCluster({ health: { status: 'inactive', message: raw, since: new Date().toISOString() } }));
     const fix = issueCopy({ code: 'signed_out', severity: 'problem', safety: false }, shared, [shared], Date.now(), true).fix[0]!;
     expect(fix.commands[0]!.line).toBe('/home/ada/bin/wicked-core cluster install --admin-context rancher-desktop --home /home/ada/.wicked-crew');
+  });
+  it('the Helpers list row says crew’s lead only: no command, path or backtick (coord r2 on #1387)', async () => {
+    roster = [noCluster()];
+    page('');
+    const row = await screen.findByTestId('agents-row');
+    const status = await within(row).findByTestId('agents-status');
+    expect(status.textContent).toBe('No Kubernetes cluster is set up for these helpers yet');
+    for (const id of ['agents-status', 'agents-ready', 'agents-sign']) {
+      const text = within(row).getByTestId(id).textContent ?? '';
+      expect(text).not.toMatch(/[`/]|wicked-core|--home/);
+    }
+    expect(within(row).getByRole('button', { name: 'Set up Kubernetes' })).toBeInTheDocument();
   });
   it('the modal and setup step 4 show the command with Copy', async () => {
     roster = [noCluster()];

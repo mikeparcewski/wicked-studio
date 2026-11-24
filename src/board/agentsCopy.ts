@@ -92,12 +92,15 @@ export function helperNotInstalled(row: AgentRow): boolean {
 const NO_CLUSTER_RE = /^No Kubernetes cluster is set up\b/i;
 
 /** A stopped runtime, or a cluster never set up, prevents the sign-in probe itself, rather than reporting a signed-out
- *  helper. */
+ *  helper. The words are short enough for a list row's status: for no cluster, crew's lead sentence only (its command
+ *  and state-home path are read from the raw words by {@link helperRuntimeCommand}, coord r2 on #1387). */
 export function helperRuntimeDown(row: AgentRow): string | null {
   const health = row.seat.health;
   const message = health?.status === 'inactive' ? health.message ?? row.seat.council_ineligible_reason : null;
-  return typeof message === 'string' && (/^(?:Docker(?: Desktop)?|Rancher(?: Desktop)?|Kubernetes) (?:isn.t|is not) running[.!]?$/i.test(message.trim()) || NO_CLUSTER_RE.test(message.trim()))
-    ? displayText(message) : null;
+  if (typeof message !== 'string') return null;
+  const text = message.trim();
+  if (NO_CLUSTER_RE.test(text)) return displayText(/^[^.`\n]*/.exec(text)![0].trim());
+  return /^(?:Docker(?: Desktop)?|Rancher(?: Desktop)?|Kubernetes) (?:isn.t|is not) running[.!]?$/i.test(text) ? displayText(message) : null;
 }
 
 /** A command shape studio offers with Copy: the engine CLI (by path or name), an `npx` / `npm install -g` install, or the
