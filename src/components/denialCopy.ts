@@ -79,14 +79,19 @@ export function parseDenial(raw: string | null | undefined, structured?: Structu
  */
 function blockedWrites(raw: string): string {
   const n = Number(/refused (\d+) write\(s\)/.exec(raw)?.[1] ?? NaN);
-  const paths = [...raw.matchAll(/`([^`]+)` \(/g)].map((m) => m[1]!);
-  const count = Number.isFinite(n) && n > 0 ? n : paths.length;
+  // The list between "afterwards: " and ". The step's work": "`path` (why)" entries joined by ", ", maybe "and K more".
+  // A path may itself hold a backtick (the engine does not escape it), so an entry ends only where the next one (or the
+  // list's end) starts. A list that names more paths than it counts is not trusted, and no path is named (codex r1).
+  const list = /afterwards: ([\s\S]*?)\. The step's work/.exec(raw)?.[1] ?? '';
+  const named = [...list.matchAll(/`([\s\S]+?)` \([^()]*\)(?=, `|, and \d+ more$|$)/g)].map((m) => m[1]!);
+  const count = Number.isFinite(n) && n > 0 ? n : named.length;
+  const paths = named.length <= count ? named : [];
   const what = count === 0 ? 'its writes' : count === 1 ? 'a write' : `${count} writes`;
   if (paths.length === 0) return `${what} inside the project`;
   const shown = paths.slice(0, 3);
   const more = Math.max(count, paths.length) - shown.length;
-  const named = more > 0 ? `${shown.join(', ')} and ${more} more` : shown.length <= 1 ? shown.join('') : `${shown.slice(0, -1).join(', ')} and ${shown.at(-1)!}`;
-  return `${what} inside the project (${named})`;
+  const names = more > 0 ? `${shown.join(', ')} and ${more} more` : shown.length <= 1 ? shown.join('') : `${shown.slice(0, -1).join(', ')} and ${shown.at(-1)!}`;
+  return `${what} inside the project (${names})`;
 }
 
 /**
@@ -247,6 +252,9 @@ export function escalationCopy(
     case 'boundary_deny': {
       // `input_governance` names the layer; `""` is the hook-veto arm whose source identity the
       // engine folded away (actor.rs) — the SAME refusal, so the same sentence.
+      // core: a seat-refused denial wins the fold, and a hook that also denied books the class `boundary_deny`
+      // (actor.rs `denial_class`, `_ if hook_denied`): the sandbox is still what stopped the step (codex r1).
+      if (source === 'seat_refused') return known(`${unit}: its own sandbox blocked ${blockedWrites(facts.verdictSummary ?? '')}, so its work isn’t complete`);
       if (source !== 'input_governance' && source !== '') break;
       const cmd = facts.deniedCommand ? `: \`${facts.deniedCommand}\`` : '';
       const read = facts.claimId?.startsWith('boundary-read-deny:') ? ' (a read outside the workspace)' : '';

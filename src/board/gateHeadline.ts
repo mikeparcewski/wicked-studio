@@ -3,7 +3,7 @@ import { reassignCandidates, reassignRefusedOf, runBenchesOf, seatStanding, type
 import { isDeliverGate } from '../components/gateMoveModel.js';
 import { deliverAcceptance } from './checkState.js';
 import { choicesOf, type OpenGate } from '../store/gates.js';
-import { creatorSeatRefusal, escalationFor, isReduced, noDistinctReviewer, ruleHolds, rulesHoldAt, sessionAssurance, sessionQe, waitsForJudge, type RuleRow } from './assuranceModel.js';
+import { creatorSeatRefusal, escalationSinceDispatch, isReduced, noDistinctReviewer, ruleHolds, rulesHoldAt, sessionAssurance, sessionQe, waitsForJudge, type RuleRow } from './assuranceModel.js';
 import { governanceDenialHeadline, plainGateQuestion, rulesHoldWords } from './deskWords.js';
 import type { GateRowModel } from './gateRowModel.js';
 import { isHelperSeat } from './responder.js';
@@ -164,8 +164,9 @@ export function gateCause({ view, gate, events, model, roster, pool = runPoolOf(
   // Only when the gate's own cause is the hold: a broken rule or a hold behind another denial keeps its own headline.
   const rulesHeld = hold !== null && hold.held && !hold.behind ? rulesHoldHeadline(hold.rows) : null;
   // studio#1384 (core#1850): the step's OWN seat (its CLI sandbox, a read-only mount, file permissions) refused its
-  // writes inside the project. Nothing reviewed the work, so the gate never reads "did not pass review".
-  const blockedCli = gate !== undefined && escalationFor(events, gate.ord)?.denialSource === 'seat_refused'
+  // writes inside the project. Nothing reviewed the work, so the gate never reads "did not pass review". Only this
+  // attempt's escalation counts: a retry dispatched after an older refusal is a new attempt (codex r1).
+  const blockedCli = gate !== undefined && escalationSinceDispatch(events, gate.ord)?.denialSource === 'seat_refused'
     ? view.units.find((u) => u.ord === gate.ord)?.assigned_cli ?? '' : null;
   const blocked = blockedCli === null ? null
     : `${blockedCli === '' ? 'The helper' : upperFirst(seatName(blockedCli, (roster ?? []).find((r) => r.key === blockedCli)?.display_name ?? null))}’s own sandbox blocked its writes inside the project, so the step isn’t complete`;

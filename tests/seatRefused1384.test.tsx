@@ -48,10 +48,23 @@ describe('studio#1384: a seat-refused denial is said in plain words', () => {
     expect(denialAdvice(one)).toBe('Send it back to try again, or reassign it to a different CLI.');
   });
 
-  it('the escalation row knows the pair (verdict_not_pass × seat_refused)', () => {
+  it('the escalation row knows the pair (verdict_not_pass × seat_refused), and boundary_deny × seat_refused', () => {
     const c = escalationCopy('verdict_not_pass', 'seat_refused', { ord: 2, verdictSummary: ONE });
     expect(c.known).toBe(true);
     expect(c.headline).toBe('Unit #2: its own sandbox blocked a write inside the project (src/notes.ts), so its work isn’t complete');
+    // A hook that also denied a call books the class boundary_deny (actor.rs `_ if hook_denied`); the source still wins.
+    const both = escalationCopy('boundary_deny', 'seat_refused', { ord: 2, verdictSummary: ONE, deniedCommand: 'rm -rf /' });
+    expect(both.known).toBe(true);
+    expect(both.headline).toBe(c.headline);
+    // The governance row keeps its words.
+    expect(escalationCopy('boundary_deny', 'input_governance', { ord: 2, deniedCommand: 'ls' }).headline).toBe('Unit #2: a command was refused by governance: `ls`');
+  });
+
+  it('a path that holds a backtick is named whole, and a list that names more than it counts names none', () => {
+    const tick = "the agent's own sandbox refused 2 write(s) inside the project that this step never made afterwards: `src/a`b.ts` (Permission denied), `c (copy).ts` (Permission denied). The step's work is not complete as built. Send it back to try again, or reassign the step to another agent";
+    expect(stepDenialHeadline(parseDenial(tick, { source: 'seat_refused' }), 'Build')).toBe('Build’s own sandbox blocked 2 writes inside the project (src/a`b.ts and c (copy).ts), so its work isn’t complete.');
+    const over = "the agent's own sandbox refused 1 write(s) inside the project that this step never made afterwards: `a.ts` (x), `b.ts` (y). The step's work is not complete as built.";
+    expect(stepDenialHeadline(parseDenial(over, { source: 'seat_refused' }), 'Build')).toBe('Build’s own sandbox blocked a write inside the project, so its work isn’t complete.');
   });
 
   it('the gate card reads "denied by the agent’s own sandbox", with the engine’s words after it', () => {
@@ -96,6 +109,10 @@ describe('studio#1384: a seat-refused denial is said in plain words', () => {
     // A roster that names the seat in lower case still opens the sentence with a capital.
     expect(gateCause({ view, gate, events, model: { choices: [], overflow: [], recommended: null } as never, roster: [{ key: 'codex', display_name: 'codex', binary: 'codex', enabled_for_council: true }] as never }).headline)
       .toBe('Codex’s own sandbox blocked its writes inside the project, so the step isn’t complete');
+    // A retry dispatched after the refusal is a new attempt: its gate does not inherit the old cause (codex r1).
+    const retried = [...events, { type: 'unitDispatched', session: 'r-g', ord: 2, attempt: 1, ts: 4, seq: 4 },
+      { type: 'awaitingHuman', session: 'r-g', ord: 2, prompt: 'Unit 2 failed and triage escalated: boom', gateKind: 'escalation', ts: 5, seq: 5 }] as unknown as CoreEvent[];
+    expect(gateCause({ view, gate, events: retried, model: { choices: [], overflow: [], recommended: null } as never, roster }).headline ?? '').not.toMatch(/sandbox/);
     // Another denial on the same gate keeps its own words.
     const other = events.map((e) => (e.type === 'gateEscalated' ? { ...e, denialSource: 'agent_validator' } : e)) as CoreEvent[];
     expect(gateCause({ view, gate, events: other, model: { choices: [], overflow: [], recommended: null } as never, roster }).headline).toBeNull();
