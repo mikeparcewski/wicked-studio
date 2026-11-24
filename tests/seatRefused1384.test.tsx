@@ -11,7 +11,7 @@ import type { CoreEvent } from '../src/api/types.js';
 import { RunStory } from '../src/components/session/RunRecord.js';
 import { useProvenanceStore } from '../src/store/provenance.js';
 import { makeUnit, makeView } from './factories.js';
-import { escalationCopy, parseDenial, stepDenialAdvice, stepDenialHeadline, denialHeadline, denialAdvice } from '../src/components/denialCopy.js';
+import { escalationCopy, parseDenial, sandboxOwner, stepDenialAdvice, stepDenialHeadline, denialHeadline, denialAdvice } from '../src/components/denialCopy.js';
 import { denialSourceLabel, gateVerdict } from '../src/components/gateVerdictModel.js';
 import { GateVerdict } from '../src/components/GateVerdict.js';
 import { gateCause } from '../src/board/gateHeadline.js';
@@ -37,21 +37,27 @@ describe('studio#1384: a seat-refused denial is said in plain words', () => {
   it('the step card names the blocked writes and offers send back or reassign', () => {
     const one = parseDenial(ONE, { source: 'seat_refused' });
     expect(one.kind).toBe('seat-refused');
-    expect(stepDenialHeadline(one, 'Build')).toBe('Build’s own sandbox blocked a write inside the project (src/notes.ts), so its work isn’t complete.');
+    // The sandbox is the helper's (the seat that ran the step), never the step's (coord r2).
+    expect(stepDenialHeadline(one, 'Build', 'Codex')).toBe('Codex’s own sandbox blocked a write inside the project (src/notes.ts), so Build isn’t complete.');
+    expect(stepDenialHeadline(one, 'Build')).toBe('The helper’s own sandbox blocked a write inside the project (src/notes.ts), so Build isn’t complete.');
+    expect(sandboxOwner('codex', [{ key: 'codex', display_name: 'codex' }])).toBe('Codex');
+    expect(sandboxOwner('claude', [{ key: 'claude', display_name: 'Claude Code' }])).toBe('Claude Code');
+    expect(sandboxOwner('copilot#2', null)).toBe('Copilot');
+    expect(sandboxOwner(null, null)).toBe('The helper');
     expect(stepDenialAdvice(one)).toBe('Send the step back to try again, or reassign it to another helper.');
     const seven = parseDenial(SEVEN, { source: 'seat_refused' });
-    expect(stepDenialHeadline(seven, 'Build')).toBe('Build’s own sandbox blocked 7 writes inside the project (a.ts, b.ts, c.ts and 4 more), so its work isn’t complete.');
+    expect(stepDenialHeadline(seven, 'Build', 'Codex')).toBe('Codex’s own sandbox blocked 7 writes inside the project (a.ts, b.ts, c.ts and 4 more), so Build isn’t complete.');
     // Without the engine's count or paths (a later engine's other words), the sentence still holds.
-    expect(stepDenialHeadline(parseDenial('blocked', { source: 'seat_refused' }), 'Build')).toBe('Build’s own sandbox blocked its writes inside the project, so its work isn’t complete.');
+    expect(stepDenialHeadline(parseDenial('blocked', { source: 'seat_refused' }), 'Build')).toBe('The helper’s own sandbox blocked its writes inside the project, so Build isn’t complete.');
     // The unit-numbered twins say the same.
-    expect(denialHeadline(one, 3)).toBe('Unit #3’s own sandbox blocked a write inside the project (src/notes.ts), so its work isn’t complete.');
+    expect(denialHeadline(one, 3)).toBe('The helper’s own sandbox blocked a write inside the project (src/notes.ts), so unit #3 isn’t complete.');
     expect(denialAdvice(one)).toBe('Send it back to try again, or reassign it to a different CLI.');
   });
 
   it('the escalation row knows the pair (verdict_not_pass × seat_refused), and boundary_deny × seat_refused', () => {
     const c = escalationCopy('verdict_not_pass', 'seat_refused', { ord: 2, verdictSummary: ONE });
     expect(c.known).toBe(true);
-    expect(c.headline).toBe('Unit #2: its own sandbox blocked a write inside the project (src/notes.ts), so its work isn’t complete');
+    expect(c.headline).toBe('Unit #2: the helper’s own sandbox blocked a write inside the project (src/notes.ts), so its work isn’t complete');
     // A hook that also denied a call books the class boundary_deny (actor.rs `_ if hook_denied`); the source still wins.
     const both = escalationCopy('boundary_deny', 'seat_refused', { ord: 2, verdictSummary: ONE, deniedCommand: 'rm -rf /' });
     expect(both.known).toBe(true);
@@ -62,9 +68,9 @@ describe('studio#1384: a seat-refused denial is said in plain words', () => {
 
   it('a path that holds a backtick is named whole, and a list that names more than it counts names none', () => {
     const tick = "the agent's own sandbox refused 2 write(s) inside the project that this step never made afterwards: `src/a`b.ts` (Permission denied), `c (copy).ts` (Permission denied). The step's work is not complete as built. Send it back to try again, or reassign the step to another agent";
-    expect(stepDenialHeadline(parseDenial(tick, { source: 'seat_refused' }), 'Build')).toBe('Build’s own sandbox blocked 2 writes inside the project (src/a`b.ts and c (copy).ts), so its work isn’t complete.');
+    expect(stepDenialHeadline(parseDenial(tick, { source: 'seat_refused' }), 'Build')).toBe('The helper’s own sandbox blocked 2 writes inside the project (src/a`b.ts and c (copy).ts), so Build isn’t complete.');
     const over = "the agent's own sandbox refused 1 write(s) inside the project that this step never made afterwards: `a.ts` (x), `b.ts` (y). The step's work is not complete as built.";
-    expect(stepDenialHeadline(parseDenial(over, { source: 'seat_refused' }), 'Build')).toBe('Build’s own sandbox blocked a write inside the project, so its work isn’t complete.');
+    expect(stepDenialHeadline(parseDenial(over, { source: 'seat_refused' }), 'Build')).toBe('The helper’s own sandbox blocked a write inside the project, so Build isn’t complete.');
   });
 
   it('the gate card reads "denied by the agent’s own sandbox", with the engine’s words after it', () => {
@@ -76,18 +82,19 @@ describe('studio#1384: a seat-refused denial is said in plain words', () => {
     const line = screen.getByTestId('gate-verdict-denial').textContent ?? '';
     expect(line.startsWith('denied by the agent’s own sandbox: ')).toBe(true);
     expect(line).not.toContain('seat_refused');
-    expect(screen.getByTestId('gate-verdict').querySelector('.wk-verdict-head')!.textContent).toBe('Build’s own sandbox blocked its writes');
+    expect(screen.getByTestId('gate-verdict').querySelector('.wk-verdict-head')!.textContent).toBe('The helper’s own sandbox blocked its writes');
   });
 
   it('the run’s story says it on the refused step, the engine’s words behind Technical details', () => {
     // The unit record as core serializes it (domain.rs WorkUnit: `denial_reason` + the structured `denial`).
     const view = makeView({ id: 'r-sr', status: 'failed' }, [
-      makeUnit({ id: 'r-sr:build', session_id: 'r-sr', ord: 1, status: 'rejected', phase_ref: 'build', denial_reason: ONE,
+      makeUnit({ id: 'r-sr:build', session_id: 'r-sr', ord: 1, status: 'rejected', phase_ref: 'build', denial_reason: ONE, assigned_cli: 'codex',
         denial: { source: 'seat_refused', reason: ONE } } as never),
     ]);
     render(<RunStory view={view} />);
     const plain = screen.getByTestId('failure-plain');
-    expect(plain.querySelector('.wk-session-run-story-line')!.textContent).toMatch(/own sandbox blocked a write inside the project \(src\/notes\.ts\), so its work isn’t complete\.$/);
+    // The helper that ran the step is named (the roster's name), and the step is what isn't complete (coord r2).
+    expect(plain.querySelector('.wk-session-run-story-line')!.textContent).toMatch(/^Codex’s own sandbox blocked a write inside the project \(src\/notes\.ts\), so .+ isn’t complete\.$/);
     expect(plain.textContent).toContain('Send the step back to try again, or reassign it to another helper.');
     expect(screen.getByTestId('failure-engine-detail').textContent).toContain('Operation not permitted');
   });

@@ -95,10 +95,23 @@ function blockedWrites(raw: string): string {
 }
 
 /**
- * The session card's headline (studio#682 row 5): the step by its NAME, in plain words — never
- * "unit #N", env vars or the engine's prose (that stays in the card's Technical details).
+ * studio#1384 (coord r2): whose sandbox refused the writes: the HELPER's (the seat running the step), by the roster's
+ * name, else its key with a capital ("codex" -> "Codex"); "The helper" when the step names no seat. Never the step's
+ * name: a step has no sandbox of its own.
  */
-export function stepDenialHeadline(f: DenialFacts, step: string): string {
+export function sandboxOwner(cli: string | null | undefined, roster: readonly { key: string; display_name?: string | null }[] | null): string {
+  if (cli === null || cli === undefined || cli === '') return 'The helper';
+  const label = roster?.find((r) => r.key === cli)?.display_name;
+  const name = label !== null && label !== undefined && label !== '' ? label : (cli.split('#')[0] ?? cli);
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+/**
+ * The session card's headline (studio#682 row 5): the step by its NAME, in plain words — never
+ * "unit #N", env vars or the engine's prose (that stays in the card's Technical details). `helper` names the seat
+ * that ran the step (see {@link sandboxOwner}); only the seat-refused sentence uses it.
+ */
+export function stepDenialHeadline(f: DenialFacts, step: string, helper = 'The helper'): string {
   switch (f.kind) {
     case 'sandbox-write':
       return `${step} tried to change files outside its workspace and was stopped to protect your files.`;
@@ -117,7 +130,7 @@ export function stepDenialHeadline(f: DenialFacts, step: string): string {
         ? `${step} couldn't start: its helper's skills aren't set up on this machine.`
         : `${step} failed: its helper stopped with an error.`;
     case 'seat-refused':
-      return `${step}’s own sandbox blocked ${blockedWrites(f.raw)}, so its work isn’t complete.`;
+      return `${helper}’s own sandbox blocked ${blockedWrites(f.raw)}, so ${step} isn’t complete.`;
     default:
       return `${step} failed.`;
   }
@@ -161,7 +174,7 @@ export function denialHeadline(f: DenialFacts, ord: number): string {
     case 'worker-failed':
       return `The worker failed on unit #${ord}.`;
     case 'seat-refused':
-      return `Unit #${ord}’s own sandbox blocked ${blockedWrites(f.raw)}, so its work isn’t complete.`;
+      return `The helper’s own sandbox blocked ${blockedWrites(f.raw)}, so unit #${ord} isn’t complete.`;
     default:
       return `Unit #${ord} was stopped.`;
   }
@@ -254,7 +267,7 @@ export function escalationCopy(
       // engine folded away (actor.rs) — the SAME refusal, so the same sentence.
       // core: a seat-refused denial wins the fold, and a hook that also denied books the class `boundary_deny`
       // (actor.rs `denial_class`, `_ if hook_denied`): the sandbox is still what stopped the step (codex r1).
-      if (source === 'seat_refused') return known(`${unit}: its own sandbox blocked ${blockedWrites(facts.verdictSummary ?? '')}, so its work isn’t complete`);
+      if (source === 'seat_refused') return known(`${unit}: the helper’s own sandbox blocked ${blockedWrites(facts.verdictSummary ?? '')}, so its work isn’t complete`);
       if (source !== 'input_governance' && source !== '') break;
       const cmd = facts.deniedCommand ? `: \`${facts.deniedCommand}\`` : '';
       const read = facts.claimId?.startsWith('boundary-read-deny:') ? ' (a read outside the workspace)' : '';
@@ -276,7 +289,7 @@ export function escalationCopy(
       if (source === 'evaluator_verdict') return known(`${unit}: the evaluator's VERDICT was not PASS${tail}`);
       // core#1850: actor.rs `denial_class` books `seat_refused` under `verdict_not_pass` (its `_` arm). The summary is the
       // engine's reason, which this sentence already says.
-      if (source === 'seat_refused') return known(`${unit}: its own sandbox blocked ${blockedWrites(facts.verdictSummary ?? '')}, so its work isn’t complete`);
+      if (source === 'seat_refused') return known(`${unit}: the helper’s own sandbox blocked ${blockedWrites(facts.verdictSummary ?? '')}, so its work isn’t complete`);
       break;
     default:
       break;
