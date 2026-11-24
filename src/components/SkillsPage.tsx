@@ -100,6 +100,9 @@ const PAGE_VERB_LABEL: Record<PageVerb, string> = {
   publish: 'Publish',
 };
 
+/** How often the page re-reads crew's skills state while crew is publishing at boot (studio#1363). */
+const PUBLISHING_POLL_MS = 4_000;
+
 export function SkillsPage({ navigate, search = '' }: {
   navigate: (path: string) => void;
   /** The URL search string — `?skill=<name>` addresses one skill's drawer. */
@@ -487,6 +490,19 @@ export function SkillsPage({ navigate, search = '' }: {
     </button>
   );
   const error = recovery.error ?? pageError ?? stale ?? (state.kind === 'failed' || state.kind === 'unavailable' ? state.message : null);
+  /** studio#1363: crew publishes at boot and says so; while it does, the page re-reads it (every few seconds) and, once it
+   *  is done, the catalog too, so "Publishing now" never outlives the publish. */
+  const publishingNow = engine?.state === 'publishing';
+  const wasPublishing = useRef(false);
+  useEffect(() => {
+    if (publishingNow) {
+      wasPublishing.current = true;
+      const t = setInterval(() => { void loadEngine(); }, PUBLISHING_POLL_MS);
+      return () => clearInterval(t);
+    }
+    if (wasPublishing.current && engine !== null) { wasPublishing.current = false; void load(); }
+    return undefined;
+  }, [publishingNow, engine, load, loadEngine]);
   /** studio#1363: crew's skills state, said in the same words as setup step 2 when it is not the catalog's to tell
    *  (publishing at boot, or wicked-garden missing or too old, with crew's install command). */
   const reading = skillsReading(engine);

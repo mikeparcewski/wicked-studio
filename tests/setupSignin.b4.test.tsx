@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useEffect } from 'react';
 import type { RosterSeat } from '../src/api/types.js';
 import { agentRows } from '../src/board/agentsModel.js';
-import { crewCommand, helperRuntimeDown, issueCopy, runtimeStart } from '../src/board/agentsCopy.js';
+import { crewCommand, helperRuntimeCommand, helperRuntimeDown, issueCopy, runtimeStart } from '../src/board/agentsCopy.js';
 import { deliveryStep, skillsReading, skillsWords } from '../src/board/firstUse.js';
 
 /**
@@ -27,6 +27,7 @@ const LOCAL = '; or deliver locally, with no pull request (studio Settings: turn
 const DELIVERY_SIGNED_OUT = { deliverDefault: 'pr', github: MISSING_GH, pushAs: null, gitAuthor: ident, ready: false, reason: 'A job that opens a pull request would stop at its deliver step: gh is not signed in to github.com.', fix: `To open pull requests, sign in to GitHub: gh auth login (or export GH_TOKEN for the daemon)${LOCAL}` };
 const DELIVERY_NO_GH = { ...DELIVERY_SIGNED_OUT, reason: 'A job that opens a pull request would stop at its deliver step: gh is not installed (delivery opens the pull request with it).', fix: `To open pull requests, install the GitHub CLI (gh) and sign in: gh auth login${LOCAL}` };
 const DELIVERY_NO_AUTHOR = { ...DELIVERY_READY, gitAuthor: null, ready: false, reason: 'A job that opens a pull request would stop at its deliver step: no git author or committer identity is configured, so the commit would be refused.', fix: `To open pull requests, set the git author: git config --global user.name "Your Name" and git config --global user.email you@example.com${LOCAL}` };
+const DELIVERY_TOKEN = { ...DELIVERY_SIGNED_OUT, reason: 'A job that opens a pull request would stop at its deliver step: GitHub refuses the exported GH_TOKEN (expired or revoked).', fix: `To open pull requests, export a valid GH_TOKEN, or unset it${LOCAL}` };
 const DELIVERY_UNKNOWN = { ...DELIVERY_READY, github: { provider: 'github', status: 'unknown', source: null, missing: [], message: 'GitHub credentials: could not be checked.' }, pushAs: null, ready: null, reason: 'Whether a pull request can be opened is not known yet: the GitHub credential could not be checked (gh did not answer in time, or GitHub could not be reached).', fix: 'Re-check in a moment.' };
 const FALLBACK = { kind: 'skills.fallback', severity: 'warning', message: 'no wicked-garden plugin source: no installed plugin found — install wicked-garden >= 12.68.0 first: npx wicked-installer install wicked-garden (or npm i -g wicked-garden)' };
 const TOO_OLD = { kind: 'skills.garden', severity: 'error', message: 'wicked-garden 0.40.0 (the installed plugin at /x/wicked-garden) is older than the required 12.68.0, so it is not used and every launch and onboarding is refused — install wicked-garden >= 12.68.0 (`npx wicked-installer install wicked-garden`), then POST /skills/refresh-baseline and POST /skills/publish (or restart the daemon)' };
@@ -67,7 +68,7 @@ const response = (body: unknown, status = 200): Response => new Response(JSON.st
 beforeEach(() => {
   resetAgentsReads(); resetFirstUseReads(); clearCachedRoster(); localStorage.clear();
   useAuthOps.setState({ pending: {}, checking: {} });
-  useComposerPrefsStore.setState({ prefs: { ...DEFAULT_COMPOSER_PREFS }, loaded: true });
+  useComposerPrefsStore.setState({ prefs: { ...DEFAULT_COMPOSER_PREFS }, loaded: true, persist: 'unknown' });
   roster = [helper()];
   refusal = { status: 502, body: CLI_MISSING };
   diagnostics = { components: { engineBinaries: { 'wicked-estate': '1.0.0' } } };
@@ -95,13 +96,19 @@ describe('crew#1844: a cluster never set up reads its own reason and crew’s co
   it('is never "Kubernetes is stopped": its card names crew’s filled-in command with Copy', () => {
     const row = rowOf(noCluster());
     expect(helperRuntimeDown(row)).toBe(NO_CLUSTER);
-    expect(runtimeStart(NO_CLUSTER)).toMatchObject({ title: 'Kubernetes isn’t set up for helpers yet', button: 'Set up Kubernetes', command: CORE });
+    expect(runtimeStart(NO_CLUSTER)).toMatchObject({ title: 'Kubernetes isn’t set up for helpers yet', button: 'Set up Kubernetes', noCluster: true });
+    expect(helperRuntimeCommand(row)).toBe(CORE);
     const copy = issueCopy({ code: 'signed_out', severity: 'problem', safety: false }, row, [row], Date.now(), true);
     expect(copy.title).toBe('Kubernetes isn’t set up for helpers yet');
     expect(copy.what).not.toMatch(/stopped/);
     expect(copy.fix[0]!.commands).toEqual([{ line: CORE, display: CORE, label: 'cluster setup' }]);
     // A stopped Kubernetes keeps its own words.
-    expect(runtimeStart("Kubernetes isn't running")).toMatchObject({ what: 'Kubernetes is stopped', command: null });
+    expect(runtimeStart("Kubernetes isn't running")).toMatchObject({ what: 'Kubernetes is stopped', noCluster: false });
+    // The copied line is crew's raw command; only its display masks a home folder (review r1).
+    const raw = 'No Kubernetes cluster is set up for these helpers yet. Set one up: `/home/ada/bin/wicked-core cluster install --admin-context rancher-desktop --home /home/ada/.wicked-crew`';
+    const shared = rowOf(noCluster({ health: { status: 'inactive', message: raw, since: new Date().toISOString() } }));
+    const fix = issueCopy({ code: 'signed_out', severity: 'problem', safety: false }, shared, [shared], Date.now(), true).fix[0]!;
+    expect(fix.commands[0]!.line).toBe('/home/ada/bin/wicked-core cluster install --admin-context rancher-desktop --home /home/ada/.wicked-crew');
   });
   it('the modal and setup step 4 show the command with Copy', async () => {
     roster = [noCluster()];
@@ -131,6 +138,13 @@ describe('core#1845: a missing host CLI names its install command with Copy', ()
     expect(crewCommand(CLI_MISSING.error)).toBe('npm install -g @openai/codex@0.162.1');
     expect(crewCommand(NO_CLUSTER)).toBe(CORE);
     expect(crewCommand('Codex isn\'t installed on this computer: install it (see its install guide), then try again.')).toBeNull();
+    // Never a template, a name or an example: only a command crew filled in (review r1).
+    expect(crewCommand("To set one up, run `wicked-core cluster install --admin-context <your cluster context> --home <this daemon's state home>`, then try again.")).toBeNull();
+    expect(crewCommand('The cluster said: run `kind load image-archive x --name y` first. Build it (`/opt/wc seat-image build codex`), then try again.'.replace('/opt/wc', '/opt/wc/wicked-core'))).toBe('/opt/wc/wicked-core seat-image build codex');
+    expect(crewCommand('`codex` is missing: install it (npm install -g @openai/codex@0.162.1).')).toBe('npm install -g @openai/codex@0.162.1');
+    expect(crewCommand('Install it with npm install -g @openai/codex@0.162.1.')).toBe('npm install -g @openai/codex@0.162.1');
+    expect(crewCommand("Run `~/'My Tools/wicked-core' cluster status --home ~/.wicked-crew` by hand.")).toBe("~/'My Tools/wicked-core' cluster status --home ~/.wicked-crew");
+    expect(crewCommand('Run `wicked-core cluster status; rm -rf x` now.')).toBeNull();
   });
   it('the not-installed card offers Sign in, and the refusal shows the install command with Copy', async () => {
     roster = [codex()];
@@ -178,8 +192,14 @@ describe('crew#1527: the setup steps show the GitHub-or-local delivery choice be
   it('reads crew’s readiness', () => {
     expect(deliveryStep(DELIVERY_READY, true)).toMatchObject({ done: true, state: 'ready', commands: [] });
     expect(deliveryStep(DELIVERY_SIGNED_OUT, true)).toMatchObject({ done: false, state: 'blocked', words: 'Not done. Sign in to GitHub for pull requests, or choose local delivery.', commands: ['gh auth login'] });
-    expect(deliveryStep(DELIVERY_NO_GH, true).commands).toEqual([]);
-    expect(deliveryStep(DELIVERY_NO_AUTHOR, true).commands).toEqual(['git config --global user.name "Your Name"', 'git config --global user.email you@example.com']);
+    expect(deliveryStep(DELIVERY_SIGNED_OUT, true).fix).toBe('To open pull requests, sign in to GitHub: gh auth login (or export GH_TOKEN for studio’s service).');
+    expect(deliveryStep(DELIVERY_NO_GH, true)).toMatchObject({ commands: [], words: 'Not done. Install the GitHub CLI (gh) and sign in for pull requests, or choose local delivery.' });
+    expect(deliveryStep(DELIVERY_NO_AUTHOR, true)).toMatchObject({
+      words: 'Not done. Set your git author for pull requests, or choose local delivery.',
+      commands: ['git config --global user.name "Your Name"', 'git config --global user.email you@example.com'],
+    });
+    // An exported token GitHub refuses is fixed by exporting a valid one: gh's sign-in would not change it (review r1).
+    expect(deliveryStep(DELIVERY_TOKEN, true)).toMatchObject({ state: 'blocked', commands: [], fix: 'To open pull requests, export a valid GH_TOKEN, or unset it.' });
     expect(deliveryStep(DELIVERY_UNKNOWN, true)).toMatchObject({ done: false, state: 'unknown' });
     expect(deliveryStep(undefined, true)).toMatchObject({ done: false, state: 'unknown', detail: null });
     // Local delivery asks GitHub for nothing.
@@ -212,6 +232,30 @@ describe('crew#1527: the setup steps show the GitHub-or-local delivery choice be
     expect(older).toHaveTextContent('Not checked yet.');
     expect(older).toHaveAttribute('data-done', 'false');
   });
+  it('a check that could not answer says why; it is "checking" only while the read is out', async () => {
+    let answer: (r: Response) => void = () => undefined;
+    const held = new Promise<Response>((r) => { answer = r; });
+    const base = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (input, init) => (new URL(String(input)).pathname.endsWith('/setup/known') ? held : base(input as string, init)));
+    page('?setup=1');
+    const step = await screen.findByTestId('agents-setup-step-delivery');
+    expect(step).toHaveAttribute('data-state', 'checking');
+    expect(step).toHaveTextContent('Checking your GitHub sign-in…');
+    expect(within(step).getByTestId('agents-setup-delivery-check')).toBeDisabled();
+    answer(response({ ...known, delivery: DELIVERY_UNKNOWN }));
+    await waitFor(() => expect(step).toHaveAttribute('data-state', 'unknown'));
+    expect(step).toHaveTextContent('gh did not answer in time, or GitHub could not be reached');
+    expect(within(step).getByTestId('agents-setup-delivery-check')).toBeEnabled();
+  });
+  it('a local-delivery choice studio’s service did not store says so', async () => {
+    known = { ...known, delivery: DELIVERY_SIGNED_OUT };
+    page('?setup=1');
+    const step = await screen.findByTestId('agents-setup-step-delivery');
+    await waitFor(() => expect(step).toHaveAttribute('data-state', 'blocked'));
+    fireEvent.click(within(step).getByTestId('agents-setup-delivery-local'));
+    act(() => { useComposerPrefsStore.setState({ persist: 'dropped' }); });
+    expect(within(step).getByTestId('agents-setup-delivery-unsaved')).toHaveTextContent('applies to this session only');
+  });
 });
 
 describe('studio#1363: the Skills page says crew’s skills state in the same words', () => {
@@ -235,6 +279,20 @@ describe('studio#1363: the Skills page says crew’s skills state in the same wo
     expect(status).toHaveAttribute('data-stage', 'publishing');
     expect(status).toHaveTextContent(skillsWords({ stage: 'publishing', command: null, garden: null }));
     expect(screen.queryByText('Ready to publish')).toBeNull();
+  });
+  it('re-reads crew while it publishes, and the catalog once it is done', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      diagnostics = { skills: skillsBlock('publishing', [PUBLISHING]) };
+      skillsFetch(() => response(catalog));
+      render(<SkillsPage navigate={() => {}} />);
+      await screen.findByTestId('skills-engine-status');
+      diagnostics = { skills: skillsBlock('published', [], { gen: 1, path: '/s/skills/snapshots/1' }) };
+      await act(async () => { await vi.advanceTimersByTimeAsync(4_500); });
+      await waitFor(() => expect(screen.queryByTestId('skills-engine-status')).toBeNull());
+      const skillsReads = vi.mocked(fetch).mock.calls.filter(([u]) => new URL(String(u)).pathname.endsWith('/api/v1/skills')).length;
+      expect(skillsReads).toBeGreaterThanOrEqual(2);
+    } finally { vi.useRealTimers(); }
   });
   it('a missing wicked-garden shows crew’s install command where the page asks to restore skills', async () => {
     diagnostics = { skills: skillsBlock('fallback', [FALLBACK]) };

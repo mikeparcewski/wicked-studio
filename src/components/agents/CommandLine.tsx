@@ -24,7 +24,7 @@ export function Command({ c }: { c: CopyCommand }): React.ReactElement {
     <div className="wk-agents-cmd">
       <code data-testid="agents-command">{c.display}</code>
       <button type="button" data-testid="agents-copy" data-command-kind={c.label} data-state={state} onClick={copy}
-        aria-label={`Copy the ${c.label} command`} className="wk-btn wk-btn--secondary wk-agents-copy">
+        aria-label={state === 'copied' ? `Copied the ${c.label} command` : state === 'failed' ? `Couldn’t copy the ${c.label} command` : `Copy the ${c.label} command`} className="wk-btn wk-btn--secondary wk-agents-copy">
         {state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : 'Copy'}
       </button>
     </div>

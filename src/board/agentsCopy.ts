@@ -100,33 +100,54 @@ export function helperRuntimeDown(row: AgentRow): string | null {
     ? displayText(message) : null;
 }
 
+/** A command shape studio offers with Copy: the engine CLI (by path or name), an `npx` / `npm install -g` install, or the
+ *  GitHub and git setup commands; never a placeholder (`<…>`) or a stray shell character. */
+const COMMAND_SHAPE = /^(?:(?:[^\s']*|[^\s']*'[^']*)wicked-core'? (?:cluster|seat-image) \S|npx \S|npm (?:install|i) (?:-g|--global) \S|gh auth login\b|git config --global \S)/;
+const UNSAFE = /[<>|;&$`\\]/;
+
 /**
- * The one setup command crew's own sentence names, so studio can offer it with Copy: a command crew quotes in
- * backticks (crew#1844: the cluster setup, filled in with this computer's engine and state home), else a helper's
- * `npm install -g …` (core#1845: the package the seats run). `null` when the sentence names none.
+ * The one setup command crew's own sentence names, so studio can offer it with Copy: the first backticked span that is a
+ * command (crew#1844: the cluster setup, filled in with this computer's engine and state home; an image build), else a
+ * helper's `npm install -g …` (core#1845: the package the seats run). Spans that are names, tags, examples or templates
+ * with `<placeholders>` are passed over. `null` when the sentence names none. Read it from crew's RAW words: the copied
+ * line must be crew's, not the display masking of it.
  */
 export function crewCommand(text: string): string | null {
-  const quoted = /`([^`\n]{3,400})`/.exec(text)?.[1]?.trim();
-  if (quoted !== undefined && quoted !== '') return quoted;
-  return /\bnpm (?:install|i) (?:-g|--global) [@a-z0-9_./-]+/i.exec(text)?.[0] ?? null;
+  for (const m of text.matchAll(/`([^`\n]{3,400})`/g)) {
+    const span = (m[1] ?? '').trim();
+    if (COMMAND_SHAPE.test(span) && !UNSAFE.test(span.replace(/'[^']*'/g, "''"))) return span;
+  }
+  return /\bnpm (?:install|i) (?:-g|--global) [@a-z0-9_./-]*[a-z0-9]/i.exec(text)?.[0] ?? null;
+}
+
+/** The setup command a runtime-down helper's raw roster words name (crew#1844's cluster setup), for Copy. */
+export function helperRuntimeCommand(row: AgentRow): string | null {
+  const health = row.seat.health;
+  const message = health?.status === 'inactive' ? health.message ?? row.seat.council_ineligible_reason : null;
+  return typeof message === 'string' && NO_CLUSTER_RE.test(message.trim()) ? crewCommand(message) : null;
 }
 
 /** What is stopped (or missing) and how to fix it, from crew's runtime-down words: the k8s runner's seats need
  *  Kubernetes ("Kubernetes isn't running"), or a cluster set up for them first (crew#1844, with crew's command); the
  *  container runtime's need Docker or Rancher. */
-export function runtimeStart(message: string): { title: string; what: string; button: string; step: string; command: string | null } {
+export function runtimeStart(message: string): { title: string; what: string; button: string; step: string; noCluster: boolean } {
   if (NO_CLUSTER_RE.test(message.trim())) {
     return {
       title: 'Kubernetes isn’t set up for helpers yet',
       what: 'no Kubernetes cluster is set up for helpers',
       button: 'Set up Kubernetes',
-      step: 'With Rancher Desktop running and Kubernetes on, run this once in a terminal,',
-      command: crewCommand(message),
+      step: 'With Rancher Desktop running and Kubernetes on, run the setup command once in a terminal (Nerve Center names it),',
+      noCluster: true,
     };
   }
   return /kubernetes/i.test(message)
-    ? { title: message, what: 'Kubernetes is stopped', button: 'Start Kubernetes', step: 'Start Rancher Desktop with Kubernetes on,', command: null }
-    : { title: message, what: 'Docker or Rancher is stopped', button: 'Start Docker or Rancher', step: 'Start Rancher Desktop,', command: null };
+    ? { title: message, what: 'Kubernetes is stopped', button: 'Start Kubernetes', step: 'Start Rancher Desktop with Kubernetes on,', noCluster: false }
+    : { title: message, what: 'Docker or Rancher is stopped', button: 'Start Docker or Rancher', step: 'Start Rancher Desktop,', noCluster: false };
+}
+
+/** The step for a runtime-down helper: with crew's command, "run this"; without one, where to find it. */
+export function runtimeStep(start: ReturnType<typeof runtimeStart>, command: string | null): string {
+  return start.noCluster && command !== null ? 'With Rancher Desktop running and Kubernetes on, run this once in a terminal,' : start.step;
 }
 
 /**
@@ -137,11 +158,12 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
   const runtime = helperRuntimeDown(row);
   if (runtime !== null) {
     const start = runtimeStart(runtime);
+    const command = helperRuntimeCommand(row);
     return {
       title: start.title,
       what: `Studio can’t check ${row.name} while ${start.what}.`,
       why: 'This helper can’t take work yet.',
-      fix: [step(start.step, 'then check again.', cmd(start.command, 'cluster setup'))],
+      fix: [step(runtimeStep(start, command), 'then check again.', cmd(command, 'cluster setup'))],
       tech: null,
     };
   }

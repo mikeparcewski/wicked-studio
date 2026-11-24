@@ -369,6 +369,12 @@
       ]
     },
     {
+      "testId": "agents-setup-delivery-unsaved",
+      "files": [
+        "src/components/agents/SetupPanel.tsx"
+      ]
+    },
+    {
       "testId": "agents-setup-desk",
       "files": [
         "src/components/agents/SetupPanel.tsx"

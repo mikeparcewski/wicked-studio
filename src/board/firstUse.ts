@@ -186,37 +186,48 @@ export interface DeliveryStep {
   words: string;
   /** crew's own sentence (what it checked), shown beside studio's words; `null` when there is none. */
   detail: string | null;
+  /** crew's fix for pull requests (its `fix`, without the local-delivery half studio offers as a button); `null` when none. */
+  fix: string | null;
   commands: string[];
 }
 
 interface DeliveryReadinessLike {
   ready?: unknown;
   reason?: unknown;
+  fix?: unknown;
   github?: { status?: unknown } | null;
 }
 
 export function deliveryStep(delivery: unknown, deliverPr: boolean): DeliveryStep {
   if (!deliverPr) {
-    return { done: true, state: 'local', words: 'Done. Finished work stays on its branch in your repository; studio opens no pull request. Change it in Settings.', detail: null, commands: [] };
+    return { done: true, state: 'local', words: 'Done. Finished work stays on its branch in your repository; studio opens no pull request. Change it in Settings.', detail: null, fix: null, commands: [] };
   }
   const d = delivery !== null && typeof delivery === 'object' ? delivery as DeliveryReadinessLike : null;
-  const reason = typeof d?.reason === 'string' && d.reason.trim() !== '' ? d.reason.trim() : null;
+  const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
+  const reason = text(d?.reason);
   if (d === null || d.ready === null || d.ready === undefined) {
-    return { done: false, state: 'unknown', words: 'Not checked yet.', detail: d === null ? null : reason, commands: [] };
+    return { done: false, state: 'unknown', words: 'Not checked yet.', detail: d === null ? null : reason, fix: null, commands: [] };
   }
-  if (d.ready === true) return { done: true, state: 'ready', words: 'Done. Finished work opens a pull request on GitHub.', detail: reason, commands: [] };
-  // The commands for the blockers crew's sentence names (setup/delivery-readiness.ts deliveryReadiness): a GitHub
-  // sign-in delivery refuses (a missing gh is said in crew's words, with no command), and no git author.
+  if (d.ready === true) return { done: true, state: 'ready', words: 'Done. Finished work opens a pull request on GitHub.', detail: reason, fix: null, commands: [] };
+  // The blockers crew's sentence names (setup/delivery-readiness.ts deliveryReadiness): no gh, a GitHub credential
+  // delivery refuses (an exported token is fixed by exporting a valid one, not by gh's sign-in), and no git author.
+  const said = reason ?? '';
+  const noGh = /\bgh is not installed\b/.test(said);
+  const token = /\bexported (?:GH_TOKEN|GITHUB_TOKEN)\b/.test(`${said} ${text(d.fix) ?? ''}`);
+  const github = d.github?.status === 'missing';
+  const author = /\bno git (?:author|committer)\b[^.;]*\bidentity\b/.test(said);
   const commands: string[] = [];
-  if (d.github?.status === 'missing' && !/\bgh is not installed\b/.test(reason ?? '')) commands.push('gh auth login');
-  if (/\bno git (?:author|committer)\b[^.;]*\bidentity\b/.test(reason ?? '')) {
-    commands.push('git config --global user.name "Your Name"', 'git config --global user.email you@example.com');
-  }
-  return {
-    done: false, state: 'blocked',
-    words: 'Not done. Sign in to GitHub for pull requests, or choose local delivery.',
-    detail: reason, commands,
-  };
+  if (github && !noGh && !token) commands.push('gh auth login');
+  if (author) commands.push('git config --global user.name "Your Name"', 'git config --global user.email you@example.com');
+  const need = [
+    noGh ? 'Install the GitHub CLI (gh) and sign in' : github ? 'Sign in to GitHub' : null,
+    author ? (github || noGh ? 'set your git author' : 'Set your git author') : null,
+  ].filter((x): x is string => x !== null);
+  const words = need.length === 0 ? 'Not done. Fix what is below for pull requests, or choose local delivery.'
+    : `Not done. ${need.join(' and ')} for pull requests, or choose local delivery.`;
+  // crew's fix up to its local-delivery half (studio offers that as a button, in its own words).
+  const fix = text(d.fix)?.split(/;\s*or deliver locally\b/)[0]?.replace(/\bthe daemon\b/g, 'studio’s service').replace(/[.;\s]+$/, '') ?? null;
+  return { done: false, state: 'blocked', words, detail: reason, fix: fix === null || fix === '' ? null : `${fix}.`, commands };
 }
 
 /** Projects that count: the synthesized "Unfiled" default (`id: 'default'`) never does. */
