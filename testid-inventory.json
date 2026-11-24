@@ -23687,6 +23687,12 @@
       ]
     },
     {
+      "testId": "start-on-login-options",
+      "files": [
+        "src/components/StartOnLoginSettings.tsx"
+      ]
+    },
+    {
       "testId": "start-on-login-read-error",
       "files": [
         "src/components/StartOnLoginSettings.tsx"
@@ -23700,12 +23706,6 @@
     },
     {
       "testId": "start-on-login-reread-error",
-      "files": [
-        "src/components/StartOnLoginSettings.tsx"
-      ]
-    },
-    {
-      "testId": "start-on-login-restart",
       "files": [
         "src/components/StartOnLoginSettings.tsx"
       ]

@@ -9,13 +9,6 @@ import { TechDetails } from './ui/TechDetails.js';
 /** A command to copy, as the gate card draws one (GateVerdict's suggestion ref). */
 const CODE: React.CSSProperties = { background: 'var(--surface-rail)', color: 'var(--ink-high)', userSelect: 'all', overflowWrap: 'anywhere' };
 
-/** The hand start for the same port, after removing the unit stopped the service (crew's `uninstallService` runs
- *  `launchctl bootout` / `systemctl --user disable --now`). crew's commands are `<serve> --install-service`. */
-function restartOf(s: StartOnLoginStatus): string {
-  const flag = ' --uninstall-service';
-  return s.uninstallCommand.endsWith(flag) ? s.uninstallCommand.slice(0, -flag.length) : `wicked-crew serve --port ${s.port}`;
-}
-
 /** What the card says for crew's answer: on, off, or a system where nothing is automated. */
 function stateOf(s: StartOnLoginStatus): 'on' | 'off' | 'manual' {
   if (s.platform === 'other') return 'manual';
@@ -104,19 +97,18 @@ function StartOnLoginBody({ status, reading, onReread, readError }: {
       )}
       {state === 'on' && (
         <p className="wk-field-note" data-testid="start-on-login-howto">
-          To stop it starting when you sign in, run this in a terminal. It also stops the service now, so this page loses it
-          until you start it again with the second command:
+          To stop it starting when you sign in, run this in a terminal. If the service is running under it, this also stops
+          the service now: start it again the way you start it by hand, with the same options.
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2 min-w-0">
         <code className="px-1 rounded min-w-0" data-testid="start-on-login-command" style={CODE}>{command}</code>
         <CopyButton command={command} />
       </div>
-      {state === 'on' && (
-        <div className="flex flex-wrap items-center gap-2 min-w-0">
-          <code className="px-1 rounded min-w-0" data-testid="start-on-login-restart" style={CODE}>{restartOf(status)}</code>
-          <CopyButton command={restartOf(status)} />
-        </div>
+      {state !== 'manual' && (
+        // crew's commands name only the port; a service started with other options (`--db`) keeps them only if they are
+        // added (crew's unit re-runs the install's own serve options, codex r2).
+        <p className="wk-field-note" data-testid="start-on-login-options">If you start the service with other options, such as <code>--db</code>, add them to this command.</p>
       )}
       {readError !== null && (
         <div data-testid="start-on-login-reread-error" role="status">

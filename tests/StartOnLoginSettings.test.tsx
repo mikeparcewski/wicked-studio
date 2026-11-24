@@ -58,10 +58,11 @@ describe('the Start at login card', () => {
     expect(status.textContent).toBe('On: a start-at-login service is set up for Studio’s service on port 7701.');
     expect(screen.getByTestId('start-on-login-unit').textContent).toContain('~/Library/LaunchAgents/com.wickedagile.wicked-crew.plist');
     expect(screen.getByTestId('start-on-login-command').textContent).toBe('wicked-crew serve --port 7701 --uninstall-service');
-    // codex r1: removing it stops the service now (crew runs `launchctl bootout`), so the hand start for the port is given.
-    expect(screen.getByTestId('start-on-login-howto').textContent).toContain('It also stops the service now');
-    expect(screen.getByTestId('start-on-login-restart').textContent).toBe('wicked-crew serve --port 7701');
-    expect(within(card()).getByRole('button', { name: 'copy wicked-crew serve --port 7701' })).toBeInTheDocument();
+    // codex r1-r2: removing it stops the service now when the service runs under it (crew runs `launchctl bootout`);
+    // no restart command is derived, as crew's commands carry only the port and a `--db` would be lost.
+    expect(screen.getByTestId('start-on-login-howto').textContent).toContain('If the service is running under it, this also stops the service now');
+    expect(screen.queryByTestId('start-on-login-restart')).toBeNull();
+    expect(screen.getByTestId('start-on-login-options').textContent).toBe('If you start the service with other options, such as --db, add them to this command.');
   });
 
   it('on (Linux, another port): the port and the unit are crew\'s', async () => {
@@ -70,7 +71,6 @@ describe('the Start at login card', () => {
     expect((await screen.findByTestId('start-on-login-status')).textContent).toContain('set up for Studio’s service on port 7741');
     expect(screen.getByTestId('start-on-login-unit').textContent).toContain('~/.config/systemd/user/wicked-crew-7741.service');
     expect(screen.getByTestId('start-on-login-command').textContent).toBe('wicked-crew serve --port 7741 --uninstall-service');
-    expect(screen.getByTestId('start-on-login-restart').textContent).toBe('wicked-crew serve --port 7741');
   });
 
   it('another system: nothing is automated, and the command prints the steps', async () => {
