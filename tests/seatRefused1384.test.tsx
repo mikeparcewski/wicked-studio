@@ -14,6 +14,7 @@ import { makeUnit, makeView } from './factories.js';
 import { escalationCopy, parseDenial, stepDenialAdvice, stepDenialHeadline, denialHeadline, denialAdvice } from '../src/components/denialCopy.js';
 import { denialSourceLabel, gateVerdict } from '../src/components/gateVerdictModel.js';
 import { GateVerdict } from '../src/components/GateVerdict.js';
+import { gateCause } from '../src/board/gateHeadline.js';
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -75,5 +76,24 @@ describe('studio#1384: a seat-refused denial is said in plain words', () => {
     expect(plain.querySelector('.wk-session-run-story-line')!.textContent).toMatch(/own sandbox blocked a write inside the project \(src\/notes\.ts\), so its work isn’t complete\.$/);
     expect(plain.textContent).toContain('Send the step back to try again, or reassign it to another helper.');
     expect(screen.getByTestId('failure-engine-detail').textContent).toContain('Operation not permitted');
+  });
+
+  it('the gate’s question names the blocked writes, never "did not pass review" (nothing reviewed the work)', () => {
+    const PROMPT = 'Unit 2 verdict is NOT PASS — confirm to retry the phase, request changes to send the review back to the creator phase, or reject to cancel the run';
+    const view = makeView({ id: 'r-g', status: 'awaiting_human', clis: ['codex', 'claude'] } as never, [
+      makeUnit({ id: 'r-g:build', session_id: 'r-g', ord: 2, status: 'rejected', role: 'creator', assigned_cli: 'codex' }),
+    ]);
+    const events = [
+      { type: 'gateEvaluated', session: 'r-g', ord: 2, passed: false, denial: { source: 'seat_refused', reason: ONE }, denialReason: ONE, ts: 1, seq: 1 },
+      { type: 'gateEscalated', session: 'r-g', ord: 2, condition: 'verdict_not_pass', denialSource: 'seat_refused', verdictSummary: ONE, attempt: 0, ts: 2, seq: 2 },
+      { type: 'awaitingHuman', session: 'r-g', ord: 2, prompt: PROMPT, gateKind: 'escalation', ts: 3, seq: 3 },
+    ] as unknown as CoreEvent[];
+    const gate = { runId: 'r-g', ord: 2, prompt: PROMPT, lifecycle: 'open', receivedAt: 3, gateKind: 'escalation' } as never;
+    const roster = [{ key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true }] as never;
+    const c = gateCause({ view, gate, events, model: { choices: [], overflow: [], recommended: null } as never, roster });
+    expect(c.headline).toBe('Codex’s own sandbox blocked its writes inside the project, so the step isn’t complete');
+    // Another denial on the same gate keeps its own words.
+    const other = events.map((e) => (e.type === 'gateEscalated' ? { ...e, denialSource: 'agent_validator' } : e)) as CoreEvent[];
+    expect(gateCause({ view, gate, events: other, model: { choices: [], overflow: [], recommended: null } as never, roster }).headline).toBeNull();
   });
 });

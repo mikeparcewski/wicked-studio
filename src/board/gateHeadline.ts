@@ -3,7 +3,7 @@ import { reassignCandidates, reassignRefusedOf, runBenchesOf, seatStanding, type
 import { isDeliverGate } from '../components/gateMoveModel.js';
 import { deliverAcceptance } from './checkState.js';
 import { choicesOf, type OpenGate } from '../store/gates.js';
-import { creatorSeatRefusal, isReduced, noDistinctReviewer, ruleHolds, rulesHoldAt, sessionAssurance, sessionQe, waitsForJudge, type RuleRow } from './assuranceModel.js';
+import { creatorSeatRefusal, escalationFor, isReduced, noDistinctReviewer, ruleHolds, rulesHoldAt, sessionAssurance, sessionQe, waitsForJudge, type RuleRow } from './assuranceModel.js';
 import { governanceDenialHeadline, plainGateQuestion, rulesHoldWords } from './deskWords.js';
 import type { GateRowModel } from './gateRowModel.js';
 import { isHelperSeat } from './responder.js';
@@ -160,8 +160,14 @@ export function gateCause({ view, gate, events, model, roster, pool = runPoolOf(
   const hold = gate !== undefined && model !== null ? rulesHoldAt(events, view.units, gate.ord) : null;
   // Only when the gate's own cause is the hold: a broken rule or a hold behind another denial keeps its own headline.
   const rulesHeld = hold !== null && hold.held && !hold.behind ? rulesHoldHeadline(hold.rows) : null;
+  // studio#1384 (core#1850): the step's OWN seat (its CLI sandbox, a read-only mount, file permissions) refused its
+  // writes inside the project. Nothing reviewed the work, so the gate never reads "did not pass review".
+  const blockedCli = gate !== undefined && escalationFor(events, gate.ord)?.denialSource === 'seat_refused'
+    ? view.units.find((u) => u.ord === gate.ord)?.assigned_cli ?? '' : null;
+  const blocked = blockedCli === null ? null
+    : `${blockedCli === '' ? 'The helper' : seatName(blockedCli, (roster ?? []).find((r) => r.key === blockedCli)?.display_name ?? null)}’s own sandbox blocked its writes inside the project, so the step isn’t complete`;
   // The failures only this change has come before a missing judge (J4 0.16.6: a fix gate with both led with the judge).
-  const headline = seatRefusal ? (judges?.inJob !== undefined ? `${seatName(judges.inJob.cli, judges.inJob.label)} can review this instead`
+  const headline = blocked !== null ? blocked : seatRefusal ? (judges?.inJob !== undefined ? `${seatName(judges.inJob.cli, judges.inJob.label)} can review this instead`
       : judges?.outside !== undefined ? `${seatName(judges.outside.key, judges.outside.display_name ?? null)} could review this, but isn’t one of this job’s helpers`
         : deadEnd !== null ? 'None of this job’s helpers can review this independently' : 'No second helper is free to review this')
     : broke !== null ? broke
