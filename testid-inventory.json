@@ -2797,6 +2797,18 @@
       ]
     },
     {
+      "testId": "blast-rings-footer",
+      "files": [
+        "src/components/graph/BlastRings.tsx"
+      ]
+    },
+    {
+      "testId": "blast-rings-header",
+      "files": [
+        "src/components/graph/BlastRings.tsx"
+      ]
+    },
+    {
       "testId": "blast-rings-levels",
       "files": [
         "src/components/graph/BlastRings.tsx"
