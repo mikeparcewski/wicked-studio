@@ -10,7 +10,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client.js';
-import { ApiError } from '../api/errors.js';
+import { ApiError, isRouteAbsent } from '../api/errors.js';
 import type { RequirementSummary, RequirementDetail, RequirementsPage, RequirementPatch } from '../api/types.js';
 import { useModalEscape } from './Modal.js';
 import { openLaunchWizard } from '../store/launchWizard.js';
@@ -439,6 +439,13 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
               onClose={() => setSelectedKey(null)}
               onSaved={absorbUpdate}
               onNavigateComponent={onNavigateComponent}
+              retirable={uncountedOf(page?.items.find((i) => i.key === selectedKey) ?? null) === 'unindexed'}
+              onRetired={(key) => {
+                // studio#1386: the row leaves the list now; the read that follows is crew's word on it.
+                setPage((prev) => (prev === null ? prev : { ...prev, items: prev.items.filter((i) => i.key !== key), total: Math.max(0, prev.total - 1) }));
+                setSelectedKey((k) => (k === key ? null : k));
+                refetchNow.current();
+              }}
             />
           )}
         </div>
@@ -810,12 +817,17 @@ function RequirementEditRail({
   onClose,
   onSaved,
   onNavigateComponent,
+  retirable = false,
+  onRetired,
 }: {
   repoId: string;
   reqKey: string;
   onClose: () => void;
   onSaved: (d: RequirementDetail) => void;
   onNavigateComponent?: ((symbol: string) => void) | undefined;
+  /** The row is listed as no longer in the code (`uncounted: 'unindexed'`): it can be retired (studio#1386). */
+  retirable?: boolean;
+  onRetired?: (key: string) => void;
 }): React.ReactElement {
   const [detail, setDetail] = useState<RequirementDetail | null>(null);
   const [title, setTitle] = useState('');
@@ -1018,6 +1030,7 @@ function RequirementEditRail({
               </ul>
             </div>
           )}
+          {retirable && onRetired !== undefined && <RetireRequirement repoId={repoId} reqKey={reqKey} onRetired={onRetired} />}
           <div className="flex items-center gap-3 mt-1">
             <button
               type="button"
@@ -1057,6 +1070,63 @@ function RailCorroboration({ detail }: { detail: RequirementDetail }): React.Rea
       <p className="text-xs mt-1" style={{ color: c.status === 'validated' ? T.ink : 'var(--status-warn)' }}>
         {corroborationSentence(c)}
       </p>
+    </div>
+  );
+}
+
+/** The words a refused retire shows: crew's own sentence (its 409s name the next step), or the update line when the
+ *  daemon predates the route. */
+function retireRefusal(e: unknown): string {
+  if (isRouteAbsent(e)) return 'This version of Studio’s service can’t retire requirements. Update wicked to get it.';
+  const said = e instanceof ApiError && typeof e.body === 'object' && e.body !== null ? (e.body as { error?: unknown }).error : undefined;
+  if (typeof said === 'string' && said.trim() !== '') return said;
+  return e instanceof Error ? e.message : String(e);
+}
+
+/**
+ * RETIRE (studio#1386): a requirement whose code was deleted is kept across re-maps, flagged as no longer in the code,
+ * until a person retires it (crew#1858, wicked-core#1698). It confirms first, then asks crew once; the list is read
+ * again after. A refusal is said here, in crew's words, and the button comes back.
+ */
+function RetireRequirement({ repoId, reqKey, onRetired }: { repoId: string; reqKey: string; onRetired: (key: string) => void }): React.ReactElement {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const out = useRef(false);
+  useEffect(() => { setConfirming(false); setError(null); }, [reqKey]);
+  function retire(): void {
+    if (out.current) return;
+    out.current = true;
+    setBusy(true);
+    setError(null);
+    api
+      .retireRequirement(repoId, reqKey)
+      .then(() => onRetired(reqKey), (e: unknown) => { setError(retireRefusal(e)); setConfirming(false); })
+      .finally(() => { out.current = false; setBusy(false); });
+  }
+  return (
+    <div data-testid="requirement-retire" className="flex flex-col gap-1.5 rounded-lg px-3 py-2" style={{ border: `1px solid ${T.hairlineS}`, background: T.canvas2 }}>
+      <p className="text-xs" style={{ color: T.muted }}>Its code is no longer in the code index. Re-mapping keeps listing it until it is retired.</p>
+      {confirming ? (
+        <div data-testid="requirement-retire-confirm" className="flex flex-col gap-1.5">
+          <p className="text-xs" style={{ color: T.ink }}>This requirement’s code was deleted. Retire it? It will no longer be listed, and its id is not reused.</p>
+          <div className="flex items-center gap-2">
+            <button type="button" data-testid="requirement-retire-go" onClick={retire} disabled={busy} className="wk-btn wk-btn--danger wk-btn--sm">
+              {busy ? 'Retiring…' : 'Retire'}
+            </button>
+            <button type="button" data-testid="requirement-retire-cancel" onClick={() => setConfirming(false)} disabled={busy} className="wk-btn wk-btn--quiet wk-btn--sm">
+              Keep it
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div>
+          <button type="button" data-testid="requirement-retire-start" onClick={() => setConfirming(true)} className="wk-btn wk-btn--secondary wk-btn--sm">
+            Retire…
+          </button>
+        </div>
+      )}
+      {error !== null && <p data-testid="requirement-retire-error" role="alert" className="text-xs" style={{ color: T.deny }}>{error}</p>}
     </div>
   );
 }
