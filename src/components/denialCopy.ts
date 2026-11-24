@@ -28,6 +28,7 @@ export type DenialKind =
   | 'rule'
   | 'triage'
   | 'worker-failed'
+  | 'seat-refused'
   | 'unknown';
 
 export interface DenialFacts {
@@ -53,6 +54,9 @@ export function parseDenial(raw: string | null | undefined, structured?: Structu
   const ruleIds = linkable(structured?.rule_ids ?? structured?.ruleIds ?? []);
 
   const kind: DenialKind = (() => {
+    // core#1850 (core#1674): the step's OWN seat (its CLI sandbox, a read-only mount, file permissions) refused writes
+    // inside the project. Keyed on the layer only: the prose is the engine's and may change.
+    if (structured?.source === 'seat_refused') return 'seat-refused';
     if (claimId?.startsWith('boundary-read-deny:')) return 'sandbox-read';
     if (claimId?.startsWith('boundary-deny:')) return 'sandbox-write';
     if (claimId?.startsWith('phase-scope') || text.includes('phase-scope')) return 'phase-scope';
@@ -68,10 +72,46 @@ export function parseDenial(raw: string | null | undefined, structured?: Structu
 }
 
 /**
- * The session card's headline (studio#682 row 5): the step by its NAME, in plain words — never
- * "unit #N", env vars or the engine's prose (that stays in the card's Technical details).
+ * studio#1384: what a seat-refused denial blocked, read off the engine's words (core `seat_refused_reason`:
+ * "… refused N write(s) inside the project …: `path` (why), …, and K more. …"): "a write inside the project (a.ts)",
+ * "7 writes inside the project (a.ts, b.ts, c.ts and 4 more)", or "its writes inside the project" when the words
+ * name neither. At most three paths are named; the rest are counted.
  */
-export function stepDenialHeadline(f: DenialFacts, step: string): string {
+function blockedWrites(raw: string): string {
+  const n = Number(/refused (\d+) write\(s\)/.exec(raw)?.[1] ?? NaN);
+  // The list between "afterwards: " and ". The step's work": "`path` (why)" entries joined by ", ", maybe "and K more".
+  // A path may itself hold a backtick (the engine does not escape it), so an entry ends only where the next one (or the
+  // list's end) starts. A list that names more paths than it counts is not trusted, and no path is named (codex r1).
+  const list = /afterwards: ([\s\S]*?)\. The step's work/.exec(raw)?.[1] ?? '';
+  const named = [...list.matchAll(/`([\s\S]+?)` \([^()]*\)(?=, `|, and \d+ more$|$)/g)].map((m) => m[1]!);
+  const count = Number.isFinite(n) && n > 0 ? n : named.length;
+  const paths = named.length <= count ? named : [];
+  const what = count === 0 ? 'its writes' : count === 1 ? 'a write' : `${count} writes`;
+  if (paths.length === 0) return `${what} inside the project`;
+  const shown = paths.slice(0, 3);
+  const more = Math.max(count, paths.length) - shown.length;
+  const names = more > 0 ? `${shown.join(', ')} and ${more} more` : shown.length <= 1 ? shown.join('') : `${shown.slice(0, -1).join(', ')} and ${shown.at(-1)!}`;
+  return `${what} inside the project (${names})`;
+}
+
+/**
+ * studio#1384 (coord r2): whose sandbox refused the writes: the HELPER's (the seat running the step), by the roster's
+ * name, else its key with a capital ("codex" -> "Codex"); "The helper" when the step names no seat. Never the step's
+ * name: a step has no sandbox of its own.
+ */
+export function sandboxOwner(cli: string | null | undefined, roster: readonly { key: string; display_name?: string | null }[] | null): string {
+  if (cli === null || cli === undefined || cli === '') return 'The helper';
+  const label = roster?.find((r) => r.key === cli)?.display_name;
+  const name = label !== null && label !== undefined && label !== '' ? label : (cli.split('#')[0] ?? cli);
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+/**
+ * The session card's headline (studio#682 row 5): the step by its NAME, in plain words — never
+ * "unit #N", env vars or the engine's prose (that stays in the card's Technical details). `helper` names the seat
+ * that ran the step (see {@link sandboxOwner}); only the seat-refused sentence uses it.
+ */
+export function stepDenialHeadline(f: DenialFacts, step: string, helper = 'The helper'): string {
   switch (f.kind) {
     case 'sandbox-write':
       return `${step} tried to change files outside its workspace and was stopped to protect your files.`;
@@ -89,6 +129,8 @@ export function stepDenialHeadline(f: DenialFacts, step: string): string {
       return /skills snapshot/i.test(f.raw)
         ? `${step} couldn't start: its helper's skills aren't set up on this machine.`
         : `${step} failed: its helper stopped with an error.`;
+    case 'seat-refused':
+      return `${helper}’s own sandbox blocked ${blockedWrites(f.raw)}, so ${step} isn’t complete.`;
     default:
       return `${step} failed.`;
   }
@@ -107,6 +149,8 @@ export function stepDenialAdvice(f: DenialFacts): string {
       return /skills snapshot/i.test(f.raw)
         ? 'Check Health, then resume. The technical details below say what was missing.'
         : 'Look at what the step did, then resume or start over.';
+    case 'seat-refused':
+      return 'Send the step back to try again, or reassign it to another helper.';
     default:
       return 'Look at what the step did, then resume or start over.';
   }
@@ -129,6 +173,8 @@ export function denialHeadline(f: DenialFacts, ord: number): string {
       return `Unit #${ord} failed and was escalated for review.`;
     case 'worker-failed':
       return `The worker failed on unit #${ord}.`;
+    case 'seat-refused':
+      return `The helper’s own sandbox blocked ${blockedWrites(f.raw)}, so unit #${ord} isn’t complete.`;
     default:
       return `Unit #${ord} was stopped.`;
   }
@@ -219,6 +265,9 @@ export function escalationCopy(
     case 'boundary_deny': {
       // `input_governance` names the layer; `""` is the hook-veto arm whose source identity the
       // engine folded away (actor.rs) — the SAME refusal, so the same sentence.
+      // core: a seat-refused denial wins the fold, and a hook that also denied books the class `boundary_deny`
+      // (actor.rs `denial_class`, `_ if hook_denied`): the sandbox is still what stopped the step (codex r1).
+      if (source === 'seat_refused') return known(`${unit}: the helper’s own sandbox blocked ${blockedWrites(facts.verdictSummary ?? '')}, so its work isn’t complete`);
       if (source !== 'input_governance' && source !== '') break;
       const cmd = facts.deniedCommand ? `: \`${facts.deniedCommand}\`` : '';
       const read = facts.claimId?.startsWith('boundary-read-deny:') ? ' (a read outside the workspace)' : '';
@@ -238,6 +287,9 @@ export function escalationCopy(
       if (source === 'agent_validator') return known(`${unit}: the review did not pass${tail}`);
       if (source === 'worker_failure') return known(`${unit}: the worker exited before finishing${tail}`);
       if (source === 'evaluator_verdict') return known(`${unit}: the evaluator's VERDICT was not PASS${tail}`);
+      // core#1850: actor.rs `denial_class` books `seat_refused` under `verdict_not_pass` (its `_` arm). The summary is the
+      // engine's reason, which this sentence already says.
+      if (source === 'seat_refused') return known(`${unit}: the helper’s own sandbox blocked ${blockedWrites(facts.verdictSummary ?? '')}, so its work isn’t complete`);
       break;
     default:
       break;
@@ -265,6 +317,8 @@ export function denialAdvice(f: DenialFacts): string {
       return 'Read the failure output in the transcript, then retry — or reassign the unit to a different CLI.';
     case 'worker-failed':
       return 'Read the failure output in the transcript, then retry.';
+    case 'seat-refused':
+      return 'Send it back to try again, or reassign it to a different CLI.';
     default:
       return 'Check the unit transcript, then retry.';
   }

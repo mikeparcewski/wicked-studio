@@ -1063,7 +1063,7 @@ export function rulesHoldAt(events: readonly CoreEvent[] | null, units: readonly
 }
 
 /** {@link escalationFor}, but `null` when the unit was dispatched again after its newest escalation. */
-function escalationSinceDispatch(events: readonly CoreEvent[] | null, ord: number | null | undefined): { condition: string; denialSource: string; summary: string } | null {
+export function escalationSinceDispatch(events: readonly CoreEvent[] | null, ord: number | null | undefined): { condition: string; denialSource: string; summary: string } | null {
   if (typeof ord !== 'number') return null;
   const log = events ?? [];
   for (let i = log.length - 1; i >= 0; i--) {

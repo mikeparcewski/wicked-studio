@@ -1150,6 +1150,8 @@ export function denialSourceLabel(source: string | null): string {
     case 'substance': return 'no reviewable substance';
     case 'deliverables': return 'declared deliverables missing';
     case 'elicitation': return 'elicitation ended';
+    // core#1850 (core#1674): the step's own seat refused writes inside the project (studio#1384).
+    case 'seat_refused': return 'the agent’s own sandbox';
     case null: return 'the gate';
     default: return source;
   }
