@@ -9,6 +9,13 @@ import { TechDetails } from './ui/TechDetails.js';
 /** A command to copy, as the gate card draws one (GateVerdict's suggestion ref). */
 const CODE: React.CSSProperties = { background: 'var(--surface-rail)', color: 'var(--ink-high)', userSelect: 'all', overflowWrap: 'anywhere' };
 
+/** The hand start for the same port, after removing the unit stopped the service (crew's `uninstallService` runs
+ *  `launchctl bootout` / `systemctl --user disable --now`). crew's commands are `<serve> --install-service`. */
+function restartOf(s: StartOnLoginStatus): string {
+  const flag = ' --uninstall-service';
+  return s.uninstallCommand.endsWith(flag) ? s.uninstallCommand.slice(0, -flag.length) : `wicked-crew serve --port ${s.port}`;
+}
+
 /** What the card says for crew's answer: on, off, or a system where nothing is automated. */
 function stateOf(s: StartOnLoginStatus): 'on' | 'off' | 'manual' {
   if (s.platform === 'other') return 'manual';
@@ -36,6 +43,7 @@ export function StartOnLoginSettings(): React.ReactElement {
     if (out.current) return;
     out.current = true;
     setReading(true);
+    setReadError(null);
     api.getStartOnLogin().then(
       (s) => { if (alive.current) { setStatus(s); setReadError(null); setUnsupported(false); } },
       (e: unknown) => {
@@ -79,20 +87,37 @@ function StartOnLoginBody({ status, reading, onReread, readError }: {
   return (
     <div className="flex flex-col gap-2">
       <p data-testid="start-on-login-status">
-        {state === 'on' ? `On: Studio’s service on port ${status.port} starts when you sign in to this computer.`
-          : state === 'off' ? `Off: Studio’s service on port ${status.port} doesn’t start when you sign in to this computer.`
+        {/* crew reports whether its unit file is there (`installedService`), not whether the account's service manager
+            has it enabled: the words say what was set up, never that a start is confirmed (codex r1). */}
+        {state === 'on' ? `On: a start-at-login service is set up for Studio’s service on port ${status.port}.`
+          : state === 'off' ? `Off: nothing is set up to start Studio’s service on port ${status.port} when you sign in to this computer.`
           : 'Studio can’t set this computer to start its service when you sign in. This command prints the steps to set it up by hand:'}
       </p>
       {state === 'on' && status.unit !== null && (
         <p className="wk-field-note" data-testid="start-on-login-unit">Set up by <code style={{ overflowWrap: 'anywhere' }}>{status.unit}</code></p>
       )}
-      {state !== 'manual' && (
-        <p className="wk-field-note">{state === 'on' ? 'To stop it starting when you sign in, run this in a terminal:' : 'To start it when you sign in, run this in a terminal:'}</p>
+      {state === 'off' && (
+        <p className="wk-field-note" data-testid="start-on-login-howto">
+          First stop the service you started by hand (in its terminal): the install refuses while it holds port {status.port}, and starts
+          the service again itself. Then run this in a terminal, and reload this page once it is back:
+        </p>
+      )}
+      {state === 'on' && (
+        <p className="wk-field-note" data-testid="start-on-login-howto">
+          To stop it starting when you sign in, run this in a terminal. It also stops the service now, so this page loses it
+          until you start it again with the second command:
+        </p>
       )}
       <div className="flex flex-wrap items-center gap-2 min-w-0">
         <code className="px-1 rounded min-w-0" data-testid="start-on-login-command" style={CODE}>{command}</code>
         <CopyButton command={command} />
       </div>
+      {state === 'on' && (
+        <div className="flex flex-wrap items-center gap-2 min-w-0">
+          <code className="px-1 rounded min-w-0" data-testid="start-on-login-restart" style={CODE}>{restartOf(status)}</code>
+          <CopyButton command={restartOf(status)} />
+        </div>
+      )}
       {readError !== null && (
         <div data-testid="start-on-login-reread-error" role="status">
           <p className="wk-field-note wk-field-note--bad">Studio couldn’t check again. This is what its service said last time.</p>

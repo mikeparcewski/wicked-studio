@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ApiError } from '../src/api/errors.js';
@@ -37,7 +38,9 @@ describe('the Start at login card', () => {
     render(<StartOnLoginSettings />);
     const status = await screen.findByTestId('start-on-login-status');
     expect(card()).toHaveAttribute('data-state', 'off');
-    expect(status.textContent).toBe('Off: Studio’s service on port 7701 doesn’t start when you sign in to this computer.');
+    expect(status.textContent).toBe('Off: nothing is set up to start Studio’s service on port 7701 when you sign in to this computer.');
+    // codex r1: the install refuses while the hand-started service holds the port, and the page loses it meanwhile.
+    expect(screen.getByTestId('start-on-login-howto').textContent).toMatch(/^First stop the service you started by hand \(in its terminal\): the install refuses while it holds port 7701/);
     const cmd = screen.getByTestId('start-on-login-command');
     expect(cmd.textContent).toBe('wicked-crew serve --port 7701 --install-service');
     expect(within(card()).getByRole('button', { name: 'copy wicked-crew serve --port 7701 --install-service' })).toBeInTheDocument();
@@ -51,17 +54,23 @@ describe('the Start at login card', () => {
     render(<StartOnLoginSettings />);
     const status = await screen.findByTestId('start-on-login-status');
     expect(card()).toHaveAttribute('data-state', 'on');
-    expect(status.textContent).toBe('On: Studio’s service on port 7701 starts when you sign in to this computer.');
+    // codex r1: crew reports the unit file, not that the service manager has it enabled.
+    expect(status.textContent).toBe('On: a start-at-login service is set up for Studio’s service on port 7701.');
     expect(screen.getByTestId('start-on-login-unit').textContent).toContain('~/Library/LaunchAgents/com.wickedagile.wicked-crew.plist');
     expect(screen.getByTestId('start-on-login-command').textContent).toBe('wicked-crew serve --port 7701 --uninstall-service');
+    // codex r1: removing it stops the service now (crew runs `launchctl bootout`), so the hand start for the port is given.
+    expect(screen.getByTestId('start-on-login-howto').textContent).toContain('It also stops the service now');
+    expect(screen.getByTestId('start-on-login-restart').textContent).toBe('wicked-crew serve --port 7701');
+    expect(within(card()).getByRole('button', { name: 'copy wicked-crew serve --port 7701' })).toBeInTheDocument();
   });
 
   it('on (Linux, another port): the port and the unit are crew\'s', async () => {
     answer = () => Promise.resolve(LINUX_ON);
     render(<StartOnLoginSettings />);
-    expect((await screen.findByTestId('start-on-login-status')).textContent).toContain('port 7741 starts when you sign in');
+    expect((await screen.findByTestId('start-on-login-status')).textContent).toContain('set up for Studio’s service on port 7741');
     expect(screen.getByTestId('start-on-login-unit').textContent).toContain('~/.config/systemd/user/wicked-crew-7741.service');
     expect(screen.getByTestId('start-on-login-command').textContent).toBe('wicked-crew serve --port 7741 --uninstall-service');
+    expect(screen.getByTestId('start-on-login-restart').textContent).toBe('wicked-crew serve --port 7741');
   });
 
   it('another system: nothing is automated, and the command prints the steps', async () => {
@@ -99,17 +108,40 @@ describe('the Start at login card', () => {
     await waitFor(() => expect(card()).toHaveAttribute('data-state', 'on'));
   });
 
-  it('a read answered after a newer one never overwrites it', async () => {
+  it('while Check again is out the button is held (Checking…), and its answer lands', async () => {
     let late: (v: StartOnLoginStatus) => void = () => undefined;
     render(<StartOnLoginSettings />);
     await screen.findByTestId('start-on-login-status');
     answer = () => new Promise((r) => { late = r; });
     fireEvent.click(screen.getByTestId('start-on-login-reread'));
-    // The first Check again is still out: a second press is held, not a second read.
-    fireEvent.click(screen.getByTestId('start-on-login-reread'));
+    const btn = screen.getByTestId('start-on-login-reread');
+    expect(btn).toBeDisabled();
+    expect(btn.textContent).toBe('Checking…');
     expect(getStartOnLogin).toHaveBeenCalledTimes(2);
     late(DARWIN_ON);
     await waitFor(() => expect(card()).toHaveAttribute('data-state', 'on'));
+  });
+
+  it('codex r1: under StrictMode the mount reads once (the replayed effect finds the read out), and its answer lands', async () => {
+    let first: (v: StartOnLoginStatus) => void = () => undefined;
+    answer = () => new Promise((r) => { first = r; });
+    render(<StrictMode><StartOnLoginSettings /></StrictMode>);
+    expect(getStartOnLogin).toHaveBeenCalledTimes(1);
+    first(DARWIN_ON);
+    await waitFor(() => expect(card()).toHaveAttribute('data-state', 'on'));
+  });
+
+  it('agy r1: a failed Check again keeps the last answer, says so, and the next good read clears it', async () => {
+    render(<StartOnLoginSettings />);
+    await screen.findByTestId('start-on-login-status');
+    answer = () => Promise.reject(new TypeError('Failed to fetch'));
+    fireEvent.click(screen.getByTestId('start-on-login-reread'));
+    expect((await screen.findByTestId('start-on-login-reread-error')).textContent).toContain('This is what its service said last time.');
+    expect(card()).toHaveAttribute('data-state', 'off');
+    answer = () => Promise.resolve(DARWIN_ON);
+    fireEvent.click(screen.getByTestId('start-on-login-reread'));
+    await waitFor(() => expect(card()).toHaveAttribute('data-state', 'on'));
+    expect(screen.queryByTestId('start-on-login-reread-error')).toBeNull();
   });
 });
 
