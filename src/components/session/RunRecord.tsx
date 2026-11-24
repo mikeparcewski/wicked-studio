@@ -41,6 +41,11 @@ export function useConsentDecline(view: SessionView | undefined): { install: boo
   return view !== undefined && cancelled ? consentDeclineOf(view, story) : null;
 }
 
+/** studio#1383: the one word for a run a consent Decline ended, on every surface that would say "Cancelled". */
+export function consentDeclineWord(declined: { install: boolean }): 'Not installed' | 'Declined' {
+  return declined.install ? 'Not installed' : 'Declined';
+}
+
 /**
  * S16a-1c: why a finished run stopped, said in its thread — the run page's FailureBanner story,
  * words verbatim (tests/FailureBanner.test.tsx's pins carry over), one quiet line under the status
