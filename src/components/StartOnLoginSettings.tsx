@@ -105,10 +105,10 @@ function StartOnLoginBody({ status, reading, onReread, readError }: {
         <code className="px-1 rounded min-w-0" data-testid="start-on-login-command" style={CODE}>{command}</code>
         <CopyButton command={command} />
       </div>
-      {state !== 'manual' && (
+      {state === 'off' && (
         // crew's commands name only the port; a service started with other options (`--db`) keeps them only if they are
         // added (crew's unit re-runs the install's own serve options, codex r2).
-        <p className="wk-field-note" data-testid="start-on-login-options">If you start the service with other options, such as <code>--db</code>, add them to this command.</p>
+        <p className="wk-field-note" data-testid="start-on-login-options">If you start the service with other options, such as <code>--db</code>, add them to this command: the service started at login re-runs it as given.</p>
       )}
       {readError !== null && (
         <div data-testid="start-on-login-reread-error" role="status">

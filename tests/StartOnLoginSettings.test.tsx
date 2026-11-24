@@ -43,6 +43,8 @@ describe('the Start at login card', () => {
     expect(screen.getByTestId('start-on-login-howto').textContent).toMatch(/^First stop the service you started by hand \(in its terminal\): the install refuses while it holds port 7701/);
     const cmd = screen.getByTestId('start-on-login-command');
     expect(cmd.textContent).toBe('wicked-crew serve --port 7701 --install-service');
+    // codex r2: crew's command names only the port; the unit re-runs the install's own options.
+    expect(screen.getByTestId('start-on-login-options').textContent).toBe('If you start the service with other options, such as --db, add them to this command: the service started at login re-runs it as given.');
     expect(within(card()).getByRole('button', { name: 'copy wicked-crew serve --port 7701 --install-service' })).toBeInTheDocument();
     expect(screen.queryByTestId('start-on-login-unit')).toBeNull();
     // Read once; nothing is written.
@@ -62,7 +64,8 @@ describe('the Start at login card', () => {
     // no restart command is derived, as crew's commands carry only the port and a `--db` would be lost.
     expect(screen.getByTestId('start-on-login-howto').textContent).toContain('If the service is running under it, this also stops the service now');
     expect(screen.queryByTestId('start-on-login-restart')).toBeNull();
-    expect(screen.getByTestId('start-on-login-options').textContent).toBe('If you start the service with other options, such as --db, add them to this command.');
+    // The uninstall needs only the port: the options note is the install's.
+    expect(screen.queryByTestId('start-on-login-options')).toBeNull();
   });
 
   it('on (Linux, another port): the port and the unit are crew\'s', async () => {
