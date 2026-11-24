@@ -778,10 +778,11 @@ export function RepoGraphModal({ repo, onClose, onSelectRun, initialFocus, initi
               </p>
             </div>
           ) : (
-            <div className="h-full flex flex-col md:flex-row p-4 gap-4">
-              {/* studio#1290: on a phone the detail panel goes under the graph, so the canvas (and the rings) keep the width. */}
+            <div className="h-full flex flex-col md:flex-row p-4 gap-4 overflow-y-auto md:overflow-y-visible">
+              {/* studio#1290: on a phone the detail panel goes under the graph, so the canvas (and the rings) keep the width,
+                  and the graph keeps 440px with the body scrolling below it (coord round 2: a 320px phone left it 140px). */}
               {/* ── Left: graph panel + hotspots ─────────────────────────── */}
-              <div className="flex-1 flex flex-col gap-3 min-w-0 overflow-hidden">
+              <div data-testid="repo-graph-main" className="flex-1 flex flex-col gap-3 min-w-0 overflow-hidden min-h-[440px] md:min-h-0">
 
                 {/* Graph panel — wicked .wf-preview / .gc style */}
                 <div

@@ -2797,6 +2797,12 @@
       ]
     },
     {
+      "testId": "blast-rings-canvas",
+      "files": [
+        "src/components/graph/BlastRings.tsx"
+      ]
+    },
+    {
       "testId": "blast-rings-footer",
       "files": [
         "src/components/graph/BlastRings.tsx"
@@ -17446,6 +17452,12 @@
       "testId": "repo-graph-empty",
       "files": [
         "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-graph-main",
+      "files": [
+        "src/components/RepoGraphModal.tsx"
       ]
     },
     {

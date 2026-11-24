@@ -102,8 +102,8 @@ export function BlastRings({ blast, onOpen, onBack }: {
   notes.push(...blastCompleteness(blast));
 
   return (
-    <div data-testid="blast-rings" className="h-full flex flex-col min-h-0">
-      <div data-testid="blast-rings-header" className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 border-b shrink-0 max-h-[35%] overflow-y-auto" style={{ borderColor: 'var(--surface-raised)' }}>
+    <div data-testid="blast-rings" className="h-full flex flex-col min-h-0 overflow-y-auto md:overflow-y-hidden">
+      <div data-testid="blast-rings-header" className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 border-b shrink-0 md:max-h-[35%] md:overflow-y-auto" style={{ borderColor: 'var(--surface-raised)' }}>
         <span className="text-xs font-medium" style={{ color: 'var(--ink-high)' }}>
           Blast radius of <span className="font-mono">{blast.target}</span>
         </span>
@@ -115,14 +115,15 @@ export function BlastRings({ blast, onOpen, onBack }: {
           <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" onClick={onBack}>Back to the code graph</button>
         </span>
       </div>
-      <div className="flex-1 min-h-[min(120px,30%)]">
+      <div data-testid="blast-rings-canvas" className="flex-1 min-h-[240px] md:min-h-[min(120px,30%)]">
         <RingGraph model={model} view="rings" selectedId={picked === null ? null : `n:${picked}`} hoverLevel={null}
           onSelect={select} onActivate={activate}
           ariaLabel={`Blast radius of ${blast.target}: ${blast.dependents.length} dependents by hop. Tap a file group or a summary to open it. Every dependent is also in the list below.`} />
       </div>
-      {/* Header, canvas and footer always fit the panel (codex r1-r2, a phone's short panel): the header scrolls within
-          a third of it, the canvas keeps 120px (or 30% of a shorter panel), and the footer takes at most half and shrinks and scrolls in what is left. */}
-      <div data-testid="blast-rings-footer" className="shrink min-h-0 max-h-[50%] overflow-y-auto border-t px-3 py-2 flex flex-col gap-1.5 text-xs" style={{ borderColor: 'var(--surface-raised)' }}>
+      {/* From a tablet up, header, canvas and footer share the panel: the header scrolls within a third of it, the
+          footer takes at most half and scrolls, and the canvas refits to what is left (RingGraph observes its box).
+          Under a tablet's width the canvas keeps 240px and the panel scrolls below it (studio#1290 r3; coord round 2). */}
+      <div data-testid="blast-rings-footer" className="shrink-0 md:shrink md:min-h-0 md:max-h-[50%] md:overflow-y-auto border-t px-3 py-2 flex flex-col gap-1.5 text-xs" style={{ borderColor: 'var(--surface-raised)' }}>
         {dep !== undefined && (
           <div data-testid="blast-rings-picked" className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
             <span className="font-mono" style={{ color: 'var(--ink-high)' }}>{dep.name}</span>
@@ -153,7 +154,7 @@ export function BlastRings({ blast, onOpen, onBack }: {
           {listed ? 'Hide the list' : `List all ${blast.dependents.length} dependents`}
         </button>
         {listed && (
-          <ul id="blast-rings-list" data-testid="blast-rings-list" className="flex flex-col divide-y" style={{ borderColor: 'var(--surface-raised)' }}>
+          <ul id="blast-rings-list" data-testid="blast-rings-list" className="flex flex-col divide-y divide-[color:var(--surface-raised)]">
             {list.map((d) => {
               const k = depthOf.get(d.id) ?? null;
               return (
