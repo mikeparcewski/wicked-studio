@@ -6,7 +6,8 @@ import type { ChainModel, ChainStep } from '../../board/chainModel.js';
 import { jobTitle } from '../../board/deskWords.js';
 import { deriveRunCost } from '../runIdentity.js';
 import { workflowLabel } from '../../board/workflowNames.js';
-import { chatStatusWord } from '../../board/statusWords.js';
+import { chatStatusWord, statusWord } from '../../board/statusWords.js';
+import { useInstallOutcome } from './outcomeReads.js';
 import { seatLabel } from '../../board/seatNames.js';
 import { ORPHANED_LINE, orphanedOf } from '../../board/sessionModel.js';
 import { finishedDeliveryArm, proposalKindOf } from '../../board/proposalCard.js';
@@ -192,6 +193,9 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   // studio#1364: a declined install is said as what happened, not why a job stopped.
   const declined = useConsentDecline(view);
   const endedKnown = useProvenanceStore((st) => view.session.status !== 'cancelled' || st.endedDone[view.session.id] === true);
+  // studio#1382 (coord r2): a finished MCP-server job whose install registered nothing, or failed, says so here too, as
+  // the header and the passage do: the one kept read of the install's record (outcomeReads.ts), never a second.
+  const installed = useInstallOutcome(view.session.status === 'completed' && statusWord(view).word !== 'Archived' ? view : null).standing;
   const stop = (): void => {
     if (stopping) return;
     const reason = stopReason.trim();
@@ -294,9 +298,11 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   // ended audit read answers (or fails), a cancelled run says only that it ended: a Cancelled a Decline then replaces is
   // the wrong word on screen (codex r1).
   const declinedWord = declined !== null ? consentDeclineWord(declined) : !endedKnown ? 'Ended' : null;
-  const nowWord = declinedWord ?? (held ? chatStatusWord([shown]).word : silent !== null ? silentWords(silent) : floor !== null ? floorWords(floor) : chatStatusWord([view]).word);
+  const installWord = installed === 'not-registered' ? 'Not registered' : installed === 'failed' ? 'Install failed' : null;
+  const nowWord = declinedWord ?? installWord ?? (held ? chatStatusWord([shown]).word : silent !== null ? silentWords(silent) : floor !== null ? floorWords(floor) : chatStatusWord([view]).word);
   const statusLine = statusSentence(shown, chain, gate, action, silent?.minutes ?? null);
-  const shownStatus = declinedWord !== null ? statusLine.replace(/^Cancelled\b/, declinedWord) : statusLine;
+  const shownStatus = declinedWord !== null ? statusLine.replace(/^Cancelled\b/, declinedWord)
+    : installWord !== null ? statusLine.replace(/^Finished\b/, installWord) : statusLine;
   const core: Record<PanelSectionId, React.ReactElement> = {
     now: (
       <Section id="now" {...fold} summary={nowWord}>
@@ -313,7 +319,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         </div>
         <div data-testid="run-tab-workflow" className="wk-run-tab-block">
           <p className="wk-run-tab-line">{workflowLabel(session.workflow_id)}{' '}
-            <span className="wk-run-tab-pill" data-testid="run-tab-pill">{declinedWord ?? (silent !== null && !held ? silentWords(silent) : chatStatusWord([shown]).word)}</span>
+            <span className="wk-run-tab-pill" data-testid="run-tab-pill">{declinedWord ?? installWord ?? (silent !== null && !held ? silentWords(silent) : chatStatusWord([shown]).word)}</span>
           </p>
           {typeof session.repo_ref === 'string' && session.repo_ref.trim() !== '' && (
             <p data-testid="run-tab-repo" className="wk-run-tab-line"><code>{session.repo_ref}</code></p>

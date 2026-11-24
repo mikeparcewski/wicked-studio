@@ -50,10 +50,10 @@ import { PowerPauseCard } from './PowerMode.js';
 import { usePower } from '../../hooks/usePower.js';
 import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
 import { useProvenanceStore } from '../../store/provenance.js';
-import { consentDeclineOf, installRecordOf, installUnitOf, installWords, type InstallRecord, type InstallWords } from '../../board/installOutcome.js';
+import { consentDeclineOf, installUnitOf, type InstallRecord, type InstallWords } from '../../board/installOutcome.js';
+import { useInstallOutcome, useOutcomeRead, type OutcomeRead } from './outcomeReads.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
 import { TechDetails } from '../ui/TechDetails.js';
-import { unitKeyOf } from '../../board/runConversation.js';
 import { mcpPath } from '../../api/mcp.js';
 import { coverageHeadline, DOMAIN_EXTRACTION_ID, domainJobResultOf, requirementsNotGenerated, type DomainJobResult } from '../../board/requirementsState.js';
 import { projectRequirementsPath } from '../../hooks/useRoute.js';
@@ -189,6 +189,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   // The ENDED read: a live read from before the stop holds no Decline yet (codex r1).
   const storyRead = useProvenanceStore((st) => stoppedRun !== null && st.endedDone[stoppedRun] === true);
   const stoppedKnown = v.phase !== 'stopped' || storyRead;
+  const installShown = useInstallOutcome(run !== null && v.phase === 'delivered' ? run : null).standing;
   const pt = proposalTarget(head.proposal);
   // A confirm made for one run closes when the job's run is another.
   useEffect(() => { if (confirmStop !== null && confirmStop !== runId) setConfirmStop(null); }, [confirmStop, runId]);
@@ -570,13 +571,16 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   if (settled && jobSettled(v.phase)) {
     const pr = run !== null ? deliverySummary(run) : null;
     return (
-      <section role="region" aria-label={regionName(v)} data-testid="job-passage" data-phase={v.phase} data-settled="true" data-lineage={lineage.lineage} className="wk-pass wk-pass--settled">
+      <section role="region" aria-label={regionName(v)} data-testid="job-passage" data-phase={v.phase} data-settled="true" data-lineage={lineage.lineage} className={`wk-pass wk-pass--settled${installShown === 'not-registered' ? ' wk-pass--needs' : installShown === 'failed' ? ' wk-pass--bad' : ''}`}>
         <p className="wk-pass-settled">
           {v.phase === 'notStarted' && moved !== null
             ? <>Moved to {moved.where}: {v.proposal.what.label} · <button type="button" className="wk-pass-inl" data-testid="job-passage-moved-open" onClick={() => openChat(moved.chatId)}>Open it</button></>
             : declined !== null && run !== null ? `${declinedLead(run, declined.install)} ${v.proposal.what.label}${pr !== null ? ` · ${pr}` : ''}`
               : !stoppedKnown ? `${v.proposal.what.label}${pr !== null ? ` · ${pr}` : ''}`
-                : settledLine(v, { pr })}
+                // studio#1382: an older job whose install registered nothing keeps saying so; while that is read, no "Done".
+                : installShown === 'not-registered' || installShown === 'failed' ? `${installLead(installShown, run !== null && handedOf(run) !== null)}. ${v.proposal.what.label}${pr !== null ? ` · ${pr}` : ''}`
+                  : installShown === 'loading' ? `${v.proposal.what.label}${pr !== null ? ` · ${pr}` : ''}`
+                    : settledLine(v, { pr })}
           {runId !== null && <> · <button type="button" className="wk-pass-inl" data-testid="job-passage-details" onClick={() => openSheet({ kind: 'session', sessionId: `run:${runId}` })}>Details ›</button></>}
         </p>
         <div aria-live="polite" className="wk-visually-hidden" data-testid="job-passage-live">{announce}</div>
@@ -586,7 +590,12 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
 
   // A repository job (a run or a compose on a repository): the one a failure hands to Bug.
   const repoJob = (v.proposal.launch === 'run' || v.proposal.launch === 'compose') && ((v.proposal.repoRefs ?? v.proposal.repos).length > 0);
-  const tone = v.needsYou ? ' wk-pass--needs' : v.phase === 'delivered' || declined !== null ? ' wk-pass--ok' : v.phase === 'failed' || (v.phase === 'stopped' && stoppedKnown) ? ' wk-pass--bad'
+  // studio#1382: a delivered job whose install registered nothing is not a plain success: it waits on the person (a token
+  // to add), and a failed install is a failure. The same kept read the delivery's own lines say it from.
+  const tone = v.needsYou ? ' wk-pass--needs' : installShown === 'not-registered' ? ' wk-pass--needs' : installShown === 'failed' ? ' wk-pass--bad'
+    // While the install's record is read, the edge claims nothing (codex r1): not the green of a success it may not be.
+    : installShown === 'loading' ? ''
+    : v.phase === 'delivered' || declined !== null ? ' wk-pass--ok' : v.phase === 'failed' || (v.phase === 'stopped' && stoppedKnown) ? ' wk-pass--bad'
     : v.phase === 'revising' || v.phase === 'swapPending' || v.phase === 'planning' || v.phase === 'replanning' || v.phase === 'starting' ? ' wk-pass--busy' : '';
   // studio#1335: crew sends every repository in scope as a choice; the card shows the named ones and enough to fill the
   // chips' count, then "N more" (JobRepoChoices' rule). The others stay replies (a typed answer can still bind one).
@@ -1091,37 +1100,8 @@ function QuestionInput({ label, target, disabled, onAnswer }: { label: string; t
   );
 }
 
-/**
- * A finished run's outcome reads (studio#1365, studio#1367), ONE per run and step: kept for the page's life, so leaving
- * the chat and coming back, a second passage on the same run, or a re-render reads nothing again. `again` (a press on
- * Try again, or the requirements view closing after a change) drops the kept answer and reads once more.
- */
-const outcomeReads = new Map<string, Promise<unknown>>();
-function useOutcomeRead<T>(key: string | null, read: () => Promise<T>): { value: T | 'failed' | null; again: () => void } {
-  const [state, setState] = useState<{ key: string | null; value: T | 'failed' | null }>({ key: null, value: null });
-  const [tries, setTries] = useState(0);
-  useEffect(() => {
-    if (key === null) return undefined;
-    let live = true;
-    let p = outcomeReads.get(key) as Promise<T> | undefined;
-    if (p === undefined) {
-      p = read();
-      outcomeReads.set(key, p);
-      // A failed read is not kept: the next mount (or Try again) reads once more.
-      p.catch(() => { if (outcomeReads.get(key) === p) outcomeReads.delete(key); });
-    }
-    p.then((v) => { if (live) setState({ key, value: v }); }, () => { if (live) setState({ key, value: 'failed' }); });
-    return () => { live = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `read` is the key's own read
-  }, [key, tries]);
-  return {
-    value: state.key === key ? state.value : null,
-    again: () => { if (key !== null) outcomeReads.delete(key); setState({ key: null, value: null }); setTries((n) => n + 1); },
-  };
-}
-
-/** Tests: forget every kept outcome read. */
-export function resetOutcomeReadsForTest(): void { outcomeReads.clear(); }
+/** Tests: forget every kept outcome read (the reads live in ./outcomeReads.ts, shared with the session header). */
+export { resetOutcomeReadsForTest } from './outcomeReads.js';
 
 /** The repository's requirements as a finished mapping left them (the share and the business domains). */
 function readDomainResult(repoId: string): Promise<DomainJobResult> {
@@ -1144,20 +1124,20 @@ function Delivered({ run, navigate }: { run: SessionView; navigate?: Navigate })
   const repoId = domain ? run.session.repo_ref : null;
   const domainRead = useOutcomeRead<DomainJobResult>(repoId === null ? null : `domain:${run.session.id}`, () => readDomainResult(repoId!));
   const install = installUnitOf(run);
-  const installKey = install === null ? null : unitKeyOf(run.session.id, install);
-  const installRead = useOutcomeRead<string | null>(installKey === null ? null : `install:${run.session.id}:${installKey}`,
-    () => api.getUnitOutput(run.session.id, installKey!).then(({ output }) => output));
-  const record = typeof installRead.value === 'string' ? installRecordOf(installRead.value) : null;
-  const installWord = record === null ? null : installWords(record);
-  // The lead says what the job came to: never "Done" over an install that registered nothing, nor "nothing to deliver"
-  // over a job whose result is its mapping or its install.
-  const lead = installWord !== null && !installWord.registered
-    ? (record!.ok ? 'Finished, but not registered.' : 'Finished, but the install failed.')
-    : (domain || install !== null) && handed === null ? 'Finished.' : 'Done.';
+  const { read: installRead, record, words: installWord, standing } = useInstallOutcome(run);
+  // The lead says what the job came to, once: never "Done" over an install that registered nothing, nor "nothing to
+  // deliver" over a job whose result is its mapping or its install. Over an install that registered nothing it says the
+  // delivery and the install in one ("Delivered, but not registered · Pull request #7", studio#1382), never "Finished"
+  // twice.
+  const unregistered = standing === 'not-registered' || standing === 'failed';
+  // While the record is read, the lead claims no "Done" (codex r1): "Delivered" over the pull request, else "Finished.".
+  const lead = unregistered ? (handed !== null ? installLead(standing, true) : `${installLead(standing, false)}.`)
+    : standing === 'loading' ? (handed !== null ? 'Delivered' : 'Finished.')
+      : (domain || install !== null) && handed === null ? 'Finished.' : 'Done.';
   return (
     <div data-testid="job-passage-delivered" className="wk-pass-done">
       <p className="wk-pass-sub">
-        <b>{lead}</b>{(domain || install !== null) && handed === null ? null : <> {outcomeLine(run)}</>}
+        <b>{lead}</b>{unregistered || standing === 'loading' || ((domain || install !== null) && handed === null) ? null : <> {outcomeLine(run)}</>}
         {handed?.href != null && <> · <a href={handed.href} target="_blank" rel="noreferrer">{pr ?? 'the pull request'}</a></>}
         {handed?.href == null && handed?.branch != null && <> · branch <code>{handed.branch}</code></>}
       </p>
@@ -1179,6 +1159,11 @@ function InPlaceLink({ href, navigate, testId, children }: { href: string; navig
       {children}
     </a>
   );
+}
+
+/** studio#1382: the lead over an install that registered nothing or failed, said once ("Delivered, but not registered"). */
+function installLead(standing: 'not-registered' | 'failed', delivered: boolean): string {
+  return `${delivered ? 'Delivered' : 'Finished'}, but ${standing === 'failed' ? 'the install failed' : 'not registered'}`;
 }
 
 /** studio#1364: the lead of a job ended by a consent Decline: "Delivered" only over a recorded pull request or branch. */
@@ -1210,7 +1195,7 @@ function DeclinedInstall({ run, install }: { run: SessionView; install: boolean 
 
 /** studio#1365: what a finished domain mapping found (the share of real requirements against the minimum, and the business
  *  domains), read once from the repository's requirements, with the way to the requirements themselves. */
-function DomainResultLine({ run, read, navigate }: { run: SessionView; read: ReturnType<typeof useOutcomeRead<DomainJobResult>>; navigate?: Navigate }): React.ReactElement | null {
+function DomainResultLine({ run, read, navigate }: { run: SessionView; read: OutcomeRead<DomainJobResult>; navigate?: Navigate }): React.ReactElement | null {
   const repoId = run.session.repo_ref;
   const projectId = typeof run.session.project_id === 'string' ? run.session.project_id : null;
   const [open, setOpen] = useState(false);
@@ -1263,11 +1248,11 @@ export function domainResultWords(r: DomainJobResult): string {
 function InstallResultLine({ record, words, read, navigate }: {
   record: InstallRecord | null;
   words: InstallWords | null;
-  read: ReturnType<typeof useOutcomeRead<string | null>>;
+  read: OutcomeRead<string | null>;
   navigate?: Navigate;
 }): React.ReactElement {
   const show = useDisplayText();
-  if (read.value === null) return <p data-testid="job-passage-install" data-state="loading" className="wk-pass-sub wk-pass-grey">Reading what the install did…</p>;
+  if (read.pending) return <p data-testid="job-passage-install" data-state="loading" className="wk-pass-sub wk-pass-grey">Reading what the install did…</p>;
   if (read.value === 'failed') {
     return (
       <p data-testid="job-passage-install" data-state="failed" className="wk-pass-sub">

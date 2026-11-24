@@ -133,12 +133,12 @@ export function installWords(r: InstallRecord): InstallWords {
   } else if (r.registered === true) {
     line = `Installed and registered in MCP tools${tools !== null ? `: ${tools}` : ''}.`;
   } else if (r.missing.length > 0) {
-    line = `Installed, but not registered in MCP tools: it needs ${list(r.missing)}, which the daemon can’t find.`;
-    todo = `Add the server in MCP tools with Add existing and give it the token (it is kept in your keychain), or set ${list(r.missing)} in the daemon’s environment and run the install again.`;
+    line = `Installed, but not registered in MCP tools: it needs ${list(r.missing)}, which Studio’s service can’t find.`;
+    todo = `Add the server in MCP tools with Add existing and give it the token (it is kept in your keychain), or set ${list(r.missing)} in the environment Studio’s service runs in, and run the install again.`;
   } else {
     line = sentence(`Installed, but not registered in MCP tools${r.reason !== null ? ` (${r.reason.replace(/[.]$/, '')})` : ''}`);
     todo = r.reason !== null && /^no daemon\b/i.test(r.reason)
-      ? 'Start the daemon, then run the install again, or add the server in MCP tools with Add existing.'
+      ? 'Start Studio’s service, then run the install again, or add the server in MCP tools with Add existing.'
       : 'Run the install again, or add the server in MCP tools with Add existing.';
   }
   if (r.ok && r.smoke === 'pending_credential') todo = `It couldn’t be tried without its token. ${todo ?? ''}`.trim();
