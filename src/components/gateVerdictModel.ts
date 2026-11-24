@@ -761,13 +761,14 @@ export function conversationStep(units: readonly WorkUnit[] | undefined, ord: nu
 
 /**
  * Whether this gate's floor never ran its checks because of the machine, not the work (wicked-core#1846): the engine's
- * own words, "Unit N's checks did not run: <cause>", or an older engine's "Unit N failed its deterministic floor (…):
+ * own words, "Unit N's checks did not run: <cause>" (or "did not finish", when the disk stopped it part way), or an older
+ * engine's "Unit N failed its deterministic floor (…):
  * repo checks floor could not run: environment: <cause>". The cause is the floor's (the disk was short of space). Nothing
  * failed, so no seat, send-back or override fixes it: free the space, then retry.
  */
 export function isFloorNotRun(prompt: string | undefined): boolean {
   if (prompt === undefined) return false;
-  return /^\s*Unit\s+\d+['’]s checks did not run:/i.test(prompt)
+  return /^\s*Unit\s+\d+['’]s checks did not (?:run|finish):/i.test(prompt)
     || /^\s*Unit\s+\d+\s+failed its deterministic floor\s*\([^)]*\):\s*repo checks floor could not run:\s*environment:/i.test(prompt);
 }
 
