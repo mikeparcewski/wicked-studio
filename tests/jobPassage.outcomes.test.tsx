@@ -234,11 +234,11 @@ describe('studio#1367: a finished MCP-server job says what its install did', () 
     unitOutput = output(pendingRecord);
     page([mcpRun('completed', 'done')]);
     await waitFor(() => expect(screen.getByTestId('job-passage-install').dataset['state']).toBe('not-registered'), { timeout: 4000 });
-    expect(screen.getByTestId('job-passage-install').textContent).toContain('Installed, but not registered in MCP tools: it needs ACME_NOTES_TOKEN, which the daemon can’t find.');
+    expect(screen.getByTestId('job-passage-install').textContent).toContain('Installed, but not registered in MCP tools: it needs ACME_NOTES_TOKEN, which Studio’s service can’t find.');
     expect(screen.getByTestId('job-passage-install-todo').textContent).toMatch(/^Add the server in MCP tools with Add existing/);
     expect(screen.getByTestId('job-passage-install-clis').textContent).toBe('Added to Claude Code and Codex. Not added to Pi (no MCP target).');
     expect(screen.getByTestId('job-passage-install-mcp').getAttribute('href')).toBe('/mcp');
-    expect(screen.getByTestId('job-passage-delivered').textContent).toMatch(/^Finished, but not registered\./);
+    expect(screen.getByTestId('job-passage-delivered').textContent).toMatch(/^Delivered, but not registered · Pull request #7/);
     expect(reads).toContain(`GET /runs/${RUN}/units/install/output`);
   });
 
@@ -358,5 +358,53 @@ describe('studio#1365: a finished domain mapping names what it found', () => {
     built = true;
     fireEvent.keyDown(document, { key: 'Escape' });
     await waitFor(() => expect(screen.getByTestId('job-passage-domain-result').dataset['state']).toBe('built'), { timeout: 4000 });
+  });
+});
+
+describe('studio#1382: an install that registered nothing never reads as a plain green Finished', () => {
+  const output = (record: unknown) => () => ok({ output: `staging acme-notes…\n${JSON.stringify(record)}\n` });
+  const passage = () => screen.getByTestId('job-passage');
+  const badge = () => screen.getByTestId('session-status');
+
+  it('not registered (garden’s pending record): the lead says it once, in studio’s words; amber edge and badge', async () => {
+    unitOutput = output(pendingRecord);
+    page([mcpRun('completed', 'done')]);
+    await waitFor(() => expect(screen.getByTestId('job-passage-install').dataset['state']).toBe('not-registered'), { timeout: 4000 });
+    const lead = screen.getByTestId('job-passage-delivered').querySelector('p')!.textContent;
+    expect(lead).toBe('Delivered, but not registered · Pull request #7');
+    expect(screen.getByTestId('job-passage-delivered').textContent).not.toContain('Finished');
+    expect(screen.getByTestId('job-passage-install-todo').textContent).toContain('set ACME_NOTES_TOKEN in the environment Studio’s service runs in, and run the install again.');
+    expect(passage().textContent).not.toMatch(/daemon/i);
+    await waitFor(() => expect(badge().textContent).toBe('Not registered'));
+    expect(badge().dataset['tone']).toBe('gate');
+    expect(passage().className).toContain('wk-pass--needs');
+    expect(passage().className).not.toContain('wk-pass--ok');
+    // The header, the passage's edge and the delivery's lines share ONE read of the install's output.
+    expect(reads.filter((r) => r === `GET /runs/${RUN}/units/install/output`)).toHaveLength(1);
+  });
+
+  it('a failed install with a record: says the install failed; red edge, Install failed badge', async () => {
+    unitOutput = output({ ok: false, error: 'the staged server failed its smoke: boom' });
+    page([mcpRun('completed', 'done')]);
+    await waitFor(() => expect(screen.getByTestId('job-passage-install').dataset['state']).toBe('failed'), { timeout: 4000 });
+    expect(screen.getByTestId('job-passage-delivered').querySelector('p')!.textContent).toBe('Delivered, but the install failed · Pull request #7');
+    await waitFor(() => expect(badge().textContent).toBe('Install failed'));
+    expect(badge().dataset['tone']).toBe('danger');
+    expect(passage().className).toContain('wk-pass--bad');
+  });
+
+  it('registered: still the green Finished and Done', async () => {
+    unitOutput = output(registeredRecord);
+    page([mcpRun('completed', 'done')]);
+    await waitFor(() => expect(screen.getByTestId('job-passage-install').dataset['state']).toBe('registered'), { timeout: 4000 });
+    expect(screen.getByTestId('job-passage-delivered').querySelector('p')!.textContent).toBe('Done. Finished · delivered · Pull request #7');
+    expect(badge().textContent).toBe('Finished');
+    expect(badge().dataset['tone']).toBe('ok');
+    expect(passage().className).toContain('wk-pass--ok');
+  });
+
+  it('no service to register with: the next step names Studio’s service, not the daemon', () => {
+    const w = installWords(installRecordOf(JSON.stringify({ ...pendingRecord, missing: [], reason: 'no daemon at http://127.0.0.1:7701' }))!);
+    expect(w.todo).toBe('Start Studio’s service, then run the install again, or add the server in MCP tools with Add existing.');
   });
 });
