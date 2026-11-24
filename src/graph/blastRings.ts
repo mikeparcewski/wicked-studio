@@ -20,3 +20,23 @@ export function blastRows(blast: BlastRadius): CodeRow[] {
     return { symbolId: d.id, name: d.name, file: d.file, depth };
   });
 }
+
+const hopsText = (k: number): string => `${k} hop${k === 1 ? '' : 's'}`;
+
+/**
+ * What the answer itself says it leaves out (estate's walk limits), for the rings and for an answer with no
+ * dependents alike: an empty answer that stopped at its horizon or size limit is not "nothing depends on this".
+ */
+export function blastCompleteness(blast: BlastRadius): string[] {
+  const notes: string[] = [];
+  if (blast.depth_horizon_reached === true) {
+    notes.push(isHop(blast.searched_depth)
+      ? `The search stopped at ${hopsText(blast.searched_depth)}; more dependents lie beyond it.`
+      : 'The search stopped at its hop limit; more dependents lie beyond it.');
+  }
+  if (blast.node_cap_reached === true) notes.push('The search reached its size limit, so some dependents are missing.');
+  if (typeof blast.truncated_dependents === 'number' && blast.truncated_dependents > 0) {
+    notes.push(`${blast.truncated_dependents} more ${blast.truncated_dependents === 1 ? 'dependent was' : 'dependents were'} left out of the answer to fit its size.`);
+  }
+  return notes;
+}

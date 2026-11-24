@@ -5,6 +5,7 @@ import type { RepoEntry, CodeGraphNode, CodeGraphEdge, CodeGraphData, DomainGrap
 import { coverageOf, requirementsNotGenerated, type RequirementsCoverage } from '../board/requirementsState.js';
 import { RequirementsCoverageSummary } from './RequirementsCoverageSummary.js';
 import { BlastRings } from './graph/BlastRings.js';
+import { blastCompleteness } from '../graph/blastRings.js';
 import { CytoGraph } from './CytoGraph.js';
 import { HotspotsView } from './HotspotsView.js';
 import { useModalEscape } from './Modal.js';
@@ -169,6 +170,10 @@ function NodeDetailPanel({
             {blast.dependents.length > 0 && blast.unresolved !== -1 && (
               <span data-testid="blast-rings-pointer" className="text-xs" style={{ color: T.faint }}>Drawn as rings by hop in the Graph tab.</span>
             )}
+            {/* codex r1: an empty answer cut by its horizon or size limit is not "nothing depends on this". */}
+            {blast.dependents.length === 0 && blast.unresolved !== -1 && blastCompleteness(blast).map((n) => (
+              <span key={n} data-testid="blast-empty-note" className="text-xs" style={{ color: T.muted }}>{n}</span>
+            ))}
           </div>
         )}
         {node.kind && (

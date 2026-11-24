@@ -2785,6 +2785,12 @@
       ]
     },
     {
+      "testId": "blast-empty-note",
+      "files": [
+        "src/components/RepoGraphModal.tsx"
+      ]
+    },
+    {
       "testId": "blast-rings",
       "files": [
         "src/components/graph/BlastRings.tsx"
@@ -2797,7 +2803,25 @@
       ]
     },
     {
+      "testId": "blast-rings-list",
+      "files": [
+        "src/components/graph/BlastRings.tsx"
+      ]
+    },
+    {
+      "testId": "blast-rings-list-toggle",
+      "files": [
+        "src/components/graph/BlastRings.tsx"
+      ]
+    },
+    {
       "testId": "blast-rings-notes",
+      "files": [
+        "src/components/graph/BlastRings.tsx"
+      ]
+    },
+    {
+      "testId": "blast-rings-open",
       "files": [
         "src/components/graph/BlastRings.tsx"
       ]
@@ -2816,6 +2840,12 @@
     },
     {
       "testId": "blast-rings-refused",
+      "files": [
+        "src/components/graph/BlastRings.tsx"
+      ]
+    },
+    {
+      "testId": "blast-rings-reset",
       "files": [
         "src/components/graph/BlastRings.tsx"
       ]
