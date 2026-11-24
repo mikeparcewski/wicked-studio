@@ -28,6 +28,7 @@ export type DenialKind =
   | 'rule'
   | 'triage'
   | 'worker-failed'
+  | 'seat-refused'
   | 'unknown';
 
 export interface DenialFacts {
@@ -53,6 +54,9 @@ export function parseDenial(raw: string | null | undefined, structured?: Structu
   const ruleIds = linkable(structured?.rule_ids ?? structured?.ruleIds ?? []);
 
   const kind: DenialKind = (() => {
+    // core#1850 (core#1674): the step's OWN seat (its CLI sandbox, a read-only mount, file permissions) refused writes
+    // inside the project. Keyed on the layer only: the prose is the engine's and may change.
+    if (structured?.source === 'seat_refused') return 'seat-refused';
     if (claimId?.startsWith('boundary-read-deny:')) return 'sandbox-read';
     if (claimId?.startsWith('boundary-deny:')) return 'sandbox-write';
     if (claimId?.startsWith('phase-scope') || text.includes('phase-scope')) return 'phase-scope';
@@ -65,6 +69,24 @@ export function parseDenial(raw: string | null | undefined, structured?: Structu
   })();
 
   return { kind, ruleIds, claimId, raw: text };
+}
+
+/**
+ * studio#1384: what a seat-refused denial blocked, read off the engine's words (core `seat_refused_reason`:
+ * "… refused N write(s) inside the project …: `path` (why), …, and K more. …"): "a write inside the project (a.ts)",
+ * "7 writes inside the project (a.ts, b.ts, c.ts and 4 more)", or "its writes inside the project" when the words
+ * name neither. At most three paths are named; the rest are counted.
+ */
+function blockedWrites(raw: string): string {
+  const n = Number(/refused (\d+) write\(s\)/.exec(raw)?.[1] ?? NaN);
+  const paths = [...raw.matchAll(/`([^`]+)` \(/g)].map((m) => m[1]!);
+  const count = Number.isFinite(n) && n > 0 ? n : paths.length;
+  const what = count === 0 ? 'its writes' : count === 1 ? 'a write' : `${count} writes`;
+  if (paths.length === 0) return `${what} inside the project`;
+  const shown = paths.slice(0, 3);
+  const more = Math.max(count, paths.length) - shown.length;
+  const named = more > 0 ? `${shown.join(', ')} and ${more} more` : shown.length <= 1 ? shown.join('') : `${shown.slice(0, -1).join(', ')} and ${shown.at(-1)!}`;
+  return `${what} inside the project (${named})`;
 }
 
 /**
@@ -89,6 +111,8 @@ export function stepDenialHeadline(f: DenialFacts, step: string): string {
       return /skills snapshot/i.test(f.raw)
         ? `${step} couldn't start: its helper's skills aren't set up on this machine.`
         : `${step} failed: its helper stopped with an error.`;
+    case 'seat-refused':
+      return `${step}’s own sandbox blocked ${blockedWrites(f.raw)}, so its work isn’t complete.`;
     default:
       return `${step} failed.`;
   }
@@ -107,6 +131,8 @@ export function stepDenialAdvice(f: DenialFacts): string {
       return /skills snapshot/i.test(f.raw)
         ? 'Check Health, then resume. The technical details below say what was missing.'
         : 'Look at what the step did, then resume or start over.';
+    case 'seat-refused':
+      return 'Send the step back to try again, or reassign it to another helper.';
     default:
       return 'Look at what the step did, then resume or start over.';
   }
@@ -129,6 +155,8 @@ export function denialHeadline(f: DenialFacts, ord: number): string {
       return `Unit #${ord} failed and was escalated for review.`;
     case 'worker-failed':
       return `The worker failed on unit #${ord}.`;
+    case 'seat-refused':
+      return `Unit #${ord}’s own sandbox blocked ${blockedWrites(f.raw)}, so its work isn’t complete.`;
     default:
       return `Unit #${ord} was stopped.`;
   }
@@ -238,6 +266,9 @@ export function escalationCopy(
       if (source === 'agent_validator') return known(`${unit}: the review did not pass${tail}`);
       if (source === 'worker_failure') return known(`${unit}: the worker exited before finishing${tail}`);
       if (source === 'evaluator_verdict') return known(`${unit}: the evaluator's VERDICT was not PASS${tail}`);
+      // core#1850: actor.rs `denial_class` books `seat_refused` under `verdict_not_pass` (its `_` arm). The summary is the
+      // engine's reason, which this sentence already says.
+      if (source === 'seat_refused') return known(`${unit}: its own sandbox blocked ${blockedWrites(facts.verdictSummary ?? '')}, so its work isn’t complete`);
       break;
     default:
       break;
@@ -265,6 +296,8 @@ export function denialAdvice(f: DenialFacts): string {
       return 'Read the failure output in the transcript, then retry — or reassign the unit to a different CLI.';
     case 'worker-failed':
       return 'Read the failure output in the transcript, then retry.';
+    case 'seat-refused':
+      return 'Send it back to try again, or reassign it to a different CLI.';
     default:
       return 'Check the unit transcript, then retry.';
   }
