@@ -270,6 +270,17 @@ describe('crew#1527: the setup steps show the GitHub-or-local delivery choice be
     expect(commandLines()).toEqual(['gh auth login', 'git config --global user.name "Ada O\'Neil"', 'git config --global user.email "user.name@lovelace.dev"']);
     expect(within(step).getAllByTestId('agents-copy').map((b) => b.getAttribute('data-command-kind'))).toEqual(['GitHub sign-in', 'git author name', 'git author email']);
     noPlaceholder();
+    // Correcting a value after Copy drops the old command's Copied, so it never vouches for the new line (review r1b).
+    const writes: string[] = [];
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn(async (t: string) => { writes.push(t); }) } });
+    const nameCopy = (): HTMLElement => within(step).getAllByTestId('agents-copy')[1]!;
+    fireEvent.click(nameCopy());
+    await waitFor(() => expect(nameCopy()).toHaveAttribute('data-state', 'copied'));
+    expect(writes).toEqual(['git config --global user.name "Ada O\'Neil"']);
+    fireEvent.change(within(author).getByTestId('agents-setup-author-name'), { target: { value: 'Ada Lovelace' } });
+    expect(commandLines()[1]).toBe('git config --global user.name "Ada Lovelace"');
+    expect(nameCopy()).toHaveAttribute('data-state', 'idle');
+    expect(nameCopy()).toHaveTextContent('Copy');
     // A value a terminal would read as code gets a note, never a command.
     fireEvent.change(within(author).getByTestId('agents-setup-author-name'), { target: { value: 'Ada $(id)' } });
     expect(commandLines()).toEqual(['gh auth login']);

@@ -183,7 +183,8 @@ export function SetupPanel({ rows, open, navigate, helpersKnown = true }: {
                     <input type="email" className="wk-field" data-testid="agents-setup-author-email" autoComplete="email" value={authorEmail} onChange={(e) => setAuthorEmail(e.target.value)} />
                   </label>
                 </div>
-                {authorCommands.commands.map((c) => <CopyLine key={c.label} line={c.line} label={c.label} />)}
+                {/* Keyed by the line: a corrected value is a new command, so an earlier Copied never stands for it (review r1b). */}
+                {authorCommands.commands.map((c) => <CopyLine key={c.line} line={c.line} label={c.label} />)}
                 {authorCommands.note !== null && <span className="wk-agents-sub" data-testid="agents-setup-author-note" role="status">{authorCommands.note}</span>}
               </div>
             )}
