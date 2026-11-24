@@ -239,6 +239,22 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
     );
   }
 
+  // studio#1386: a retire that landed. Only for the repository on screen now (review r1: a late answer after a switch
+  // never touches another repository's list); the row leaves this page if it is on it, and the read that follows is
+  // crew's word. A page emptied by it (the last row of a later page) steps back one page, so Prev stays reachable.
+  const shown = useRef({ page, offset });
+  shown.current = { page, offset };
+  function absorbRetired(repo: string, key: string): void {
+    if (repo !== viewRepo.current) return;
+    // Read when it lands (a retire can outlive the render that started it).
+    const { page, offset } = shown.current;
+    const listed = page?.items.some((i) => i.key === key) ?? false;
+    if (listed) setPage((prev) => (prev === null ? prev : { ...prev, items: prev.items.filter((i) => i.key !== key), total: Math.max(0, prev.total - 1) }));
+    setSelectedKey((k) => (k === key ? null : k));
+    if (listed && offset > 0 && page !== null && page.items.length === 1) setOffset(Math.max(0, offset - PAGE_SIZE));
+    else refetchNow.current();
+  }
+
   // Escape must close the rail first (discarding unsaved edits is preferable to closing the
   // whole modal and losing navigation context). Only when no rail is open does it close the modal.
   const handleEscape = useCallback((): void => {
@@ -439,13 +455,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
               onClose={() => setSelectedKey(null)}
               onSaved={absorbUpdate}
               onNavigateComponent={onNavigateComponent}
-              retirable={uncountedOf(page?.items.find((i) => i.key === selectedKey) ?? null) === 'unindexed'}
-              onRetired={(key) => {
-                // studio#1386: the row leaves the list now; the read that follows is crew's word on it.
-                setPage((prev) => (prev === null ? prev : { ...prev, items: prev.items.filter((i) => i.key !== key), total: Math.max(0, prev.total - 1) }));
-                setSelectedKey((k) => (k === key ? null : k));
-                refetchNow.current();
-              }}
+              onRetired={absorbRetired}
             />
           )}
         </div>
@@ -817,7 +827,6 @@ function RequirementEditRail({
   onClose,
   onSaved,
   onNavigateComponent,
-  retirable = false,
   onRetired,
 }: {
   repoId: string;
@@ -825,9 +834,8 @@ function RequirementEditRail({
   onClose: () => void;
   onSaved: (d: RequirementDetail) => void;
   onNavigateComponent?: ((symbol: string) => void) | undefined;
-  /** The row is listed as no longer in the code (`uncounted: 'unindexed'`): it can be retired (studio#1386). */
-  retirable?: boolean;
-  onRetired?: (key: string) => void;
+  /** A retire of this repository's requirement landed (studio#1386). */
+  onRetired?: (repoId: string, key: string) => void;
 }): React.ReactElement {
   const [detail, setDetail] = useState<RequirementDetail | null>(null);
   const [title, setTitle] = useState('');
@@ -841,9 +849,13 @@ function RequirementEditRail({
     setDetail(null);
     setSavedAt(null);
     setError(null);
+    // Only this selection's answer is applied (review r1: a slower read for the row picked before never replaces it,
+    // so the rail's words and its Retire are always about the same requirement).
+    let live = true;
     api
       .getRequirement(repoId, reqKey)
       .then(({ requirement }) => {
+        if (!live) return;
         setDetail(requirement);
         setTitle(requirement.title);
         setNotes(requirement.notes);
@@ -853,7 +865,8 @@ function RequirementEditRail({
             : 'active',
         );
       })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+      .catch((e: unknown) => { if (live) setError(e instanceof Error ? e.message : String(e)); });
+    return () => { live = false; };
   }, [repoId, reqKey]);
 
   function save(extra?: RequirementPatch): void {
@@ -1030,7 +1043,11 @@ function RequirementEditRail({
               </ul>
             </div>
           )}
-          {retirable && onRetired !== undefined && <RetireRequirement repoId={repoId} reqKey={reqKey} onRetired={onRetired} />}
+          {/* Eligibility is the loaded detail's own flag (it carries the summary's `uncounted`), for this repository
+              and key (review r1): never a list row read for another repository. */}
+          {onRetired !== undefined && detail.key === reqKey && uncountedOf(detail) === 'unindexed' && (
+            <RetireRequirement key={`${repoId}\u0000${reqKey}`} repoId={repoId} reqKey={reqKey} onRetired={onRetired} />
+          )}
           <div className="flex items-center gap-3 mt-1">
             <button
               type="button"
@@ -1083,26 +1100,47 @@ function retireRefusal(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+/** Retires on their way, by repository and key: one request per requirement, whichever rail asks (review r1: a
+ *  rail closed and opened again, or another row and back, never sends a second). */
+const retiresInFlight = new Map<string, Promise<unknown>>();
+
 /**
  * RETIRE (studio#1386): a requirement whose code was deleted is kept across re-maps, flagged as no longer in the code,
  * until a person retires it (crew#1858, wicked-core#1698). It confirms first, then asks crew once; the list is read
- * again after. A refusal is said here, in crew's words, and the button comes back.
+ * again after. A refusal is said here, in crew's words, and the button comes back. Mounted per repository and key.
  */
-function RetireRequirement({ repoId, reqKey, onRetired }: { repoId: string; reqKey: string; onRetired: (key: string) => void }): React.ReactElement {
-  const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
+function RetireRequirement({ repoId, reqKey, onRetired }: { repoId: string; reqKey: string; onRetired: (repoId: string, key: string) => void }): React.ReactElement {
+  const id = `${repoId}\u0000${reqKey}`;
+  const [confirming, setConfirming] = useState(() => retiresInFlight.has(id));
+  const [busy, setBusy] = useState(() => retiresInFlight.has(id));
   const [error, setError] = useState<string | null>(null);
-  const out = useRef(false);
-  useEffect(() => { setConfirming(false); setError(null); }, [reqKey]);
+  const alive = useRef(true);
+  const done = useRef(onRetired);
+  done.current = onRetired;
+  useEffect(() => {
+    alive.current = true;
+    // Opened while this requirement's retire is still out: held until it settles (its answer lands through the
+    // request's own callbacks below, on whichever rail is mounted then).
+    const pending = retiresInFlight.get(id);
+    if (pending !== undefined) void pending.finally(() => { if (alive.current) setBusy(false); });
+    return () => { alive.current = false; };
+  }, [id]);
   function retire(): void {
-    if (out.current) return;
-    out.current = true;
+    if (retiresInFlight.has(id)) return;
     setBusy(true);
     setError(null);
-    api
+    const req = api
       .retireRequirement(repoId, reqKey)
-      .then(() => onRetired(reqKey), (e: unknown) => { setError(retireRefusal(e)); setConfirming(false); })
-      .finally(() => { out.current = false; setBusy(false); });
+      .then(() => done.current(repoId, reqKey), (e: unknown) => {
+        if (!alive.current) return;
+        setError(retireRefusal(e));
+        setConfirming(false);
+      })
+      .finally(() => {
+        retiresInFlight.delete(id);
+        if (alive.current) setBusy(false);
+      });
+    retiresInFlight.set(id, req);
   }
   return (
     <div data-testid="requirement-retire" className="flex flex-col gap-1.5 rounded-lg px-3 py-2" style={{ border: `1px solid ${T.hairlineS}`, background: T.canvas2 }}>

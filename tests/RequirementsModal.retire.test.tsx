@@ -124,4 +124,83 @@ describe('Retire a requirement whose code was deleted (studio#1386)', () => {
     settle({ retired: gone.key });
     await waitFor(() => expect(screen.queryByText('Description (source)')).toBeNull());
   });
+
+  it('review r1: closed and opened again while the retire is out, the rail holds it and sends no second request', async () => {
+    let settle: (v: unknown) => void = () => undefined;
+    retireRequirement.mockImplementationOnce(() => new Promise((r) => { settle = r; }));
+    await openRow('Export invoices as CSV');
+    fireEvent.click(screen.getByTestId('requirement-retire-start'));
+    fireEvent.click(screen.getByTestId('requirement-retire-go'));
+    fireEvent.click(screen.getByRole('button', { name: 'Close requirement editor' }));
+    fireEvent.click(screen.getByText('Export invoices as CSV'));
+    const go = await screen.findByTestId('requirement-retire-go');
+    expect(go).toBeDisabled();
+    expect(go.textContent).toBe('Retiring…');
+    fireEvent.click(go);
+    expect(retireRequirement).toHaveBeenCalledTimes(1);
+    listRequirements.mockResolvedValue(page([kept]));
+    settle({ retired: gone.key });
+    await waitFor(() => expect(screen.queryByText('Export invoices as CSV')).toBeNull());
+  });
+
+  it('review r1: a retire answered after a switch to another repository leaves that repository\'s list alone', async () => {
+    let settle: (v: unknown) => void = () => undefined;
+    retireRequirement.mockImplementationOnce(() => new Promise((r) => { settle = r; }));
+    const { rerender } = render(<RequirementsModal repoId="r1" repoName="billing-api" onClose={() => {}} />);
+    fireEvent.click(await screen.findByText('Export invoices as CSV'));
+    fireEvent.click(await screen.findByTestId('requirement-retire-start'));
+    fireEvent.click(screen.getByTestId('requirement-retire-go'));
+    // r2 lists the same key, still counted there.
+    listRequirements.mockResolvedValue(page([{ ...gone, uncounted: null }]));
+    getRequirement.mockImplementation(() => Promise.resolve({ requirement: detailOf({ ...gone, uncounted: null } as never) }));
+    rerender(<RequirementsModal repoId="r2" repoName="ledger-api" onClose={() => {}} />);
+    await waitFor(() => expect(listRequirements).toHaveBeenLastCalledWith('r2', expect.anything()));
+    fireEvent.click(await screen.findByText('Export invoices as CSV'));
+    await screen.findByText('Description (source)');
+    settle({ retired: gone.key });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.getByText('Export invoices as CSV')).toBeInTheDocument();
+    expect(screen.getByText('Description (source)')).toBeInTheDocument();
+    // The r2 row counts there: no Retire on it.
+    expect(screen.queryByTestId('requirement-retire')).toBeNull();
+  });
+
+  it('review r1: a slower detail read for the row picked before never replaces the rail (its Retire stays with its words)', async () => {
+    let lateKept: (v: unknown) => void = () => undefined;
+    getRequirement.mockImplementation((_r: string, key: string) => (key === kept.key
+      ? new Promise((r) => { lateKept = r; })
+      : Promise.resolve({ requirement: detailOf(gone) })));
+    render(<RequirementsModal repoId="r1" repoName="billing-api" onClose={() => {}} />);
+    fireEvent.click(await screen.findByText('Totals include tax'));
+    fireEvent.click(screen.getAllByText('Export invoices as CSV')[0]!);
+    await screen.findByTestId('requirement-retire');
+    lateKept({ requirement: detailOf(kept) });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.getByDisplayValue('Export invoices as CSV')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('Totals include tax')).toBeNull();
+    expect(screen.getByTestId('requirement-retire')).toBeInTheDocument();
+  });
+
+  it('review r1: whether a row can be retired is its own loaded detail\'s flag, not a list row', async () => {
+    // The list says unindexed, the requirement's own read says it counts: no Retire.
+    getRequirement.mockImplementation(() => Promise.resolve({ requirement: detailOf({ ...gone, uncounted: null } as never) }));
+    await openRow('Export invoices as CSV');
+    expect(screen.queryByTestId('requirement-retire')).toBeNull();
+  });
+
+  it('review r1: retiring the last row of a later page steps back a page, so the rest stay reachable', async () => {
+    const many = Array.from({ length: 50 }, (_, i) => ({ ...kept, key: `billing::REQ-${100 + i}`, reqId: `REQ-${100 + i}`, title: `Rule ${i}` }));
+    let total = 51;
+    listRequirements.mockImplementation((_r: string, p: { offset?: number }) => Promise.resolve(
+      (p.offset ?? 0) >= 50 && total === 51 ? { ...page([gone]), total, offset: 50 } : { ...page(many), total, offset: 0 }));
+    render(<RequirementsModal repoId="r1" repoName="billing-api" onClose={() => {}} />);
+    await screen.findByText('Rule 0');
+    fireEvent.click(screen.getByText('Next →'));
+    fireEvent.click(await screen.findByText('Export invoices as CSV'));
+    fireEvent.click(await screen.findByTestId('requirement-retire-start'));
+    total = 50;
+    fireEvent.click(screen.getByTestId('requirement-retire-go'));
+    await waitFor(() => expect(listRequirements).toHaveBeenLastCalledWith('r1', expect.objectContaining({ offset: 0 })), { timeout: 2000 });
+    expect(await screen.findByText('Rule 0')).toBeInTheDocument();
+  });
 });
