@@ -43,7 +43,7 @@ const BLAST: ProjectBlastRadiusWire = {
     { repoId: 'r-web', repo: 'web', id: 'web::src/feed.ts::feed', name: 'feed', kind: 'function', file: 'src/feed.ts', line: 4, depth: 3, via_crossing: 'x9', via_crossing_omitted: true },
   ],
   byRepo: [{ repoId: 'r-api', repo: 'api', count: 1 }, { repoId: 'r-web', repo: 'web', count: 2 }],
-  unresolved: 2, reposSearched: ['api', 'web'], missingRepos: ['docs'],
+  unresolved: 2, reposSearched: ['api', 'web'], missingRepos: ['r-docs'],
   linkage: 'linked', note: 'linked note',
   crossings: [crossing], crossings_total: 2, crossings_truncated: true,
   link_stale: true, link_stale_labels: ['web'],
@@ -55,6 +55,13 @@ const PATH: ProjectGraphPath = {
   depth_bounded: false, node_bounded: false, crossings: [], reposSearched: ['api', 'web'], missingRepos: [],
   linkage: 'co-located', note: 'n',
 };
+
+/** The parent's ProjectGraphStatus.repos: crew's member ids, labels, and per-member cause and remedy. */
+const REPOS = [
+  { repoId: 'r-api', label: 'api', rootPath: '~/src/api', indexed: true },
+  { repoId: 'r-web', label: 'web', rootPath: '~/src/web', indexed: true },
+  { repoId: 'r-docs', label: 'docs', rootPath: '~/src/docs', indexed: false, reason: 'attached since the last refresh', remedy: 'Refresh the code graph to index it.' },
+];
 
 const getProjectGraphBoundaries = vi.fn();
 const getProjectBlastRadius = vi.fn();
@@ -84,7 +91,8 @@ describe('the links between repositories', () => {
       'api: 2 links out', 'web: 2 links in, linking incomplete',
     ]);
     expect(screen.getByTestId('project-crossings-stale').textContent).toBe(
-      'The links between repositories are older than the latest index (web changed since), so a crossing may be missing. Refresh the code graph to relink them.');
+      // codex r1: crew marks links stale for a changed member OR a failed link step; the words cover both.
+      'The links between repositories are out of date (web): a repository changed since they were built, or the last linking step failed. A crossing may be missing. Refresh the code graph to relink them.');
     const possible = screen.getByTestId('project-crossings-possible');
     expect(possible.textContent).toContain('Might also depend on another repository: 3 imports estate couldn’t prove are links, so they are not counted as dependencies.');
     expect(within(possible).getAllByRole('listitem').map((l) => l.textContent)).toEqual(['api imports pkg (undeclared)', 'web imports a (unresolved)', 'web imports z (unresolved)']);
@@ -113,21 +121,27 @@ describe('what depends on a symbol across repositories', () => {
     expect(getProjectBlastRadius).toHaveBeenCalledWith('p1', 'listRuns');
     expect(ans).toHaveAttribute('data-linkage', 'linked');
     expect(ans.textContent).toContain('3 dependents of listRuns in 2 repositories: api 1 · web 2');
-    expect(within(screen.getByTestId('project-crossings-crossings')).getAllByRole('listitem')[0]!.textContent).toBe('Package crossings');
+    // agy r1: the heading sits outside the list, so the list holds only crossings.
+    expect(within(screen.getByTestId('project-crossings-crossings')).getAllByRole('listitem')).toHaveLength(1);
+    expect(screen.getByText('Crossings between repositories')).toBeInTheDocument();
     expect(screen.getByTestId('project-crossings-crossing').textContent).toBe('web → api through package wicked-api (matched by path, confidence 0.95)');
     const web = screen.getAllByTestId('project-crossings-repo').find((r) => r.dataset.repo === 'web')!;
-    expect(within(web).getAllByRole('listitem')[0]!.textContent).toBe('loadBoard src/board.ts:30 · through a package link · file modified since indexed');
+    expect(within(web).getAllByRole('listitem')[0]!.textContent).toBe('loadBoard src/board.ts:30 · reached from another repository · file modified since indexed');
+    // agy r1: a dependent whose crossing is omitted (no id) is still marked.
+    expect(within(web).getAllByRole('listitem')[1]!.textContent).toBe('feed src/feed.ts:4 · reached from another repository');
   });
 
   it('says what it could not place, that the links are stale and that files changed', async () => {
-    render(<ProjectCrossings projectId="p1" />);
+    render(<ProjectCrossings projectId="p1" repos={REPOS} />);
     await ask('listRuns');
     // The links card already says the links are stale (BOUNDARIES.stale): the answer does not repeat it.
     expect(screen.getByTestId('project-crossings-stale')).toBeInTheDocument();
     expect(screen.queryByTestId('project-crossings-blast-stale')).toBeNull();
-    expect(screen.getByTestId('project-crossings-blast-changed').textContent).toBe('1 file has changed since it was indexed, so this answer may be out of date.');
+    expect(screen.getByTestId('project-crossings-blast-changed').textContent).toBe('1 file has changed since it was indexed. This answer may be out of date; refresh the code graph.');
     expect(within(screen.getByTestId('project-crossings-unplaced')).getAllByRole('listitem').map((l) => l.textContent)).toEqual([
-      'Not searched: docs (not in the project graph yet; refresh it).',
+      // codex r1: crew's missingRepos are member ids; each is named with crew's own cause and remedy.
+      'Not searched: docs (attached since the last refresh). Refresh the code graph to index it.',
+      'Linking is incomplete for web, so a crossing may be missing.',
       '2 crossings were taken; 1 is listed.',
       '1 dependent was reached through a crossing that is not listed.',
       'The search stopped at 3 hops; more dependents lie beyond it.',
@@ -140,11 +154,14 @@ describe('what depends on a symbol across repositories', () => {
     render(<ProjectCrossings projectId="p1" />);
     await screen.findByTestId('project-crossings-links-error');
     await ask('listRuns');
-    expect(screen.getByTestId('project-crossings-blast-stale').textContent).toContain('(web changed since)');
+    expect(screen.getByTestId('project-crossings-blast-stale').textContent).toContain('out of date (web)');
+    // Whether the links are built is unknown here, so nothing is said to cross or not.
+    expect(screen.getByTestId('project-crossings-unplaced').textContent).toContain('Whether the repositories are linked couldn’t be read');
   });
 
   it('a co-located answer says no crossing was taken; an unknown name says it must match exactly', async () => {
-    getProjectBlastRadius.mockResolvedValueOnce({ ...BLAST, crossings: [], crossings_total: 0, crossings_truncated: undefined, linkage: 'co-located', dependents: BLAST.dependents.slice(0, 1), byRepo: [BLAST.byRepo[0]!] });
+    // Built and complete links (the answer's own coverage): only then is "no crossing" said.
+    getProjectBlastRadius.mockResolvedValueOnce({ ...BLAST, crossings: [], crossings_total: 0, crossings_truncated: undefined, linkage: 'co-located', dependents: BLAST.dependents.slice(0, 1), byRepo: [BLAST.byRepo[0]!], coverage: [{ repoId: 'r-api', repo: 'api', links_out: 0 }, { repoId: 'r-web', repo: 'web', links_in: 0 }] });
     render(<ProjectCrossings projectId="p1" />);
     await ask('listRuns');
     expect(screen.getByTestId('project-crossings-none')).toBeInTheDocument();
@@ -152,7 +169,32 @@ describe('what depends on a symbol across repositories', () => {
     fireEvent.change(screen.getByTestId('project-crossings-name'), { target: { value: 'nope' } });
     fireEvent.click(screen.getByTestId('project-crossings-ask'));
     await waitFor(() => expect(screen.getByTestId('project-crossings-blast')).toHaveAttribute('data-resolved', 'false'));
-    expect(screen.getByTestId('project-crossings-blast').textContent).toBe('No symbol is named nope in this project. The name must match exactly.');
+    // codex r1: scoped to the repositories searched, with the member that was not.
+    expect(screen.getByTestId('project-crossings-blast').textContent).toBe('No symbol is named nope in the repositories searched (api, web). The name must match exactly.Not searched: r-docs.');
+  });
+
+  it('codex r1: new files not yet indexed are said, even with no changed file and no dependent', async () => {
+    getProjectBlastRadius.mockResolvedValueOnce({ ...BLAST, dependents: [], byRepo: [], freshness: { stale_files_total: 0, unindexed_files: 1, checked_files: 40, not_file_backed: 0 } });
+    render(<ProjectCrossings projectId="p1" />);
+    await ask('listRuns');
+    expect(screen.getByTestId('project-crossings-blast-changed').textContent).toBe('1 file isn’t indexed yet, so dependents in it are missing. This answer may be out of date; refresh the code graph.');
+    expect(screen.getByTestId('project-crossings-blast').textContent).toContain('Nothing found that depends on listRuns in the repositories searched (api, web).');
+  });
+
+  it('codex r1 + agy r1: an empty crossing list is never "nothing crossed" when crossings were taken, or the links are not built', async () => {
+    getProjectBlastRadius.mockResolvedValueOnce({ ...BLAST, crossings: [], crossings_total: 1, crossings_truncated: true, coverage: [{ repoId: 'r-api', repo: 'api' }, { repoId: 'r-web', repo: 'web' }] });
+    render(<ProjectCrossings projectId="p1" />);
+    await ask('listRuns');
+    expect(screen.queryByTestId('project-crossings-none')).toBeNull();
+    expect(screen.getByTestId('project-crossings-unplaced').textContent).toContain('1 crossing was taken; 0 are listed.');
+    cleanup();
+    getProjectGraphBoundaries.mockResolvedValue({ projectId: 'p1', linked: false, possible: [], members: [], note: 'n' });
+    getProjectBlastRadius.mockResolvedValueOnce({ ...BLAST, crossings: [], crossings_total: 0, crossings_truncated: undefined, linkage: 'co-located', dependents: BLAST.dependents.slice(0, 1) });
+    render(<ProjectCrossings projectId="p1" />);
+    await screen.findByTestId('project-crossings-unlinked');
+    await ask('listRuns');
+    expect(screen.queryByTestId('project-crossings-none')).toBeNull();
+    expect(screen.getByTestId('project-crossings-unplaced').textContent).toContain('The repositories aren’t linked, so nothing reached through another repository could be followed.');
   });
 
   it('a graph that cannot answer shows crew\'s own standing sentence', async () => {
@@ -191,7 +233,7 @@ describe('a route from one symbol to another', () => {
     const hops = await screen.findAllByTestId('project-crossings-hop');
     expect(getProjectGraphPath).toHaveBeenCalledWith('p1', 'a', 'b');
     expect(hops.map((h) => h.dataset.crosses)).toEqual(['false', 'true']);
-    expect(hops[1]!.textContent).toBe('mid (api, src/mid.ts:7) calls b (web, src/b.ts:7) · crosses into web');
+    expect(hops[1]!.textContent).toBe('mid (api, src/mid.ts:7) calls b (web, src/b.ts:7) · confidence 0.9 · crosses into web');
   });
 
   it('no route, and a search that stopped at its bound, are told apart', async () => {
@@ -201,7 +243,31 @@ describe('a route from one symbol to another', () => {
     fireEvent.change(screen.getByTestId('project-crossings-from'), { target: { value: 'a' } });
     fireEvent.change(screen.getByTestId('project-crossings-to'), { target: { value: 'b' } });
     fireEvent.click(screen.getByTestId('project-crossings-route'));
-    expect((await screen.findByTestId('project-crossings-path')).textContent).toBe('No route from a to b in this project. The search stopped at its depth or size limit, so a longer route may still exist.');
+    expect((await screen.findByTestId('project-crossings-path')).textContent).toBe('No route from a to b was found in the repositories searched. The search stopped at its depth or size limit, so a longer route may still exist.Linking is incomplete for web, so a crossing may be missing.');
+  });
+});
+
+describe('a route: confidence and the zero-step answer', () => {
+  async function route(): Promise<HTMLElement> {
+    render(<ProjectCrossings projectId="p1" />);
+    await screen.findByTestId('project-crossings-links');
+    fireEvent.change(screen.getByTestId('project-crossings-from'), { target: { value: 'a' } });
+    fireEvent.change(screen.getByTestId('project-crossings-to'), { target: { value: 'b' } });
+    fireEvent.click(screen.getByTestId('project-crossings-route'));
+    return screen.findByTestId('project-crossings-path');
+  }
+
+  it('codex r1: a step under 0.5 confidence is shown and the route is said to be a lead, not proof', async () => {
+    getProjectGraphPath.mockResolvedValue({ ...PATH, hops: [{ ...PATH.hops[1]!, confidence: 0.2 }] });
+    await route();
+    expect(screen.getByTestId('project-crossings-hop').textContent).toContain('· confidence 0.2');
+    expect(screen.getByTestId('project-crossings-path-unsure').textContent).toBe('1 step is uncertain (confidence under 0.5): treat this route as a lead to check, not as proof.');
+  });
+
+  it('codex r1 + agy r1: found with no steps says so instead of an empty answer', async () => {
+    getProjectGraphPath.mockResolvedValue({ ...PATH, hops: [] });
+    await route();
+    expect(screen.getByTestId('project-crossings-path-same').textContent).toBe('a and b were found at the same symbol, so there is no step between them.');
   });
 });
 

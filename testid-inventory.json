@@ -15672,6 +15672,12 @@
       ]
     },
     {
+      "testId": "project-crossings-blast-missing",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
       "testId": "project-crossings-blast-stale",
       "files": [
         "src/components/ProjectCrossings.tsx"
@@ -15733,6 +15739,18 @@
     },
     {
       "testId": "project-crossings-path-error",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-path-same",
+      "files": [
+        "src/components/ProjectCrossings.tsx"
+      ]
+    },
+    {
+      "testId": "project-crossings-path-unsure",
       "files": [
         "src/components/ProjectCrossings.tsx"
       ]

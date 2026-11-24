@@ -339,8 +339,9 @@ export function ProjectCodeGraph({ projectId, repoCount }: Props): React.ReactEl
         <TechDetails text={buildError} />
       </div>}
       {readError !== null && <TechDetails text={readError} />}
-      {/* studio#1079: the cross-repo questions, once the graph holds two or more repositories. */}
-      {status?.state === 'ready' && <ProjectCrossings projectId={projectId} />}
+      {/* studio#1079: the cross-repo questions, once the graph holds two or more repositories. Keyed by the build, so a
+          refresh rereads the links and drops every earlier answer (a question asked before it never lands after). */}
+      {status?.state === 'ready' && <ProjectCrossings key={`${projectId}\u0000${status.updatedAt ?? 'never'}`} projectId={projectId} repos={status.repos} />}
     </div>
   );
 }

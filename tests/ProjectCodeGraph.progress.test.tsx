@@ -50,6 +50,7 @@ function built(over: Partial<ProjectGraphRefreshResult>): ProjectGraphRefreshRes
 
 beforeEach(() => {
   resetProjectGraphBuilds();
+  getProjectGraphBoundaries.mockClear();
   getProjectGraph.mockReset();
   refreshProjectGraph.mockReset();
 });
@@ -77,6 +78,23 @@ describe('the Across repositories card (studio#1079)', () => {
     render(<ProjectCodeGraph projectId="proj-1" repoCount={1} />);
     await waitFor(() => expect(screen.getByTestId('project-graph')).toHaveAttribute('data-state', 'ready-single-repo'));
     expect(screen.queryByTestId('project-crossings')).toBeNull();
+  });
+});
+
+describe('the Across repositories card after a refresh (studio#1079 codex r1, agy r1)', () => {
+  it('a refresh of a built graph rereads the links and drops an answer asked before it', async () => {
+    getProjectGraph.mockResolvedValue({ status: status({ updatedAt: 1 }) });
+    refreshProjectGraph.mockResolvedValueOnce(built({ status: status({ updatedAt: 2 }) }));
+    render(<ProjectCodeGraph projectId="proj-1" repoCount={2} />);
+    await screen.findByTestId('project-crossings');
+    expect(getProjectGraphBoundaries).toHaveBeenCalledTimes(1);
+    fireEvent.change(screen.getByTestId('project-crossings-name'), { target: { value: 'listRuns' } });
+    expect(screen.getByTestId('project-crossings-name')).toHaveValue('listRuns');
+    fireEvent.click(await screen.findByTestId('project-graph-build'));
+    await screen.findByTestId('project-graph-result');
+    await waitFor(() => expect(getProjectGraphBoundaries).toHaveBeenCalledTimes(2));
+    // A fresh card: the question typed before the refresh is gone with its answer.
+    expect(screen.getByTestId('project-crossings-name')).toHaveValue('');
   });
 });
 
