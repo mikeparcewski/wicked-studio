@@ -1024,4 +1024,31 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body ?? {}),
     }),
+
+  /**
+   * studio#1079: `GET /projects/:id/graph/blast-radius?name=` (crew `projects/routes.ts`): the symbol's dependents in
+   * every member repo, each attributed, with the package crossings the walk took, its completeness causes, and
+   * whether the links are stale. 400 no name; 404 unknown project or no graph to ask (`status` says why); 501 engine
+   * too old.
+   */
+  getProjectBlastRadius: (id: string, name: string) =>
+    apiFetch<import('./projectGraph-wire.js').ProjectBlastRadiusWire>(
+      `/projects/${encodeURIComponent(id)}/graph/blast-radius?name=${encodeURIComponent(name)}`,
+    ),
+
+  /**
+   * studio#1079: `GET /projects/:id/graph/path?from=&to=&maxDepth=` (crew#1476): a route from one symbol to another
+   * across member repos, every endpoint attributed. `maxDepth` is 1-16 (crew refuses anything else with 400).
+   */
+  getProjectGraphPath: (id: string, from: string, to: string, maxDepth?: number) =>
+    apiFetch<import('./projectGraph-wire.js').ProjectGraphPath>(
+      `/projects/${encodeURIComponent(id)}/graph/path?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${maxDepth === undefined ? '' : `&maxDepth=${maxDepth}`}`,
+    ),
+
+  /**
+   * studio#1079: `GET /projects/:id/graph/boundaries` (crew#1477): each member's link coverage and the imports estate
+   * could not prove are links to another member ("possible": never edges).
+   */
+  getProjectGraphBoundaries: (id: string) =>
+    apiFetch<import('./projectGraph-wire.js').ProjectGraphBoundaries>(`/projects/${encodeURIComponent(id)}/graph/boundaries`),
 };
