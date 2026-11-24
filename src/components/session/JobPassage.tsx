@@ -571,14 +571,14 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   if (settled && jobSettled(v.phase)) {
     const pr = run !== null ? deliverySummary(run) : null;
     return (
-      <section role="region" aria-label={regionName(v)} data-testid="job-passage" data-phase={v.phase} data-settled="true" data-lineage={lineage.lineage} className="wk-pass wk-pass--settled">
+      <section role="region" aria-label={regionName(v)} data-testid="job-passage" data-phase={v.phase} data-settled="true" data-lineage={lineage.lineage} className={`wk-pass wk-pass--settled${installShown === 'not-registered' ? ' wk-pass--needs' : installShown === 'failed' ? ' wk-pass--bad' : ''}`}>
         <p className="wk-pass-settled">
           {v.phase === 'notStarted' && moved !== null
             ? <>Moved to {moved.where}: {v.proposal.what.label} · <button type="button" className="wk-pass-inl" data-testid="job-passage-moved-open" onClick={() => openChat(moved.chatId)}>Open it</button></>
             : declined !== null && run !== null ? `${declinedLead(run, declined.install)} ${v.proposal.what.label}${pr !== null ? ` · ${pr}` : ''}`
               : !stoppedKnown ? `${v.proposal.what.label}${pr !== null ? ` · ${pr}` : ''}`
                 // studio#1382: an older job whose install registered nothing keeps saying so; while that is read, no "Done".
-                : installShown === 'not-registered' || installShown === 'failed' ? `${installLead(installShown, true)}. ${v.proposal.what.label}${pr !== null ? ` · ${pr}` : ''}`
+                : installShown === 'not-registered' || installShown === 'failed' ? `${installLead(installShown, run !== null && handedOf(run) !== null)}. ${v.proposal.what.label}${pr !== null ? ` · ${pr}` : ''}`
                   : installShown === 'loading' ? `${v.proposal.what.label}${pr !== null ? ` · ${pr}` : ''}`
                     : settledLine(v, { pr })}
           {runId !== null && <> · <button type="button" className="wk-pass-inl" data-testid="job-passage-details" onClick={() => openSheet({ kind: 'session', sessionId: `run:${runId}` })}>Details ›</button></>}
@@ -1252,7 +1252,7 @@ function InstallResultLine({ record, words, read, navigate }: {
   navigate?: Navigate;
 }): React.ReactElement {
   const show = useDisplayText();
-  if (read.value === null) return <p data-testid="job-passage-install" data-state="loading" className="wk-pass-sub wk-pass-grey">Reading what the install did…</p>;
+  if (read.pending) return <p data-testid="job-passage-install" data-state="loading" className="wk-pass-sub wk-pass-grey">Reading what the install did…</p>;
   if (read.value === 'failed') {
     return (
       <p data-testid="job-passage-install" data-state="failed" className="wk-pass-sub">

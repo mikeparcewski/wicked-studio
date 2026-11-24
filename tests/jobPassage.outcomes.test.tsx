@@ -450,5 +450,45 @@ describe('studio#1382: an install that registered nothing never reads as a plain
     const older = screen.getAllByTestId('job-passage').find((el) => el.dataset['settled'] === 'true')!;
     expect(older.textContent).toContain('Pull request #7');
     expect(older.textContent).not.toMatch(/^Done\./);
+    // Its edge keeps the tone too (codex r2).
+    expect(older.className).toContain('wk-pass--needs');
+  });
+
+  const twoJobs = () => {
+    const P2 = { at: T0 + 20, turnId: 't2', kind: 'proposal', proposal: jobProposal({ pid: `${CHAT}:t2`, turnId: 't2', lineage: `${CHAT}:t2` } as never) };
+    messages = [USER, P1, DECIDED, { ...USER, at: T0 + 10, turnId: 't2', text: 'and a second one' }, P2];
+  };
+  const olderOf = () => screen.getAllByTestId('job-passage').find((el) => el.dataset['settled'] === 'true');
+
+  it('an older job that handed nothing over says Finished, never Delivered, and a failed install keeps its red edge', async () => {
+    unitOutput = output(pendingRecord);
+    twoJobs();
+    page([mcpRun('completed', 'done', false)]);
+    await waitFor(() => expect(olderOf()?.textContent).toMatch(/^Finished, but not registered\. /), { timeout: 4000 });
+    expect(olderOf()!.textContent).not.toMatch(/Delivered/);
+    cleanup();
+    resetOutcomeReadsForTest();
+    unitOutput = output({ ok: false, error: 'the staged server failed its smoke: boom' });
+    twoJobs();
+    page([mcpRun('completed', 'done')]);
+    await waitFor(() => expect(olderOf()?.textContent).toMatch(/^Delivered, but the install failed\. /), { timeout: 4000 });
+    expect(olderOf()!.className).toContain('wk-pass--bad');
+  });
+
+  it('an install output that is read and empty is answered, not loading: no record, the run’s own Finished', async () => {
+    unitOutput = () => ok({ output: null });
+    page([mcpRun('completed', 'done')]);
+    await waitFor(() => expect(screen.getByTestId('job-passage-install').dataset['state']).toBe('unknown'), { timeout: 4000 });
+    expect(badge().textContent).toBe('Finished');
+    expect(badge().dataset['tone']).toBe('ok');
+    expect(passage().className).toContain('wk-pass--ok');
+  });
+
+  it('an archived run keeps its Archived badge, whatever its install said', async () => {
+    unitOutput = output(pendingRecord);
+    const v = mcpRun('completed', 'done');
+    page([{ ...v, session: { ...v.session, archived_at: (T0 + 1000) / 1000 } } as never]);
+    await waitFor(() => expect(screen.getByTestId('job-passage-install').dataset['state']).toBe('not-registered'), { timeout: 4000 });
+    expect(badge().textContent).toBe('Archived');
   });
 });

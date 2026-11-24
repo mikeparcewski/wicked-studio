@@ -30,10 +30,11 @@ function ensureRead(key: string, read: () => Promise<unknown>, force = false): v
   );
 }
 
-export type OutcomeRead<T> = { value: T | 'failed' | null; again: () => void };
+/** `value` is the answer (null while reading, and also an answered null); `pending` tells the two apart (codex/agy r2). */
+export type OutcomeRead<T> = { value: T | 'failed' | null; pending: boolean; again: () => void };
 
 export function useOutcomeRead<T>(key: string | null, read: () => Promise<T>): OutcomeRead<T> {
-  const value = useSyncExternalStore(
+  const entry = useSyncExternalStore(
     useCallback((onChange: () => void) => {
       if (key === null) return () => {};
       let set = outcomeListeners.get(key);
@@ -41,13 +42,14 @@ export function useOutcomeRead<T>(key: string | null, read: () => Promise<T>): O
       set.add(onChange);
       return () => { set.delete(onChange); if (set.size === 0) outcomeListeners.delete(key); };
     }, [key]),
-    () => (key === null ? null : (outcomeReads.get(key)?.value ?? null)),
-  ) as T | 'failed' | null;
+    () => (key === null ? undefined : outcomeReads.get(key)),
+  );
   const readRef = useRef(read);
   readRef.current = read;
   useEffect(() => { if (key !== null) ensureRead(key, () => readRef.current()); }, [key]);
   return {
-    value,
+    value: (entry?.value ?? null) as T | 'failed' | null,
+    pending: key !== null && (entry === undefined || entry.read !== null),
     again: () => { if (key !== null) ensureRead(key, () => readRef.current(), true); },
   };
 }
@@ -57,7 +59,7 @@ export function resetOutcomeReadsForTest(): void { outcomeReads.clear(); }
 
 /** What an MCP-server job's install came to, as every surface that says it reads it (studio#1382). */
 export interface InstallOutcome {
-  /** The install step's output read (null while reading, 'failed' when it could not be read). */
+  /** The install step's output read (`pending` while reading, 'failed' when it could not be read). */
   read: OutcomeRead<string | null>;
   record: InstallRecord | null;
   words: InstallWords | null;
@@ -78,7 +80,7 @@ export function useInstallOutcome(run: SessionView | null): InstallOutcome {
     () => api.getUnitOutput(run!.session.id, installKey!).then(({ output }) => output));
   const record = typeof read.value === 'string' ? installRecordOf(read.value) : null;
   const words = record === null ? null : installWords(record);
-  const standing = installKey !== null && read.value === null ? 'loading'
+  const standing = read.pending ? 'loading'
     : record === null || words === null ? null : words.registered ? 'registered' : record.ok ? 'not-registered' : 'failed';
   return { read, record, words, standing };
 }

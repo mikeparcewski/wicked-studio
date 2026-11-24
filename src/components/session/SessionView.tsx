@@ -34,6 +34,7 @@ import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { ChatQuestions } from './ThreadQuestions.js';
 import { SourceChips } from './SourceChips.js';
 import { NeedsBanner } from './NeedsBanner.js';
+import { statusWord } from '../../board/statusWords.js';
 import { arrivals, atEnd, headerBadge, heldArrivals, jumpLabel, newEntries, QUESTION_KINDS, readDetailsOpen, needsForSession, writeDetailsOpen, type WaitingItem } from '../../board/runHeader.js';
 import { needsSource } from '../../board/attention.js';
 import { Composer, type ComposerSend, type ComposerSuggestion } from './Composer.js';
@@ -583,7 +584,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // studio#1382: the newest run finished, but its MCP install registered nothing (a token to add) or failed: not a green
   // "Finished". The passage's own kept read of the install record; nothing else is read.
   const lastRun = mine.length > 0 ? mine[mine.length - 1]! : null;
-  const installed = useInstallOutcome(lastRun !== null && lastRun.session.status === 'completed' ? lastRun : null).standing;
+  // An archived run keeps its Archived badge (statusWord's archived-first precedence, codex r2).
+  const installed = useInstallOutcome(lastRun !== null && lastRun.session.status === 'completed' && statusWord(lastRun).word !== 'Archived' ? lastRun : null).standing;
   const settledHere = state !== 'waiting' && state !== 'working';
   const badge = declined !== null && settledHere ? { word: declined.install ? 'Not installed' : 'Declined', tone: 'quiet' as const }
     : installed === 'not-registered' && settledHere ? { word: 'Not registered', tone: 'gate' as const }
