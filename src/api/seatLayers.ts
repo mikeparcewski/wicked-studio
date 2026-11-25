@@ -3,7 +3,7 @@ import { ApiError, apiStatus } from './errors.js';
 
 /**
  * wicked-core#1043: the toolchain layers a repo's seats get, as crew serves them on `GET /repos` and in the reply of
- * `PUT /repos/:id/seat-layers` (wicked-crew api-types 0.232.0 `RepoEntry.seat_layers` / `seat_layers_off`). Studio
+ * `PUT /repos/:id/seat-layers` (wicked-crew api-types next, `RepoEntry.seat_layers` / `seat_layers_off`). Studio
  * pins an older api-types, so the fields are read here from core's writer: `RepoEntry.seat_layers`
  * (core src/repo.rs:82-88, always serialized on the reads a person sees) holds the layers detected in the checkout,
  * in catalog order, each `{id, enabled, off_by}` (src/seat_layers.rs:382-408); `seat_layers_off` (src/repo.rs:89-94)
