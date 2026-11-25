@@ -170,6 +170,19 @@ describe('the next list is built from crew\'s latest row (core#1043, round 1)', 
     expect(sw('Node.js')).toHaveAttribute('aria-checked', 'false');
   });
 
+  it('a change of unknown outcome from an earlier visit reads nothing for it (delta 2)', async () => {
+    const reply = deferred<RepoEntry>();
+    setRepoSeatLayers.mockImplementationOnce(() => reply.promise);
+    const { rerender } = render(ui());
+    await screen.findByTestId('repo-seat-layers');
+    await act(async () => { fireEvent.click(sw('Node.js')); });
+    rerender(ui('?tab=settings', undefined, 'other'));
+    await screen.findByRole('heading', { name: 'other' });
+    const before = listRepos.mock.calls.length;
+    await act(async () => { reply.reject(new TypeError('Failed to fetch')); });
+    expect(listRepos.mock.calls.length).toBe(before);
+  });
+
   it('a reply for an earlier visit to this repository does not land on a later one', async () => {
     const reply = deferred<RepoEntry>();
     setRepoSeatLayers.mockImplementationOnce(() => reply.promise);

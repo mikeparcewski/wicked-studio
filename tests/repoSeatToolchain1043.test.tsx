@@ -166,6 +166,14 @@ describe('a switch sends the full list and shows crew\'s answer (core#1043)', ()
     expect(within(card()).getByRole('alert')).toHaveTextContent('This repository is no longer registered.');
   });
 
+  it('crew still has the repository but sends no layers for it now: nothing is sent, and it is not called unregistered (delta 2)', async () => {
+    render(<RepoSeatToolchain repo={entry([on('node')])} onChanged={() => {}} onReread={async () => {}} />);
+    crewRow = entry(undefined);
+    await act(async () => { fireEvent.click(sw('Node.js')); });
+    expect(setRepoSeatLayers).not.toHaveBeenCalled();
+    expect(within(card()).getByRole('alert')).toHaveTextContent('This daemon no longer reports toolchain layers for this repository. Nothing changed.');
+  });
+
   it('a repository named like an Object property (constructor) is not taken as saving (round 1 delta)', async () => {
     const e = { ...entry([on('node')]), id: 'constructor', name: 'constructor' } as RepoEntry;
     render(<RepoSeatToolchain repo={crewIs(e)} onChanged={() => {}} onReread={async () => {}} />);
@@ -198,7 +206,7 @@ describe('a switch sends the full list and shows crew\'s answer (core#1043)', ()
     setRepoSeatLayers.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     render(<RepoSeatToolchain repo={crewIs(entry([on('node'), on('python')]))} onChanged={changed} onReread={onReread} />);
     await act(async () => { fireEvent.click(sw('Node.js')); });
-    expect(within(card()).getByRole('alert')).toHaveTextContent('Couldn’t confirm that change. The switches show what this daemon has now.');
+    expect(within(card()).getByRole('alert')).toHaveTextContent('Couldn’t confirm that change. The switches show the last state this page read.');
     expect(onReread).toHaveBeenCalledTimes(1);
     expect(sw('Python')).toBeDisabled();
     await act(async () => { reread.resolve(); });
