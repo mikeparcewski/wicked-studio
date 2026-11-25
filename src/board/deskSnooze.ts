@@ -1,10 +1,12 @@
 /**
  * Snoozing a Needs-you item (crew#1124; DES-desk-v2 §6 item 6). Pure in every input, `now` included.
  *
- * - The snooze key is the item INSTANCE: the row's key and its clock (`gate:<run>@<at>`), the inbox's own seen id. A
- *   new decision on the same job is a new instance, so it is never hidden by an older snooze.
+ * - The snooze key is the item INSTANCE: the row's key and the daemon's identity of this occurrence
+ *   (`NeedRow.instance`: `gate:<run>@ord:<n>`), the same live and after a reload. A new decision on the same job is a
+ *   new instance, so it is never hidden by an older snooze. A row with no such identity (one whose occurrences only
+ *   studio's own clock tells apart: a stalled run or chat, a campaign) can't be snoozed.
  * - A snooze is in force while its end is still ahead AND the item is no worse than when it was snoozed: the row's
- *   rank now (`NeedRow.severity`) is at most the rank stored with the snooze. One that gets worse comes back at once.
+ *   rank now ({@link snoozeRank}) is at most the rank stored with the snooze. One that gets worse comes back at once.
  * - It only defers the item on the Desk's inbox: the item stays in crew's attention read.
  */
 
@@ -15,13 +17,18 @@ import type { DeskSnooze } from '../api/deskSnooze-wire.js';
 export const SNOOZE_KEY_MAX = 200;
 export const SNOOZE_MAX_MS = 7 * 24 * 3_600_000;
 
-export function snoozeKey(row: Pick<NeedRow, 'key' | 'at'>): string {
-  return `${row.key}@${row.at ?? ''}`;
+export function snoozeKey(row: Pick<NeedRow, 'key' | 'instance'>): string {
+  return `${row.key}@${row.instance ?? ''}`;
 }
 
-/** A row the inbox can offer to snooze: one item (never a folded group), with a key crew takes. */
+/** A row the inbox can offer to snooze: one item (never a folded group) with a daemon identity, and a key crew takes. */
 export function snoozable(row: NeedRow): boolean {
-  return row.members === undefined && snoozeKey(row).length <= SNOOZE_KEY_MAX;
+  return row.members === undefined && row.instance !== undefined && snoozeKey(row).length <= SNOOZE_KEY_MAX;
+}
+
+/** The row's rank as crew stores it with a snooze: a whole number 0-1000. */
+export function snoozeRank(row: Pick<NeedRow, 'severity'>): number {
+  return Math.max(0, Math.min(1000, Math.round(row.severity)));
 }
 
 /** The snooze holding this row back now, or null. */
@@ -30,7 +37,7 @@ export function snoozeOf(row: NeedRow, byKey: Readonly<Record<string, DeskSnooze
   if (s === undefined) return null;
   const end = Date.parse(s.until);
   if (!Number.isFinite(end) || end <= now) return null;
-  if (s.severity !== null && row.severity > s.severity) return null;
+  if (s.severity !== null && snoozeRank(row) > s.severity) return null;
   return s;
 }
 

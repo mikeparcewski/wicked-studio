@@ -22,7 +22,7 @@ import { InlineUndo } from '../InlineUndo.js';
 import { gateKeyOf } from '../../board/gateActions.js';
 import { batchFailedResult } from './BatchFailures.js';
 import { useDeskSnoozes } from '../../store/deskSnoozes.js';
-import { snoozable, snoozeChoices, snoozeEndWords, snoozeKey, splitSnoozed } from '../../board/deskSnooze.js';
+import { snoozable, snoozeChoices, snoozeEndWords, snoozeKey, snoozeRank, splitSnoozed } from '../../board/deskSnooze.js';
 
 /**
  * NEEDS YOU, AS AN INBOX (DES-desk-v2 §2.1). The rows are the needs fold (`useNeedsRows` →
@@ -83,6 +83,9 @@ export function DeskInbox({ rows: allRows, runs, navigate, now, settled, agentNa
   const snoozes = useDeskSnoozes();
   const loadSnoozes = snoozes.load;
   useEffect(() => { void loadSnoozes(); }, [loadSnoozes]);
+  // A failed read hides nothing and offers nothing; it is tried again on the inbox's next minute.
+  const retrySnoozesAt = snoozes.phase === 'failed' ? now : null;
+  useEffect(() => { if (retrySnoozesAt !== null) void loadSnoozes(); }, [retrySnoozesAt, loadSnoozes]);
   const { awake: rows, snoozed } = useMemo(() => splitSnoozed(allRows, snoozes.byKey, now), [allRows, snoozes.byKey, now]);
   const canSnooze = snoozes.phase === 'ready';
   const tabPrefix = useId();
@@ -217,15 +220,22 @@ function SnoozedItem({ row, until, now, navigate }: { row: NeedRow; until: strin
 }
 
 /** Snooze the item in the reading pane: the ends offered, then what happened. */
+/** Snooze in the reading pane. Mounted per item instance ({@link snoozeKey}), so a new occurrence starts fresh. */
 function SnoozeAct({ row, now }: { row: NeedRow; now: number }): React.ReactElement {
   const snooze = useDeskSnoozes((st) => st.snooze);
   const [state, setState] = useState<{ kind: 'idle' | 'choose' | 'sending' } | { kind: 'failed'; words: string }>({ kind: 'idle' });
-  const sentFor = useRef(row.key);
-  useEffect(() => { sentFor.current = row.key; setState({ kind: 'idle' }); }, [row.key]);
+  const opener = useRef<HTMLButtonElement>(null);
+  const firstChoice = useRef<HTMLButtonElement>(null);
+  const backToOpener = useRef(false);
+  // Keyboard: the choices take focus when they open; Cancel hands it back to Snooze.
+  useEffect(() => {
+    if (state.kind === 'choose') firstChoice.current?.focus();
+    else if (state.kind === 'idle' && backToOpener.current) { backToOpener.current = false; opener.current?.focus(); }
+  }, [state.kind]);
   if (state.kind === 'idle' || state.kind === 'failed') {
     return (
       <span className="wk-inbox-snooze">
-        <button type="button" data-testid="desk-inbox-snooze" className="wk-btn wk-btn--quiet wk-btn--sm" aria-expanded={false} onClick={() => setState({ kind: 'choose' })}>
+        <button ref={opener} type="button" data-testid="desk-inbox-snooze" className="wk-btn wk-btn--quiet wk-btn--sm" onClick={() => setState({ kind: 'choose' })}>
           <AlarmClock size={13} aria-hidden />Snooze
         </button>
         {state.kind === 'failed' && <span role="status" className="wk-viz-meta" data-testid="desk-inbox-snooze-failed">{state.words}</span>}
@@ -234,17 +244,17 @@ function SnoozeAct({ row, now }: { row: NeedRow; now: number }): React.ReactElem
   }
   return (
     <span className="wk-inbox-snooze" role="group" aria-label="Snooze until">
-      {snoozeChoices(now).map((c) => (
-        <button key={c.id} type="button" data-testid={`desk-inbox-snooze-${c.id}`} className="wk-btn wk-btn--secondary wk-btn--sm" disabled={state.kind === 'sending'}
+      {snoozeChoices(now).map((c, i) => (
+        <button key={c.id} ref={i === 0 ? firstChoice : undefined} type="button" data-testid={`desk-inbox-snooze-${c.id}`} className="wk-btn wk-btn--secondary wk-btn--sm" disabled={state.kind === 'sending'}
           onClick={() => {
-            const key = row.key;
             setState({ kind: 'sending' });
-            void snooze(snoozeKey(row), c.until, row.severity).then((why) => { if (sentFor.current === key && why !== null) setState({ kind: 'failed', words: why }); });
+            // Done: the item leaves the list (and this pane with it); were it still shown, the controls settle back.
+            void snooze(snoozeKey(row), c.until, snoozeRank(row)).then((why) => setState(why === null ? { kind: 'idle' } : { kind: 'failed', words: why }));
           }}>
           {c.label}
         </button>
       ))}
-      <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" disabled={state.kind === 'sending'} onClick={() => setState({ kind: 'idle' })}>Cancel</button>
+      <button type="button" data-testid="desk-inbox-snooze-cancel" className="wk-btn wk-btn--quiet wk-btn--sm" disabled={state.kind === 'sending'} onClick={() => { backToOpener.current = true; setState({ kind: 'idle' }); }}>Cancel</button>
     </span>
   );
 }
@@ -365,7 +375,7 @@ function ReadingPane({ row, view, queueAct, navigate, now, agentName, canSnooze 
               : <button type="button" className="wk-btn wk-btn--primary wk-btn--sm" onClick={() => queueAct(a, row.key)}>{deskVerb(a.label)}</button>}
           </div>
         )}
-        {canSnooze && snoozable(row) && <div className="wk-inbox-read-acts" data-testid="desk-inbox-snooze-row"><SnoozeAct row={row} now={now} /></div>}
+        {canSnooze && snoozable(row) && <div className="wk-inbox-read-acts" data-testid="desk-inbox-snooze-row"><SnoozeAct key={snoozeKey(row)} row={row} now={now} /></div>}
       </div>
     </article>
   );

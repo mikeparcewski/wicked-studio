@@ -5,7 +5,8 @@ import { ApiError, apiStatus, isRouteUnsupported } from '../api/errors.js';
 /**
  * The Needs-you snoozes in force (crew#1124), read once when the inbox opens and again after each change. A daemon
  * from before the snooze route answers an unknown-route 404: `phase: 'unsupported'`, and the inbox offers no snooze. A read that fails
- * otherwise hides nothing (every row shows) and offers no snooze until a read succeeds.
+ * otherwise, the first or a later one, hides nothing (every row shows) and offers no snooze until a read succeeds; the
+ * inbox tries again on its next minute.
  */
 
 type Phase = 'idle' | 'loading' | 'ready' | 'unsupported' | 'failed';
@@ -42,15 +43,14 @@ export const useDeskSnoozes = create<State>((set, get) => ({
     } catch (e) {
       if (mine !== readSeq) return;
       if (isRouteUnsupported(e)) set({ phase: 'unsupported', byKey: {} });
-      else if (get().phase !== 'ready') set({ phase: 'failed' });
+      else set({ phase: 'failed', byKey: {} });
     }
   },
   snooze: async (key, until, severity) => {
     try {
       const s = await deskSnoozeApi.snooze(key, { until, severity });
-      readSeq += 1; // a read that started before this answer must not drop it
       set((st) => ({ byKey: { ...st.byKey, [s.key]: s } }));
-      void get().load();
+      void get().load(); // starts a new read, so one already in flight is dropped when it answers
       return null;
     } catch (e) {
       return refusal(e, 'snooze');
@@ -59,7 +59,6 @@ export const useDeskSnoozes = create<State>((set, get) => ({
   wake: async (key) => {
     try {
       await deskSnoozeApi.wake(key);
-      readSeq += 1;
       set((st) => { const byKey = { ...st.byKey }; delete byKey[key]; return { byKey }; });
       void get().load();
       return null;
