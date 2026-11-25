@@ -57,13 +57,20 @@ export function seatLayerName(id: string): string {
   return LAYER_WORDS[id] ?? id;
 }
 
-/** Why a change did not land, in plain words. Crew changes nothing on any of these. */
-export function seatLayersRefusal(e: unknown): string {
+/**
+ * Why a change did not land, in plain words, when crew said so: these refusals come before crew writes anything, so
+ * nothing changed. `null` when the outcome is not known (no answer, or a failure crew did not name): the write may
+ * have landed, so the caller reads crew again before the next change.
+ */
+export function seatLayersRefusal(e: unknown): string | null {
   const code = e instanceof ApiError && typeof e.body === 'object' && e.body !== null ? (e.body as { code?: unknown }).code : undefined;
   const status = apiStatus(e);
   if (code === 'human_operator_only' || status === 403) return 'Only a person can change this; an agent cannot.';
   if (code === 'repo_not_found') return 'This repository is no longer registered.';
   if (code === 'unknown_seat_layer') return 'This daemon has no such toolchain layer.';
   if (code === 'repo_seat_layers_unsupported' || status === 501) return 'This daemon can’t turn toolchain layers off yet. Upgrade wicked-crew to use this.';
-  return 'Couldn’t save that just now. Nothing changed.';
+  return null;
 }
+
+/** What the card says when the outcome is not known; the switches then show crew's row as read again. */
+export const SEAT_LAYERS_UNSURE = 'Couldn’t confirm that change. The switches show what this daemon has now.';

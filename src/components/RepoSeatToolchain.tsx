@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { api } from '../api/client.js';
 import type { RepoEntry } from '../api/types.js';
-import { nextSeatLayersOff, seatLayerName, seatLayersOf, seatLayersOffOf, seatLayersRefusal, type SeatLayerRow } from '../api/seatLayers.js';
+import { SEAT_LAYERS_UNSURE, nextSeatLayersOff, seatLayerName, seatLayersOf, seatLayersOffOf, seatLayersRefusal, type SeatLayerRow } from '../api/seatLayers.js';
+import { useSeatLayerSaves } from '../store/seatLayerSaves.js';
 import { SectionTitle } from './ui/index.js';
 import { Switch } from './ui/Switch.js';
 
@@ -10,38 +11,44 @@ import { Switch } from './ui/Switch.js';
  * checkout (crew's `seat_layers`): a switch when this repo's own switch decides it, else the reason it is off (the
  * daemon turned every layer off, or the operator's own seat image supplies the tools) and no switch. A switch sends
  * the repo's full off list (`PUT /repos/:id/seat-layers`) and hands crew's answer, the repo's row as `GET /repos`
- * shows it, to the page. A refusal is said in plain words and changes nothing. Nothing renders on a crew that sends
- * no rows.
+ * shows it, to the page. Nothing renders on a crew that sends no rows.
+ *
+ * The full list is built from the row shown, so that row must be crew's latest (round 1). One change per repository
+ * is in flight at a time, held in a store the card's unmount does not reset; a refusal crew names changed nothing;
+ * any other failure may have landed, so the page reads crew again before the switches free.
  */
-export function RepoSeatToolchain({ repo, onChanged }: { repo: RepoEntry; onChanged: (repo: RepoEntry) => void }): React.ReactElement | null {
-  const [saving, setSaving] = useState<string | null>(null);
-  const [refused, setRefused] = useState<string | null>(null);
-  // A second press while crew answers sends nothing (the fieldset is disabled too, a render later).
-  const busy = useRef(false);
+export function RepoSeatToolchain({ repo, onChanged, onReread }: {
+  repo: RepoEntry;
+  /** Crew's answer: the repo's row as `GET /repos` shows it. */
+  onChanged: (repo: RepoEntry) => void;
+  /** Read the repo's row from crew again (the outcome of a change is not known). */
+  onReread: () => Promise<void>;
+}): React.ReactElement | null {
+  const saving = useSeatLayerSaves((s) => s.saving[repo.id] ?? null);
+  const [said, setSaid] = useState<string | null>(null);
   const rows = seatLayersOf(repo);
   if (rows === null) return null;
 
   async function flip(row: SeatLayerRow, turnOn: boolean): Promise<void> {
-    if (busy.current || rows === null) return;
-    busy.current = true;
-    setSaving(row.id);
-    setRefused(null);
-    const forRepo = repo.id;
+    if (rows === null) return;
+    const saves = useSeatLayerSaves.getState();
+    if (!saves.begin(repo.id, row.id)) return;
+    setSaid(null);
     try {
-      const next = await api.setRepoSeatLayers(forRepo, nextSeatLayersOff(seatLayersOffOf(repo, rows), row.id, turnOn));
-      onChanged(next);
+      onChanged(await api.setRepoSeatLayers(repo.id, nextSeatLayersOff(seatLayersOffOf(repo, rows), row.id, turnOn)));
     } catch (e) {
-      setRefused(seatLayersRefusal(e));
+      const refused = seatLayersRefusal(e);
+      setSaid(refused ?? SEAT_LAYERS_UNSURE);
+      if (refused === null) await onReread().catch(() => undefined);
     } finally {
-      busy.current = false;
-      setSaving(null);
+      saves.end(repo.id);
     }
   }
 
   return (
     <section className="wk-card" data-testid="repo-seat-layers" aria-labelledby="repo-seat-layers-title">
       <div id="repo-seat-layers-title"><SectionTitle>Seat toolchain</SectionTitle></div>
-      <p className="wk-rp-note">The tools put in this repository’s seats, picked from its files. A layer turned off is left out of the next jobs’ seats.</p>
+      <p className="wk-rp-note">Toolchain layers added to this repository’s seats, picked from its files. Turning one off stops adding it to the next jobs’ seats; tools the seat image already has stay.</p>
       {rows.length === 0
         ? <p className="wk-rp-note" data-testid="repo-seat-layers-none">No toolchain was found in its files, so none is added to its seats.</p>
         : (
@@ -73,7 +80,7 @@ export function RepoSeatToolchain({ repo, onChanged }: { repo: RepoEntry; onChan
             </ul>
           </fieldset>
         )}
-      {refused !== null && <p className="wk-field-note wk-field-note--bad" role="alert" data-testid="repo-seat-layers-error">{refused}</p>}
+      {said !== null && <p className="wk-field-note wk-field-note--bad" role="alert" data-testid="repo-seat-layers-error">{said}</p>}
     </section>
   );
 }

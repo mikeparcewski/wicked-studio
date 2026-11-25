@@ -258,6 +258,22 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
       .catch((e: unknown) => { if (graphCurrent()) setGraphFailed(graphReadError(e)); });
   }, [rawRuns, loading, repoId]);
 
+  // core#1043: the Seat toolchain card builds its next full list from the row shown, so a row crew answered for this
+  // visit lands, and a re-read begun before it (a run finishing) no longer can: it holds the row from before the change.
+  // Bound to the visit they were made for; a later visit of the same repository reads crew afresh.
+  const seatVisit = visitRef.current.visit;
+  const landSeatRow = (forRepo: string, forVisit: number, r: RepoEntry | null): void => {
+    if (r === null || r.id !== forRepo || repoRef.current !== forRepo || visitRef.current.visit !== forVisit) return;
+    reReadSeq.current += 1;
+    setRepo(r);
+  };
+  const seatLayersLand = (r: RepoEntry): void => landSeatRow(repoId, seatVisit, r);
+  const seatLayersReread = async (): Promise<void> => {
+    const forRepo = repoId;
+    const { repos } = await api.listRepos();
+    landSeatRow(forRepo, seatVisit, repos.find((x) => x.id === forRepo) ?? null);
+  };
+
   /** "Try again" on a failed graph read: re-reads the graph alone, for the repo it was pressed on. */
   function retryGraph(): void {
     const forRepo = repoId;
@@ -681,7 +697,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                     {gitLink !== null && <a className="wk-link wk-rp-more" href={gitLink} target="_blank" rel="noopener noreferrer">View on the web</a>}
                   </section>
                   {/* core#1043: the toolchain layers this repository's seats get; crew's answer replaces the row shown. */}
-                  <RepoSeatToolchain key={repo.id} repo={repo} onChanged={(r) => { if (repoRef.current === r.id) setRepo(r); }} />
+                  <RepoSeatToolchain key={repo.id} repo={repo} onChanged={seatLayersLand} onReread={seatLayersReread} />
                 </div>
               </div>
             )}
