@@ -12328,6 +12328,12 @@
       ]
     },
     {
+      "testId": "memory-add-repo-note",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
       "testId": "memory-add-repo-retry",
       "files": [
         "src/components/memory/MemoryPage.tsx"
