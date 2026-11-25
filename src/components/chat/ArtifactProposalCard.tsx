@@ -222,7 +222,6 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
     setGoing(decision === 'go');
     // A new answer starts clean: the last one's refusal no longer says anything about this one.
     setRefusedAt(null);
-    setCutPendingAt(null);
     setError(null);
     setNote(null);
     const keep = (v: ChatProposalView, acceptingAt: number | null = null): void => {
@@ -239,16 +238,21 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
     try {
       const r = await api.decideChatProposal(chatId, entry.pid, { decision, ...(edits !== undefined ? { edits } : {}) });
       if (isProposalView(r.view)) keep(r.view);
+      setCutPendingAt(null);
       return null;
     } catch (err: unknown) {
       const refusal = proposalRefusal(err);
-      if (refusal.view !== null) keep(refusal.view, refusal.acceptingAt);
-      // (R2 F2) A cut the video tool is still making: the card's line says so; it is no refusal.
-      // It names the accepting record it answered for (crew's Go again writes one; Not now answers for the shown one).
+      // (R2 F2) A cut the video tool is still making: the card's line says so; it is no refusal. It is about the accepting
+      // record crew names (a Go that wrote one), else the one on screen (Go again or Not now that found the render going).
       if (refusal.code === 'cut_pending') {
-        setCutPendingAt(refusal.acceptingAt ?? (entry.state === 'accepting' ? entry.acceptingAt ?? null : null));
+        const pendingAt = refusal.acceptingAt ?? (view.state === 'accepting' ? view.acceptingAt ?? null : null);
+        if (refusal.view !== null) keep(refusal.view, pendingAt);
+        setCutPendingAt(pendingAt);
         return null;
       }
+      if (refusal.view !== null) keep(refusal.view, refusal.acceptingAt);
+      // Crew answered something else about this card: no longer "still making". A send that never reached crew keeps it.
+      if (refusal.view !== null || refusal.acceptingAt !== null) setCutPendingAt(null);
       // The card keeps every refusal; where it shows depends on what is on screen when it renders (the form while it is
       // open, else under the card), never on the response alone: a live record may already have closed the form.
       setError({ words: refusal.words, settles: refusal.view !== null && terminal(refusal.view.state) });

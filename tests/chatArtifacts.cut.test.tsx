@@ -345,10 +345,13 @@ describe('round-2 words (coord R2 on studio#1409)', () => {
   it('F2 (round 1): a Go again crew answers cut_pending right after an interrupted Go says "still making" and keeps Go again, for that record only', async () => {
     const accepting = { ...GO.decide.view, state: 'accepting', decision: undefined, result: undefined };
     const first = Date.now();
-    // crew chat-proposals.ts: launch_failed and cut_pending each name the accepting record their Go wrote (`acceptingAt`).
+    // crew chat-proposals.ts: launch_failed names the accepting record its Go wrote (`acceptingAt`); a Go again that finds
+    // the render still going answers cut_pending before writing one (:1649, no `acceptingAt`). The parent's entry stays
+    // the open card here (its re-read hasn't come), so only the card's own view knows the record.
     const answers = [
       () => ok({ code: 'launch_failed', error: 'I lost track of the new version while it was being made (socket hang up). Go again checks whether it finished.', acceptingAt: first, view: accepting }, 502),
-      () => ok({ code: 'cut_pending', error: 'Still making the new version. It shows here when it is done.', acceptingAt: first + 1, view: accepting }, 409),
+      () => ok({ code: 'cut_pending', error: 'Still making the new version. It shows here when it is done.', view: accepting }, 409),
+      () => new Response('', { status: 503 }),
     ];
     decideAnswer = () => answers.shift()!();
     const [open] = foldChatProposals(GO.records.slice(0, 1));
@@ -360,6 +363,11 @@ describe('round-2 words (coord R2 on studio#1409)', () => {
     await waitFor(() => expect(text('artifact-proposal-record')).toBe('Still making the new version. Go again shows it here once it’s made.'));
     expect(screen.getByTestId('artifact-proposal-go-again')).toBeTruthy();
     expect(screen.queryByTestId('artifact-proposal-error')).toBeNull();
+    // A Go again that never reached crew says nothing new about the render: still making, Go again still there.
+    fireEvent.click(screen.getByTestId('artifact-proposal-go-again'));
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal-error')).toBeTruthy());
+    expect(text('artifact-proposal-record')).toBe('Still making the new version. Go again shows it here once it’s made.');
+    expect(screen.getByTestId('artifact-proposal-go-again')).toBeTruthy();
     // Another tab's newer Go: its own record, which this tab's "still making" says nothing about.
     const newer = foldChatProposals([GO.records[0]!, { ...GO.records[1]!, at: first + 5000 }])[0];
     rerender(card(newer));
