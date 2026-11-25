@@ -4252,6 +4252,12 @@
       ]
     },
     {
+      "testId": "coverage-not-indexed",
+      "files": [
+        "src/components/CoverageView.tsx"
+      ]
+    },
+    {
       "testId": "coverage-reading",
       "files": [
         "src/components/CoverageView.tsx"

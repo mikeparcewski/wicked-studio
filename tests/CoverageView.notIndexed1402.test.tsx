@@ -43,6 +43,39 @@ describe('Coverage on a repository not indexed yet (studio#1402)', () => {
     expect(screen.queryByText(/rules ingest/)).toBeNull();
   });
 
+  // Either half saying not_indexed is enough (codex r1 fold): coverage answering while the graph says not indexed.
+  it.each([
+    ['graph 200 not_indexed (crew#1887)', () => Promise.resolve({ kinds: [], ...NOT_INDEXED })],
+    ['graph 404 not_indexed', () => Promise.reject(notIndexed404())],
+  ])('coverage answers, %s: says it is not indexed yet', async (_name, graph) => {
+    vi.spyOn(client.api, 'getCoverageReportForRepo').mockResolvedValue({ report: null } as never);
+    vi.spyOn(client.api, 'getGraphKindsForRepo').mockImplementation(graph as never);
+    await pick();
+    expect(await screen.findByTestId('coverage-not-indexed')).toBeInTheDocument();
+    expect(screen.queryByText(/rules ingest/)).toBeNull();
+  });
+
+  it('coverage 404 not_indexed with a graph summary that answers: says it is not indexed yet', async () => {
+    vi.spyOn(client.api, 'getCoverageReportForRepo').mockRejectedValue(notIndexed404());
+    vi.spyOn(client.api, 'getGraphKindsForRepo').mockResolvedValue({ kinds: [{ kind: 'function', count: 3 }] } as never);
+    await pick();
+    expect(await screen.findByTestId('coverage-not-indexed')).toBeInTheDocument();
+    expect(screen.queryByTestId('coverage-error')).toBeNull();
+  });
+
+  // A genuine failure of the other half is never hidden behind the not-indexed line.
+  it.each([
+    ['coverage not_indexed, graph refused', () => Promise.reject(notIndexed404()), () => Promise.reject(new ApiError(500, 'store locked', { error: 'store locked' }))],
+    ['graph not_indexed, coverage refused', () => Promise.reject(new ApiError(500, 'store locked', { error: 'store locked' })), () => Promise.resolve({ kinds: [], ...NOT_INDEXED })],
+  ])('%s: a failed read with Try again', async (_name, cov, graph) => {
+    vi.spyOn(client.api, 'getCoverageReportForRepo').mockImplementation(cov as never);
+    vi.spyOn(client.api, 'getGraphKindsForRepo').mockImplementation(graph as never);
+    await pick();
+    expect(await screen.findByTestId('coverage-error')).toBeInTheDocument();
+    expect(screen.getByTestId('coverage-retry')).toBeInTheDocument();
+    expect(screen.queryByTestId('coverage-not-indexed')).toBeNull();
+  });
+
   it('any other refusal is still a failed read with Try again', async () => {
     vi.spyOn(client.api, 'getCoverageReportForRepo').mockRejectedValue(new ApiError(404, "no registered repo 'fresh'", { error: "no registered repo 'fresh'" }));
     vi.spyOn(client.api, 'getGraphKindsForRepo').mockResolvedValue({ kinds: [] } as never);
