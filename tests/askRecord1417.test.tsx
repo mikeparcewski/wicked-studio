@@ -93,6 +93,16 @@ describe('a disabled option says no consequence (studio#1417)', () => {
     expect(screen.getByTestId('ask-option-why')).toHaveTextContent('The video moved on');
   });
 
+  it('a hovered option that goes disabled drops its preview', async () => {
+    const { rerender } = render(<AskCard ask={{ ...ask(), default: 'later' } as Ask} header={false} onAnswer={() => undefined} />);
+    const go = (): HTMLElement => screen.getAllByTestId('ask-option').find((el) => el.textContent?.includes('Change the video'))!;
+    await act(async () => { fireEvent.mouseEnter(go()); });
+    expect(screen.getByTestId('ask-consequence-preview')).toHaveTextContent('Preview: Change the video: The new version plays in the editor.');
+    rerender(<AskCard ask={{ ...ask('Not available now'), default: 'later' } as Ask} header={false} onAnswer={() => undefined} />);
+    expect(screen.getByTestId('ask-consequence-preview')).toBeEmptyDOMElement();
+    expect(screen.getByTestId('ask-consequence')).toHaveTextContent('If you choose this: Nothing changes.');
+  });
+
   // Pins today's behaviour (a disabled card hears no hover), so the fix keeps it.
   it('a disabled option is no preview either', async () => {
     render(<AskCard ask={{ ...ask('Not available now'), default: 'later' } as Ask} header={false} onAnswer={() => undefined} />);
