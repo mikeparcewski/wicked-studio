@@ -1,0 +1,181 @@
+{
+ "_source": "Written by wicked-crew (branch b7/1814-chat-cut, packages/crew/src/api/proposal-cut.ts resolveCut and chat-proposals.ts decide) in its tests/chat-proposals-cut.test.ts journey, against the answers wicked-interactive 0.17.0-pre gave (crew tests/fixtures/demo-cut/routes-0.17.0.json): the transcript records crew appended, and the decide answer.",
+ "records": [
+  {
+   "at": 1000,
+   "turnId": "t1",
+   "kind": "proposal",
+   "proposal": {
+    "pid": "c1:t1",
+    "chatId": "c1",
+    "turnId": "t1",
+    "kind": "cut",
+    "seat": "claude",
+    "what": {
+     "entry": null,
+     "title": "Demo of http://127.0.0.1:5173/",
+     "label": "Change the video · Demo of http://127.0.0.1:5173/",
+     "outcome": "A new version of the video. Earlier versions stay in Versions."
+    },
+    "brief": null,
+    "reason": "They asked to skip setup.",
+    "sources": [],
+    "repos": [],
+    "helpers": null,
+    "time": null,
+    "stops": null,
+    "filedIn": {
+     "projectId": "mikes",
+     "label": "Mikes"
+    },
+    "target": {
+     "ref": "mikes/demo-8e0ffbece431",
+     "title": "Demo of http://127.0.0.1:5173/",
+     "base": 1
+    },
+    "cut": {
+     "ops": [
+      {
+       "op": "chapter-drop",
+       "chapter": "setup"
+      },
+      {
+       "op": "chapter-move",
+       "chapter": "sign-in",
+       "after": null
+      },
+      {
+       "op": "chapter-say",
+       "chapter": "sign-in",
+       "say": "You sign in with your work account, and that's all the setup there is."
+      }
+     ],
+     "changes": [
+      "Drop “Setup” (Undo brings it back)",
+      "Move “Sign in” to the start",
+      "Caption of “Sign in” → “You sign in with your work account, and that's all the setup there is.”"
+     ]
+    },
+    "blocked": null
+   }
+  },
+  {
+   "at": 1000,
+   "turnId": "t1",
+   "kind": "proposal",
+   "proposal": {
+    "pid": "c1:t1",
+    "chatId": "c1",
+    "turnId": "t1",
+    "kind": "cut",
+    "seat": "claude",
+    "what": {
+     "entry": null,
+     "title": "Demo of http://127.0.0.1:5173/",
+     "label": "Change the video · Demo of http://127.0.0.1:5173/",
+     "outcome": "A new version of the video. Earlier versions stay in Versions."
+    },
+    "brief": null,
+    "reason": "They asked to skip setup.",
+    "sources": [],
+    "repos": [],
+    "helpers": null,
+    "time": null,
+    "stops": null,
+    "filedIn": {
+     "projectId": "mikes",
+     "label": "Mikes"
+    },
+    "target": {
+     "ref": "mikes/demo-8e0ffbece431",
+     "title": "Demo of http://127.0.0.1:5173/",
+     "base": 1
+    },
+    "cut": {
+     "ops": [
+      {
+       "op": "chapter-drop",
+       "chapter": "setup"
+      },
+      {
+       "op": "chapter-move",
+       "chapter": "sign-in",
+       "after": null
+      },
+      {
+       "op": "chapter-say",
+       "chapter": "sign-in",
+       "say": "You sign in with your work account, and that's all the setup there is."
+      }
+     ],
+     "changes": [
+      "Drop “Setup” (Undo brings it back)",
+      "Move “Sign in” to the start",
+      "Caption of “Sign in” → “You sign in with your work account, and that's all the setup there is.”"
+     ]
+    },
+    "blocked": "The video changed since this was proposed (now version 2). Ask again to change the new version."
+   }
+  }
+ ],
+ "decide": {
+  "code": "cut_moved",
+  "error": "The video changed since this was proposed (now version 2). Ask again to change the new version.",
+  "view": {
+   "proposal": {
+    "pid": "c1:t1",
+    "chatId": "c1",
+    "turnId": "t1",
+    "kind": "cut",
+    "seat": "claude",
+    "what": {
+     "entry": null,
+     "title": "Demo of http://127.0.0.1:5173/",
+     "label": "Change the video · Demo of http://127.0.0.1:5173/",
+     "outcome": "A new version of the video. Earlier versions stay in Versions."
+    },
+    "brief": null,
+    "reason": "They asked to skip setup.",
+    "sources": [],
+    "repos": [],
+    "helpers": null,
+    "time": null,
+    "stops": null,
+    "filedIn": {
+     "projectId": "mikes",
+     "label": "Mikes"
+    },
+    "target": {
+     "ref": "mikes/demo-8e0ffbece431",
+     "title": "Demo of http://127.0.0.1:5173/",
+     "base": 1
+    },
+    "cut": {
+     "ops": [
+      {
+       "op": "chapter-drop",
+       "chapter": "setup"
+      },
+      {
+       "op": "chapter-move",
+       "chapter": "sign-in",
+       "after": null
+      },
+      {
+       "op": "chapter-say",
+       "chapter": "sign-in",
+       "say": "You sign in with your work account, and that's all the setup there is."
+      }
+     ],
+     "changes": [
+      "Drop “Setup” (Undo brings it back)",
+      "Move “Sign in” to the start",
+      "Caption of “Sign in” → “You sign in with your work account, and that's all the setup there is.”"
+     ]
+    },
+    "blocked": "The video changed since this was proposed (now version 2). Ask again to change the new version."
+   },
+   "state": "open"
+  }
+ }
+}
