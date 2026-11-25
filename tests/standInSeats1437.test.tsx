@@ -24,7 +24,11 @@ import { seatResponder } from '../src/board/responder.js';
 import { seatName } from '../src/board/gateHeadline.js';
 import { handoffRow } from '../src/board/powerMode.js';
 import { sandboxOwner } from '../src/components/denialCopy.js';
-import { skipReasonWord } from '../src/board/assuranceModel.js';
+import { assuranceKind, passedWord, receiptOf, receiptWords, skipReasonWord } from '../src/board/assuranceModel.js';
+import { gateVerdict } from '../src/components/gateVerdictModel.js';
+import { toRow } from '../src/editors/runEvents.js';
+import { standInBase } from '../src/board/seatNames.js';
+import type { CoreEvent } from '../src/api/types.js';
 import type { HandoffStep } from '../src/api/power.js';
 
 vi.mock('../src/api/client.js', async (importOriginal) => {
@@ -32,7 +36,7 @@ vi.mock('../src/api/client.js', async (importOriginal) => {
   return { ...original, api: { ...original.api, getRunEvents: vi.fn().mockResolvedValue({ events: [] }) } };
 });
 
-const FIXTURE = fixture as unknown as { run: SessionView };
+const FIXTURE = fixture as unknown as { run: SessionView; events: CoreEvent[] };
 const RUN = FIXTURE.run;
 const ROSTER = [{ key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true }];
 const REVIEW = "Claude Code stood in for the review, using Claude Code's default model: only Claude Code was signed in";
@@ -58,8 +62,56 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe('studio#1437: a seated stand-in is named as one (run b0ade71f)', () => {
   it('reads both stand-ins from the run wire, each with the engine\'s own sentence', () => {
     const seats = seatedStandIns(RUN, ROSTER);
-    expect(seats.get('claude~1')).toEqual({ key: 'claude~1', name: 'Claude Code (stand-in)', label: REVIEW });
-    expect(seats.get('claude~2')).toEqual({ key: 'claude~2', name: 'Claude Code (stand-in)', label: JUDGE });
+    expect(seats.get('claude~1')).toEqual({ key: 'claude~1', name: 'Claude Code (stand-in)', label: REVIEW, role: 'evaluator' });
+    expect(seats.get('claude~2')).toEqual({ key: 'claude~2', name: 'Claude Code (stand-in)', label: JUDGE, role: 'judge' });
+  });
+
+  it('the session\'s unkeyed sentence labels a reviewer stand-in only when it can be only one', () => {
+    const session = { assurance: { standInLabel: REVIEW, standIns: [{ key: 'claude~1', display: 'Claude Code', role: 'evaluator' }, { key: 'codex~2', display: 'Codex', role: 'evaluator' }] } };
+    const two = seatedStandIns({ session, units: [] }, ROSTER);
+    expect(two.get('claude~1')?.label).toBeNull();
+    expect(two.get('codex~2')?.label).toBeNull();
+    expect(two.get('codex~2')?.name).toBe('Codex (stand-in)');
+    const one = seatedStandIns({ session: { assurance: { standInLabel: REVIEW, standIns: [session.assurance.standIns[0]] } }, units: [] }, ROSTER);
+    expect(one.get('claude~1')?.label).toBe(REVIEW);
+  });
+
+  it('a program path is never a stand-in, whatever it ends with', () => {
+    expect(standInBase('/tmp/check~1')).toBeNull();
+    expect(standInBase('C:\\tools\\check~1')).toBeNull();
+    expect(sandboxOwner('/tmp/check~1', ROSTER)).not.toMatch(/stand-in/);
+    expect(standInBase('claude~1')).toBe('claude');
+  });
+
+  it('a receipt names the stand-in reviewer and judge, and never says no judge ran or only automatic checks', () => {
+    const unit = (ord: number): unknown => (RUN.units.find((u) => u.ord === ord) as unknown as { assurance: unknown }).assurance;
+    const build = receiptOf(unit(2))!;
+    expect(build.standIns).toEqual([{ role: 'judge', seat: 'claude~2', label: JUDGE }]);
+    expect(assuranceKind(build)).toBe('same-seat');
+    expect(passedWord(build)).not.toBe('No judge ran');
+    const review = receiptOf(unit(3))!;
+    expect(assuranceKind(review)).toBe('same-seat');
+    expect(passedWord(review)).toBe('Passed, judged by a stand-in');
+    const words = receiptWords(review, true);
+    expect(words.who).toContain('evaluated by Claude Code (stand-in)');
+    expect(words.who).toContain('judged by Claude Code (stand-in)');
+    expect(words.who).toContain('a stand-in, not a different helper');
+    expect(words.who).not.toMatch(/separate seat|claude~/);
+  });
+
+  it('the gate verdict names the stand-in judge from the roles, not the legacy "claude, not distinct"', () => {
+    const view = gateVerdict(FIXTURE.events, 3)!;
+    expect(view.judgeCli).toBe('claude~2');
+    expect(view.judgeDistinct).toBeNull();
+    expect(view.judgeStandIn).toBe(JUDGE);
+  });
+
+  it('the phase report keeps the stand-in seat and names it', () => {
+    const distributed = FIXTURE.events.find((e) => e.type === 'unitDistributed')!;
+    const row = toRow(distributed, RUN.session.id, 0, 'x', (cli) => seatKeyName(cli, ROSTER, () => null));
+    expect(row?.data).toMatchObject({ seat: 'claude~1', seatName: 'Claude Code (stand-in)' });
+    const stepped = FIXTURE.events.find((e) => e.type === 'powerHandoffStepped')!;
+    expect(toRow(stepped, RUN.session.id, 0, 'y', (cli) => seatKeyName(cli, ROSTER, () => null))?.data).toMatchObject({ seat: 'claude~1', seatName: 'Claude Code (stand-in)' });
   });
 
   it('every shared namer says "(stand-in)" and never the bare key, for the reviewer and the judge', () => {
@@ -107,6 +159,12 @@ describe('studio#1437: a seated stand-in is named as one (run b0ade71f)', () => 
     const agent = screen.getAllByTestId('run-tab-agent').find((li) => li.dataset['cli'] === 'claude~1')!;
     expect(agent.textContent).toContain('Claude Code (stand-in)');
     expect(agent.textContent).toContain(REVIEW);
+    // The judge stand-in has no step of its own and is still listed, with its sentence.
+    const judge = screen.getAllByTestId('run-tab-agent').find((li) => li.dataset['cli'] === 'claude~2')!;
+    expect(judge.textContent).toContain('Claude Code (stand-in) judges');
+    expect(judge.textContent).toContain(JUDGE);
+    // One name once on the Helpers line.
+    expect(helpers.split('Claude Code (stand-in)').length - 1).toBe(1);
     // Helpers and spend (the spend line's unmetered seats included) never shows the bare key. The operator's own
     // skip note on this run quotes "claude~2" and is shown verbatim, so the whole page is not asserted.
     const agents = screen.getByTestId('run-tab-agents').textContent ?? '';
