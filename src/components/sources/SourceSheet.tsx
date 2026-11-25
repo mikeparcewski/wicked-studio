@@ -542,7 +542,7 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
       const refused = !landed && !stale && e instanceof ApiError && ((e.status >= 400 && e.status < 500) || (e.status >= 500 && typeof code === 'string'));
       if (!refused && !noRoute) onRenameUnsure?.(from, id);
       if (!alive.current) return;
-      const using = refused ? appsBoundOf(e) : null;
+      const using = refused && !noRoute ? appsBoundOf(e) : null;
       if (using !== null) setRenameApps({ to: renameTo, apps: using });
       else {
         setRenameApps(null);
