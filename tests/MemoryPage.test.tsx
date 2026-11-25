@@ -429,6 +429,113 @@ describe('MemoryPage — Add a memory (a proposal you approve as you add it)', (
     await waitFor(() => expect(bodies['/proposals']).toEqual([{ content: 'keep these words', repo: 'r-api' }]));
   });
 
+  it('studio#1433 r1: Save waits for the chosen project\'s repositories, and an earlier project\'s late answer changes nothing', async () => {
+    useProjectsStore.setState({ projects: [{ id: 'p-wicked', name: 'Wicked' }, { id: 'p-north', name: 'Northwind' }] } as never);
+    PROJECT_REPOS = { 'p-wicked': ['r-api'], 'p-north': ['r-web'] };
+    const { bodies } = wire([]);
+    const base = apiFetch.getMockImplementation()!;
+    const held: Record<string, { go: () => void; fail: () => void }> = {};
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) => {
+      const s = String(path);
+      if (!s.startsWith('/projects/')) return base(path, init);
+      return new Promise((res, rej) => { held[s] = { go: () => res(base(path, init)), fail: () => rej(new ApiError(503, 'the engine is busy')) }; });
+    });
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    await openAdd(user);
+    const dialog = await screen.findByTestId('memory-add-dialog');
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-web' })).toHaveLength(1));
+    await user.type(within(dialog).getByTestId('memory-add-text'), 'Run the migrations before the tests');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-project'), 'p-wicked');
+    await waitFor(() => expect(held['/projects/p-wicked']).toBeDefined());
+    expect(within(dialog).getByTestId('memory-add-save')).toBeDisabled();
+    await user.click(within(dialog).getByTestId('memory-add-save'));
+    expect(bodies['/proposals']).toBeUndefined();
+    await user.selectOptions(within(dialog).getByTestId('memory-add-project'), 'p-north');
+    await waitFor(() => expect(held['/projects/p-north']).toBeDefined());
+    // Wicked's answer lands after Northwind was chosen: it offers nothing and unlocks nothing.
+    await act(async () => { held['/projects/p-wicked']!.go(); await Promise.resolve(); });
+    expect(within(dialog).queryByRole('option', { name: 'northwind-api' })).toBeNull();
+    expect(within(dialog).getByTestId('memory-add-save')).toBeDisabled();
+    await act(async () => { held['/projects/p-north']!.go(); await Promise.resolve(); });
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-web' })).toHaveLength(1));
+    expect(within(dialog).queryByRole('option', { name: 'northwind-api' })).toBeNull();
+    await user.selectOptions(within(dialog).getByTestId('memory-add-repo'), 'r-web');
+    await user.click(within(dialog).getByTestId('memory-add-save'));
+    await waitFor(() => expect(bodies['/proposals']).toEqual([{ content: 'Run the migrations before the tests', project: 'p-north', repo: 'r-web' }]));
+  });
+
+  it('studio#1433 r1: a picked repository a project cannot be checked against is kept and said so, never dropped as not in it', async () => {
+    const { bodies } = wire([]);
+    const base = apiFetch.getMockImplementation()!;
+    let fail = true;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) =>
+      String(path) === '/projects/p-wicked' && fail ? Promise.reject(new ApiError(503, 'the engine is busy')) : base(path, init));
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    await openAdd(user);
+    const dialog = await screen.findByTestId('memory-add-dialog');
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-api' })).toHaveLength(1));
+    await user.type(within(dialog).getByTestId('memory-add-text'), 'Run the migrations before the tests');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-repo'), 'r-api');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-project'), 'p-wicked');
+    expect(await within(dialog).findByTestId('memory-add-repo-failed')).toHaveTextContent('Couldn’t read Wicked’s repositories, so northwind-api can’t be checked against it. Try again, or pick Any repository.');
+    expect(within(dialog).getByTestId('memory-add-repo')).toHaveValue('r-api');
+    expect(within(dialog).queryByTestId('memory-add-repo-note')).toBeNull();
+    expect(within(dialog).getByTestId('memory-add-save')).toBeDisabled();
+    fail = false;
+    await user.click(within(dialog).getByTestId('memory-add-repo-retry'));
+    await waitFor(() => expect(within(dialog).queryByTestId('memory-add-repo-failed')).toBeNull());
+    // Wicked does hold northwind-api: nothing was dropped, and nothing says it was.
+    expect(within(dialog).getByTestId('memory-add-repo')).toHaveValue('r-api');
+    expect(within(dialog).queryByTestId('memory-add-repo-note')).toBeNull();
+    await user.click(within(dialog).getByTestId('memory-add-save'));
+    await waitFor(() => expect(bodies['/proposals']).toEqual([{ content: 'Run the migrations before the tests', project: 'p-wicked', repo: 'r-api' }]));
+  });
+
+  it('studio#1433 r1: a refused repository leaves the picker at once, even when the list cannot be read again; the scope is locked while saving', async () => {
+    PROJECT_REPOS = { 'p-wicked': ['r-api', 'r-gone'] };
+    const { calls } = wire([]);
+    const base = apiFetch.getMockImplementation()!;
+    const listed = [...REPOS, { id: 'r-gone', name: 'northwind-old', root_path: '/srv/northwind-old', default_branch: 'main', registered_at: 1_700_000_000 }];
+    let reposDown = false;
+    let answer: (() => void) | null = null;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) => {
+      const s = String(path);
+      if (s === '/repos') return reposDown ? Promise.reject(new ApiError(503, 'the engine is busy')) : Promise.resolve({ repos: listed });
+      if (s === '/proposals' && init?.method === 'POST') {
+        const e = "no registered repository has the id 'r-gone', so a memory on it would never be recalled; pick one from GET /repos";
+        return new Promise((_res, rej) => { answer = () => rej(new ApiError(400, e, { error: e, code: 'repo_unknown' })); });
+      }
+      return base(path, init);
+    });
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    await openAdd(user);
+    const dialog = await screen.findByTestId('memory-add-dialog');
+    await user.type(within(dialog).getByTestId('memory-add-text'), 'keep these words');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-project'), 'p-wicked');
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-old' })).toHaveLength(1));
+    await user.selectOptions(within(dialog).getByTestId('memory-add-repo'), 'r-gone');
+    const memberReads = calls.filter((c) => c === '/projects/p-wicked').length;
+    reposDown = true;
+    await user.click(within(dialog).getByTestId('memory-add-save'));
+    await waitFor(() => expect(answer).not.toBeNull());
+    expect(within(dialog).getByTestId('memory-add-repo')).toBeDisabled();
+    expect(within(dialog).getByTestId('memory-add-project')).toBeDisabled();
+    expect(within(dialog).getByTestId('memory-add-tier')).toBeDisabled();
+    await act(async () => { answer!(); await Promise.resolve(); });
+    expect(await within(dialog).findByTestId('memory-add-refused')).toHaveTextContent('northwind-old is no longer registered');
+    await waitFor(() => expect(within(dialog).getByTestId('memory-add-repo-failed')).toBeInTheDocument());
+    expect(within(dialog).queryByRole('option', { name: 'northwind-old' })).toBeNull();
+    expect(within(dialog).getAllByRole('option', { name: 'northwind-api' })).toHaveLength(1);
+    expect(within(dialog).getByTestId('memory-add-project')).toHaveValue('p-wicked');
+    expect(calls.filter((c) => c === '/projects/p-wicked').length).toBe(memberReads);
+  });
+
   it('studio#1095: an episodic memory on a repository only, with no project', async () => {
     const { bodies } = wire([]);
     page();
