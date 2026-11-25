@@ -37,23 +37,30 @@ vi.mock('../src/api/client.js', () => ({
 }));
 
 const { RepoSeatToolchain } = await import('../src/components/RepoSeatToolchain.js');
+const { resetSeatLayerSaves } = await import('../src/store/seatLayerSaves.js');
 
 beforeEach(() => { setRepoSeatLayers.mockReset(); });
-afterEach(() => { cleanup(); });
+afterEach(() => { cleanup(); resetSeatLayerSaves(); });
+
+function deferredVoid(): { promise: Promise<void>; resolve: () => void } {
+  let resolve: () => void = () => {};
+  const promise = new Promise<void>((r) => { resolve = r; });
+  return { promise, resolve };
+}
 
 const card = (): HTMLElement => screen.getByTestId('repo-seat-layers');
 const sw = (label: string): HTMLElement => within(card()).getByRole('switch', { name: label });
 
 describe('the Seat toolchain card shows crew\'s rows (core#1043)', () => {
   it('a switch per layer this repo can turn off, on when the layer is on', () => {
-    render(<RepoSeatToolchain repo={entry([on('node'), offBy('python', 'repo')], ['python'])} onChanged={() => {}} />);
+    render(<RepoSeatToolchain repo={entry([on('node'), offBy('python', 'repo')], ['python'])} onChanged={() => {}} onReread={async () => {}} />);
     expect(within(card()).getByRole('heading', { name: 'Seat toolchain' })).toBeInTheDocument();
     expect(sw('Node.js')).toHaveAttribute('aria-checked', 'true');
     expect(sw('Python')).toHaveAttribute('aria-checked', 'false');
   });
 
   it('a layer the daemon turned off shows why and has no switch', () => {
-    render(<RepoSeatToolchain repo={entry([offBy('node', 'daemon'), offBy('python', 'daemon')])} onChanged={() => {}} />);
+    render(<RepoSeatToolchain repo={entry([offBy('node', 'daemon'), offBy('python', 'daemon')])} onChanged={() => {}} onReread={async () => {}} />);
     expect(within(card()).queryAllByRole('switch')).toHaveLength(0);
     const rows = within(card()).getAllByTestId('repo-seat-layer');
     expect(rows.map((r) => r.dataset['layer'])).toEqual(['node', 'python']);
@@ -63,25 +70,25 @@ describe('the Seat toolchain card shows crew\'s rows (core#1043)', () => {
   });
 
   it('the operator\'s own seat image: each layer says the image supplies the tools, with no switch', () => {
-    render(<RepoSeatToolchain repo={entry([offBy('node', 'operator_base')])} onChanged={() => {}} />);
+    render(<RepoSeatToolchain repo={entry([offBy('node', 'operator_base')])} onChanged={() => {}} onReread={async () => {}} />);
     expect(within(card()).queryAllByRole('switch')).toHaveLength(0);
     expect(within(card()).getByTestId('repo-seat-layer')).toHaveTextContent('Your own seat image supplies the tools');
   });
 
   it('no layer found: says so, with no switch', () => {
-    render(<RepoSeatToolchain repo={entry([])} onChanged={() => {}} />);
+    render(<RepoSeatToolchain repo={entry([])} onChanged={() => {}} onReread={async () => {}} />);
     expect(within(card()).queryAllByRole('switch')).toHaveLength(0);
     expect(within(card()).getByTestId('repo-seat-layers-none')).toBeInTheDocument();
   });
 
   it('an older crew that sends no rows: no card at all', () => {
-    const { container } = render(<RepoSeatToolchain repo={entry(undefined)} onChanged={() => {}} />);
+    const { container } = render(<RepoSeatToolchain repo={entry(undefined)} onChanged={() => {}} onReread={async () => {}} />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it('a row crew did not shape as a layer is left out', () => {
     const odd = [on('node'), { id: 7, enabled: 'yes' }, { id: 'python', enabled: false, off_by: 'somewhere' }] as unknown as Row[];
-    render(<RepoSeatToolchain repo={entry(odd)} onChanged={() => {}} />);
+    render(<RepoSeatToolchain repo={entry(odd)} onChanged={() => {}} onReread={async () => {}} />);
     expect(within(card()).getAllByTestId('repo-seat-layer').map((r) => r.dataset['layer'])).toEqual(['node']);
   });
 });
@@ -90,7 +97,7 @@ describe('a switch sends the full list and shows crew\'s answer (core#1043)', ()
   it('turning Node.js off sends every layer this repo turned off, and hands on crew\'s row', async () => {
     const changed = vi.fn();
     setRepoSeatLayers.mockResolvedValueOnce(answer(['node', 'python']));
-    render(<RepoSeatToolchain repo={entry([on('node'), offBy('python', 'repo')], ['python'])} onChanged={changed} />);
+    render(<RepoSeatToolchain repo={entry([on('node'), offBy('python', 'repo')], ['python'])} onChanged={changed} onReread={async () => {}} />);
     await act(async () => { fireEvent.click(sw('Node.js')); });
     expect(setRepoSeatLayers).toHaveBeenCalledWith('shop', ['node', 'python']);
     expect(changed).toHaveBeenCalledWith(answer(['node', 'python']));
@@ -98,14 +105,21 @@ describe('a switch sends the full list and shows crew\'s answer (core#1043)', ()
 
   it('turning Python back on sends the list without it', async () => {
     setRepoSeatLayers.mockResolvedValueOnce(answer([]));
-    render(<RepoSeatToolchain repo={entry([on('node'), offBy('python', 'repo')], ['python'])} onChanged={() => {}} />);
+    render(<RepoSeatToolchain repo={entry([on('node'), offBy('python', 'repo')], ['python'])} onChanged={() => {}} onReread={async () => {}} />);
     await act(async () => { fireEvent.click(sw('Python')); });
     expect(setRepoSeatLayers).toHaveBeenCalledWith('shop', []);
   });
 
+  it('turning one layer back on keeps every other id this repo turned off (round 1)', async () => {
+    setRepoSeatLayers.mockResolvedValueOnce(answer(['go', 'rust']));
+    render(<RepoSeatToolchain repo={entry([on('node'), offBy('python', 'repo'), offBy('rust', 'repo')], ['go', 'python', 'rust'])} onChanged={() => {}} onReread={async () => {}} />);
+    await act(async () => { fireEvent.click(sw('Python')); });
+    expect(setRepoSeatLayers).toHaveBeenCalledWith('shop', ['go', 'rust']);
+  });
+
   it('a layer turned off that this checkout no longer has stays in the list', async () => {
     setRepoSeatLayers.mockResolvedValueOnce(answer(['go', 'node', 'python']));
-    render(<RepoSeatToolchain repo={entry([on('node'), offBy('python', 'repo')], ['go', 'python'])} onChanged={() => {}} />);
+    render(<RepoSeatToolchain repo={entry([on('node'), offBy('python', 'repo')], ['go', 'python'])} onChanged={() => {}} onReread={async () => {}} />);
     await act(async () => { fireEvent.click(sw('Node.js')); });
     expect(setRepoSeatLayers).toHaveBeenCalledWith('shop', ['go', 'node', 'python']);
   });
@@ -113,7 +127,7 @@ describe('a switch sends the full list and shows crew\'s answer (core#1043)', ()
   it('while crew answers, the switches wait, and a second press sends nothing', async () => {
     let finish: (r: RepoEntry) => void = () => {};
     setRepoSeatLayers.mockImplementationOnce(() => new Promise<RepoEntry>((r) => { finish = r; }));
-    render(<RepoSeatToolchain repo={entry([on('node'), on('python')])} onChanged={() => {}} />);
+    render(<RepoSeatToolchain repo={entry([on('node'), on('python')])} onChanged={() => {}} onReread={async () => {}} />);
     await act(async () => { fireEvent.click(sw('Node.js')); });
     expect(sw('Python')).toBeDisabled();
     await act(async () => { fireEvent.click(sw('Python')); });
@@ -127,11 +141,10 @@ describe('a switch sends the full list and shows crew\'s answer (core#1043)', ()
     [new ApiError(404, '', { code: 'repo_not_found' }), 'This repository is no longer registered.'],
     [new ApiError(400, 'no seat layer `cobol` (the layers are go, java, node, python, rust)', { code: 'unknown_seat_layer', error: 'no seat layer `cobol` (the layers are go, java, node, python, rust)' }), 'This daemon has no such toolchain layer.'],
     [new ApiError(501, 'requires an engine with setRepoSeatLayersOff', { code: 'repo_seat_layers_unsupported' }), 'This daemon can’t turn toolchain layers off yet. Upgrade wicked-crew to use this.'],
-    [new Error('socket hang up'), 'Couldn’t save that just now. Nothing changed.'],
   ])('a refusal is said in plain words, and nothing changes (%#)', async (err, words) => {
     const changed = vi.fn();
     setRepoSeatLayers.mockRejectedValueOnce(err);
-    render(<RepoSeatToolchain repo={entry([on('node'), on('python')])} onChanged={changed} />);
+    render(<RepoSeatToolchain repo={entry([on('node'), on('python')])} onChanged={changed} onReread={async () => {}} />);
     await act(async () => { fireEvent.click(sw('Node.js')); });
     expect(within(card()).getByRole('alert')).toHaveTextContent(words);
     expect(changed).not.toHaveBeenCalled();
@@ -139,9 +152,33 @@ describe('a switch sends the full list and shows crew\'s answer (core#1043)', ()
     expect(sw('Node.js')).not.toBeDisabled();
   });
 
+  it('no answer, or a failure crew did not name: says it could not confirm, and reads crew again before a switch frees (round 1)', async () => {
+    const changed = vi.fn();
+    const reread = deferredVoid();
+    const onReread = vi.fn(() => reread.promise);
+    setRepoSeatLayers.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    render(<RepoSeatToolchain repo={entry([on('node'), on('python')])} onChanged={changed} onReread={onReread} />);
+    await act(async () => { fireEvent.click(sw('Node.js')); });
+    expect(within(card()).getByRole('alert')).toHaveTextContent('Couldn’t confirm that change. The switches show what this daemon has now.');
+    expect(onReread).toHaveBeenCalledTimes(1);
+    expect(sw('Python')).toBeDisabled();
+    await act(async () => { reread.resolve(); });
+    expect(sw('Python')).not.toBeDisabled();
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  it('a 500 is not taken as nothing changed either', async () => {
+    const onReread = vi.fn(async () => {});
+    setRepoSeatLayers.mockRejectedValueOnce(new ApiError(500, 'boom', { error: 'boom' }));
+    render(<RepoSeatToolchain repo={entry([on('node')])} onChanged={() => {}} onReread={onReread} />);
+    await act(async () => { fireEvent.click(sw('Node.js')); });
+    expect(within(card()).getByRole('alert')).toHaveTextContent('Couldn’t confirm that change');
+    expect(onReread).toHaveBeenCalledTimes(1);
+  });
+
   it('a later change clears the last refusal', async () => {
     setRepoSeatLayers.mockRejectedValueOnce(new Error('socket hang up')).mockResolvedValueOnce(answer(['node']));
-    render(<RepoSeatToolchain repo={entry([on('node'), on('python')])} onChanged={() => {}} />);
+    render(<RepoSeatToolchain repo={entry([on('node'), on('python')])} onChanged={() => {}} onReread={async () => {}} />);
     await act(async () => { fireEvent.click(sw('Node.js')); });
     expect(within(card()).getByRole('alert')).toBeInTheDocument();
     await act(async () => { fireEvent.click(sw('Node.js')); });
