@@ -37,7 +37,7 @@ export function rowWriteMenuBlocker(source: McpServer, r: SourceCatalogRelation)
  * presentation over what it is handed, except the catalog of a source the person opens (read-only).
  * The components palette is the runtime's (K4) and rides `children`.
  */
-export function DataPanel({ sources, epochs, loading, error, onAdd, onOpen, onTest, onAsk, onDeclare, queries, actions, onGrantAction, children, 'data-testid': testId = 'data-panel' }: {
+export function DataPanel({ sources, epochs, loading, error, onAdd, onOpen, onTest, onAsk, onRename, onDeclare, queries, actions, onGrantAction, children, 'data-testid': testId = 'data-panel' }: {
   sources: readonly McpServer[];
   /** Per source, a count the host bumps when it was described again (its tables may have changed). */
   epochs?: Readonly<Record<string, number>>;
@@ -45,6 +45,8 @@ export function DataPanel({ sources, epochs, loading, error, onAdd, onOpen, onTe
   error: string | null;
   onAdd: () => void;
   onOpen: (name: string) => void;
+  /** (crew#1514) "Rename…": the source's sheet opens with its Name field ready. Absent = no such item. */
+  onRename?: (name: string) => void;
   /** "Test connection" on a saved SQL or GraphQL source (its sheet opens and tests at once). */
   onTest?: (name: string) => void;
   /** "Ask a question…" on a saved SQL source (its sheet opens on the question). */
@@ -106,6 +108,7 @@ export function DataPanel({ sources, epochs, loading, error, onAdd, onOpen, onTe
   const sourceMenu = (s: McpServer): MenuItem[] => [
     ...(onTest !== undefined && (s.kind === 'sql' || s.kind === 'graphql') ? [{ id: 'test', label: 'Test connection', onSelect: () => onTest(s.name), testId: 'data-panel-test' }] : []),
     ...(onAsk !== undefined && s.kind === 'sql' ? [{ id: 'ask', label: 'Ask a question…', onSelect: () => onAsk(s.name), testId: 'data-panel-ask' }] : []),
+    ...(onRename !== undefined ? [{ id: 'rename', label: 'Rename…', onSelect: () => onRename(s.name), testId: 'data-panel-rename' }] : []),
     { id: 'open', label: 'Open the source', onSelect: () => onOpen(s.name), testId: 'data-panel-open-source' },
   ];
 
@@ -142,7 +145,7 @@ export function DataPanel({ sources, epochs, loading, error, onAdd, onOpen, onTe
                     <span className="wk-src-row-name">{s.name}</span>
                   </button>
                   <span className={`wk-src-chip${s.allowWrites === true ? ' wk-src-chip--writes' : ''}`} data-testid="data-panel-chip">{sourceChip(s)}</span>
-                  {(onTest !== undefined || onAsk !== undefined) && <OverflowMenu label={`${s.name}: more`} items={sourceMenu(s)} data-testid={`data-panel-source-menu-${s.name}`} />}
+                  {(onTest !== undefined || onAsk !== undefined || onRename !== undefined) && <OverflowMenu label={`${s.name}: more`} items={sourceMenu(s)} data-testid={`data-panel-source-menu-${s.name}`} />}
                 </div>
                 {shown && (
                   <ul className="wk-src-tables" data-testid="data-panel-tables">
