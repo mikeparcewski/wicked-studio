@@ -2,6 +2,7 @@ import { actorWords } from './actorWords.js';
 import type { CoreEvent, RuleCouncilRecord, RuleCouncilVote, RulePosition, RuleVerdictOrigin, RuleVerdictStatus, SessionView, WorkUnit } from '../api/types.js';
 import { floorOverrideOf, isToolCheckOverride, type FloorOverrideView } from './floorOverride.js';
 import { isCommandPath } from './responder.js';
+import { cliLabel, standInBase } from './seatNames.js';
 
 /**
  * The assurance receipt (wicked-core#850 / #852, core-ts 0.7.46): what a run REQUIRES, and for each
@@ -771,6 +772,8 @@ const REASON_WORD: Record<string, string> = {
   no_boundary: 'no boundary',
   error: 'error',
   not_applicable: 'not applicable',
+  // wicked-core#1930: the role was filled by a stand-in, the same helper checking again (studio#1437).
+  stand_in: 'a stand-in checked instead',
 };
 
 /** An instrument token in words; a newer engine's token passes through with `_` spaced. */
@@ -881,7 +884,8 @@ export interface ReceiptWords {
 function seatNames(list: string | null): string | null {
   if (list === null) return null;
   const kept = list.split(', ').filter((x) => x.trim() !== '' && !isCommandPath(x.trim()));
-  return kept.length === 0 ? null : kept.join(', ');
+  // A stand-in seat (`claude~1`) is never shown bare: "Claude Code (stand-in)" (studio#1437).
+  return kept.length === 0 ? null : kept.map((x) => (standInBase(x.trim()) !== null ? cliLabel(x.trim()) : x)).join(', ');
 }
 
 /** `passed`: the decision the receipt is for passed (`true`), did not (`false`), or is unknown (`null`). */
@@ -913,7 +917,7 @@ export function receiptWords(r: AssuranceReceipt, passed: boolean | null = null)
   });
   // The operator's judgment (`judge: "operator:<who>"`) is said as such, never as a seat that judged.
   const ownJudges = (r.judge ?? '').split(', ').filter((j) => j !== '' && !fallbackSeats.includes(j) && !j.startsWith('operator:'));
-  if (ownJudges.length > 0) seats.push(`judged by ${ownJudges.join(', ')}`);
+  if (ownJudges.length > 0) seats.push(`judged by ${ownJudges.map((j) => (standInBase(j) !== null ? cliLabel(j) : j)).join(', ')}`);
   // (api-types 0.135.0) A floor the operator overrode is said as such — the engine's label — never as a judge.
   const overriders = [...new Set((r.operatorJudges ?? []).filter((j) => j.floorOverride !== undefined && !isToolCheckOverride(j.floorOverride)).map((j) => actorWords(j.by)))];
   // wicked-core#1318: a tool check the operator overrode is said in its own label.

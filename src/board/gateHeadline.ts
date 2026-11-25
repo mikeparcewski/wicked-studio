@@ -8,6 +8,7 @@ import { sandboxOwner } from '../components/denialCopy.js';
 import { governanceDenialHeadline, plainGateQuestion, rulesHoldWords } from './deskWords.js';
 import type { GateRowModel } from './gateRowModel.js';
 import { isHelperSeat } from './responder.js';
+import { seatLabel, standInBase } from './seatNames.js';
 
 /**
  * THE GATE'S PLAIN-CAUSE HEADLINE (mockup ui-v2-gate): what a decision is about, in a person's words —
@@ -18,6 +19,7 @@ import { isHelperSeat } from './responder.js';
 
 /** The seat's name in the Desk's words: the roster's, else its key with a capital ("Copilot"). */
 export function seatName(cli: string, label: string | null): string {
+  if (standInBase(cli) !== null) return seatLabel({ key: cli, display_name: label });
   if (label !== null && label !== '') return label;
   const base = cli.split('#')[0] ?? cli;
   return base.charAt(0).toUpperCase() + base.slice(1);

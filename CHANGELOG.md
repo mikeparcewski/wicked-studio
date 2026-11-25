@@ -12,6 +12,10 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+
+- A seated stand-in is named as one wherever studio names a seat (studio#1437, the live proof wicked-core#1930 F8 asks for). On a run whose reviewer or judge is a stand-in (`claude~1`, `claude~2`), the Helpers line, the thread, the hand-off row, Helpers and spend, the spend line, team rows, live activity, gate cards and the receipt's who line now say "Claude Code (stand-in)", never the bare key. The run panel shows the engine's own sentences ("Claude Code stood in for the review, …", and the judge's). The hand-off row says "a stand-in review, not a different helper" instead of "reviewing on its own seat", and a receipt's `stand_in` skip reads "a stand-in checked instead". Tested on the recorded wire of run b0ade71f.
+
 ## [0.16.18] — 2026-11-25
 
 Patch release on the train-14 cut c705c91a, carrying 19 PRs since 0.16.17: #1391, #1392, #1393, #1394, #1395, #1398, #1396, #1403, #1404, #1409, #1407, #1412, #1410, #1408, #1413, #1420, #1415, #1421, #1422.

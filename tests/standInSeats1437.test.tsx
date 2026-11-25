@@ -18,9 +18,8 @@ import { setCachedRoster } from '../src/store/rosterCache.js';
 import * as sheets from '../src/store/sheets.js';
 import { resetRunPanel } from '../src/store/runPanel.js';
 import { RUN_PANEL_KEY } from '../src/board/runPanelModel.js';
-import { helperNamer } from '../src/board/standIn.js';
-import { seatLabel } from '../src/board/seatNames.js';
-import { cliLabel } from '../src/api/skillUsage.js';
+import { seatedStandIns, helperNamer } from '../src/board/standIn.js';
+import { cliLabel, seatKeyName, seatLabel } from '../src/board/seatNames.js';
 import { seatResponder } from '../src/board/responder.js';
 import { seatName } from '../src/board/gateHeadline.js';
 import { handoffRow } from '../src/board/powerMode.js';
@@ -57,8 +56,16 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('studio#1437: a seated stand-in is named as one (run b0ade71f)', () => {
+  it('reads both stand-ins from the run wire, each with the engine\'s own sentence', () => {
+    const seats = seatedStandIns(RUN, ROSTER);
+    expect(seats.get('claude~1')).toEqual({ key: 'claude~1', name: 'Claude Code (stand-in)', label: REVIEW });
+    expect(seats.get('claude~2')).toEqual({ key: 'claude~2', name: 'Claude Code (stand-in)', label: JUDGE });
+  });
+
   it('every shared namer says "(stand-in)" and never the bare key, for the reviewer and the judge', () => {
     for (const key of ['claude~1', 'claude~2']) {
+      expect(seatKeyName(key, ROSTER)).toBe('Claude Code (stand-in)');
+      expect(seatKeyName(key, null)).toBe('Claude Code (stand-in)');
       expect(cliLabel(key)).toBe('Claude Code (stand-in)');
       expect(seatLabel({ key })).toBe('Claude Code (stand-in)');
       expect(helperNamer(ROSTER)(key)).toBe('Claude Code (stand-in)');
@@ -68,6 +75,7 @@ describe('studio#1437: a seated stand-in is named as one (run b0ade71f)', () => 
       expect(sandboxOwner(key, ROSTER)).toBe('Claude Code (stand-in)');
     }
     // An ordinary seat keeps its name.
+    expect(seatKeyName('claude', ROSTER)).toBe('Claude Code');
     expect(seatResponder('claude', ROSTER).name).toBe('Claude Code');
   });
 
@@ -99,6 +107,11 @@ describe('studio#1437: a seated stand-in is named as one (run b0ade71f)', () => 
     const agent = screen.getAllByTestId('run-tab-agent').find((li) => li.dataset['cli'] === 'claude~1')!;
     expect(agent.textContent).toContain('Claude Code (stand-in)');
     expect(agent.textContent).toContain(REVIEW);
-    expect(result.container.textContent ?? '').not.toMatch(BARE);
+    // Helpers and spend (the spend line's unmetered seats included) never shows the bare key. The operator's own
+    // skip note on this run quotes "claude~2" and is shown verbatim, so the whole page is not asserted.
+    const agents = screen.getByTestId('run-tab-agents').textContent ?? '';
+    expect(agents).not.toMatch(BARE);
+    expect(screen.getByTestId('run-tab-spend').textContent).toContain('Claude Code (stand-in) not metered');
+    expect(result.container.textContent ?? '').toContain('Claude Code (stand-in)');
   });
 });

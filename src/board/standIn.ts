@@ -16,9 +16,8 @@
  */
 import { ApiError } from '../api/errors.js';
 import { api } from '../api/client.js';
-import { cliLabel } from '../api/skillUsage.js';
 import type { LaunchBodyWithDeliver } from '../api/types.js';
-import { seatLabel, type SeatNameInput } from './seatNames.js';
+import { cliLabel, seatKeyName, type SeatNameInput } from './seatNames.js';
 
 /** The refusal's code (DES §4: `short && canStandIn && !consent` → `409 stand_in_choice`). */
 export const STAND_IN_CHOICE_CODE = 'stand_in_choice';
@@ -140,10 +139,7 @@ export function standInRelaunchBody(sent: LaunchBodyWithDeliver, refusal: StandI
 
 /** A helper's name as the rest of studio says it: the roster's name, else its family's ("codex#2" → "Codex (2)"). */
 export function helperNamer(roster: readonly SeatNameInput[] | null | undefined): (cli: string) => string {
-  return (cli) => {
-    const seat = (roster ?? []).find((s) => s.key === cli);
-    return seat !== undefined ? seatLabel(seat) : cliLabel(cli);
-  };
+  return (cli) => seatKeyName(cli, roster, cliLabel);
 }
 
 /** What one short role is called on the card, by what it does (DES §2.1 roles; coord round 2: no insider words). */
@@ -258,4 +254,66 @@ export async function saveStandInsEveryJob(): Promise<void> {
   const out = await api.updateSettings({ standInReview: 'always' } as never).catch(() => null);
   const saved = (out as { settings?: { standInReview?: unknown } } | null)?.settings?.standInReview;
   if (saved !== 'always') throw new Error(SETTINGS_NOT_SAVED);
+}
+
+// ── A run's seated stand-ins (wicked-core#1930 F8, studio#1437) ─────────────────────────────────────────────────────
+
+/** One seated stand-in as the run's wire says it. */
+export interface SeatedStandIn {
+  /** The seat key (`claude~1`). */
+  key: string;
+  /** "Claude Code (stand-in)": the wire's `display`, else the base seat's name. */
+  name: string;
+  /** The engine's sentence: "Claude Code stood in for the review, using …". Null on a read that carries none. */
+  label: string | null;
+}
+
+function text(v: unknown): string | null {
+  return typeof v === 'string' && v.trim() !== '' ? v.trim() : null;
+}
+
+function rec(v: unknown): Record<string, unknown> | null {
+  return typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+}
+
+/**
+ * The run's seated stand-ins, by seat key (GET /runs/:id): `session.assurance.standIns[]` (`key`, `display`) and each
+ * unit's `assurance.roles[].standIn` (`cli`, `label`); `session.assurance.standInLabel` is the reviewer's sentence on a
+ * read whose roles are not in yet. A seat key in the run's units that carries the reserved stand-in separator is
+ * named a stand-in even with no record (never the bare `claude~1`). Pure.
+ */
+export function seatedStandIns(view: { session: unknown; units: readonly unknown[] } | null | undefined, roster?: readonly SeatNameInput[] | null): Map<string, SeatedStandIn> {
+  const out = new Map<string, SeatedStandIn>();
+  if (view == null) return out;
+  const named = (key: string, display: string | null): string => seatKeyName(key, display !== null ? [{ key: key.replace(/~\d+$/, ''), display_name: display }] : roster);
+  const put = (key: string | null, display: string | null, label: string | null): void => {
+    if (key === null || !/~\d+$/.test(key)) return;
+    const had = out.get(key);
+    out.set(key, { key, name: had !== undefined && display === null ? had.name : named(key, display), label: label ?? had?.label ?? null });
+  };
+  const assurance = rec(rec(view.session)?.['assurance']);
+  const sessionLabel = text(assurance?.['standInLabel']);
+  for (const s of Array.isArray(assurance?.['standIns']) ? (assurance['standIns'] as unknown[]) : []) {
+    const r = rec(s);
+    if (r === null) continue;
+    put(text(r['key']), text(r['display']), null);
+  }
+  for (const u of view.units) {
+    const unit = rec(u);
+    for (const role of Array.isArray(rec(unit?.['assurance'])?.['roles']) ? (rec(unit!['assurance'])!['roles'] as unknown[]) : []) {
+      const si = rec(rec(role)?.['standIn']);
+      if (si !== null) put(text(si['cli']) ?? text(rec(role)?.['seat']), null, text(si['label']));
+    }
+    put(text(unit?.['assigned_cli']), null, null);
+  }
+  // The session's own sentence names the review's stand-in: it fills a reviewer seat no role has labelled yet.
+  if (sessionLabel !== null) {
+    for (const s of Array.isArray(assurance?.['standIns']) ? (assurance['standIns'] as unknown[]) : []) {
+      const r = rec(s);
+      const key = text(r?.['key']);
+      const seat = key !== null ? out.get(key) : undefined;
+      if (seat !== undefined && seat.label === null && text(r?.['role']) === 'evaluator') out.set(seat.key, { ...seat, label: sessionLabel });
+    }
+  }
+  return out;
 }

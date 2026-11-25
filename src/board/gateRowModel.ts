@@ -50,6 +50,7 @@ import { offersSkipQeHere, skipQeAtDelivery, SKIP_QE_ACTION, SKIP_QE_GATE_TITLE,
 import { FACE_MAX, failingOnFace, failingSplit, standingFloor, type FailingOnFace, type FailingSplit } from './failingChecks.js';
 import { deliverLift } from '../components/deliverLiftModel.js';
 import { choiceTokens, contractChoices, type GateAction, type GateContext, type NotePolicy } from './gateContract.js';
+import { seatKeyName, standInBase } from './seatNames.js';
 
 /**
  * SESSION GATE ROW MODEL (S15e): pure classification and choice set for the session thread's
@@ -601,7 +602,7 @@ function withListed(model: GateRowModel, actions: readonly GateAction[], roster:
   // A listed answer the template has no control for (a consent choice its install frame does not name, a free-text
   // gate's Reject) gets the contract's own control, so the list is drawn whole.
   const drawn = new Set(choiceTokens([...choices, ...overflow]));
-  const label = (cli: string): string => roster?.find((r) => r.key === cli)?.display_name ?? cli;
+  const label = (cli: string): string => (standInBase(cli) !== null ? seatKeyName(cli, roster) : roster?.find((r) => r.key === cli)?.display_name ?? cli);
   const extra = contractChoices(actions.filter((a) => !drawn.has(a.action)), label, ctx);
   const added = [...extra.choices, ...extra.overflow];
   const rec = model.recommended !== null ? model.choices[model.recommended] : undefined;
@@ -635,7 +636,7 @@ const CONTRACT_EXEMPT: ReadonlySet<SessionGateReason> = new Set(['consent', 'fre
  * never ones the list offers; and the "isn't offered" lines are the template's inference, so they go with it.
  */
 function withContract(model: GateRowModel, actions: readonly GateAction[], roster: readonly RosterSeat[] | null, ctx: GateContext = {}): GateRowModel {
-  const label = (cli: string): string => roster?.find((r) => r.key === cli)?.display_name ?? cli;
+  const label = (cli: string): string => (standInBase(cli) !== null ? seatKeyName(cli, roster) : roster?.find((r) => r.key === cli)?.display_name ?? cli);
   const listedChoices = contractChoices(actions, label, ctx);
   // Where a note on an approve LANDS is the template's to know (studio#1170 review r1): a steer before a non-creator
   // step goes to the next creator (`amendScope: 'creator'`, `steerScopeTarget`). The listed steer keeps the template's
