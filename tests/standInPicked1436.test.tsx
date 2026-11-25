@@ -70,6 +70,13 @@ describe('the words when other helpers are signed in but not picked', () => {
     expect(w.why).toMatch(/ Codex is signed in but not picked: pick it to have the work checked by a helper that did not build it\.$/);
   });
 
+  it('a helper is left out by its key, not its name: a second "Claude Code" signed in is still one to pick (codex r1)', () => {
+    const twin = helperNamer([...ROSTER, seat('claude#2', 'Claude Code')]);
+    const w = standInChoiceWords(standInChoiceOf(refusalError())!, twin, [PICKED[0]!, 'claude#2']);
+    expect(w.title).toBe('Only one helper is picked for this job');
+    expect(w.choices.map((c) => c.id)).toContain('pick');
+  });
+
   it('a helper the preflight benched is not one to pick', () => {
     const body = structuredClone(CHOICE.body) as { preflight: { benched: Array<{ seat: string; reason: string }> } };
     body.preflight.benched = [{ seat: 'pi', reason: 'out of quota' }];
@@ -102,22 +109,51 @@ describe('/runs/new: Pick another helper opens the helper options', () => {
   });
   afterEach(() => cleanup());
 
-  it('the card names Codex and Pi; Pick another helper starts nothing and shows the helpers to turn on', async () => {
+  /** Codex and Pi turned off in the + helper options, then Send: crew refuses with the one-helper body. */
+  async function sendClaudeOnly(): Promise<{ launch: ReturnType<typeof vi.spyOn>; navigate: ReturnType<typeof vi.fn> }> {
     const launch = vi.spyOn(client.api, 'launchRun').mockRejectedValueOnce(refusalError());
     const navigate = vi.fn();
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} navigate={navigate} />);
     fireEvent.change(screen.getByTestId('launch-problem'), { target: { value: 'fix the reader' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Open launch options' }));
+    for (const key of ['codex', 'pi']) {
+      // The form's defaults land after the roster read: every signed-in helper on. Then this person turns two off.
+      await waitFor(() => expect((screen.getByTestId(`launch-seat-${key}`) as HTMLInputElement).checked).toBe(true));
+      fireEvent.click(screen.getByTestId(`launch-seat-${key}`));
+      expect((screen.getByTestId(`launch-seat-${key}`) as HTMLInputElement).checked).toBe(false);
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Open launch options' }));
     await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
     fireEvent.click(screen.getByTestId('launch-submit'));
     await screen.findByTestId('launch-standin');
+    const sent = JSON.parse(String((launch.mock.calls[0]![0] as { clisJson?: string }).clisJson)) as Array<{ key: string }>;
+    expect(sent.map((x) => x.key)).toEqual([PICKED[0]]);
+    return { launch, navigate };
+  }
+
+  it('the card names Codex and Pi; Pick another helper starts nothing and shows the helpers to turn on', async () => {
+    const { launch, navigate } = await sendClaudeOnly();
     expect(screen.getByTestId('launch-standin-title')).toHaveTextContent('Only one helper is picked for this job');
     expect(screen.getByTestId('launch-standin-why')).toHaveTextContent('Codex and Pi CLI are signed in but not picked');
     expect(screen.queryByTestId('launch-standin-sign_in')).toBeNull();
     fireEvent.click(screen.getByTestId('launch-standin-pick'));
     expect(screen.queryByTestId('launch-standin')).toBeNull();
-    expect(await screen.findByTestId('launch-seat-codex')).toBeTruthy();
-    expect(screen.getByTestId('launch-seat-pi')).toBeTruthy();
+    expect((await screen.findByTestId('launch-seat-codex') as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByTestId('launch-seat-pi') as HTMLInputElement).checked).toBe(false);
     expect(navigate).not.toHaveBeenCalled();
+    expect(launch).toHaveBeenCalledTimes(1);
+  });
+
+  it('the card says a signed-out helper is neither picked nor one to pick', async () => {
+    await sendClaudeOnly();
+    expect(screen.getByTestId('launch-standin-why').textContent).not.toMatch(/OpenCode/);
+  });
+
+  it('turning a helper on after the refusal drops the card: its "not picked" words no longer hold (codex r1)', async () => {
+    const { launch } = await sendClaudeOnly();
+    fireEvent.click(screen.getByRole('button', { name: 'Open launch options' }));
+    fireEvent.click(await screen.findByTestId('launch-seat-codex'));
+    await waitFor(() => expect(screen.queryByTestId('launch-standin')).toBeNull());
     expect(launch).toHaveBeenCalledTimes(1);
   });
 });
@@ -126,7 +162,13 @@ describe('/runs/new: Pick another helper opens the helper options', () => {
 
 const WF = [{ id: 'bug', phases: [{ id: 'build', executes_code: true }] }] as unknown as WorkflowDef[];
 const REPO = { id: 'repo-1', name: 'svc', root_path: '/srv/svc', default_branch: 'main', registered_at: 0 } as RepoEntry;
-let posts: Array<{ method: string; path: string }> = [];
+let posts: Array<{ method: string; path: string; body?: string }> = [];
+const wizardSeat = (key: string): HTMLElement => screen.getAllByTestId('launch-wizard-seat').find((b) => b.dataset.key === key)!;
+/** The helper keys the wizard's first POST /runs sent. */
+const launchedKeys = (): string[] => {
+  const body = JSON.parse(posts.find((p) => p.method === 'POST' && p.path === '/runs')!.body ?? '{}') as { clisJson?: string };
+  return (JSON.parse(body.clisJson ?? '[]') as Array<{ key: string }>).map((x) => x.key);
+};
 
 function stubWire(): void {
   posts = [];
@@ -136,7 +178,7 @@ function stubWire(): void {
     const json = (status: number, body: unknown): Promise<Response> =>
       Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }));
     const method = init?.method ?? 'GET';
-    if (method !== 'GET') posts.push({ method, path });
+    if (method !== 'GET') posts.push({ method, path, body: String(init?.body ?? '') });
     if (method === 'POST' && path === '/runs') {
       if (!refused) { refused = true; return json(CHOICE.status, CHOICE.body); }
       return json(201, { runId: 'r-new' });
@@ -175,24 +217,50 @@ describe('the launch wizard: Pick another helper goes back to Options', () => {
   });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); resetComposerSeats(); });
 
-  it('the card names Codex and Pi; Pick another helper starts nothing and opens the Options step', async () => {
-    const navigate = vi.fn();
+  /** Codex and Pi turned off on Options, then Launch: crew refuses with the one-helper body. */
+  async function launchClaudeOnly(navigate: (path: string) => void): Promise<void> {
     render(<Harness navigate={navigate} />);
     act(() => { openLaunchWizard({ workflowId: 'bug', composerKey: 'desk' }); });
     await screen.findByTestId('launch-wizard');
     fireEvent.change(screen.getByTestId('launch-wizard-intent'), { target: { value: 'fix the reader' } });
     for (let i = 0; i < 6 && screen.getByTestId('launch-wizard-step').dataset.step !== 'review'; i += 1) {
       await waitFor(() => expect(screen.getByTestId('launch-wizard-next')).toBeEnabled());
+      if (screen.getByTestId('launch-wizard-step').dataset.step === 'options') {
+        for (const key of ['codex', 'pi']) {
+          if (wizardSeat(key).getAttribute('aria-pressed') === 'true') fireEvent.click(wizardSeat(key));
+          expect(wizardSeat(key)).toHaveAttribute('aria-pressed', 'false');
+        }
+      }
       fireEvent.click(screen.getByTestId('launch-wizard-next'));
     }
     fireEvent.click(screen.getByTestId('launch-wizard-launch'));
     await screen.findByTestId('launch-wizard-standin');
+    expect(launchedKeys()).toEqual([PICKED[0]]);
+  }
+
+  it('the card names Codex and Pi; Pick another helper starts nothing and opens the Options step', async () => {
+    const navigate = vi.fn();
+    await launchClaudeOnly(navigate);
     expect(screen.getByTestId('launch-wizard-standin-title')).toHaveTextContent('Only one helper is picked for this job');
     expect(screen.getByTestId('launch-wizard-standin-why')).toHaveTextContent('Codex and Pi CLI are signed in but not picked');
     fireEvent.click(screen.getByTestId('launch-wizard-standin-pick'));
     expect(screen.getByTestId('launch-wizard-step').dataset.step).toBe('options');
     expect(screen.queryByTestId('launch-wizard-standin')).toBeNull();
+    expect(wizardSeat('codex')).toHaveAttribute('aria-pressed', 'false');
     expect(navigate).not.toHaveBeenCalled();
     expect(posts.filter((p) => p.method === 'POST' && p.path === '/runs')).toHaveLength(1);
+  });
+
+  it('Back to Options and turning a helper on drops the card; Back and Next alone keep it (codex r1)', async () => {
+    await launchClaudeOnly(vi.fn());
+    fireEvent.click(screen.getByTestId('launch-wizard-back'));
+    expect(screen.getByTestId('launch-wizard-step').dataset.step).toBe('options');
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    expect(screen.getByTestId('launch-wizard-standin')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('launch-wizard-back'));
+    fireEvent.click(wizardSeat('codex'));
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    expect(screen.getByTestId('launch-wizard-step').dataset.step).toBe('review');
+    expect(screen.queryByTestId('launch-wizard-standin')).toBeNull();
   });
 });
