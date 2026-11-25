@@ -24,6 +24,8 @@ import userEvent from '@testing-library/user-event';
 const apiFetch = vi.fn();
 vi.mock('../src/api/client.js', () => ({
   apiFetch: (...a: unknown[]) => apiFetch(...a),
+  // The repository list Add a memory offers (`GET /repos`, through the one repo cache).
+  api: { listRepos: () => apiFetch('/repos') },
 }));
 
 const { MemoryPage } = await import('../src/components/memory/MemoryPage.js');
@@ -36,6 +38,11 @@ type Proposal = import('../src/api/proposals.js').Proposal;
 const M1: MemoryItem = { id: 'm1', content: 'gh account flips to a secondary → push 403', tier: 'semantic', scope: 'brain:wicked/doc:ops', facets: { project: 'p-wicked', domain: 'ops' }, created_at: 1_700_000_200 };
 const M2: MemoryItem = { id: 'm2', content: 'overwritten .node module → silent SIGKILL; codesign -s - -f', tier: 'episodic', scope: 'brain:wicked/doc:macos', facets: { domain: 'macos' }, created_at: 1_700_000_100 };
 const PM: Proposal = { id: 'pm1', kind_type: 'memory', payload: { content: 'tests run with --runInBand on CI', tier: 'semantic' }, facets: {}, provenance: { agent: 'claude' }, state: 'pending', created_at: 1_700_000_000 };
+/** Registered repositories as `GET /repos` answers them (crew RepoEntry: the id is what a run on it names). */
+const REPOS = [
+  { id: 'r-api', name: 'northwind-api', root_path: '/srv/northwind-api', default_branch: 'main', registered_at: 1_700_000_000 },
+  { id: 'r-web', name: 'northwind-web', root_path: '/srv/northwind-web', default_branch: 'main', registered_at: 1_700_000_000 },
+];
 const PP: Proposal = { id: 'pp1', kind_type: 'policy:testing', payload: { rule: 'every PR runs the journeys', severity: 'warn' }, facets: {}, provenance: {}, state: 'pending', created_at: 1_700_000_000 };
 
 /** A stateful wire: memories, coverage over them, retire, edit, proposals (file / approve / reject; a decided
@@ -77,9 +84,14 @@ function wire(initial: MemoryItem[], proposals: Proposal[] = []): { calls: strin
       const q = new URLSearchParams(s.split('?')[1] ?? '').get('query');
       return Promise.resolve({ memories: q === null ? store.rows : store.rows.filter((m) => m.content.toLowerCase().includes(q.toLowerCase())) });
     }
+    if (s === '/repos') return Promise.resolve({ repos: REPOS });
     if (s === '/proposals' && init?.method === 'POST') {
       const id = `pref-${queue.length + 1}`;
-      queue = [...queue, { id, kind_type: 'memory', payload: { content: body?.content, tier: 'semantic', capture: 'preference' }, facets: body?.project !== undefined ? { project: String(body.project) } : {}, provenance: {}, state: 'pending', created_at: 1_700_000_300 }];
+      // crew#1878 (routes.ts POST /proposals): payload {content, tier: tier ?? 'semantic', capture}, facets {project?, repo?}.
+      const facets: Record<string, string> = {};
+      if (body?.project !== undefined) facets['project'] = String(body.project);
+      if (body?.repo !== undefined) facets['repo'] = String(body.repo);
+      queue = [...queue, { id, kind_type: 'memory', payload: { content: body?.content, tier: body?.tier ?? 'semantic', capture: 'preference' }, facets, provenance: {}, state: 'pending', created_at: 1_700_000_300 }];
       return Promise.resolve({ id });
     }
     const approve = /^\/proposals\/([^/]+)\/approve$/.exec(s);
@@ -94,8 +106,8 @@ function wire(initial: MemoryItem[], proposals: Proposal[] = []): { calls: strin
         return Promise.resolve({ outcome: 'promoted', active_id: `proposal:${copy.id}`, edited: { from: p.id, to: copy.id } });
       }
       queue = queue.map((x) => (x === p ? { ...x, state: 'approved' as const } : x));
-      const content = (p.payload as { content: string }).content;
-      store.rows = [...store.rows, { id: `proposal:${p.id}`, content, tier: 'semantic', scope: '', facets: p.facets, created_at: 1_700_000_400 }];
+      const { content, tier } = p.payload as { content: string; tier: string };
+      store.rows = [...store.rows, { id: `proposal:${p.id}`, content, tier, scope: '', facets: p.facets, created_at: 1_700_000_400 }];
       return Promise.resolve({ outcome: 'promoted', active_id: `proposal:${p.id}` });
     }
     const reject = /^\/proposals\/([^/]+)\/reject$/.exec(s);
@@ -266,6 +278,73 @@ describe('MemoryPage — Add a memory (a proposal you approve as you add it)', (
     expect(await screen.findByTestId('memories-note')).toHaveTextContent('Added: Deploys freeze on Fridays');
     expect(screen.queryByTestId('memory-add-dialog')).toBeNull();
     await waitFor(() => expect(screen.getAllByTestId('memory-content').map((c) => c.textContent)).toContain('Deploys freeze on Fridays'));
+  });
+
+  it('studio#1095: the person picks the kind and one repository; crew gets tier and repo, and the row says where it applies', async () => {
+    const { calls, bodies } = wire([]);
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    await openAdd(user);
+    const dialog = await screen.findByTestId('memory-add-dialog');
+    // A fact unless the person says otherwise; any repository unless one is picked.
+    expect(within(dialog).getByTestId('memory-add-tier')).toHaveValue('semantic');
+    expect([...within(dialog).getByTestId('memory-add-tier').querySelectorAll('option')].map((o) => o.textContent))
+      .toEqual(['A fact or decision', 'How something is done', 'Something that happened']);
+    expect(within(dialog).getByTestId('memory-add-repo')).toHaveValue('');
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-api' })).toHaveLength(1));
+    expect(dialog).not.toHaveTextContent('It is saved as a fact');
+    await user.type(within(dialog).getByTestId('memory-add-text'), 'Run the migrations before the tests');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-tier'), 'procedural');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-project'), 'p-wicked');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-repo'), 'r-api');
+    await user.click(within(dialog).getByTestId('memory-add-save'));
+    await waitFor(() => expect(calls).toContain('/proposals/pref-1/approve'));
+    expect(bodies['/proposals']).toEqual([{ content: 'Run the migrations before the tests', project: 'p-wicked', repo: 'r-api', tier: 'procedural' }]);
+    const row = await waitFor(() => screen.getAllByTestId('memory-row').find((r) => r.textContent?.includes('Run the migrations'))!);
+    expect(row).toHaveAttribute('data-tier', 'procedural');
+    expect(row).toHaveTextContent('repository northwind-api');
+  });
+
+  it('studio#1095: an episodic memory on a repository only, with no project', async () => {
+    const { bodies } = wire([]);
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    await openAdd(user);
+    const dialog = await screen.findByTestId('memory-add-dialog');
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-web' })).toHaveLength(1));
+    await user.type(within(dialog).getByTestId('memory-add-text'), 'The Friday deploy broke search');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-tier'), 'episodic');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-repo'), 'r-web');
+    await user.click(within(dialog).getByTestId('memory-add-save'));
+    await waitFor(() => expect(bodies['/proposals']).toEqual([{ content: 'The Friday deploy broke search', repo: 'r-web', tier: 'episodic' }]));
+  });
+
+  it('studio#1095: an older crew refuses a kind or a repository (400, its strict schema): nothing is filed, the words stay, and it says what to do', async () => {
+    const { calls } = wire([]);
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) => {
+      const b = init?.body !== undefined ? JSON.parse(init.body) as Record<string, unknown> : {};
+      return String(path) === '/proposals' && init?.method === 'POST' && ('tier' in b || 'repo' in b)
+        ? Promise.reject(new ApiError(400, 'body/ must NOT have additional properties'))
+        : base(path, init);
+    });
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    await openAdd(user);
+    const dialog = await screen.findByTestId('memory-add-dialog');
+    await user.type(within(dialog).getByTestId('memory-add-text'), 'Run the migrations before the tests');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-tier'), 'procedural');
+    await user.click(within(dialog).getByTestId('memory-add-save'));
+    await waitFor(() => expect(dialog).toHaveTextContent(/This crew can’t save a kind other than a fact yet, so nothing was saved\. Update wicked-crew, or save it as a fact on every repository\./));
+    expect(within(dialog).getByTestId('memory-add-text')).toHaveValue('Run the migrations before the tests');
+    expect(calls.some((c) => c.endsWith('/approve'))).toBe(false);
+    // As a fact on any repository it is the body an older crew takes.
+    await user.selectOptions(within(dialog).getByTestId('memory-add-tier'), 'semantic');
+    await user.click(within(dialog).getByTestId('memory-add-save'));
+    await waitFor(() => expect(calls).toContain('/proposals/pref-1/approve'));
   });
 
   it('an approve that fails after the file says the proposal waits and nothing was remembered', async () => {
