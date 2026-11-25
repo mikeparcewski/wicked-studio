@@ -56,6 +56,10 @@
 .wk-src-input:disabled { background: transparent; border-color: var(--border-subtle); color: var(--ink-body); opacity: 1; cursor: default; }
 .wk-src-input--static { display: flex; align-items: center; min-height: 32px; padding: 0 var(--space-3); border: 1px dashed var(--border); border-radius: var(--radius-md); font-size: var(--text-body); color: var(--ink-body); }
 /* A saved secret's state, and beside it the control that types it again (re-key). */
+/* (crew#1514) A saved source's rename: what it keeps, the apps that use it when crew lists them, and the two actions. */
+.wk-src-rename { display: flex; flex-direction: column; gap: var(--space-2); margin-top: calc(-1 * var(--space-1)); }
+.wk-src-rename-confirm { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.wk-src-rename-actions { display: flex; justify-content: flex-end; gap: var(--space-2); flex-wrap: wrap; }
 .wk-src-rekey-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 .wk-src-rekey-row > .wk-src-input--static { flex: 1 1 12rem; min-width: 0; }
 .wk-src-rekey-row + .wk-src-secret { margin-top: var(--space-1); }

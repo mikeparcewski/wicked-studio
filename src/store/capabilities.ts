@@ -67,6 +67,9 @@ interface CapabilitiesStore {
    *  chat can't change (the seat says so and points to the editor's own controls; a refine of it is blocked). Only
    *  then is a cut card registered as in view: an older crew would read a cut as a page a refine may change. */
   chatCutInView: boolean;
+  /** `chatArtifacts.cut` (crew#1814): the chat can change the demo video open in it through a `cut` card; studio draws the
+   *  card and declares `accepts: ['cut']`. */
+  chatCut: boolean;
   /** `chatArtifacts.stubOps` (api-types 0.171.0, A3): the kinds still stubbed under the test configuration; `null` = the
    *  daemon did not say (with `stub`, every kind is). */
   chatArtifactsStubOps: string[] | null;
@@ -115,11 +118,11 @@ type Caps = Omit<CapabilitiesStore, 'load'>;
 /** The capabilities a `GET /health` answer carries (absent ones are false). */
 function capsOf(h: unknown): Caps {
   const caps = ((h as { capabilities?: Record<string, unknown> }).capabilities) ?? {};
-  return { loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true, askPath: caps['askPath'] === true, chatIdOnLaunch: caps['chatIdOnLaunch'] === true, deliverGate: caps['deliverGate'] === true, reducedAssurance: caps['reducedAssurance'] === true, launchPrimary: caps['launchPrimary'] === true, chatList: caps['chatList'] === true, chatAttachments: caps['chatAttachments'] === true, chatWorkflows: Array.isArray(caps['chatWorkflows']) ? (caps['chatWorkflows'] as unknown[]).filter((w): w is string => typeof w === 'string') : [], powerMode: caps['powerMode'] === true, gateActions: caps['gateActions'] === true, voice: caps['voice'] === true, chatContext: (caps['chatArtifacts'] as { context?: unknown } | undefined)?.context === true, chatProposals: (caps['chatArtifacts'] as { proposals?: unknown } | undefined)?.proposals === true, chatArtifactsStub: (caps['chatArtifacts'] as { stub?: unknown } | undefined)?.stub === true, chatOnboard: (caps['chatArtifacts'] as { onboard?: unknown } | undefined)?.onboard === true, chatArtifactsStubOps: stubOpsOf(caps['chatArtifacts']), chatCutInView: (caps['chatArtifacts'] as { cutInView?: unknown } | undefined)?.cutInView === true, dataSources: (caps['apps'] as { uploads?: unknown } | undefined)?.uploads === true, trackerLinks: caps['trackerLinks'] === true, planGateNote: caps['planGateNote'] === true, chatJobProposals: caps['chatJobProposals'] === true, reshapeRun: caps['reshapeRun'] === true, chatJobPower: caps['chatJobPower'] === true, workflowCatalogV2: caps['workflowCatalogV2'] === true, memoryRestore: caps['memoryRestore'] === true, knowledgeForget: caps['knowledgeForget'] === true };
+  return { loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true, askPath: caps['askPath'] === true, chatIdOnLaunch: caps['chatIdOnLaunch'] === true, deliverGate: caps['deliverGate'] === true, reducedAssurance: caps['reducedAssurance'] === true, launchPrimary: caps['launchPrimary'] === true, chatList: caps['chatList'] === true, chatAttachments: caps['chatAttachments'] === true, chatWorkflows: Array.isArray(caps['chatWorkflows']) ? (caps['chatWorkflows'] as unknown[]).filter((w): w is string => typeof w === 'string') : [], powerMode: caps['powerMode'] === true, gateActions: caps['gateActions'] === true, voice: caps['voice'] === true, chatContext: (caps['chatArtifacts'] as { context?: unknown } | undefined)?.context === true, chatProposals: (caps['chatArtifacts'] as { proposals?: unknown } | undefined)?.proposals === true, chatArtifactsStub: (caps['chatArtifacts'] as { stub?: unknown } | undefined)?.stub === true, chatOnboard: (caps['chatArtifacts'] as { onboard?: unknown } | undefined)?.onboard === true, chatArtifactsStubOps: stubOpsOf(caps['chatArtifacts']), chatCutInView: (caps['chatArtifacts'] as { cutInView?: unknown } | undefined)?.cutInView === true, chatCut: (caps['chatArtifacts'] as { cut?: unknown } | undefined)?.cut === true, dataSources: (caps['apps'] as { uploads?: unknown } | undefined)?.uploads === true, trackerLinks: caps['trackerLinks'] === true, planGateNote: caps['planGateNote'] === true, chatJobProposals: caps['chatJobProposals'] === true, reshapeRun: caps['reshapeRun'] === true, chatJobPower: caps['chatJobPower'] === true, workflowCatalogV2: caps['workflowCatalogV2'] === true, memoryRestore: caps['memoryRestore'] === true, knowledgeForget: caps['knowledgeForget'] === true };
 }
 
 /** Every capability off: a failed read (an older or unreachable daemon). */
-const NO_CAPS: Caps = { loaded: true, gateActions: false, runChatId: false, walkthroughRoots: false, askPath: false, chatIdOnLaunch: false, deliverGate: false, reducedAssurance: false, launchPrimary: false, chatList: false, chatAttachments: false, chatWorkflows: [], powerMode: false, voice: false, chatContext: false, chatProposals: false, chatArtifactsStub: false, chatOnboard: false, chatArtifactsStubOps: null, chatCutInView: false, dataSources: false, trackerLinks: false, planGateNote: false, chatJobProposals: false, reshapeRun: false, chatJobPower: false, workflowCatalogV2: false, memoryRestore: null, knowledgeForget: false };
+const NO_CAPS: Caps = { loaded: true, gateActions: false, runChatId: false, walkthroughRoots: false, askPath: false, chatIdOnLaunch: false, deliverGate: false, reducedAssurance: false, launchPrimary: false, chatList: false, chatAttachments: false, chatWorkflows: [], powerMode: false, voice: false, chatContext: false, chatProposals: false, chatArtifactsStub: false, chatOnboard: false, chatArtifactsStubOps: null, chatCutInView: false, chatCut: false, dataSources: false, trackerLinks: false, planGateNote: false, chatJobProposals: false, reshapeRun: false, chatJobPower: false, workflowCatalogV2: false, memoryRestore: null, knowledgeForget: false };
 
 export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
   loaded: false,
@@ -142,6 +145,7 @@ export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
   chatOnboard: false,
   chatArtifactsStubOps: null,
   chatCutInView: false,
+  chatCut: false,
   dataSources: false,
   planGateNote: false,
   chatJobProposals: false,

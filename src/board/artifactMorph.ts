@@ -42,14 +42,21 @@ export function editedLine(version: number, what: string, verb: WriteVerb = 'cha
  *  a deck's slide ops (P-D1) "added", "duplicated", "moved". */
 export type WriteVerb = 'changed' | 'removed' | 'restyled' | 'added' | 'duplicated' | 'moved';
 
+/** What an editor's Undo lines call the artifact: a page (and the person's own change), or a video, whose change may
+ *  be the chat's (crew#1814 R2 F3). */
+export type UndoSubject = 'page' | 'video';
+
 /** Undo forked the page before the change as a new head. */
-export function undoneLine(version: number): string {
+export function undoneLine(version: number, subject: UndoSubject = 'page'): string {
+  if (subject === 'video') return `Undone — version ${version} is the video before that change.`;
   return `Undone — version ${version} is the page before your change.`;
 }
 
 /** Undo refused (`409 head_moved`): a helper's version landed in between, and burying it would
  *  lose their work — so the operator's change stays and the line says why. */
-export function notUndoneLine(head: number): string {
+export function notUndoneLine(head: number, subject: UndoSubject = 'page'): string {
+  // A video's newer version may be another editor's or tab's Undo of this very change: never say the change stays.
+  if (subject === 'video') return `Not undone — the video changed since (now version ${head}), in another editor or tab. Versions has every version if you want an earlier one.`;
   return `Not undone — a helper changed the page since (version ${head}). Your change stays; undo by hand if you still want it.`;
 }
 

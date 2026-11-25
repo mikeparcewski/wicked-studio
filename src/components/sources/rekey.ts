@@ -24,8 +24,13 @@ export function secretShapeProblem(value: string, what: string): string | null {
 }
 
 /** Whether crew can write this source's secret again: it references its own keychain entry. */
-export function ownsKeychainEntry(server: Pick<McpServer, 'name' | 'auth'> | null | undefined): boolean {
-  return server != null && server.auth?.ref === keychainRef(server.name);
+export function ownsKeychainEntry(server: (Pick<McpServer, 'name' | 'auth'> & { keychainAccount?: string }) | null | undefined): boolean {
+  return server != null && server.auth?.ref === keychainRef(ownAccountOf(server));
+}
+
+/** (crew#1514) The keychain account a source's own secret lives under: the name it was saved as (a renamed source keeps it). */
+export function ownAccountOf(server: Pick<McpServer, 'name'> & { keychainAccount?: string }): string {
+  return typeof server.keychainAccount === 'string' && server.keychainAccount !== '' ? server.keychainAccount : server.name;
 }
 
 /** The prefix of a GitHub source's `auth.ref` that names the GitHub CLI login crew reads at use (no secret at all). */
@@ -41,11 +46,11 @@ export function ghCliLoginOf(server: Pick<McpServer, 'auth'> | null | undefined)
 }
 
 /** Where crew reads a saved source's secret: its own keychain entry, a daemon variable, another keychain entry, the GitHub CLI's login (no secret), none. */
-export function secretRefKind(server: Pick<McpServer, 'name' | 'auth'> | null | undefined): 'own' | 'env' | 'other' | 'gh' | 'none' {
+export function secretRefKind(server: (Pick<McpServer, 'name' | 'auth'> & { keychainAccount?: string }) | null | undefined): 'own' | 'env' | 'other' | 'gh' | 'none' {
   const ref = server?.auth?.ref;
   if (server == null || typeof ref !== 'string' || ref === '') return 'none';
   if (ref.startsWith(GH_CLI_REF)) return 'gh';
-  return ref === keychainRef(server.name) ? 'own' : ref.startsWith('env:') ? 'env' : 'other';
+  return ref === keychainRef(ownAccountOf(server)) ? 'own' : ref.startsWith('env:') ? 'env' : 'other';
 }
 
 /** What a sheet says when crew reads the secret somewhere studio can't type it again. */

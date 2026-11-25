@@ -85,7 +85,7 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
   /** What the sheet of ONE source opens on, from the data panel's menu (test at once, or the question):
    *  used once, and forgotten when that sheet closes (Back, then Forward, does not test again). */
-  const [sheetFocus, setSheetFocus] = useState<{ name: string; focus: 'test' | 'ask' } | null>(null);
+  const [sheetFocus, setSheetFocus] = useState<{ name: string; focus: 'test' | 'ask' | 'rename' } | null>(null);
   const [actions, setActions] = useState<PageRowWrite[]>([]);
   const [dialog, setDialog] = useState<{ source: string; relation: SourceCatalogRelation; privileges: SourcePrivilegeReport | null; declared: PageRowWrite | null } | null>(null);
   /** Per source, bumped when the sheet described it again: the panel reads its tables afresh. */
@@ -149,7 +149,29 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
     if (!loading) { setSheet((cur) => (cur !== null && cur.mode !== 'new' ? null : cur)); setPmSheet((cur) => (cur !== null && cur.mode !== 'new' ? null : cur)); setError(`No source named ${deep}.`); }
   }, [deep, sources, pmSources, pmOn, loading]);
 
-  const open = (name: string, focus: 'test' | 'ask' | null = null): void => { openGen.current++; setSheetFocus(focus === null ? null : { name, focus }); navigate(sourcesPath(name)); };
+  /** (crew#1514) The address's source now, for a rename that settles later: only a sheet still on the old name follows. */
+  const deepNow = useRef(deep);
+  deepNow.current = deep;
+  const followRename = (from: string, renamed: McpServer): void => {
+    bumpRevoked(from);
+    // Row writes declared on this page named the old source; they are drafts, so they go with its name.
+    setActions((list) => list.filter((a) => a.source !== from));
+    setDialog((d) => (d !== null && d.source === from ? null : d));
+    setSources((list) => list.map((s) => (s.name === from || (renamed.id !== undefined && s.id === renamed.id) ? renamed : s)));
+    if (deepNow.current === from) navigate(sourcesPath(renamed.name), { replace: true });
+  };
+  /** A rename whose outcome crew never said: crew's list says where the source is now, by its id (never a resend). */
+  const findRenamed = async (from: string, id: string): Promise<void> => {
+    try {
+      const now = (await sourcesApi.list()).servers.find((s) => s.id === id);
+      if (now !== undefined && now.name !== from) followRename(from, now);
+    } catch {
+      // the list read below says what it can
+    }
+    void refresh();
+  };
+
+  const open = (name: string, focus: 'test' | 'ask' | 'rename' | null = null): void => { openGen.current++; setSheetFocus(focus === null ? null : { name, focus }); navigate(sourcesPath(name)); };
   // A sheet closed by the address (Back) forgets what it was opened for.
   useEffect(() => { if (sheet === null) setSheetFocus(null); }, [sheet]);
   /** "Add a data source" (the page's button and the panel's ＋): a Grant still reading its table never opens over it. */
@@ -234,6 +256,7 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
           onOpen={(name) => open(name)}
           onTest={(name) => open(name, 'test')}
           onAsk={(name) => open(name, 'ask')}
+          onRename={(name) => open(name, 'rename')}
           onDeclare={declare}
           actions={shownActions}
           onGrantAction={(id) => void grantAction(id)}
@@ -258,6 +281,13 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
           }}
           // Only the secret's state changed: merged into the latest record (the re-key's settle re-reads crew's list).
           onRekeyed={(name) => setSources((list) => list.map((s) => (s.name === name ? ({ ...s, authState: 'set' } as McpServer) : s)))}
+          // (crew#1514) The same source under its new name: the list holds it before the address moves, so the sheet
+          // re-opens on it (a fresh sheet: everything keyed by the name reads again).
+          onRenamed={(from, renamed) => {
+            followRename(from, renamed);
+            void refresh();
+          }}
+          onRenameUnsure={(from, id) => void findRenamed(from, id)}
           onAllowWrites={setWrites}
           servers={sources}
           agentsUnverified={unverified}

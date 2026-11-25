@@ -1926,6 +1926,18 @@
       ]
     },
     {
+      "testId": "artifact-proposal-cut",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-cut-change",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "artifact-proposal-demo",
       "files": [
         "src/components/chat/ArtifactProposalCard.tsx"
@@ -4252,6 +4264,12 @@
       ]
     },
     {
+      "testId": "coverage-not-indexed",
+      "files": [
+        "src/components/CoverageView.tsx"
+      ]
+    },
+    {
       "testId": "coverage-reading",
       "files": [
         "src/components/CoverageView.tsx"
@@ -4319,6 +4337,12 @@
     },
     {
       "testId": "data-panel-open-source",
+      "files": [
+        "src/components/sources/DataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "data-panel-rename",
       "files": [
         "src/components/sources/DataPanel.tsx"
       ]
@@ -9730,6 +9754,12 @@
     },
     {
       "testId": "language-bar",
+      "files": [
+        "src/components/LanguageBar.tsx"
+      ]
+    },
+    {
+      "testId": "language-basis",
       "files": [
         "src/components/LanguageBar.tsx"
       ]
@@ -15729,6 +15759,162 @@
       "testId": "preview-steps",
       "files": [
         "src/components/LaunchPreview.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-blocked",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-cancel",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-cancelled",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-card",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-card-item",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-card-what",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-compose-again",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-confirm",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-held",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-item",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-link",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-no-target",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-note",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-pick",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-publication",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-refresh",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-refresh-note",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-refused",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-resolve",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-resolve-absent",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-resolve-exists",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-resolve-note",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-show",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-unreadable",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-verdict",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
       ]
     },
     {
@@ -23495,6 +23681,12 @@
       ]
     },
     {
+      "testId": "source-former-names",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
       "testId": "source-header",
       "files": [
         "src/components/sources/SourceSheet.tsx"
@@ -23652,6 +23844,36 @@
     },
     {
       "testId": "source-rekey-status",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-rename",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-rename-apps",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-rename-blocker",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-rename-cancel",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-rename-go",
       "files": [
         "src/components/sources/SourceSheet.tsx"
       ]

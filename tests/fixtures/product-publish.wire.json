@@ -1,0 +1,1312 @@
+{
+ "provenance": "wicked-crew#372 (api-types 0.229.0; captured on the branch of wicked-crew#1900 after its last fold, before its re-stamp from 0.228.0, which changed no answer: product-publish.ts is the same on crew main a0c329bb): every answer captured from crew's own routes (registerProductPublishRoutes in packages/crew/src/api/product-publish.ts) by a run of crew's tests/product-publish.test.ts setup against the fake github-mcp-server, on the branch of wicked-crew#1900. 'view' is crew's tests/fixtures/product/compose-run-view.json: a real compose launch on the stub-runner CoreAdapter, captured once it completed.",
+ "view": {
+  "session": {
+   "archive_note": null,
+   "archived_at": null,
+   "assurance": {
+    "mode": "full",
+    "required": [
+     "distinct_evaluator",
+     "judge"
+    ]
+   },
+   "attempt": 0,
+   "auto_deliver": false,
+   "clis": [
+    "beta",
+    "alpha"
+   ],
+   "collection_scope": "wicked-agent/run-compose-1/shared",
+   "entity_mode": "shared",
+   "extra_read_roots": [],
+   "extra_write_roots": [],
+   "finished_at": 1795582596172,
+   "human_confirm": "none",
+   "id": "run-compose-1",
+   "problem": "Compose the product plan for project proj_179558259512700000 (2 requirement(s))",
+   "project_graph": null,
+   "project_id": "proj_179558259512700000",
+   "repo_ref": null,
+   "status": "completed",
+   "team": {
+    "gate_seq": 1,
+    "no_bus": true,
+    "primary": {
+     "cli": "beta",
+     "pick_seq": 0,
+     "selection": "random"
+    },
+    "reason": "team transport unavailable: no bus (WICKED_BUS_DB unset)",
+    "transport": "none"
+   },
+   "team_plan": {
+    "accepted": {
+     "auto": true,
+     "band": "70-100",
+     "by": "human",
+     "floor_override": null,
+     "high_risk": true,
+     "proposal_id": "p-2923f22e64e53e51a801807b665cfa1b",
+     "rev": 2,
+     "steps": {
+      "steps": [
+       {
+        "added_by": "plan",
+        "catalog": "understand",
+        "id": "pa-scope",
+        "instructions": "Rate this run's risk before any work starts (READ ONLY: change nothing). The plan: produce -> critique. There is no repo: judge the content and its audience; client-facing work (a customer deliverable, an RFP answer, a demo shown outside) rates higher than internal work. End with exactly one line:\nRISK {\"score\":N,\"reasons\":[\"...\"]}\nN is 0-100: 0-19 internal and routine, 20-39 shared internally, 40-69 client-facing, 70-100 high stakes (pauses for approval). A missing or malformed RISK line scores 100."
+       },
+       {
+        "added_by": "floor",
+        "catalog": "test_plan",
+        "floor_reason": "band 70-100 requires test_plan",
+        "id": "test_plan"
+       },
+       {
+        "added_by": "floor",
+        "catalog": "design",
+        "floor_reason": "band 70-100 requires design",
+        "id": "design"
+       },
+       {
+        "added_by": "floor",
+        "catalog": "architecture",
+        "floor_reason": "band 70-100 requires architecture",
+        "id": "architecture"
+       },
+       {
+        "added_by": "plan",
+        "catalog": "produce",
+        "id": "draft",
+        "instructions": "Compose a product plan for project proj_179558259512700000 from these 2 requirement(s):\n- repo-a REQ-1: Sign in \u2014 A user signs in with email.\n- repo-a REQ-2: Sign out \u2014 A user signs out.\n\nGroup them into epics, each epic into features, each feature into user stories with acceptance\ncriteria. Every feature names the requirement refs it covers ({\"repoId\",\"key\"}, exactly as listed);\nevery listed requirement is covered at least once, and nothing is invented that no requirement asks for.\nDo not create issues or change any repository. End with ONE fenced ```json block, the plan:\n{\"epics\":[{\"title\":\"\",\"features\":[{\"title\":\"\",\"requirementRefs\":[{\"repoId\":\"\",\"key\":\"\"}],\n\"stories\":[{\"title\":\"\",\"acceptance\":[\"\"]}]}]}]}"
+       },
+       {
+        "added_by": "plan",
+        "catalog": "critique",
+        "gate": {
+         "human_confirm": {
+          "unconditional": true
+         }
+        },
+        "id": "review",
+        "instructions": "Review the drafted product plan for project proj_179558259512700000 against the 2 requirement(s) it was drafted from:\n- repo-a REQ-1: Sign in \u2014 A user signs in with email.\n- repo-a REQ-2: Sign out \u2014 A user signs out.\n\nEvery listed requirement is covered at least once; every feature's requirementRefs are refs from this list,\nexactly; nothing is invented that no requirement asks for; the stories are testable; the plan is ONE\nwell-formed fenced JSON block. A gap, an unknown ref or an invented item is a FAIL naming it."
+       }
+      ]
+     },
+     "touch_source": "none"
+    },
+    "accepted_high_risk": true,
+    "accepted_rev": 2,
+    "approved_high_risk": true,
+    "destructive": false,
+    "max_score": 100,
+    "requires_evaluator": true,
+    "rev": 2,
+    "roster": [
+     {
+      "alt_binaries": [],
+      "binary": "beta",
+      "category": "agentic-coder",
+      "confidence": "confirm-on-probe",
+      "display_name": "Beta",
+      "enabled_for_council": true,
+      "headless_invocation": "beta {PROMPT}",
+      "input_mode": "prompt-arg",
+      "key": "beta",
+      "seat_eligible_for_work": true,
+      "trust_flags": [],
+      "version_probe": []
+     },
+     {
+      "alt_binaries": [],
+      "binary": "alpha",
+      "category": "agentic-coder",
+      "confidence": "confirm-on-probe",
+      "display_name": "Alpha",
+      "enabled_for_council": true,
+      "headless_invocation": "alpha {PROMPT}",
+      "input_mode": "prompt-arg",
+      "key": "alpha",
+      "seat_eligible_for_work": true,
+      "trust_flags": [],
+      "version_probe": []
+     }
+    ]
+   },
+   "unit_ix": 6,
+   "workdir": null,
+   "workflow_id": "wf-run-compose-1",
+   "run_identity": {
+    "kind": "user_plan",
+    "name": null,
+    "user_plan": true,
+    "system": false
+   }
+  },
+  "units": [
+   {
+    "allowed_skills": [],
+    "assigned_cli": "beta",
+    "assigned_invocation": "beta {PROMPT}",
+    "assurance": {
+     "attempt": 0,
+     "creator": "beta",
+     "evaluator": null,
+     "judge": null,
+     "mode": "full",
+     "ran": [],
+     "required": [
+      "distinct_evaluator",
+      "judge"
+     ],
+     "skipped": [
+      {
+       "detail": "unit 1 is a step its phase declares read-only: the judge reviews a changed tree, and this step's phase may not change one",
+       "instrument": "judge",
+       "reason": "not_applicable"
+      }
+     ],
+     "tree": null
+    },
+    "catalog": "understand",
+    "collection_scope": "wicked-agent/run-compose-1/shared",
+    "conformance_ref": "84d6971d9e008d3754c2bfba36a1f87dbb11d1b84c758c6f65cdf540be58cff7",
+    "council_task_ref": null,
+    "default_floor": true,
+    "denial_reason": null,
+    "denials_behind": [],
+    "description": "pa-scope \u2014 Compose the product plan for project proj_179558259512700000 (2 requirement(s)) ||| Rate this run's risk before any work starts (READ ONLY: change nothing). The plan: produce -> critique. There is no repo: judge the content and its audience; client-facing work (a customer deliverable, an RFP answer, a demo shown outside) rates higher than internal work. End with exactly one line:\nRISK {\"score\":N,\"reasons\":[\"...\"]}\nN is 0-100: 0-19 internal and routine, 20-39 shared internally, 40-69 client-facing, 70-100 high stakes (pauses for approval). A missing or malformed RISK line scores 100.",
+    "gate": "auto",
+    "id": "run-compose-1:pa-scope",
+    "instructions": "Rate this run's risk before any work starts (READ ONLY: change nothing). The plan: produce -> critique. There is no repo: judge the content and its audience; client-facing work (a customer deliverable, an RFP answer, a demo shown outside) rates higher than internal work. End with exactly one line:\nRISK {\"score\":N,\"reasons\":[\"...\"]}\nN is 0-100: 0-19 internal and routine, 20-39 shared internally, 40-69 client-facing, 70-100 high stakes (pauses for approval). A missing or malformed RISK line scores 100.",
+    "last_attempt": 0,
+    "ord": 1,
+    "phase_ref": "wf-run-compose-1:unit-1",
+    "phase_status": "approved",
+    "providers_unobserved": true,
+    "required_deliverables": [],
+    "role": "neutral",
+    "routing": {
+     "method": "teamed",
+     "winner": "beta"
+    },
+    "session_id": "run-compose-1",
+    "skill_ref": null,
+    "stage": "recon",
+    "status": "done",
+    "structured_description": true,
+    "team": {
+     "ledger": {
+      "finalPass": "skipped",
+      "findings": [],
+      "monitors": [],
+      "rejected": {
+       "belowBar": 0,
+       "duplicate": 0,
+       "malformed": 0,
+       "unconfirmed": 0
+      },
+      "renderedToJudge": false,
+      "teamPause": false
+     },
+     "ledger_source": "no_bus",
+     "reason": "team transport unavailable: no bus (WICKED_BUS_DB unset)",
+     "transcript": {
+      "count": 0,
+      "events": [],
+      "from_event_id": 0,
+      "to_event_id": 0,
+      "truncated": false
+     },
+     "transport": "none"
+    },
+    "team_run": true,
+    "validator": null,
+    "worktree_guarded": true
+   },
+   {
+    "allowed_skills": [],
+    "assigned_cli": "alpha",
+    "assigned_invocation": "alpha {PROMPT}",
+    "assurance": {
+     "attempt": 0,
+     "creator": "alpha",
+     "evaluator": null,
+     "judge": null,
+     "mode": "full",
+     "ran": [],
+     "required": [
+      "distinct_evaluator",
+      "judge"
+     ],
+     "skipped": [
+      {
+       "detail": "unit 2 is a step its phase declares read-only: the judge reviews a changed tree, and this step's phase may not change one",
+       "instrument": "judge",
+       "reason": "not_applicable"
+      }
+     ],
+     "tree": null
+    },
+    "catalog": "test_plan",
+    "collection_scope": "wicked-agent/run-compose-1/shared",
+    "conformance_ref": "dd49c8ae0d9437add170ed82fb4ec1aa4215155c56ecc7da354f195e448f8939",
+    "council_task_ref": null,
+    "default_floor": true,
+    "denial_reason": null,
+    "denials_behind": [],
+    "description": "test_plan \u2014 Compose the product plan for project proj_179558259512700000 (2 requirement(s))",
+    "gate": "auto",
+    "id": "run-compose-1:test_plan",
+    "last_attempt": 0,
+    "ord": 2,
+    "phase_ref": "wf-run-compose-1:unit-2",
+    "phase_status": "approved",
+    "providers_unobserved": true,
+    "required_deliverables": [],
+    "role": "neutral",
+    "routing": {
+     "method": "evaluator_distinct",
+     "was": "beta",
+     "winner": "alpha"
+    },
+    "session_id": "run-compose-1",
+    "skill_ref": null,
+    "stage": "test",
+    "status": "done",
+    "structured_description": true,
+    "team": {
+     "ledger": {
+      "finalPass": "skipped",
+      "findings": [],
+      "monitors": [],
+      "rejected": {
+       "belowBar": 0,
+       "duplicate": 0,
+       "malformed": 0,
+       "unconfirmed": 0
+      },
+      "renderedToJudge": false,
+      "teamPause": false
+     },
+     "ledger_source": "no_bus",
+     "reason": "team transport unavailable: no bus (WICKED_BUS_DB unset)",
+     "transcript": {
+      "count": 0,
+      "events": [],
+      "from_event_id": 0,
+      "to_event_id": 0,
+      "truncated": false
+     },
+     "transport": "none"
+    },
+    "team_run": true,
+    "validator": null,
+    "worktree_guarded": true
+   },
+   {
+    "allowed_skills": [],
+    "assigned_cli": "beta",
+    "assigned_invocation": "beta {PROMPT}",
+    "assurance": {
+     "attempt": 0,
+     "creator": "beta",
+     "evaluator": null,
+     "judge": null,
+     "mode": "full",
+     "ran": [],
+     "required": [
+      "distinct_evaluator",
+      "judge"
+     ],
+     "skipped": [
+      {
+       "detail": "unit 3 is a step its phase declares read-only: the judge reviews a changed tree, and this step's phase may not change one",
+       "instrument": "judge",
+       "reason": "not_applicable"
+      }
+     ],
+     "tree": null
+    },
+    "catalog": "design",
+    "collection_scope": "wicked-agent/run-compose-1/shared",
+    "conformance_ref": "841de9fc66e51bceec74729176927e872d1965c4b4ee9c9f8cf73ec8e1558972",
+    "council_task_ref": null,
+    "default_floor": true,
+    "denial_reason": null,
+    "denials_behind": [],
+    "description": "design \u2014 Compose the product plan for project proj_179558259512700000 (2 requirement(s))",
+    "gate": "auto",
+    "id": "run-compose-1:design",
+    "last_attempt": 0,
+    "ord": 3,
+    "phase_ref": "wf-run-compose-1:unit-3",
+    "phase_status": "approved",
+    "providers_unobserved": true,
+    "required_deliverables": [],
+    "role": "neutral",
+    "routing": {
+     "method": "teamed",
+     "winner": "beta"
+    },
+    "session_id": "run-compose-1",
+    "skill_ref": null,
+    "stage": "recon",
+    "status": "done",
+    "structured_description": true,
+    "team": {
+     "ledger": {
+      "finalPass": "skipped",
+      "findings": [],
+      "monitors": [],
+      "rejected": {
+       "belowBar": 0,
+       "duplicate": 0,
+       "malformed": 0,
+       "unconfirmed": 0
+      },
+      "renderedToJudge": false,
+      "teamPause": false
+     },
+     "ledger_source": "no_bus",
+     "reason": "team transport unavailable: no bus (WICKED_BUS_DB unset)",
+     "transcript": {
+      "count": 0,
+      "events": [],
+      "from_event_id": 0,
+      "to_event_id": 0,
+      "truncated": false
+     },
+     "transport": "none"
+    },
+    "team_run": true,
+    "validator": null,
+    "worktree_guarded": true
+   },
+   {
+    "allowed_skills": [],
+    "assigned_cli": "beta",
+    "assigned_invocation": "beta {PROMPT}",
+    "assurance": {
+     "attempt": 0,
+     "creator": "beta",
+     "evaluator": null,
+     "judge": null,
+     "mode": "full",
+     "ran": [],
+     "required": [
+      "distinct_evaluator",
+      "judge"
+     ],
+     "skipped": [
+      {
+       "detail": "unit 4 is a step its phase declares read-only: the judge reviews a changed tree, and this step's phase may not change one",
+       "instrument": "judge",
+       "reason": "not_applicable"
+      }
+     ],
+     "tree": null
+    },
+    "catalog": "architecture",
+    "collection_scope": "wicked-agent/run-compose-1/shared",
+    "conformance_ref": "d2483746b0a85813965afa223301a69cc33263ec2d2e88fa049ba2d3c7de6172",
+    "council_task_ref": null,
+    "default_floor": true,
+    "denial_reason": null,
+    "denials_behind": [],
+    "description": "architecture \u2014 Compose the product plan for project proj_179558259512700000 (2 requirement(s))",
+    "gate": "auto",
+    "id": "run-compose-1:architecture",
+    "last_attempt": 0,
+    "ord": 4,
+    "phase_ref": "wf-run-compose-1:unit-4",
+    "phase_status": "approved",
+    "providers_unobserved": true,
+    "required_deliverables": [],
+    "role": "neutral",
+    "routing": {
+     "method": "teamed",
+     "winner": "beta"
+    },
+    "session_id": "run-compose-1",
+    "skill_ref": null,
+    "stage": "recon",
+    "status": "done",
+    "structured_description": true,
+    "team": {
+     "ledger": {
+      "finalPass": "skipped",
+      "findings": [],
+      "monitors": [],
+      "rejected": {
+       "belowBar": 0,
+       "duplicate": 0,
+       "malformed": 0,
+       "unconfirmed": 0
+      },
+      "renderedToJudge": false,
+      "teamPause": false
+     },
+     "ledger_source": "no_bus",
+     "reason": "team transport unavailable: no bus (WICKED_BUS_DB unset)",
+     "transcript": {
+      "count": 0,
+      "events": [],
+      "from_event_id": 0,
+      "to_event_id": 0,
+      "truncated": false
+     },
+     "transport": "none"
+    },
+    "team_run": true,
+    "validator": null,
+    "worktree_guarded": true
+   },
+   {
+    "allowed_skills": [],
+    "assigned_cli": "beta",
+    "assigned_invocation": "beta {PROMPT}",
+    "assurance": {
+     "attempt": 0,
+     "creator": "beta",
+     "evaluator": null,
+     "judge": null,
+     "mode": "full",
+     "ran": [],
+     "required": [
+      "distinct_evaluator",
+      "judge"
+     ],
+     "skipped": [
+      {
+       "detail": "unit 5 ran without a worktree: no change for a judge to review",
+       "instrument": "judge",
+       "reason": "not_applicable"
+      }
+     ],
+     "tree": null
+    },
+    "authored_binaries": [
+     "beta"
+    ],
+    "authored_by": [
+     "beta"
+    ],
+    "catalog": "produce",
+    "collection_scope": "wicked-agent/run-compose-1/shared",
+    "conformance_ref": "7ad880d28ebdcd8fb1cafc93edc8f2c3cfb519f63b5be068527a45b396f65a36",
+    "council_task_ref": null,
+    "default_floor": true,
+    "denial_reason": null,
+    "denials_behind": [],
+    "description": "draft \u2014 Compose the product plan for project proj_179558259512700000 (2 requirement(s)) ||| Compose a product plan for project proj_179558259512700000 from these 2 requirement(s):\n- repo-a REQ-1: Sign in \u2014 A user signs in with email.\n- repo-a REQ-2: Sign out \u2014 A user signs out.\n\nGroup them into epics, each epic into features, each feature into user stories with acceptance\ncriteria. Every feature names the requirement refs it covers ({\"repoId\",\"key\"}, exactly as listed);\nevery listed requirement is covered at least once, and nothing is invented that no requirement asks for.\nDo not create issues or change any repository. End with ONE fenced ```json block, the plan:\n{\"epics\":[{\"title\":\"\",\"features\":[{\"title\":\"\",\"requirementRefs\":[{\"repoId\":\"\",\"key\":\"\"}],\n\"stories\":[{\"title\":\"\",\"acceptance\":[\"\"]}]}]}]}",
+    "gate": "auto",
+    "id": "run-compose-1:draft",
+    "instructions": "Compose a product plan for project proj_179558259512700000 from these 2 requirement(s):\n- repo-a REQ-1: Sign in \u2014 A user signs in with email.\n- repo-a REQ-2: Sign out \u2014 A user signs out.\n\nGroup them into epics, each epic into features, each feature into user stories with acceptance\ncriteria. Every feature names the requirement refs it covers ({\"repoId\",\"key\"}, exactly as listed);\nevery listed requirement is covered at least once, and nothing is invented that no requirement asks for.\nDo not create issues or change any repository. End with ONE fenced ```json block, the plan:\n{\"epics\":[{\"title\":\"\",\"features\":[{\"title\":\"\",\"requirementRefs\":[{\"repoId\":\"\",\"key\":\"\"}],\n\"stories\":[{\"title\":\"\",\"acceptance\":[\"\"]}]}]}]}",
+    "last_attempt": 0,
+    "ord": 5,
+    "phase_ref": "wf-run-compose-1:unit-5",
+    "phase_status": "approved",
+    "providers_unobserved": true,
+    "required_deliverables": [],
+    "role": "creator",
+    "routing": {
+     "method": "teamed",
+     "winner": "beta"
+    },
+    "session_id": "run-compose-1",
+    "skill_ref": null,
+    "stage": "build",
+    "status": "done",
+    "structured_description": true,
+    "team": {
+     "ledger": {
+      "finalPass": "skipped",
+      "findings": [],
+      "monitors": [],
+      "rejected": {
+       "belowBar": 0,
+       "duplicate": 0,
+       "malformed": 0,
+       "unconfirmed": 0
+      },
+      "renderedToJudge": false,
+      "teamPause": false
+     },
+     "ledger_source": "no_bus",
+     "reason": "team transport unavailable: no bus (WICKED_BUS_DB unset)",
+     "transcript": {
+      "count": 0,
+      "events": [],
+      "from_event_id": 0,
+      "to_event_id": 0,
+      "truncated": false
+     },
+     "transport": "none"
+    },
+    "team_run": true,
+    "validator": null
+   },
+   {
+    "allowed_skills": [],
+    "assigned_cli": "alpha",
+    "assigned_invocation": "alpha {PROMPT}",
+    "assurance": {
+     "attempt": 0,
+     "creator": "beta",
+     "evaluator": "alpha",
+     "judge": null,
+     "mode": "full",
+     "ran": [
+      "distinct_evaluator"
+     ],
+     "required": [
+      "distinct_evaluator",
+      "judge"
+     ],
+     "skipped": [
+      {
+       "detail": "unit 6 is a review its phase declares read-only: its evaluator's own verdict decides this gate (a judge reviews a changed tree, or a report under a cited-findings rubric)",
+       "instrument": "judge",
+       "reason": "not_applicable"
+      }
+     ],
+     "tree": null
+    },
+    "catalog": "critique",
+    "collection_scope": "wicked-agent/run-compose-1/shared",
+    "conformance_ref": "68e1daf186f0938fd7d75bf790ddeb6c1aa651273107bab3cd2c25bfcdb84c7e",
+    "council_task_ref": null,
+    "default_floor": true,
+    "denial_reason": null,
+    "denials_behind": [],
+    "depends_on": [
+     "draft"
+    ],
+    "description": "review \u2014 Compose the product plan for project proj_179558259512700000 (2 requirement(s)) ||| Review the drafted product plan for project proj_179558259512700000 against the 2 requirement(s) it was drafted from:\n- repo-a REQ-1: Sign in \u2014 A user signs in with email.\n- repo-a REQ-2: Sign out \u2014 A user signs out.\n\nEvery listed requirement is covered at least once; every feature's requirementRefs are refs from this list,\nexactly; nothing is invented that no requirement asks for; the stories are testable; the plan is ONE\nwell-formed fenced JSON block. A gap, an unknown ref or an invented item is a FAIL naming it.",
+    "gate": {
+     "human_confirm": {
+      "unconditional": true
+     }
+    },
+    "id": "run-compose-1:review",
+    "instructions": "Review the drafted product plan for project proj_179558259512700000 against the 2 requirement(s) it was drafted from:\n- repo-a REQ-1: Sign in \u2014 A user signs in with email.\n- repo-a REQ-2: Sign out \u2014 A user signs out.\n\nEvery listed requirement is covered at least once; every feature's requirementRefs are refs from this list,\nexactly; nothing is invented that no requirement asks for; the stories are testable; the plan is ONE\nwell-formed fenced JSON block. A gap, an unknown ref or an invented item is a FAIL naming it.",
+    "last_attempt": 0,
+    "ord": 6,
+    "phase_ref": "wf-run-compose-1:unit-6",
+    "phase_status": "approved",
+    "providers_unobserved": true,
+    "required_deliverables": [],
+    "role": "evaluator",
+    "routing": {
+     "method": "evaluator_distinct",
+     "was": "beta",
+     "winner": "alpha"
+    },
+    "rule_instructions": "Compose the product plan for project proj_179558259512700000 (2 requirement(s))",
+    "rule_steps": [
+     {
+      "kind": "understand",
+      "tokens": [
+       "unit-1",
+       "pa-scope",
+       "understand"
+      ]
+     },
+     {
+      "kind": "test_plan",
+      "tokens": [
+       "unit-2",
+       "test_plan"
+      ]
+     },
+     {
+      "kind": "design",
+      "tokens": [
+       "unit-3",
+       "design"
+      ]
+     },
+     {
+      "kind": "architecture",
+      "tokens": [
+       "unit-4",
+       "architecture"
+      ]
+     },
+     {
+      "kind": "produce",
+      "tokens": [
+       "unit-5",
+       "draft",
+       "produce"
+      ]
+     },
+     {
+      "kind": "critique",
+      "tokens": [
+       "unit-6",
+       "review",
+       "critique"
+      ]
+     }
+    ],
+    "session_id": "run-compose-1",
+    "skill_ref": null,
+    "stage": "review",
+    "status": "done",
+    "structured_description": true,
+    "team": {
+     "ledger": {
+      "finalPass": "skipped",
+      "findings": [],
+      "monitors": [],
+      "rejected": {
+       "belowBar": 0,
+       "duplicate": 0,
+       "malformed": 0,
+       "unconfirmed": 0
+      },
+      "renderedToJudge": false,
+      "teamPause": false
+     },
+     "ledger_source": "no_bus",
+     "reason": "team transport unavailable: no bus (WICKED_BUS_DB unset)",
+     "transcript": {
+      "count": 0,
+      "events": [],
+      "from_event_id": 0,
+      "to_event_id": 0,
+      "truncated": false
+     },
+     "transport": "none"
+    },
+    "team_run": true,
+    "validator": null,
+    "worktree_guarded": true
+   }
+  ]
+ },
+ "answers": {
+  "get-before": {
+   "status": 200,
+   "body": {
+    "runId": "run-compose-1",
+    "publishable": {
+     "ok": true,
+     "items": 4
+    },
+    "targets": [
+     {
+      "repo": "owner/app",
+      "source": "gh"
+     }
+    ],
+    "publications": []
+   }
+  },
+  "get-not-a-compose": {
+   "status": 200,
+   "body": {
+    "runId": "run-compose-1",
+    "publishable": {
+     "ok": false,
+     "code": "not_a_compose",
+     "error": "this run was not composed for this project, or it was composed before publishing was added; compose again to publish"
+    },
+    "targets": [
+     {
+      "repo": "owner/app",
+      "source": "gh"
+     }
+    ],
+    "publications": []
+   }
+  },
+  "get-unverified": {
+   "status": 200,
+   "body": {
+    "runId": "run-compose-1",
+    "publishable": {
+     "ok": false,
+     "code": "compose_unverified",
+     "error": "this plan was edited at its gate; publishing an edited plan isn't supported yet, compose again to publish"
+    },
+    "targets": [
+     {
+      "repo": "owner/app",
+      "source": "gh"
+     }
+    ],
+    "publications": []
+   }
+  },
+  "post-card": {
+   "status": 200,
+   "body": {
+    "done": false,
+    "card": {
+     "runId": "run-compose-1",
+     "projectId": "proj_179558259512700000",
+     "repo": "owner/app",
+     "source": "gh",
+     "identity": "pat-bot",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "body": "Features:\n- Sign in and out\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1 -->",
+       "parentKey": null
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "body": "Requirements:\n- repo-a REQ-1\n- repo-a REQ-2\n\nPart of {{parent}}\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1.f1 -->",
+       "parentKey": "e1"
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "body": "Acceptance criteria:\n- [ ] A user with an email signs in\n- [ ] A wrong password is refused\n\nPart of {{parent}}\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1.f1.s1 -->",
+       "parentKey": "e1.f1"
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "body": "Acceptance criteria:\n- [ ] The session ends and the user's data is hidden\n\nPart of {{parent}}\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1.f1.s2 -->",
+       "parentKey": "e1.f1"
+      }
+     ]
+    },
+    "publishHash": "d6d4b9e513995b00d48537090f23521c2b57959b7c590c637f9644610efaba13",
+    "publication": null
+   }
+  },
+  "post-done": {
+   "status": 200,
+   "body": {
+    "done": true,
+    "card": {
+     "runId": "run-compose-1",
+     "projectId": "proj_179558259512700000",
+     "repo": "owner/app",
+     "source": "gh",
+     "identity": "pat-bot",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "body": "Features:\n- Sign in and out\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1 -->",
+       "parentKey": null
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "body": "Requirements:\n- repo-a REQ-1\n- repo-a REQ-2\n\nPart of {{parent}}\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1.f1 -->",
+       "parentKey": "e1"
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "body": "Acceptance criteria:\n- [ ] A user with an email signs in\n- [ ] A wrong password is refused\n\nPart of {{parent}}\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1.f1.s1 -->",
+       "parentKey": "e1.f1"
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "body": "Acceptance criteria:\n- [ ] The session ends and the user's data is hidden\n\nPart of {{parent}}\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1.f1.s2 -->",
+       "parentKey": "e1.f1"
+      }
+     ]
+    },
+    "publication": {
+     "repo": "owner/app",
+     "source": "gh",
+     "publishHash": "d6d4b9e513995b00d48537090f23521c2b57959b7c590c637f9644610efaba13",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "state": "created",
+       "number": 100,
+       "url": "https://github.com/owner/app/issues/100",
+       "readBack": "ok"
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "state": "created",
+       "number": 101,
+       "url": "https://github.com/owner/app/issues/101",
+       "readBack": "ok"
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "state": "created",
+       "number": 102,
+       "url": "https://github.com/owner/app/issues/102",
+       "readBack": "ok"
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "state": "created",
+       "number": 103,
+       "url": "https://github.com/owner/app/issues/103",
+       "readBack": "ok"
+      }
+     ],
+     "published": true
+    }
+   }
+  },
+  "get-after": {
+   "status": 200,
+   "body": {
+    "runId": "run-compose-1",
+    "publishable": {
+     "ok": true,
+     "items": 4
+    },
+    "targets": [
+     {
+      "repo": "owner/app",
+      "source": "gh"
+     }
+    ],
+    "publications": [
+     {
+      "repo": "owner/app",
+      "source": "gh",
+      "publishHash": "d6d4b9e513995b00d48537090f23521c2b57959b7c590c637f9644610efaba13",
+      "items": [
+       {
+        "key": "e1",
+        "kind": "epic",
+        "title": "Accounts & access",
+        "state": "created",
+        "number": 100,
+        "url": "https://github.com/owner/app/issues/100",
+        "readBack": "ok"
+       },
+       {
+        "key": "e1.f1",
+        "kind": "feature",
+        "title": "Sign in and out",
+        "state": "created",
+        "number": 101,
+        "url": "https://github.com/owner/app/issues/101",
+        "readBack": "ok"
+       },
+       {
+        "key": "e1.f1.s1",
+        "kind": "story",
+        "title": "Email sign in (< 3 tries)",
+        "state": "created",
+        "number": 102,
+        "url": "https://github.com/owner/app/issues/102",
+        "readBack": "ok"
+       },
+       {
+        "key": "e1.f1.s2",
+        "kind": "story",
+        "title": "Sign out from any page",
+        "state": "created",
+        "number": 103,
+        "url": "https://github.com/owner/app/issues/103",
+        "readBack": "ok"
+       }
+      ],
+      "published": true
+     }
+    ]
+   }
+  },
+  "post-unsure": {
+   "status": 200,
+   "body": {
+    "done": true,
+    "card": {
+     "runId": "run-compose-1",
+     "projectId": "proj_179558259512700000",
+     "repo": "owner/app",
+     "source": "gh",
+     "identity": "pat-bot",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "body": "Features:\n- Sign in and out\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1 -->",
+       "parentKey": null
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "body": "Requirements:\n- repo-a REQ-1\n- repo-a REQ-2\n\nPart of {{parent}}\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1.f1 -->",
+       "parentKey": "e1"
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "body": "Acceptance criteria:\n- [ ] A user with an email signs in\n- [ ] A wrong password is refused\n\nPart of {{parent}}\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1.f1.s1 -->",
+       "parentKey": "e1.f1"
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "body": "Acceptance criteria:\n- [ ] The session ends and the user's data is hidden\n\nPart of {{parent}}\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1.f1.s2 -->",
+       "parentKey": "e1.f1"
+      }
+     ]
+    },
+    "publication": {
+     "repo": "owner/app",
+     "source": "gh",
+     "publishHash": "30839eaed6e08fa24a674eebeea057b0e1ae58429be454a73741ce1c1e9b8ca7",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "state": "unsure",
+       "number": null,
+       "url": null,
+       "readBack": null,
+       "why": "GitHub answered an error, which it also does after it created an issue (gh answered an error; its other words are not shown)"
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      }
+     ],
+     "published": false
+    }
+   }
+  },
+  "get-unsure": {
+   "status": 200,
+   "body": {
+    "runId": "run-compose-1",
+    "publishable": {
+     "ok": true,
+     "items": 4
+    },
+    "targets": [
+     {
+      "repo": "owner/app",
+      "source": "gh"
+     }
+    ],
+    "publications": [
+     {
+      "repo": "owner/app",
+      "source": "gh",
+      "publishHash": "30839eaed6e08fa24a674eebeea057b0e1ae58429be454a73741ce1c1e9b8ca7",
+      "items": [
+       {
+        "key": "e1",
+        "kind": "epic",
+        "title": "Accounts & access",
+        "state": "unsure",
+        "number": null,
+        "url": null,
+        "readBack": null,
+        "why": "GitHub answered an error, which it also does after it created an issue (gh answered an error; its other words are not shown)"
+       },
+       {
+        "key": "e1.f1",
+        "kind": "feature",
+        "title": "Sign in and out",
+        "state": "missing",
+        "number": null,
+        "url": null,
+        "readBack": null
+       },
+       {
+        "key": "e1.f1.s1",
+        "kind": "story",
+        "title": "Email sign in (< 3 tries)",
+        "state": "missing",
+        "number": null,
+        "url": null,
+        "readBack": null
+       },
+       {
+        "key": "e1.f1.s2",
+        "kind": "story",
+        "title": "Sign out from any page",
+        "state": "missing",
+        "number": null,
+        "url": null,
+        "readBack": null
+       }
+      ],
+      "published": false
+     }
+    ]
+   }
+  },
+  "post-unresolved": {
+   "status": 200,
+   "body": {
+    "done": false,
+    "card": {
+     "runId": "run-compose-1",
+     "projectId": "proj_179558259512700000",
+     "repo": "owner/app",
+     "source": "gh",
+     "identity": "pat-bot",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "body": "Features:\n- Sign in and out\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1 -->",
+       "parentKey": null
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "body": "Requirements:\n- repo-a REQ-1\n- repo-a REQ-2\n\nPart of {{parent}}\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1.f1 -->",
+       "parentKey": "e1"
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "body": "Acceptance criteria:\n- [ ] A user with an email signs in\n- [ ] A wrong password is refused\n\nPart of {{parent}}\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1.f1.s1 -->",
+       "parentKey": "e1.f1"
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "body": "Acceptance criteria:\n- [ ] The session ends and the user's data is hidden\n\nPart of {{parent}}\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1.f1.s2 -->",
+       "parentKey": "e1.f1"
+      }
+     ]
+    },
+    "publishHash": "30839eaed6e08fa24a674eebeea057b0e1ae58429be454a73741ce1c1e9b8ca7",
+    "publication": {
+     "repo": "owner/app",
+     "source": "gh",
+     "publishHash": "30839eaed6e08fa24a674eebeea057b0e1ae58429be454a73741ce1c1e9b8ca7",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "state": "unsure",
+       "number": null,
+       "url": null,
+       "readBack": null,
+       "why": "GitHub answered an error, which it also does after it created an issue (gh answered an error; its other words are not shown)"
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      }
+     ],
+     "published": false
+    }
+   }
+  },
+  "post-resolve-absent": {
+   "status": 200,
+   "body": {
+    "done": true,
+    "card": {
+     "runId": "run-compose-1",
+     "projectId": "proj_179558259512700000",
+     "repo": "owner/app",
+     "source": "gh",
+     "identity": "pat-bot",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "body": "Features:\n- Sign in and out\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1 -->",
+       "parentKey": null
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "body": "Requirements:\n- repo-a REQ-1\n- repo-a REQ-2\n\nPart of {{parent}}\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1.f1 -->",
+       "parentKey": "e1"
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "body": "Acceptance criteria:\n- [ ] A user with an email signs in\n- [ ] A wrong password is refused\n\nPart of {{parent}}\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1.f1.s1 -->",
+       "parentKey": "e1.f1"
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "body": "Acceptance criteria:\n- [ ] The session ends and the user's data is hidden\n\nPart of {{parent}}\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1.f1.s2 -->",
+       "parentKey": "e1.f1"
+      }
+     ]
+    },
+    "publication": {
+     "repo": "owner/app",
+     "source": "gh",
+     "publishHash": "30839eaed6e08fa24a674eebeea057b0e1ae58429be454a73741ce1c1e9b8ca7",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "state": "absent",
+       "number": null,
+       "url": null,
+       "readBack": null
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      }
+     ],
+     "published": false
+    }
+   }
+  },
+  "post-card-changed": {
+   "status": 409,
+   "body": {
+    "error": "the card changed since it was shown (the plan, the account, the source or the link); nothing was sent: look at it again",
+    "code": "card_changed",
+    "card": {
+     "runId": "run-compose-1",
+     "projectId": "proj_179558259512700000",
+     "repo": "owner/app",
+     "source": "gh",
+     "identity": "pat-bot",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts and access",
+       "body": "Features:\n- Sign in and out\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1 -->",
+       "parentKey": null
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "body": "Requirements:\n- repo-a REQ-1\n- repo-a REQ-2\n\nPart of {{parent}}\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1.f1 -->",
+       "parentKey": "e1"
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "body": "Acceptance criteria:\n- [ ] A user with an email signs in\n- [ ] A wrong password is refused\n\nPart of {{parent}}\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1.f1.s1 -->",
+       "parentKey": "e1.f1"
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "body": "Acceptance criteria:\n- [ ] The session ends and the user's data is hidden\n\nPart of {{parent}}\n\n---\nPublished by wicked-crew from run run-compose-1\n<!-- wicked-publish run=run-compose-1 key=e1.f1.s2 -->",
+       "parentKey": "e1.f1"
+      }
+     ]
+    },
+    "publishHash": "9da3155fd8e7933e4213ac086500fe8d475afc5ad42533ef1eeaad34c10ad892"
+   }
+  }
+ }
+}

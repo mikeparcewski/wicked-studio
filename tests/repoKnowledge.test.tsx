@@ -216,6 +216,21 @@ describe('the knowledge store', () => {
     release.shift()?.();
   });
 
+  it('studio#1402: a repository not indexed yet (crew#1887: 200 with no kinds and code not_indexed) reads as a code graph not built, never unknown', async () => {
+    // The body exactly as crew writes it: packages/crew/src/api/routes.ts at crew#1887 head d8177de5, the
+    // `/governance/graph` catch: `return { kinds: [], ...NOT_INDEXED }`, NOT_INDEXED = { error, code: 'not_indexed' }.
+    mocks.kinds.mockResolvedValue({ kinds: [], error: 'this repository has no code graph yet: index it first', code: 'not_indexed' });
+    mocks.reqs.mockRejectedValue(new ApiError(404, 'Not Found', { code: 'notGenerated', workflow: 'domain-extraction' }));
+    useRepoKnowledge.getState().ensure(['fresh']);
+    await vi.waitFor(() => expect(useRepoKnowledge.getState().reads['fresh']!.kinds.state).toBe('ok'));
+    const read = useRepoKnowledge.getState().reads['fresh']!;
+    expect(read.kinds).toMatchObject({ state: 'ok', nodes: 0 });
+    // Kept as fresh: a known answer, not a failure the next page reads again.
+    expect(useRepoKnowledge.getState().at['fresh']).toBeTypeOf('number');
+    const code = knowledgeMarks(repo('fresh'), [], read, NOW).find((m) => m.id === 'code')!;
+    expect(code).toMatchObject({ value: 'not built', tone: 'none', title: 'Code graph: not built yet. Indexing the repository builds it' });
+  });
+
   it('a failed read lands as failed (the marks say unknown) and is not kept as fresh: the next ask reads it again', async () => {
     mocks.kinds.mockRejectedValue(new Error('engine down'));
     mocks.reqs.mockRejectedValue(new ApiError(500, 'boom'));

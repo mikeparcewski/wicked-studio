@@ -735,6 +735,9 @@ function KnowledgeTab({ graph, graphFailedHere, graphStateNow, hotspots, marks, 
     if (filesByLang.size === 0) return null;
     return Object.fromEntries([...filesByLang].map(([lang, files]) => [lang, files.size]));
   })();
+  // studio#1406: the mix is the served slice's; the bar names how many files it counted of the repository's whole-store
+  // file count (null when the wire has none).
+  const indexedFiles = typeof totals?.files === 'number' ? totals.files : null;
   const reqs = marks.find((m) => m.id === 'reqs');
   const reqGraph = marks.find((m) => m.id === 'reqgraph');
   return (
@@ -794,7 +797,7 @@ function KnowledgeTab({ graph, graphFailedHere, graphStateNow, hotspots, marks, 
         </Section>
         {/* Language composition (§3.3) — what this repo is actually built of. */}
         <Section title="Languages" testId="repo-languages">
-          <LanguageBar breakdown={langBreakdown} {...(graphStateNow.kind !== 'ready' ? { emptyText: graphFailedHere ? waitWord : graphWords.languages } : {})} />
+          <LanguageBar breakdown={langBreakdown} indexedFiles={indexedFiles} {...(graphStateNow.kind !== 'ready' ? { emptyText: graphFailedHere ? waitWord : graphWords.languages } : {})} />
         </Section>
       </div>
     </div>
