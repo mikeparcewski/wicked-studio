@@ -12082,6 +12082,12 @@
       ]
     },
     {
+      "testId": "memory-add-repo",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
       "testId": "memory-add-retired",
       "files": [
         "src/components/memory/MemoryPage.tsx"
@@ -12116,6 +12122,12 @@
       "testId": "memory-add-thread",
       "files": [
         "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-tier",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {

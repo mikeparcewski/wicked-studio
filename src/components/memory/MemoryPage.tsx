@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { askPage, PageAskButton, pageTextLines, usePageChatHostPage } from '../chat/PageChat.js';
 import {
-  addMemory, AddMemoryApproveError, editMemory, isEraseByIdUnsupported, isMemoryEditUnsupported, isMemoryUnsupported,
+  addMemory, AddMemoryApproveError, AddMemoryScopeUnsupported, editMemory, isEraseByIdUnsupported, isMemoryEditUnsupported, isMemoryUnsupported,
   eraseMemoryItem, listMemories, listRetiredMemories, memoryCoverage, memoryPath, readMemoryView, retireMemory, retireMemoryItem,
   type MemoryCoverage, type MemoryItem, type MemoryView,
 } from '../../api/memory.js';
-import { isProposalsUnsupported, listProposals, proposalKind } from '../../api/proposals.js';
+import { FILE_PROPOSAL_TIERS, isProposalsUnsupported, listProposals, proposalKind, type FileProposalTier } from '../../api/proposals.js';
+import type { RepoEntry } from '../../api/types.js';
+import { fetchReposCached, getCachedRepos } from '../../store/repoCache.js';
 import { readErrorKind } from '../../api/errors.js';
 import { relTime } from '../../board/relTime.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -57,10 +59,21 @@ function tierWord(tier: string): string {
   return TIER_WORDS[tier] ?? tier.charAt(0).toUpperCase() + tier.slice(1);
 }
 
-/** Where a memory applies, in words: its project facet, else its scope, else everywhere. */
-function whereWords(m: MemoryItem, projectName: (id: string) => string | null): string {
+/** (studio#1095) What a person may file a memory as, in the Add a memory dialog's words. */
+export const ADD_TIER_WORDS: Record<FileProposalTier, string> = {
+  semantic: 'A fact or decision',
+  procedural: 'How something is done',
+  episodic: 'Something that happened',
+};
+
+/** Where a memory applies, in words: its project and repository facets, else its scope, else everywhere. */
+function whereWords(m: MemoryItem, projectName: (id: string) => string | null, repoName: (id: string) => string | null = () => null): string {
   const project = m.facets.project;
-  if (project !== undefined && project !== '') return projectName(project) ?? `Project ${project}`;
+  const repo = m.facets['repo'];
+  const parts: string[] = [];
+  if (project !== undefined && project !== '') parts.push(projectName(project) ?? `Project ${project}`);
+  if (repo !== undefined && repo !== '') parts.push(`repository ${repoName(repo) ?? repo}`);
+  if (parts.length > 0) { const w = parts.join(', '); return w.charAt(0).toUpperCase() + w.slice(1); }
   return m.scope === '' ? 'Everywhere' : m.scope;
 }
 
@@ -211,8 +224,9 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
   );
 
   const memoryRow = (m: MemoryItem): React.ReactElement => {
-    const where = whereWords(m, projectName);
-    const tags = Object.entries(m.facets).filter(([k]) => k !== 'project');
+    // (studio#1095) The repository a memory is scoped to is part of where it applies, not a tag.
+    const where = whereWords(m, projectName, (id) => getCachedRepos()?.find((r) => r.id === id)?.name ?? null);
+    const tags = Object.entries(m.facets).filter(([k]) => k !== 'project' && k !== 'repo');
     const origin = memoryOrigin(m);
     const added = typeof m.created_at === 'number' ? shortDate(m.created_at * 1000) : null;
     return (
@@ -387,6 +401,16 @@ function AddMemoryDialog({ background, project, projects, onClose, onDone }: {
 }): React.ReactElement {
   const [text, setText] = useState('');
   const [where, setWhere] = useState<string>(project !== null && project !== 'default' ? project : '');
+  // (studio#1095) The kind it is filed as (a fact unless the person says otherwise), and the one repository it is
+  // recalled on (crew's `repo` facet: the repository's id, as a run on it names it).
+  const [tier, setTier] = useState<FileProposalTier>('semantic');
+  const [repo, setRepo] = useState<string>('');
+  const [repos, setRepos] = useState<RepoEntry[] | null>(getCachedRepos());
+  useEffect(() => {
+    let live = true;
+    Promise.resolve().then(fetchReposCached).then((r) => { if (live) setRepos(r); }, () => { if (live) setRepos((cur) => cur ?? []); });
+    return () => { live = false; };
+  }, []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
   const words = text.trim();
@@ -394,27 +418,44 @@ function AddMemoryDialog({ background, project, projects, onClose, onDone }: {
     if (words === '' || busy) return;
     setBusy(true); setError(null);
     try {
-      await addMemory(where === '' ? { content: words } : { content: words, project: where });
+      await addMemory({ content: words, tier, ...(where === '' ? {} : { project: where }), ...(repo === '' ? {} : { repo }) });
       onDone(`Added: ${shortContent(words)}`, 'ok');
     } catch (e) {
       if (e instanceof AddMemoryApproveError) onDone(`Filed as a proposal, but approving it failed (${e.message}). It waits under Proposals; nothing was remembered yet.`, 'fail');
-      else { setError(failure(e)); setBusy(false); }
+      else if (e instanceof AddMemoryScopeUnsupported) {
+        // Nothing was filed: the dialog stays open with the words, and says what to change.
+        setError({ kind: 'error', message: `This crew can’t save ${[tier !== 'semantic' ? 'a kind other than a fact' : null, repo !== '' ? 'a repository' : null].filter(Boolean).join(' or ')} yet, so nothing was saved. Update wicked-crew, or save it as a fact on every repository. (crew said: ${e.message})` });
+        setBusy(false);
+      } else { setError(failure(e)); setBusy(false); }
     }
   };
   const choices = projects.filter((p) => p.id !== 'default');
   return (
     <Dialog title="Add a memory" testId="memory-add-dialog" background={background} onClose={onClose}
-      sub="Something helpers should know and recall. It is saved as a fact: crew files it as a memory proposal and you approve it in the same step, so it is on the record like any approved proposal.">
+      sub="Something helpers should know and recall. crew files it as a memory proposal and you approve it in the same step, so it is on the record like any approved proposal.">
       <label className="wk-se-field">
         <span>What should helpers remember?</span>
         <textarea data-testid="memory-add-text" className="wk-field" rows={4} maxLength={4000} value={text} onChange={(e) => setText(e.target.value)}
           placeholder="e.g. The billing service is deployed by hand on Fridays; never schedule it." />
       </label>
       <label className="wk-se-field">
+        <span>Save it as</span>
+        <select data-testid="memory-add-tier" className="wk-field" value={tier} onChange={(e) => setTier(e.target.value as FileProposalTier)}>
+          {FILE_PROPOSAL_TIERS.map((t) => <option key={t} value={t}>{ADD_TIER_WORDS[t]}</option>)}
+        </select>
+      </label>
+      <label className="wk-se-field">
         <span>Recall it on</span>
         <select data-testid="memory-add-project" className="wk-field" value={where} onChange={(e) => setWhere(e.target.value)}>
           <option value="">Every project</option>
           {choices.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </label>
+      <label className="wk-se-field">
+        <span>Only on this repository</span>
+        <select data-testid="memory-add-repo" className="wk-field" value={repo} onChange={(e) => setRepo(e.target.value)}>
+          <option value="">Any repository</option>
+          {(repos ?? []).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
       </label>
       {error !== null && <StateBanner kind={error.kind} what="the new memory" error={error.message} onRetry={() => void save()} />}

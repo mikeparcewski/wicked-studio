@@ -26,7 +26,7 @@
 
 import { apiFetch } from './client.js';
 import { ApiError, isRouteAbsent } from './errors.js';
-import { approveProposal, fileProposal } from './proposals.js';
+import { approveProposal, fileProposal, type FileProposalScopedBody, type FileProposalTier } from './proposals.js';
 
 // ── The page's addresses ─────────────────────────────────────────────────────────────────────
 
@@ -179,19 +179,43 @@ export function isEraseByIdUnsupported(e: unknown): boolean {
 
 /**
  * Add a memory. crew has no direct memory write, so this is two calls: `POST /proposals` files the
- * words as a pending memory proposal (crew makes it a `semantic` memory; `project` becomes its
- * `project` facet, so it is recalled on that project only), then `POST /proposals/:id/approve`
- * approves it, which writes the memory. When the approve fails the proposal stays pending —
- * {@link AddMemoryApproveError} names it, so the page can say it waits under Proposals.
+ * words as a pending memory proposal (`tier` is its kind, a fact when unsaid; `project` and `repo`
+ * become those facets, so it is recalled on that project or repository only), then
+ * `POST /proposals/:id/approve` approves it, which writes the memory. When the approve fails the
+ * proposal stays pending — {@link AddMemoryApproveError} names it, so the page can say it waits under
+ * Proposals.
+ *
+ * (studio#1095) A fact on no repository sends exactly what it always did, so an older crew takes it. Any other kind,
+ * or a repository, needs crew#1878: an older crew refuses the body with a 400 before anything is filed, which is
+ * {@link AddMemoryScopeUnsupported}.
  */
-export async function addMemory(body: { content: string; project?: string }): Promise<{ proposalId: string; memoryId: string | null }> {
-  const { id } = await fileProposal(body.project !== undefined ? { content: body.content, project: body.project } : { content: body.content });
+export async function addMemory(body: { content: string; project?: string; repo?: string; tier?: FileProposalTier }): Promise<{ proposalId: string; memoryId: string | null }> {
+  const wire: FileProposalScopedBody = { content: body.content };
+  if (body.project !== undefined) wire.project = body.project;
+  if (body.repo !== undefined) wire.repo = body.repo;
+  if (body.tier !== undefined && body.tier !== 'semantic') wire.tier = body.tier;
+  let id: string;
+  try {
+    ({ id } = await fileProposal(wire));
+  } catch (e) {
+    if ((wire.tier !== undefined || wire.repo !== undefined) && e instanceof ApiError && e.status === 400) throw new AddMemoryScopeUnsupported(e);
+    throw e;
+  }
   try {
     const out = await approveProposal(id);
     const active = (out as { active_id?: unknown }).active_id;
     return { proposalId: id, memoryId: typeof active === 'string' ? active : null };
   } catch (e) {
     throw new AddMemoryApproveError(id, e);
+  }
+}
+
+/** crew refused a kind or a repository (a 400 on a body that carried one): nothing was filed. An older crew's strict
+ *  schema answers so; the page says which part to drop, or to update crew. */
+export class AddMemoryScopeUnsupported extends Error {
+  constructor(readonly reason: ApiError) {
+    super(reason.message);
+    this.name = 'AddMemoryScopeUnsupported';
   }
 }
 
