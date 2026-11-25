@@ -90,6 +90,9 @@ describe('reading crew’s answers', () => {
     const pageless = A('get-during-send').body as { publications: Pub[] };
     pageless.publications[1]!.items[1]!['url'] = null;
     expect(publicationsOf(pageless, RUN)).toBeNull();
+    const unnumbered = A('get-during-send').body as { publications: Pub[] };
+    unnumbered.publications[1]!.items[1]!['number'] = null;
+    expect(publicationsOf(unnumbered, RUN)).toBeNull();
   });
 
   it('a created issue crew has not read back yet is not checked yet, never deleted (wicked-crew#1919)', () => {
