@@ -264,7 +264,8 @@ describe('rename follow-ups (wicked-crew#1906)', () => {
     render(<SourceSheet target={{ mode: 'saved', server: { ...pgServer(), id: 'id-support-pg' } }} existing={['support-pg']} onSaved={vi.fn()} onRenamed={vi.fn()} onRenameUnsure={unsure} onAllowWrites={vi.fn()} onClose={vi.fn()} />);
     fireEvent.change(screen.getByTestId('source-name'), { target: { value: 'billing-pg' } });
     fireEvent.click(screen.getByTestId('source-rename-go'));
-    await screen.findByText(said);
+    await screen.findByText(/could not be put back and still names billing-pg/);
+    expect(screen.queryByText(/did not say whether/)).toBeNull();
     expect(unsure).not.toHaveBeenCalled();
     renameAnswer = () => Promise.reject(new ApiError(502, 'the rename landed; read the source list again', { error: 'the rename landed; read the source list again', code: 'renamed_unread' }));
     fireEvent.click(screen.getByTestId('source-rename-go'));

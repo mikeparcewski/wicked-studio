@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { agentSwitchWrites } from '../../api/sourceAgents.js';
-import { CREW_SOURCE, readSourceDeepLink, sourcesApi, sourcesPath, type McpServer, type SourceCatalogRelation, type SourceCatalogResponse, type SourcePrivilegeReport, type SourceRowWrite } from '../../api/sources.js';
+import { CREW_SOURCE, readSourceDeepLink, sourcesApi, sourcesPath, type McpServer, type RenamedServerFields, type SourceCatalogRelation, type SourceCatalogResponse, type SourcePrivilegeReport, type SourceRowWrite } from '../../api/sources.js';
 import type { McpGhCliState } from '../../api/mcp-wire.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
 import { useCapabilities } from '../../store/capabilities.js';
@@ -146,8 +146,11 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
     const pm = pmOn ? pmSources.find((x) => x.name === deep && pmSystemOf(x as { pm?: unknown }) !== null) : undefined;
     if (pm !== undefined) { setSheet(null); setPmSheet((cur) => (cur !== null && cur.mode === 'new' ? cur : { mode: 'saved', server: pm })); return; }
     if (pmSources.some((x) => x.name === deep)) { setSheet(null); setPmSheet(null); setError(`${deep} is a project-management tool this studio can’t read: update studio.`); return; }
+    // (wicked-crew#1906) An address from before a rename follows the source to its name now.
+    const renamed = [...sources, ...pmSources].find((x) => ((x as McpServer & RenamedServerFields).formerNames ?? []).includes(deep));
+    if (renamed !== undefined) { navigate(sourcesPath(renamed.name), { replace: true }); return; }
     if (!loading) { setSheet((cur) => (cur !== null && cur.mode !== 'new' ? null : cur)); setPmSheet((cur) => (cur !== null && cur.mode !== 'new' ? null : cur)); setError(`No source named ${deep}.`); }
-  }, [deep, sources, pmSources, pmOn, loading]);
+  }, [deep, sources, pmSources, pmOn, loading, navigate]);
 
   /** (crew#1514) The address's source now, for a rename that settles later: only a sheet still on the old name follows. */
   const deepNow = useRef(deep);

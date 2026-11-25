@@ -529,15 +529,20 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
       setRenameApps(null);
       setSaved(r);
     } catch (e) {
-      // crew answered and refused (a 4xx): nothing changed. No answer, or a server failure: it may have landed.
-      const refused = e instanceof ApiError && e.status >= 400 && e.status < 500;
-      if (!refused) onRenameUnsure?.(from, id);
+      // crew answered and refused (a 4xx, or a 5xx naming its refusal): nothing changed. No answer, a server failure
+      // with no code, or `renamed_unread` (it landed, unread): it may have landed (wicked-crew#1906).
+      const code = e instanceof ApiError && typeof e.body === 'object' && e.body !== null ? (e.body as { code?: unknown }).code : undefined;
+      const refused = e instanceof ApiError && ((e.status >= 400 && e.status < 500) || (e.status >= 500 && typeof code === 'string' && code !== 'renamed_unread'));
+      // A crew with no rename route answers its plain 404, with no code.
+      const noRoute = e instanceof ApiError && e.status === 404 && code === undefined;
+      // Not this name any more (another tab renamed or removed it): the page reads the list again and follows it by id.
+      if (!refused || (e instanceof ApiError && e.status === 404 && !noRoute)) onRenameUnsure?.(from, id);
       if (!alive.current) return;
       const using = refused ? appsBoundOf(e) : null;
       if (using !== null) setRenameApps({ to: renameTo, apps: using });
       else {
         setRenameApps(null);
-        setError(refused ? words(e) : `crew did not say whether ${from} was renamed (${words(e)}): the list is read again.`);
+        setError(noRoute ? 'This crew can’t rename sources yet: update crew.' : refused ? words(e) : `crew did not say whether ${from} was renamed (${words(e)}): the list is read again.`);
       }
     } finally {
       if (alive.current) setRenaming(false);
@@ -627,7 +632,7 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
                   <div className="wk-src-rename" data-testid="source-rename">
                     {renameBlocker !== null ? <span className="wk-src-note wk-src-tone-warn" data-testid="source-rename-blocker">{renameBlocker}</span>
                       : renameApps === null ? (
-                        <span className="wk-src-note">Rename {saved.name} to {renameTo}. Its connection, secret, switches and grants stay; {saved.name} stays reserved for it.</span>
+                        <span className="wk-src-note">Rename {saved.name} to {renameTo}. Its connection, secret, switches and grants stay; {saved.name} stays reserved for it. Jobs already running with {saved.name} picked can’t reach it after the rename.</span>
                       ) : (
                         <div className="wk-src-rename-confirm" role="alert" data-testid="source-rename-apps">
                           <p className="wk-src-note wk-src-tone-warn">{renameApps.apps.length === 1 ? '1 app uses' : `${renameApps.apps.length} apps use`} {saved.name}: {renameApps.apps.map((a) => a.name).join(', ')}.</p>
