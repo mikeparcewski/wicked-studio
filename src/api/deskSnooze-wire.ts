@@ -10,7 +10,10 @@
  * Refusals: 400 `desk_snooze_invalid` (an end not in the future, more than 7 days ahead, or a key over 200 characters);
  * 403 `human_operator_only` (an agent's token; an observer's gets the auth boundary's own 403); 500
  * `desk_snooze_unsaved` (nothing changed). A daemon from before crew#1124 answers 404: studio offers no snooze.
- * A snooze only defers the item on the Desk; it stays in `/system.attention[]`.
+ * Two kinds of key. Studio's own need-row keys (the Desk inbox, crew#1124) only defer the item on the Desk: crew keeps
+ * them and the item stays in `/system.attention[]`. A key crew issued on an attention item (`snooze.key`, api-types
+ * 0.231.0, studio#1416), sent with that item's `snooze.rank`, moves the item out of `/system.attention[]` and the
+ * level into `/system.snoozed[]` while it holds (crew's `holdSnoozed`).
  */
 
 import { apiFetch } from './client.js';

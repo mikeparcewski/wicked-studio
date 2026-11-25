@@ -13583,6 +13583,24 @@
       ]
     },
     {
+      "testId": "needs-item-snooze",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-item-snooze-cancel",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-item-snooze-failed",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
       "testId": "needs-ranked",
       "files": [
         "src/components/desk/NeedsRanked.tsx"
@@ -13704,6 +13722,36 @@
     },
     {
       "testId": "needs-single",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-snoozed",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-snoozed-item",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-snoozed-summary",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-snoozed-until",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-snoozed-wake",
       "files": [
         "src/components/desk/NeedsRanked.tsx"
       ]
@@ -28793,6 +28841,12 @@
       "pattern": "memory-*",
       "files": [
         "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "pattern": "needs-item-snooze-*",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
       ]
     },
     {
