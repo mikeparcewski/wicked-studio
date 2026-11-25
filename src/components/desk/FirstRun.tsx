@@ -47,19 +47,28 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
   // Ignored here, the one line with Undo shows until the page is left; ignored before, nothing shows.
   const [justIgnored, setJustIgnored] = useState(false);
 
-  /** The style ask's job: started, then filed under Learn → Style so Style follows it. */
-  const startStyleJob = async (body: LaunchBodyWithDeliver, name: string): Promise<void> => {
+  /** The style ask's job, started. */
+  const startStyleJob = async (body: LaunchBodyWithDeliver): Promise<string> => {
     const { runId } = await api.launchRun(body);
     useProvenanceStore.getState().markLaunchedHere(runId);
-    await apiFetch('/settings', { method: 'PUT', body: JSON.stringify({ 'studio.learn.style': { jobs: [{ runId, kind: 'repo', sources: [name] }], startedAt: Date.now() } }) });
+    return runId;
   };
-  // (wicked-crew#1932) The style ask's job crew answered with the stand-in choice: the card; the ask is answered once
-  // the job starts.
-  const styleStandIn = useStandInChoice<{ name: string; answer: SetupAnswer }>(async (body, m) => {
-    await startStyleJob(body, m.name);
-    setFlash('style');
-    await useFirstRun.getState().answer('style', m.answer);
-  }, navigate);
+  /** Filed under Learn → Style, so Style follows it. */
+  const fileStyleJob = (runId: string, name: string): Promise<unknown> =>
+    apiFetch('/settings', { method: 'PUT', body: JSON.stringify({ 'studio.learn.style': { jobs: [{ runId, kind: 'repo', sources: [name] }], startedAt: Date.now() } }) });
+  // (wicked-crew#1932) The style ask's job crew answered with the stand-in choice: the card, in the ask's place; the
+  // ask is answered once the job starts. A job that started but was not filed or answered says so and is never
+  // started again from here.
+  const styleStandIn = useStandInChoice<{ name: string; answer: SetupAnswer }, string>(startStyleJob, async ([d]) => {
+    if (d === undefined) return;
+    try {
+      await fileStyleJob(d.result, d.meta.name);
+      setFlash('style');
+      await useFirstRun.getState().answer('style', d.meta.answer);
+    } catch (e) {
+      setFail(e instanceof Error ? e.message : String(e));
+    }
+  }, navigate, '/agents?setup=1');
 
   useEffect(() => { if (read === 'idle') void useFirstRun.getState().load(); }, [read]);
   useEffect(() => {
@@ -89,7 +98,7 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
   };
 
   const answer = async (key: SetupAskKey, ask: Ask, a: AskAnswer): Promise<void> => {
-    if (busy) return;
+    if (busy || styleStandIn.busy) return;
     setBusy(true);
     setFail(null);
     const raw = recordLine(ask, a);
@@ -114,14 +123,16 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
           const repo = (repos ?? []).find((r) => r.id === a.option!.slice('repo:'.length));
           if (repo !== undefined) {
             const body: LaunchBodyWithDeliver = { problem: repoStyleProblem(repo.name), repoRef: repo.id, workflow: 'capture-learnings' };
+            let runId: string;
             try {
-              await startStyleJob(body, repo.name);
+              runId = await startStyleJob(body);
             } catch (e) {
               const choice = standInChoiceOf(e);
               if (choice === null) throw e;
               styleStandIn.ask(choice, [{ body, meta: { name: repo.name, answer: styleAnswer } }]);
               return;
             }
+            await fileStyleJob(runId, repo.name);
           }
         }
         await record(key, styleAnswer);
@@ -208,12 +219,12 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
             return (
               <div key={key} className={phone ? 'wk-fr-live' : undefined} data-testid="first-run-live">
                 <div className={key === 'repos' ? 'wk-ask-rows' : undefined}>
-                  <AskCard key={(live.options ?? []).map((o) => o.id).join('|')} ask={live} tag="Setup" busy={busy} onAnswer={(x) => void answer(key, live, x)} testIds={{ root: `first-run-ask-${key}` }} />
+                  <AskCard key={(live.options ?? []).map((o) => o.id).join('|')} ask={live} tag="Setup" busy={busy || styleStandIn.busy} onAnswer={(x) => void answer(key, live, x)} testIds={{ root: `first-run-ask-${key}` }} />
                 </div>
+                {key === 'style' && styleStandIn.card('first-run-standin')}
               </div>
             );
           })}
-          {styleStandIn.card('first-run-standin')}
           {fail !== null && <p className="wk-learn-quiet wk-learn-bad" role="alert" data-testid="first-run-error">{fail}</p>}
           {saveFailed && <p className="wk-learn-quiet wk-learn-bad" role="alert" data-testid="first-run-save-failed">That answer wasn’t saved. Answer it again.</p>}
         </div>

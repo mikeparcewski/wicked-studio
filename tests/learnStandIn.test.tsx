@@ -67,6 +67,7 @@ describe('Learn → Style: Learn my style, refused for want of helpers (crew#193
     expect(screen.queryByTestId('style-launch-error')).toBeNull();
     expect(d.sent('POST /runs')).toHaveLength(1);
     expect(settings['studio.learn.style']).toBeUndefined();
+    expect(screen.getByTestId('style-standin-held').textContent).toBe('Not started yet, waiting for your choice below: web-store.');
   });
 
   it('"Use stand-ins for this job" starts the same job again with crew\'s retryWith, and Style follows it', async () => {
@@ -85,9 +86,19 @@ describe('Learn → Style: Learn my style, refused for want of helpers (crew#193
 
   it('"Use stand-ins for every job" saves the setting first, then starts the job as it was sent', async () => {
     runsRefuseOnce();
+    let saved: () => void = () => {};
+    d.on('PUT /settings', (b) => new Promise((ok) => { saved = () => { Object.assign(settings, b as object); ok({ settings }); }; }));
     await learnMyStyle();
     fireEvent.click(await screen.findByTestId('style-standin-always'));
+    fireEvent.click(screen.getByTestId('style-standin-job'));
+    await new Promise((r) => setTimeout(r, 30));
+    // Nothing starts while the setting is being saved, and no other choice runs meanwhile.
+    expect(d.sent('POST /runs')).toHaveLength(1);
+    expect((screen.getByTestId('style-go') as HTMLButtonElement).disabled).toBe(true);
+    saved();
     await waitFor(() => expect(d.sent('POST /runs')).toHaveLength(2));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(d.sent('POST /runs')).toHaveLength(2);
     expect(d.sent('PUT /settings')).toContainEqual({ standInReview: 'always' });
     const [first, again] = d.sent('POST /runs') as Record<string, unknown>[];
     expect(again).toEqual(first);
@@ -115,6 +126,59 @@ describe('Learn → Style: Learn my style, refused for want of helpers (crew#193
   });
 });
 
+describe('Learn → Style: a mixed Learn my style, one job held back', () => {
+  it('the started job stays; the held one, started from the card, joins the same record with its decisions kept', async () => {
+    runsRefuseOnce();
+    d.on('POST /governance/steering/author', { runId: 'rd' });
+    d.on('GET /runs/rd', { run: { session: { id: 'rd', status: 'executing', unit_ix: 0 }, units: [{}, {}] } });
+    d.on('GET /governance/steering/author/rd/draft', { runId: 'rd', ready: false, rules: [] });
+    render(<LearnHub navigate={nav} search="" />);
+    fireEvent.change(await screen.findByTestId('style-input'), { target: { value: 'https://wiki.example.com/handbook' } });
+    fireEvent.click(screen.getByTestId('style-add'));
+    fireEvent.change(screen.getByTestId('style-kind'), { target: { value: 'repo' } });
+    await waitFor(() => expect(screen.getByTestId('style-repo')).toBeTruthy());
+    fireEvent.change(screen.getByTestId('style-repo'), { target: { value: 'r1' } });
+    fireEvent.click(screen.getByTestId('style-add'));
+    fireEvent.click(screen.getByTestId('style-go'));
+    await screen.findByTestId('style-standin');
+    await waitFor(() => expect((settings['studio.learn.style'] as { jobs: Array<{ runId: string }> }).jobs.map((j) => j.runId)).toEqual(['rd']));
+    const startedAt = (settings['studio.learn.style'] as { startedAt: number }).startedAt;
+    fireEvent.click(screen.getByTestId('style-standin-job'));
+    await waitFor(() => expect((settings['studio.learn.style'] as { jobs: Array<{ runId: string }> }).jobs.map((j) => j.runId)).toEqual(['rd', 'rr']));
+    expect((settings['studio.learn.style'] as { startedAt: number }).startedAt).toBe(startedAt);
+    await waitFor(() => expect(screen.getByTestId('style-runline').textContent).toContain('Running as 2 jobs'));
+  });
+
+  it('Start over while "every job" is saving starts nothing and records nothing', async () => {
+    runsRefuseOnce();
+    d.on('POST /governance/steering/author', { runId: 'rd' });
+    d.on('GET /runs/rd', { run: { session: { id: 'rd', status: 'executing', unit_ix: 0 }, units: [{}, {}] } });
+    d.on('GET /governance/steering/author/rd/draft', { runId: 'rd', ready: false, rules: [] });
+    let saved: () => void = () => {};
+    d.on('PUT /settings', (b) => new Promise((ok) => {
+      if ((b as Record<string, unknown>)['standInReview'] === undefined) { Object.assign(settings, b as object); ok({ settings }); return; }
+      saved = () => { Object.assign(settings, b as object); ok({ settings }); };
+    }));
+    render(<LearnHub navigate={nav} search="" />);
+    fireEvent.change(await screen.findByTestId('style-input'), { target: { value: 'https://wiki.example.com/handbook' } });
+    fireEvent.click(screen.getByTestId('style-add'));
+    fireEvent.change(screen.getByTestId('style-kind'), { target: { value: 'repo' } });
+    await waitFor(() => expect(screen.getByTestId('style-repo')).toBeTruthy());
+    fireEvent.change(screen.getByTestId('style-repo'), { target: { value: 'r1' } });
+    fireEvent.click(screen.getByTestId('style-add'));
+    fireEvent.click(screen.getByTestId('style-go'));
+    fireEvent.click(await screen.findByTestId('style-standin-always'));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(d.sent('POST /runs')).toHaveLength(1);
+    fireEvent.click(screen.getByTestId('style-reset'));
+    await waitFor(() => expect(screen.queryByTestId('style-standin')).toBeNull());
+    saved();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(d.sent('POST /runs')).toHaveLength(1);
+    expect(settings['studio.learn.style']).toEqual({});
+  });
+});
+
 describe('First run → the style ask, refused for want of helpers (crew#1932)', () => {
   const agents = [{ key: 'claude', name: 'Claude Code', usable: true, optIn: false, issues: [], login: null }] as never;
 
@@ -130,6 +194,9 @@ describe('First run → the style ask, refused for want of helpers (crew#1932)',
     expect(within(card).getByTestId('first-run-standin-title').textContent).toBe('Only one helper can check this job');
     expect(screen.queryByTestId('first-run-error')).toBeNull();
     expect(settings['studio.learn.style']).toBeUndefined();
+    // The ask stays open, unanswered, until the job starts.
+    expect((settings['studio.firstRun'] as { answers: Record<string, unknown> }).answers['style']).toBeUndefined();
+    expect(screen.getByTestId('first-run-ask-style')).toBeTruthy();
     fireEvent.click(within(card).getByTestId('first-run-standin-job'));
     await waitFor(() => expect(d.sent('POST /runs')).toHaveLength(2));
     const [first, again] = d.sent('POST /runs') as Record<string, unknown>[];
@@ -137,5 +204,44 @@ describe('First run → the style ask, refused for want of helpers (crew#1932)',
     await waitFor(() => expect((settings['studio.learn.style'] as { jobs: unknown[] } | undefined)?.jobs).toEqual([{ runId: 'rr', kind: 'repo', sources: ['web-store'] }]));
     await waitFor(() => expect(screen.queryByTestId('first-run-standin')).toBeNull());
     expect((settings['studio.firstRun'] as { answers: Record<string, { done: boolean }> }).answers['style']?.done).toBe(true);
+  });
+});
+
+describe('First run → the style ask: a job that started but was not filed', () => {
+  const agents = [{ key: 'claude', name: 'Claude Code', usable: true, optIn: false, issues: [], login: null }] as never;
+
+  it('says so, and the card never starts it again', async () => {
+    settings['studio.firstRun'] = { answers: Object.fromEntries(['repos', 'agents'].map((k) => [k, { line: k, words: k, done: true }])) };
+    runsRefuseOnce();
+    d.on('PUT /settings', (b) => {
+      if ((b as Record<string, unknown>)['studio.learn.style'] !== undefined) throw Object.assign(new Error('x'), { status: 503, body: { error: 'the settings store is busy; try again' } });
+      Object.assign(settings, b as object);
+      return { settings };
+    });
+    render(<FirstRun navigate={nav} agents={agents} hasRoster />);
+    const ask = await screen.findByTestId('first-run-ask-style');
+    fireEvent.click(within(ask).getAllByTestId('ask-option').find((o) => o.getAttribute('data-ask-option') === 'repo:r1')!);
+    fireEvent.click(within(ask).getByTestId('ask-confirm'));
+    fireEvent.click(await screen.findByTestId('first-run-standin-job'));
+    await waitFor(() => expect(screen.getByTestId('first-run-error').textContent).toContain('the settings store is busy'));
+    expect(screen.queryByTestId('first-run-standin')).toBeNull();
+    expect(d.sent('POST /runs')).toHaveLength(2);
+  });
+});
+
+describe('First run → the style ask: sign in, from the card', () => {
+  const agents = [{ key: 'claude', name: 'Claude Code', usable: true, optIn: false, issues: [], login: null }] as never;
+
+  it('opens Helpers with the setup kept, starts nothing, and leaves the ask open', async () => {
+    settings['studio.firstRun'] = { answers: Object.fromEntries(['repos', 'agents'].map((k) => [k, { line: k, words: k, done: true }])) };
+    runsRefuseOnce();
+    render(<FirstRun navigate={nav} agents={agents} hasRoster />);
+    const ask = await screen.findByTestId('first-run-ask-style');
+    fireEvent.click(within(ask).getAllByTestId('ask-option').find((o) => o.getAttribute('data-ask-option') === 'repo:r1')!);
+    fireEvent.click(within(ask).getByTestId('ask-confirm'));
+    fireEvent.click(await screen.findByTestId('first-run-standin-sign_in'));
+    expect(nav).toHaveBeenCalledWith('/agents?setup=1');
+    expect(d.sent('POST /runs')).toHaveLength(1);
+    expect((settings['studio.firstRun'] as { answers: Record<string, unknown> }).answers['style']).toBeUndefined();
   });
 });

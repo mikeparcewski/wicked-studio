@@ -76,26 +76,32 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
   /** Every change of the record made here (a launch, Start over, a review decision): it outranks the mount read. */
   const keepHere = (r: StyleRecord | null): void => {
     decidedHere.current = true;
+    current.current = r;
     setRecord(r);
     void saveRecord(r).catch(() => undefined);
   };
-  // The jobs of the last Learn my style, so a job started again from the stand-in card joins them.
-  const batch = useRef<StyleRecord | null>(null);
-  const keepJob = (job: StyleJob): void => {
-    const next = { jobs: [...(batch.current?.jobs ?? []), job], startedAt: batch.current?.startedAt ?? Date.now() };
-    batch.current = next;
-    keepHere(next);
-  };
+  /** The record as last set here or read, so jobs started from the stand-in card join it (its decisions kept). */
+  const current = useRef<StyleRecord | null>(null);
+  /** When the last Learn my style started: the record its held jobs join. */
+  const batchAt = useRef(0);
   const launchRepo = async (body: LaunchBodyWithDeliver, label: string): Promise<StyleJob> => {
     const { runId } = await api.launchRun(body);
     useProvenanceStore.getState().markLaunchedHere(runId);
     return { runId, kind: 'repo', sources: [label] };
   };
   // (wicked-crew#1932) A repo's job crew answered with the stand-in choice: the card, not a line of text.
-  const standIn = useStandInChoice<string>(async (body, label) => keepJob(await launchRepo(body, label)), navigate);
+  // The jobs that start from it join this Learn my style's record in one write, or start a new one when none of its
+  // jobs had started.
+  const standIn = useStandInChoice<string, StyleJob>((body, label) => launchRepo(body, label), (done) => {
+    const more = done.map((d) => d.result);
+    const r = current.current;
+    keepHere(r !== null && r.startedAt === batchAt.current ? { ...r, jobs: [...r.jobs, ...more] } : { jobs: more, startedAt: batchAt.current });
+  }, navigate);
   useEffect(() => {
     api.listRepos().then((r) => setRepos(r.repos), () => setRepos([]));
-    api.getAppearanceSettings().then((s) => { if (!decidedHere.current) setRecord(readRecord(s.settings)); }, () => undefined);
+    api.getAppearanceSettings().then((s) => {
+      if (!decidedHere.current) { current.current = readRecord(s.settings); setRecord(current.current); }
+    }, () => undefined);
   }, []);
 
   const add = (): void => {
@@ -118,9 +124,10 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
   };
 
   const launch = async (): Promise<void> => {
-    if (launching || sources.length === 0) return;
+    if (launching || standIn.busy || sources.length === 0) return;
     setLaunching(true);
     setLaunchError(null);
+    standIn.ask(null, []);
     const jobs: StyleJob[] = [];
     const failed: string[] = [];
     const docs = sources.filter((s) => s.kind === 'doc');
@@ -166,7 +173,7 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
       }
       if (failed.length > 0) setLaunchError(`Not started: ${failed.join('; ')}`);
       const startedAt = Date.now();
-      batch.current = { jobs, startedAt };
+      batchAt.current = startedAt;
       if (jobs.length > 0) {
         keepHere({ jobs, startedAt });
       }
@@ -176,7 +183,7 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
     }
   };
 
-  const startOver = (): void => { batch.current = null; standIn.ask(null, []); keepHere(null); };
+  const startOver = (): void => { standIn.ask(null, []); keepHere(null); };
 
   return (
     <div data-testid="learn-style">
@@ -226,8 +233,13 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
           {/* Topics to follow are sources too (operator 2026-10-31): listed here, each on its own refresh schedule. */}
           <LearnTopics navigate={navigate} embedded />
         </div>
-        <StylePipeline record={record} launching={launching} sourceCount={sources.length} onLearn={() => void launch()} onReset={startOver}
-          launchError={launchError} standInCard={standIn.card('style-standin')} navigate={navigate} resultsEl={resultsEl} onDecided={keepHere} />
+        <StylePipeline record={record} launching={launching || standIn.busy} sourceCount={sources.length} onLearn={() => void launch()} onReset={startOver}
+          launchError={launchError} standInCard={standIn.held.length === 0 ? null : (
+            <>
+              <p className="wk-learn-quiet" data-testid="style-standin-held">Not started yet, waiting for your choice below: {standIn.held.join(', ')}.</p>
+              {standIn.card('style-standin')}
+            </>
+          )} navigate={navigate} resultsEl={resultsEl} onDecided={keepHere} />
       </div>
       <div ref={setResultsEl} className="wk-learn-results" />
     </div>
