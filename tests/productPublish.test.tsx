@@ -124,6 +124,8 @@ describe('reading crew’s answers', () => {
     expect(bodyShown(story)).not.toContain('<!--');
     expect(bodyShown(story)).toContain('Published by wicked-crew from run');
     expect(bodyShown({ body: 'keep <!-- wicked-publish run=r key=k --> in the middle', parentKey: null })).toContain('<!-- wicked-publish');
+    expect(bodyShown({ body: 'x\n<!-- wicked-publish run=r key=k -->\n', parentKey: null })).toBe('x');
+    expect(bodyShown({ body: 'x\r\n<!-- wicked-publish run=r key=k -->\r\n', parentKey: null })).toBe('x');
     expect(repoSelector({ repo: 'owner/app', source: 'gh' }, [{ repo: 'owner/app', source: 'gh' }])).toBe('owner/app');
     expect(repoSelector({ repo: 'owner/app', source: 'gh2' }, [{ repo: 'owner/app', source: 'gh' }, { repo: 'owner/app', source: 'gh2' }])).toBe('gh2:owner/app');
   });
