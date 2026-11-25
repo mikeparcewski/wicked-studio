@@ -6,6 +6,7 @@ const apiFetch = vi.fn();
 vi.mock('../src/api/client.js', () => ({ apiFetch: (...a: unknown[]) => apiFetch(...a) }));
 
 import { ApiError } from '../src/api/errors.js';
+import { agentSwitchWrites } from '../src/api/sourceAgents.js';
 import { DataPanel } from '../src/components/sources/DataPanel.js';
 import { SourceSheet } from '../src/components/sources/SourceSheet.js';
 import { SourcesPage } from '../src/components/sources/SourcesPage.js';
@@ -409,8 +410,12 @@ describe('the page and a rename it did not make (wicked-crew#1906)', () => {
     fireEvent.click(screen.getByTestId('source-rename-go'));
     fireEvent.click(screen.getByTestId('source-sheet-close'));
     await waitFor(() => expect(screen.queryByTestId('source-sheet')).toBeNull());
-    // support-pg (id one) is removed, a new support-pg is saved and opened here, and renamed in another tab.
+    // support-pg (id one) is removed and a new support-pg saved; this page reads crew again (a settled switch write),
+    // opens the new one, and it is renamed in another tab.
     list = [{ ...pgServer(), id: 'id-another' }];
+    const reads = calls.filter((c) => c.path === '/mcp/servers').length;
+    act(() => agentSwitchWrites.settled('support-pg'));
+    await waitFor(() => expect(calls.filter((c) => c.path === '/mcp/servers').length).toBeGreaterThan(reads));
     act(() => go('?source=support-pg'));
     await waitFor(() => expect(screen.getByTestId('source-sheet-title').textContent).toContain('support-pg'));
     list = [{ ...RENAMED, id: 'id-another' }];
