@@ -85,6 +85,8 @@
 .wk-ask-record { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 12px; background: color-mix(in oklab, var(--ink-high) 5%, transparent);
   color: var(--ink-body); font-size: var(--text-sm); animation: wk-ask-collapse .4s var(--ease-out); }
 .wk-ask-record-ok { color: var(--status-ok); flex-shrink: 0; }
+/* studio#1417: not done yet (in progress) or stopped short: a neutral mark, never the finished check. */
+.wk-ask-record-progress, .wk-ask-record-stopped { color: var(--ink-muted); flex-shrink: 0; }
 .wk-ask-record-meta { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; color: var(--ink-dim); font-size: var(--text-xs); white-space: nowrap; }
 @keyframes wk-ask-collapse { from { opacity: 0; transform: scaleY(1.4); } to { opacity: 1; transform: none; } }
 

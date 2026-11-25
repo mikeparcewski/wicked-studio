@@ -363,6 +363,9 @@ describe('round-2 words (coord R2 on studio#1409)', () => {
     await waitFor(() => expect(text('artifact-proposal-record')).toBe('Still making the new version. Go again shows it here once it’s made.'));
     expect(screen.getByTestId('artifact-proposal-go-again')).toBeTruthy();
     expect(screen.queryByTestId('artifact-proposal-error')).toBeNull();
+    // studio#1417: still being made is in progress, never the finished check.
+    expect(screen.getByTestId('ask-record-row')).toHaveAttribute('data-state', 'progress');
+    expect(screen.getByTestId('ask-record-row').querySelector('.wk-ask-record-ok')).toBeNull();
     // A Go again that never reached crew says nothing new about the render: still making, Go again still there.
     fireEvent.click(screen.getByTestId('artifact-proposal-go-again'));
     await waitFor(() => expect(screen.getByTestId('artifact-proposal-error')).toBeTruthy());

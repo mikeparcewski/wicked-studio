@@ -1,7 +1,10 @@
 import { useSeatImageRebuild } from '../../store/seatImageRebuild.js';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { AlarmClock } from 'lucide-react';
+import { snoozeChoices, snoozeEndWords } from '../../board/deskSnooze.js';
+import { useDeskSnoozes } from '../../store/deskSnoozes.js';
 import { api } from '../../api/client.js';
-import type { SystemAttention, SystemSnapshot, SystemUnresolved } from '../../api/system.js';
+import type { SystemAttention, SystemSnapshot, SystemSnoozed, SystemUnresolved } from '../../api/system.js';
 import type { SessionView } from '../../api/types.js';
 import { needSection } from '../../board/needsQueue.js';
 import type { NeedRow } from '../../board/needsYou.js';
@@ -42,6 +45,7 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
   now: number;
 }): React.ReactElement {
   const starting = useSeatImageRebuild((s) => s.phase === 'starting');
+  useSpendFocus(snapshot);
   const rebuilding = snapshot.infra.find((r) => r.key === 'seat_images')?.rebuild?.running === true;
   const items = snapshot.attention;
   const { several, single } = rankedSections(items);
@@ -70,7 +74,7 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
     <div className="wk-home" data-testid="needs-ranked">
       <div className="wk-home-col wk-needs-col">
         <header className="wk-home-hello">
-          <h1 className="wk-home-title" id="desk-inbox-title">Needs you</h1>
+          <h1 className="wk-home-title" id="desk-inbox-title" tabIndex={-1}>Needs you</h1>
           <p className="wk-home-state" data-testid="needs-sentence" data-count={items.length} aria-live="polite">{rankedSentence(items)}</p>
         </header>
 
@@ -85,6 +89,7 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
                   {rowLead(a, causes.get(a.id) ?? null) !== null && <span className="wk-needs-card-line">{rowLead(a, causes.get(a.id) ?? null)}</span>}
                   {a.remedy !== null && a.remedy !== 'Re-check.' && <span className="wk-needs-card-remedy">{a.remedy}</span>}
                 </span>
+                {a.snooze != null && <RankedSnooze key={a.snooze.key} snooze={a.snooze} now={now} />}
                 {a.action !== null && <button type="button" className="wk-home-btn wk-home-btn--primary" data-testid="needs-item-act" disabled={a.action?.kind === 'rebuild-seat-images' && (starting || rebuilding)} onClick={() => act(a)}>{a.action.label ?? rowVerb(a, null)}</button>}
               </article>
             ))}
@@ -114,6 +119,7 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
                         : <span className="wk-needs-row-title">{rowHeadline(a, cause)}</span>}
                       <span className="wk-needs-row-line">{meta}</span>
                     </span>
+                    {a.snooze != null && <RankedSnooze key={a.snooze.key} snooze={a.snooze} now={now} />}
                     {path !== null
                       ? <a href={path} onClick={go(path)} className="wk-home-link wk-needs-row-act" data-testid="needs-item-act">{rowVerb(a, gateKind)} <span aria-hidden>→</span></a>
                       : a.action !== null && <button type="button" className="wk-home-btn wk-home-btn--secondary" data-testid="needs-item-act" disabled={a.action?.kind === 'rebuild-seat-images' && (starting || rebuilding)} onClick={() => act(a)}>{rowVerb(a, null)}</button>}
@@ -125,6 +131,8 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
         )}
 
         {items.length === 0 && <p className="wk-home-calm" data-testid="needs-calm">Nothing is waiting on you.</p>}
+
+        {(snapshot.snoozed ?? []).length > 0 && <SnoozedItems items={snapshot.snoozed ?? []} now={now} />}
 
         {foldCount > 0 && (
           <details className="wk-needs-worth wk-ue-fold" data-testid="needs-worth">
@@ -322,4 +330,141 @@ function ResolveRow({ u, view, navigate }: { u: SystemUnresolved; view: SessionV
 export function namedInStuck(cli: string, items: readonly SystemAttention[]): boolean {
   const word = new RegExp(`\\b${cli.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
   return items.some((a) => word.test(`${a.reason ?? ''} ${a.remedy ?? ''}`));
+}
+
+/** After a snooze or a wake, crew's list is read again: the list, its number and every count follow crew. */
+/**
+ * Where a keyboard user stands once a snooze or a wake lands (studio#1416). The control they used goes with its row
+ * when crew's next answer is on the page, so the page keeps one intent: taken at the press only when that control held
+ * focus, dropped at any press or key elsewhere before the answer, at a refusal, or on leaving the page, and spent by
+ * the first snapshot committed after the change landed ({@link useSpendFocus}), whether or not it moves focus. It moves
+ * focus only while focus sits on the page body, to the first of `places` still there, else the heading.
+ * Known limit: a screen reader's own focus move (no key or press on the document) that the same answer then removes
+ * is not told apart from focus lost with the control.
+ */
+let focusIntent: { places: readonly string[]; ready: boolean; drop: () => void } | null = null;
+const focusLost = (): boolean => document.activeElement === null || document.activeElement === document.body;
+
+/** At the press: hold a place for the control's user, or nothing when the control never held focus (a pointer). */
+function holdFocus(control: Element, places: readonly string[]): { landed: () => void; drop: () => void; held: () => boolean } {
+  focusIntent?.drop();
+  const none = { landed: (): void => undefined, drop: (): void => undefined, held: (): boolean => true };
+  if (document.activeElement !== control) return none;
+  const drop = (): void => {
+    document.removeEventListener('pointerdown', drop, true);
+    document.removeEventListener('keydown', drop, true);
+    if (focusIntent?.drop === drop) focusIntent = null;
+  };
+  // From onClick: this press's own pointerdown and keydown have already passed, so only a later one drops it.
+  document.addEventListener('pointerdown', drop, true);
+  document.addEventListener('keydown', drop, true);
+  const intent = { places, ready: false, drop };
+  focusIntent = intent;
+  // `held`: nothing the person did since the press gave the place up (a refusal hands focus back only then).
+  return { landed: () => { intent.ready = true; }, drop, held: () => focusIntent === intent };
+}
+
+/** Spend the intent on the first snapshot committed after the change landed (an answer a later read superseded never
+ *  commits); it moves focus only if focus went with the control. Leaving the page drops it. */
+function useSpendFocus(snapshot: SystemSnapshot): void {
+  useEffect(() => () => { focusIntent?.drop(); }, []);
+  useEffect(() => {
+    const intent = focusIntent;
+    if (intent === null || !intent.ready) return;
+    intent.drop();
+    if (!focusLost()) return;
+    for (const sel of [...intent.places, '#desk-inbox-title']) {
+      const to = document.querySelector<HTMLElement>(sel);
+      if (to !== null) { to.focus(); return; }
+    }
+  }, [snapshot]);
+}
+
+/** Re-read /system after a snooze or a wake: crew moved the item, so the list, its number and every count follow. */
+const reread = (): void => { void useSystemStore.getState().refresh({ force: true }); };
+
+/** Snooze on a ranked item (studio#1416): crew's key and rank, the inbox's ends and refusal words. Mounted per key. */
+function RankedSnooze({ snooze: sn, now }: { snooze: { key: string; rank: number }; now: number }): React.ReactElement {
+  const snooze = useDeskSnoozes((st) => st.snooze);
+  const [state, setState] = useState<{ kind: 'idle' | 'choose' | 'sending' } | { kind: 'failed'; words: string; refocus: boolean }>({ kind: 'idle' });
+  const opener = useRef<HTMLButtonElement>(null);
+  const firstChoice = useRef<HTMLButtonElement>(null);
+  const back = useRef(false);
+  useEffect(() => {
+    if (state.kind === 'choose') firstChoice.current?.focus();
+    // Back to Snooze after Cancel or a refusal, only when focus went with the choices (never from where the person moved).
+    else if ((state.kind === 'failed' && state.refocus) || (state.kind === 'idle' && back.current)) { back.current = false; if (focusLost()) opener.current?.focus(); }
+  }, [state]);
+  if (state.kind === 'idle' || state.kind === 'failed') {
+    return (
+      <span className="wk-needs-snooze">
+        <button ref={opener} type="button" data-testid="needs-item-snooze" className="wk-home-btn wk-home-btn--secondary wk-needs-row-btn" onClick={() => setState({ kind: 'choose' })}>
+          <AlarmClock size={13} aria-hidden />Snooze
+        </button>
+        {state.kind === 'failed' && <span role="status" className="wk-needs-snooze-failed" data-testid="needs-item-snooze-failed">{state.words}</span>}
+      </span>
+    );
+  }
+  return (
+    <span className="wk-needs-snooze" role="group" aria-label="Snooze until">
+      {snoozeChoices(now).map((c, i) => (
+        <button key={c.id} ref={i === 0 ? firstChoice : undefined} type="button" data-testid={`needs-item-snooze-${c.id}`} className="wk-home-btn wk-home-btn--secondary wk-needs-row-btn" disabled={state.kind === 'sending'}
+          onClick={(e) => {
+            const place = holdFocus(e.currentTarget, ['[data-testid="needs-snoozed-summary"]']);
+            setState({ kind: 'sending' });
+            void snooze(sn.key, c.until, sn.rank).then((why) => {
+              if (why === null) { place.landed(); setState({ kind: 'idle' }); reread(); } else { const refocus = place.held(); place.drop(); setState({ kind: 'failed', words: why, refocus }); }
+            });
+          }}>
+          {c.label}
+        </button>
+      ))}
+      <button type="button" data-testid="needs-item-snooze-cancel" className="wk-home-link wk-needs-snooze-cancel" disabled={state.kind === 'sending'} onClick={() => { back.current = true; setState({ kind: 'idle' }); }}>Cancel</button>
+    </span>
+  );
+}
+
+/** "N snoozed": what crew holds back for a person's snooze, each with when it comes back and Wake now. */
+function SnoozedItems({ items, now }: { items: readonly SystemSnoozed[]; now: number }): React.ReactElement {
+  return (
+    <details className="wk-needs-worth wk-ue-fold" data-testid="needs-snoozed">
+      <summary className="wk-ue-fold-sum" data-testid="needs-snoozed-summary">
+        <span className="wk-ue-fold-words">
+          <span className="wk-ue-row-title">{items.length} snoozed</span>
+          <span className="wk-ue-row-sub">Not counted until they come back, or sooner if they get worse.</span>
+        </span>
+        <span aria-hidden className="wk-ue-fold-chev">›</span>
+      </summary>
+      <ul className="wk-needs-snoozed-list">
+        {/* Keyed by the occurrence: a new snooze of the same run starts with its own Wake. */}
+        {items.map((a) => <SnoozedItem key={a.wakeKey ?? a.id} item={a} now={now} />)}
+      </ul>
+    </details>
+  );
+}
+
+function SnoozedItem({ item, now }: { item: SystemSnoozed; now: number }): React.ReactElement {
+  const wake = useDeskSnoozes((st) => st.wake);
+  const [state, setState] = useState<{ kind: 'idle' | 'sending' } | { kind: 'failed'; words: string }>({ kind: 'idle' });
+  const key = item.wakeKey;
+  const row = `[data-testid="needs-item"][data-id="${CSS.escape(item.id)}"]`;
+  return (
+    <li className="wk-needs-snoozed-item" data-testid="needs-snoozed-item" data-id={item.id}>
+      <span className="wk-needs-snoozed-what">{item.text}</span>
+      {item.until !== null && <span className="wk-needs-snoozed-until" data-testid="needs-snoozed-until">Back {snoozeEndWords(new Date(item.until).toISOString(), now)}</span>}
+      {key !== null && (
+        <button type="button" data-testid="needs-snoozed-wake" className="wk-home-btn wk-home-btn--secondary wk-needs-row-btn" disabled={state.kind === 'sending'}
+          onClick={(e) => {
+            const place = holdFocus(e.currentTarget, [`${row} :is(a, button)`, '[data-testid="needs-snoozed-summary"]']);
+            setState({ kind: 'sending' });
+            void wake(key).then((why) => {
+              if (why === null) { place.landed(); setState({ kind: 'idle' }); reread(); } else { place.drop(); setState({ kind: 'failed', words: why }); }
+            });
+          }}>
+          Wake now
+        </button>
+      )}
+      {state.kind === 'failed' && <span role="status" className="wk-needs-snooze-failed">{state.words}</span>}
+    </li>
+  );
 }
