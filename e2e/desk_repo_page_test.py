@@ -138,9 +138,12 @@ with sync_playwright() as p:
     wiz.wait_for(state="visible", timeout=10000)
     page.wait_for_timeout(500)
     page.screenshot(path=str(SHOTS / "desk-repo-page-requirements-generate.png"))
-    intent = page.get_by_test_id("launch-wizard-intent").input_value() if page.get_by_test_id("launch-wizard-intent").count() else ""
-    check("generate-opens-new-job", panel.count() == 0 and intent.startswith("Map the domain of studio-api")
-          and not posts, intent=intent, posts=posts[:5], wizard_step=page.get_by_test_id("launch-wizard-step").get_attribute("data-step"))
+    box = page.get_by_test_id("launch-wizard-intent")
+    intent = box.input_value() if box.count() else None
+    label = page.locator(".wk-launch-wizard-field .wk-field-label").first.inner_text() if box.count() else ""
+    # J6 S1: the words are the model's scope, so the form asks for them (no words are put there for the person).
+    check("generate-opens-new-job", panel.count() == 0 and intent == "" and label.startswith("What should the model cover?")
+          and not posts, intent=intent, label=label, posts=posts[:5], wizard_step=page.get_by_test_id("launch-wizard-step").get_attribute("data-step"))
     page.get_by_test_id("launch-wizard-close").click()
 
     # ── 5. what we know (round 10): the band's marks, each opening the thing itself ──
