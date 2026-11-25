@@ -198,6 +198,70 @@ export function rectsOverlap(a: OrientedRect, b: OrientedRect): boolean {
   return true;
 }
 
+// ───────────────────────────── fit with the labels ─────────────────────────────
+
+/**
+ * The zoom at which the rings AND their labels fit a width×height canvas centred on the focus, with
+ * `pad` screen px kept clear at every edge (studio#1290 r3). A radial label runs outward from its node
+ * by 6 px plus its whole width, and that length is the same on screen at any zoom. So the outermost
+ * ring needs room for its longest label past the ring, which a nodes-only fit leaves out.
+ *
+ * Every label and node gives one bound z ≤ (room − its fixed screen px) ÷ (its model px that scale).
+ * The answer is the smallest. A label too long for the canvas at any zoom gives no bound: it is hidden
+ * instead (see labelInView). The zoom never drops under `floor` × the nodes-only fit, so a phone's rings
+ * stay readable and an outer label that cannot fit is hidden. Returns NaN for a canvas with no size
+ * (headless), and the caller falls back to cytoscape's own fit.
+ */
+export function fitZoom(
+  inputs: LabelInput[], width: number, height: number, pad: number,
+  captionPx: number, measure: Measure, floor = 0.5,
+): number {
+  const hx = width / 2 - pad;
+  const hy = height / 2 - pad;
+  if (!(hx > 0 && hy > 0)) return NaN;
+  const h = captionPx;
+  let zNodes = Infinity;
+  let zLabels = Infinity;
+  const bound = (room: number, scaled: number, isLabel: boolean): void => {
+    if (scaled <= 0 || room <= 0) return;
+    const z = room / scaled;
+    if (isLabel) zLabels = Math.min(zLabels, z);
+    else zNodes = Math.min(zNodes, z);
+  };
+  for (const input of inputs) {
+    const isGuide = input.kind === 'guide';
+    const isFocus = input.level === 0 && !isGuide;
+    if (isGuide) {
+      bound(Math.min(hx, hy), input.rRing, false);
+      if (input.text !== '') bound(hy - 6 - h, input.rRing, true);
+      continue;
+    }
+    if (isFocus) {
+      bound(Math.min(hx, hy), input.rNode, false);
+      if (input.text !== '') bound(hy - 6 - h, input.rNode, true);
+      continue;
+    }
+    const c = Math.abs(Math.cos(input.angle));
+    const s = Math.abs(Math.sin(input.angle));
+    bound(hx, input.rRing * c + input.rNode, false);
+    bound(hy, input.rRing * s + input.rNode, false);
+    if (input.text === '') continue;
+    const w = labelGeom(input, 1, captionPx, measure).rect.w;
+    const reach = input.rRing + input.rNode;
+    bound(hx - (6 + w) * c - (h / 2) * s, reach * c, true);
+    bound(hy - (6 + w) * s - (h / 2) * c, reach * s, true);
+  }
+  if (zNodes === Infinity) return NaN;
+  return Math.max(Math.min(zNodes, zLabels), floor * zNodes);
+}
+
+/** Whether a label's rectangle (screen px about the origin) lies inside a width×height canvas whose origin is at `pan`. */
+export function labelInView(rect: OrientedRect, pan: Point, width: number, height: number): boolean {
+  const slack = 0.5;
+  return corners(rect).every(([x, y]) =>
+    x + pan.x >= -slack && x + pan.x <= width + slack && y + pan.y >= -slack && y + pan.y <= height + slack);
+}
+
 // ───────────────────────────── placement ─────────────────────────────
 
 export interface PlacementResult {
