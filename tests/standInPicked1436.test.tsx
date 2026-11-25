@@ -109,6 +109,12 @@ describe('/runs/new: Pick another helper opens the helper options', () => {
   });
   afterEach(() => cleanup());
 
+  /** A helper's box in the + options, opening them when they are closed. */
+  async function optionsSeat(key: string): Promise<HTMLElement> {
+    if (screen.queryByTestId(`launch-seat-${key}`) === null) fireEvent.click(screen.getByRole('button', { name: 'Open launch options' }));
+    return screen.findByTestId(`launch-seat-${key}`);
+  }
+
   /** Codex and Pi turned off in the + helper options, then Send: crew refuses with the one-helper body. */
   async function sendClaudeOnly(): Promise<{ launch: ReturnType<typeof vi.spyOn>; navigate: ReturnType<typeof vi.fn> }> {
     const launch = vi.spyOn(client.api, 'launchRun').mockRejectedValueOnce(refusalError());
@@ -147,6 +153,39 @@ describe('/runs/new: Pick another helper opens the helper options', () => {
   it('the card says a signed-out helper is neither picked nor one to pick', async () => {
     await sendClaudeOnly();
     expect(screen.getByTestId('launch-standin-why').textContent).not.toMatch(/OpenCode/);
+  });
+
+  it('a helper turned on while the Send is out: the refusal that lands is not shown as this pick\'s card (codex delta)', async () => {
+    let refuse: () => void = () => {};
+    const launch = vi.spyOn(client.api, 'launchRun').mockImplementationOnce(() => new Promise((_r, reject) => { refuse = () => reject(refusalError()); }));
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} navigate={vi.fn()} />);
+    fireEvent.change(screen.getByTestId('launch-problem'), { target: { value: 'fix the reader' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Open launch options' }));
+    for (const key of ['codex', 'pi']) {
+      await waitFor(() => expect((screen.getByTestId(`launch-seat-${key}`) as HTMLInputElement).checked).toBe(true));
+      fireEvent.click(screen.getByTestId(`launch-seat-${key}`));
+    }
+    await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
+    fireEvent.click(screen.getByTestId('launch-submit'));
+    await waitFor(() => expect(launch).toHaveBeenCalledTimes(1));
+    fireEvent.click(await optionsSeat('codex'));
+    await act(async () => { refuse(); await new Promise((r) => setTimeout(r, 20)); });
+    expect(screen.queryByTestId('launch-standin')).toBeNull();
+    // Turning Codex off again is the refused request again: its card is back.
+    fireEvent.click(await optionsSeat('codex'));
+    expect(await screen.findByTestId('launch-standin')).toBeTruthy();
+  });
+
+  it('"every job" not saved after the pick changed meanwhile: the failure stays in view (codex delta)', async () => {
+    let fail: () => void = () => {};
+    vi.spyOn(client.api, 'updateSettings').mockImplementationOnce(() => new Promise((_r, reject) => { fail = () => reject(new ApiError(500, 'no')); }));
+    const { launch } = await sendClaudeOnly();
+    fireEvent.click(screen.getByTestId('launch-standin-always'));
+    await waitFor(() => expect(client.api.updateSettings).toHaveBeenCalled());
+    fireEvent.click(await optionsSeat('codex'));
+    await act(async () => { fail(); await new Promise((r) => setTimeout(r, 20)); });
+    expect(await screen.findByTestId('launch-standin-error')).toHaveTextContent('Settings could not be saved, so nothing started.');
+    expect(launch).toHaveBeenCalledTimes(1);
   });
 
   it('turning a helper on after the refusal drops the card: its "not picked" words no longer hold (codex r1)', async () => {
