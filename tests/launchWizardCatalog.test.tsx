@@ -939,3 +939,19 @@ describe('studio#1399: the MCP server workflow’s “Also expose as a REST API�
     expect(screen.queryByTestId('launch-wizard-rest-toggle')).toBeNull();
   });
 });
+
+describe('studio#1399: another card for the same workflow starts with the REST switch off', () => {
+  it('a reopen naming another card, and New job’s own pick of another card, both clear it', async () => {
+    const mcp = (id: string) => ({ id, category: 'analyze', title: id, summary: `${id}. More.`, outcome: 'x', needs: ['runs'], inputs: [], status: 'available',
+      launch: { kind: 'run', workflow: 'mcp-server' }, usage: { launches: 0, lastUsedAt: null, medianMinutes: null } });
+    catalog = { categories: [{ id: 'analyze', title: 'Analyze' }], entries: [mcp('mcp-a'), mcp('mcp-b')] };
+    await openCatalog();
+    fireEvent.click(screen.getAllByTestId('launch-wizard-workflow-mcp-server')[0]!);
+    fireEvent.click(screen.getByTestId('launch-wizard-rest-toggle'));
+    expect(useLaunchWizard.getState().draft?.restApi).toBe(true);
+    const first = useLaunchWizard.getState().draft!.catalogEntryId;
+    act(() => openLaunchWizard({ workflowId: 'mcp-server', catalogEntryId: first === 'mcp-a' ? 'mcp-b' : 'mcp-a' }));
+    expect(useLaunchWizard.getState().draft?.restApi).toBe(false);
+    await waitFor(() => expect(screen.getByTestId('launch-wizard-rest-toggle')).toHaveAttribute('aria-checked', 'false'));
+  });
+});

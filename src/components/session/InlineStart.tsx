@@ -110,8 +110,10 @@ export function InlineStart({
   const [choosing, setChoosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const entryId = composerEntry?.id ?? null;
+  // Each pick of a card is its own start (a fresh chip key, codex on studio#1399): its choices start fresh too.
+  const pickKey = useComposerChips((s) => chipsOf(s, composerKey).find((c) => c.kind === 'workflow')?.key ?? null);
   // Another card, or another chat's composer (the page is reused across chats), starts its own choices and consent.
-  useEffect(() => { setPickedRepo(null); setPickedProject(null); setError(null); setReduced(false); setSkipQe(false); setSkipQeReason(''); setForceQe(false); setChoosing(false); setAllChoices(false); setRestApi(false); }, [entryId, composerKey]);
+  useEffect(() => { setPickedRepo(null); setPickedProject(null); setError(null); setReduced(false); setSkipQe(false); setSkipQeReason(''); setForceQe(false); setChoosing(false); setAllChoices(false); setRestApi(false); }, [entryId, composerKey, pickKey]);
 
   // The project: the composer's (its chip, its chat), else the one picked here, else a sole project.
   const filed = projects.filter((p) => p.id !== 'default');

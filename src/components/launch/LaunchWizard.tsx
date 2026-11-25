@@ -443,7 +443,7 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
     // codex r1: another kind of job starts its own options; studio#767: and its own words.
     if (id !== draft.workflowId) update({ ...withJobKind(draft, id), catalogEntryId: entryId });
     // Another card for the same workflow: its own options and repository choice (the words are the workflow's).
-    else if (entryId !== draft.catalogEntryId) update({ catalogEntryId: entryId, reduced: false, skipQe: false, skipQeReason: '', repoRef: null });
+    else if (entryId !== draft.catalogEntryId) update({ catalogEntryId: entryId, reduced: false, skipQe: false, skipQeReason: '', repoRef: null, restApi: false });
     setStep(id === DRAFT_EPICS_ID ? 'requirements' : id === DEMO_VIDEO_ID ? 'demo' : 'what');
   };
 

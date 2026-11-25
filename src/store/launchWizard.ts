@@ -147,7 +147,7 @@ export const useLaunchWizard = create<LaunchWizardStore>((set, get) => ({
       // workflow starts its own options and repository choice, as New job's own card pick does (codex r1).
       const named = init.catalogEntryId ?? null;
       const card = named === null || named === cur.catalogEntryId ? {}
-        : { catalogEntryId: named, reduced: false, skipQe: false, skipQeReason: '', repoRef: null };
+        : { catalogEntryId: named, reduced: false, skipQe: false, skipQeReason: '', repoRef: null, restApi: false };
       set({ open: true, draft: { ...cur, intent, ...card } });
       return;
     }

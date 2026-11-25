@@ -3812,6 +3812,18 @@
       ]
     },
     {
+      "testId": "composer-job-rest",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-job-rest-toggle",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
       "testId": "composer-menu",
       "files": [
         "src/components/session/SlashMenu.tsx"

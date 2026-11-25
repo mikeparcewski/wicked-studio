@@ -21,10 +21,14 @@ export function offersRestApi(workflowId: string | null | undefined): boolean {
   return workflowId === MCP_SERVER_WORKFLOW;
 }
 
-/** The intent sent: the person's words, with the REST line after them when the option is on (never twice). */
+/**
+ * The intent sent: the person's words, with the REST line as its one last line when the option is on (a copy of the
+ * line already in the words, from a pasted earlier intent, is taken out first, so it is never there twice).
+ */
 export function withRestApi(intent: string, on: boolean): string {
   if (!on) return intent;
-  const words = intent.trimEnd();
-  if (words.includes(REST_API_INTENT_LINE)) return words;
+  const words = (intent.includes(REST_API_INTENT_LINE)
+    ? intent.split(REST_API_INTENT_LINE).map((part) => part.trim()).filter((part) => part !== '').join('\n\n')
+    : intent).trimEnd();
   return words === '' ? REST_API_INTENT_LINE : `${words}\n\n${REST_API_INTENT_LINE}`;
 }

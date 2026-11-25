@@ -20,7 +20,8 @@ import { Composer } from '../src/components/session/Composer.js';
 import { INLINE_START_LIMITS } from '../src/components/session/InlineStart.js';
 import { useCapabilities } from '../src/store/capabilities.js';
 import { resetChatFlow, useChatFlow } from '../src/store/chatFlow.js';
-import { chipsOf, useComposerChips } from '../src/store/composerChips.js';
+import { addAboutChip, chipsOf, useComposerChips } from '../src/store/composerChips.js';
+import { workflowChipFor } from '../src/store/inlineStart.js';
 import { resetComposerSeats } from '../src/store/composerSeats.js';
 import { openLaunchWizard, resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
 import { resetPlanCatalog } from '../src/store/planCatalog.js';
@@ -805,4 +806,37 @@ describe('studio#1399: the MCP server card’s “Also expose as a REST API” o
     await screen.findByTestId('composer-start-line');
     expect(screen.queryByTestId('composer-start-rest-toggle')).toBeNull();
   });
+
+  it('a new pick of the same card in the same composer starts with the switch off (its own start)', async () => {
+    render(<Harness navigate={() => {}} />);
+    await pick('mcp-server', 'mcp');
+    fireEvent.click(await screen.findByTestId('composer-start-rest-toggle'));
+    expect(screen.getByTestId('composer-start-rest-toggle')).toHaveAttribute('aria-checked', 'true');
+    // A second pick replaces the chip on the composer (one at a time, a fresh key), the row staying mounted.
+    const chip = chipsOf(useComposerChips.getState(), 'chat-1').find((c) => c.kind === 'workflow')!;
+    act(() => { addAboutChip('chat-1', workflowChipFor({ id: 'mcp-server', title: 'Build an MCP server', launchId: 'mcp-server' })); });
+    expect(chipsOf(useComposerChips.getState(), 'chat-1').find((c) => c.kind === 'workflow')?.key).not.toBe(chip.key);
+    await waitFor(() => expect(screen.getByTestId('composer-start-rest-toggle')).toHaveAttribute('aria-checked', 'false'));
+  });
+
+  it('the switch changed while the start was being checked: nothing starts, and the next Enter sends what it shows', async () => {
+    render(<Harness navigate={() => {}} />);
+    await pick('mcp-server', 'mcp');
+    type('Wrap the weather API');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    let release: () => void = () => undefined;
+    settingsGate = new Promise<void>((r) => { release = r; });
+    const before = gets().filter((g) => g === '/settings').length;
+    enter();
+    await waitFor(() => expect(gets().filter((g) => g === '/settings').length).toBeGreaterThan(before));
+    fireEvent.click(screen.getByTestId('composer-start-rest-toggle'));
+    await act(async () => { release(); await Promise.resolve(); });
+    await waitFor(() => expect(screen.getByTestId('composer-start-error')).toHaveTextContent('This job changed while it was being checked.'));
+    expect(launches()).toEqual([]);
+    settingsGate = null;
+    enter();
+    await waitFor(() => expect(launches()).toHaveLength(1));
+    expect(String(launches()[0]!['problem'])).toBe('Wrap the weather API\n\nAlso expose the tools as a REST API (mcp-scaffold --rest): HTTP routes and an OpenAPI description built from the same tools.');
+  }, 20_000);
 });
+
