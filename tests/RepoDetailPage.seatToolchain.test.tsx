@@ -102,6 +102,39 @@ describe('the next list is built from crew\'s latest row (core#1043, round 1)', 
     expect(setRepoSeatLayers).toHaveBeenLastCalledWith('shop', ['node', 'python']);
   });
 
+  it('a lost reply and a failed read after it: the next switch still keeps the change that landed (delta)', async () => {
+    render(ui());
+    await screen.findByTestId('repo-seat-layers');
+    setRepoSeatLayers.mockImplementationOnce(async (id, off) => {
+      crew = crew.map((c) => (c.id === id ? row(off, id) : c));
+      // The read after the lost reply fails too.
+      listRepos.mockImplementationOnce(async () => { throw new TypeError('Failed to fetch'); });
+      throw new TypeError('Failed to fetch');
+    });
+    await act(async () => { fireEvent.click(sw('Node.js')); });
+    await waitFor(() => expect(sw('Python')).not.toBeDisabled());
+    await act(async () => { fireEvent.click(sw('Python')); });
+    expect(setRepoSeatLayers).toHaveBeenLastCalledWith('shop', ['node', 'python']);
+  });
+
+  it('back on the repository before crew wrote the change: the next switch keeps it once it lands (delta)', async () => {
+    const reply = deferred<RepoEntry>();
+    setRepoSeatLayers.mockImplementationOnce(() => reply.promise);
+    const { rerender } = render(ui());
+    await screen.findByTestId('repo-seat-layers');
+    await act(async () => { fireEvent.click(sw('Node.js')); });
+    rerender(ui('?tab=settings', undefined, 'other'));
+    await screen.findByRole('heading', { name: 'other' });
+    rerender(ui());
+    await screen.findByTestId('repo-seat-layers');
+    // This visit read crew before the write: Node.js still shows on. Then crew writes and answers the earlier visit.
+    crew = crew.map((c) => (c.id === 'shop' ? row(['node']) : c));
+    await act(async () => { reply.resolve(row(['node'])); });
+    await waitFor(() => expect(sw('Python')).not.toBeDisabled());
+    await act(async () => { fireEvent.click(sw('Python')); });
+    expect(setRepoSeatLayers).toHaveBeenLastCalledWith('shop', ['node', 'python']);
+  });
+
   it('a save still in flight when Settings is left and opened again: the switches wait for it', async () => {
     const reply = deferred<RepoEntry>();
     setRepoSeatLayers.mockImplementationOnce(() => reply.promise);
