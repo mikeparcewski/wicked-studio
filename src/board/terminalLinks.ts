@@ -188,6 +188,22 @@ export function linksAt(read: (i: number) => TermRow, length: number, y: number,
     .filter((u) => u.start.row <= y && u.end.row >= y && !(cutBefore && u.start.row === start) && !(cutAfter && u.end.row === end));
 }
 
+/** The most rows {@link urlsIn} reads back from the end of the buffer (a sign-in link is printed near the bottom). */
+export const SCAN_ROWS_MAX = 500;
+
+/**
+ * Every whole address in the last {@link SCAN_ROWS_MAX} rows of the buffer, oldest first (studio#1362: the sign-in
+ * window shows the newest one outside the terminal, as a real link with a copy button). A link cut by the start of the
+ * read is not offered: it could be the tail of a longer address.
+ */
+export function urlsIn(read: (i: number) => TermRow, length: number, width: number, maxRows = SCAN_ROWS_MAX): string[] {
+  const start = Math.max(0, length - maxRows);
+  const rows: TermRow[] = [];
+  for (let i = start; i < length; i++) rows.push(read(i));
+  const cut = start > 0 && rows.length > 0 && (rows[0]!.wrapped || isFull(read(start - 1), width));
+  return findUrls(rows, width).filter((u) => !(cut && u.start.row === 0)).map((u) => u.url);
+}
+
 /** Open a printed address in a new tab, never handing this page to it. Only http(s). */
 export function openUrl(url: string, open: typeof window.open = window.open.bind(window)): boolean {
   if (!/^https?:\/\//iu.test(url)) return false;

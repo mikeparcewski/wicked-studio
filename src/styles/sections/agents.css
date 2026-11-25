@@ -160,6 +160,18 @@
 }
 .wk-agents-cmd code { overflow-x: auto; white-space: nowrap; }
 .wk-agents-safe { display: block; margin-top: 6px; font-size: var(--text-xs); color: var(--ink-muted); }
+/* (studio#1362) The helper's sign-in link, outside its terminal: a real link, selectable, with a Copy button. */
+.wk-agents-link { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-card); }
+.wk-agents-link .wk-agents-h { margin: 0; }
+.wk-agents-link-row { display: flex; align-items: flex-start; gap: 10px; }
+.wk-agents-link-url {
+  flex: 1 1 0; min-width: 0; max-height: 4.8em; overflow-y: auto; overflow-wrap: anywhere; word-break: break-all;
+  user-select: text; font-family: var(--font-mono); font-size: var(--text-code); line-height: 1.6; color: var(--accent); text-decoration: underline;
+}
+.wk-agents-link-url:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
+.wk-agents-link-copy { flex: none; }
+.wk-agents-link .wk-agents-safe { margin-top: 0; }
+.wk-agents-link-note--fail { color: var(--status-fail); }
 .wk-agents-check { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding: 12px 14px; border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--surface-card); }
 .wk-agents-check-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .wk-agents-modal-foot { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 18px; padding: 14px 18px 18px; border-top: 1px solid var(--border); }

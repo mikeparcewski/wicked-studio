@@ -22,6 +22,7 @@ const h = vi.hoisted(() => ({
     keyHandler: ((ev: KeyboardEvent) => boolean) | null;
     attachCustomKeyEventHandler: ReturnType<typeof vi.fn>;
     parsed: Array<() => void>;
+    onWriteParsed: ReturnType<typeof vi.fn>;
   }>,
 }));
 

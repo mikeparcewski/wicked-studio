@@ -5,7 +5,7 @@ import '@xterm/xterm/css/xterm.css';
 import { api, terminalWsUrl } from '../api/client.js';
 import { homeMasker } from '../board/homePath.js';
 import { splitUtf8 } from '../board/utf8Segments.js';
-import { copyAskWords, copyNote, linksAt, openUrl, opensOnRelease, osc52Text, readRow } from '../board/terminalLinks.js';
+import { copyAskWords, copyNote, linksAt, openUrl, opensOnRelease, osc52Text, readRow, urlsIn } from '../board/terminalLinks.js';
 import { resolveToken } from '../styles/resolveToken.js';
 
 interface Props {
@@ -43,7 +43,15 @@ interface Props {
   onOpenError?: (err: unknown) => void;
   /** Told once its PTY is gone while mounted: the daemon closes the terminal socket when the child exits. */
   onExit?: () => void;
+  /**
+   * (studio#1362) Told the web addresses on screen, oldest first, a moment after the program draws (at most every
+   * {@link LINK_SCAN_MS}): the sign-in window shows the newest outside the terminal, as a link with a copy button.
+   */
+  onLinks?: (urls: readonly string[]) => void;
 }
+
+/** How often, at most, a terminal with `onLinks` reads its screen for addresses while the program draws. */
+export const LINK_SCAN_MS = 150;
 
 /**
  * A real xterm.js terminal wired to a PTY through the daemon → core-ts → engine
@@ -58,11 +66,11 @@ interface Props {
  * A terminal is a stateful session: it opens ONCE for the component's lifetime.
  * Remount with a React `key` to start a fresh terminal (e.g. a different cwd).
  */
-export function Terminal({ cwd, cmd, governed = true, initialInput, concealHome, open, onOpenError, onExit }: Props): React.ReactElement {
+export function Terminal({ cwd, cmd, governed = true, initialInput, concealHome, open, onOpenError, onExit, onLinks }: Props): React.ReactElement {
   const hostRef = useRef<HTMLDivElement>(null);
   // Snapshot the open-time props; the session opens once (see effect deps: []).
-  const propsRef = useRef({ cwd, cmd, governed, initialInput, concealHome, open, onOpenError, onExit });
-  propsRef.current = { cwd, cmd, governed, initialInput, concealHome, open, onOpenError, onExit };
+  const propsRef = useRef({ cwd, cmd, governed, initialInput, concealHome, open, onOpenError, onExit, onLinks });
+  propsRef.current = { cwd, cmd, governed, initialInput, concealHome, open, onOpenError, onExit, onLinks };
   /** (studio#1362) A copy the terminal's program asked for, waiting on the person, or what the last copy did. */
   const [copy, setCopy] = useState<{ kind: 'ask'; chars: number } | { kind: 'done'; text: string } | null>(null);
   /** The text the program asked to copy (never drawn: it can be a sign-in token), and each request's number. */
@@ -149,6 +157,19 @@ export function Terminal({ cwd, cmd, governed = true, initialInput, concealHome,
         setCopy({ kind: 'ask', chars: text.length });
       }
       return true;
+    });
+    // (studio#1362) The addresses on screen, for a host that shows them outside the terminal. Read a moment after the
+    // program draws, at most every LINK_SCAN_MS (a sign-in screen redraws its spinner often), from the same joined rows
+    // a click opens. A terminal without `onLinks` reads nothing.
+    let scan: ReturnType<typeof setTimeout> | undefined;
+    const scanSub = propsRef.current.onLinks === undefined ? undefined : term.onWriteParsed(() => {
+      if (scan !== undefined) return;
+      scan = setTimeout(() => {
+        scan = undefined;
+        if (disposed) return;
+        const buf = term.buffer.active;
+        propsRef.current.onLinks?.(urlsIn((i) => readRow(buf.getLine(i), term.cols), buf.length, term.cols));
+      }, LINK_SCAN_MS);
     });
     // xterm keystrokes → PTY stdin over the dedicated WS (raw, as a text frame).
     const dataSub = term.onData((chunk: string) => {
@@ -285,6 +306,8 @@ export function Terminal({ cwd, cmd, governed = true, initialInput, concealHome,
     return () => {
       disposed = true;
       if (idle !== undefined) clearTimeout(idle);
+      if (scan !== undefined) clearTimeout(scan);
+      scanSub?.dispose();
       cancelAnimationFrame(rafHandle);
       observe?.disconnect();
       dataSub.dispose();
