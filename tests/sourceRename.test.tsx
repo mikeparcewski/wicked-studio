@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
@@ -245,6 +246,46 @@ describe('rename follow-ups (wicked-crew#1906)', () => {
     sheet();
     fireEvent.change(screen.getByTestId('source-name'), { target: { value: 'billing-pg' } });
     expect(screen.getByTestId('source-rename').textContent).toContain('Jobs already running with support-pg picked can’t reach it after the rename.');
+    // (r1) crew withdraws the old name's row-write grants once the rename lands; only the tool approvals carry over.
+    expect(screen.getByTestId('source-rename').textContent).toContain('Its connection, secret, switches and tool approvals stay');
+    expect(screen.getByTestId('source-rename').textContent).toContain('Apps’ row-write grants on support-pg are withdrawn.');
+  });
+
+  /** The sheet on support-pg (id one), renamed to billing-pg, answered `e`. */
+  async function renameAnswered(e: unknown): Promise<ReturnType<typeof vi.fn>> {
+    renameAnswer = () => Promise.reject(e);
+    const unsure = vi.fn();
+    render(<SourceSheet target={{ mode: 'saved', server: { ...pgServer(), id: 'id-support-pg' } }} existing={['support-pg']} onSaved={vi.fn()} onRenamed={vi.fn()} onRenameUnsure={unsure} onAllowWrites={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.change(screen.getByTestId('source-name'), { target: { value: 'billing-pg' } });
+    fireEvent.click(screen.getByTestId('source-rename-go'));
+    await waitFor(() => expect(screen.getByTestId('source-rename-go')).not.toBeDisabled());
+    return unsure;
+  }
+
+  it('a server failure with no code is not known, and its words are quoted, not called a refusal', async () => {
+    const unsure = await renameAnswered(new ApiError(500, 'disk full', { error: 'disk full' }));
+    expect(unsure).toHaveBeenCalledWith('support-pg', 'id-support-pg');
+    expect(await screen.findByText('crew did not say whether support-pg was renamed (it answered “disk full”): the list is read again.')).toBeTruthy();
+    expect(screen.queryByText(/refused/)).toBeNull();
+  });
+
+  it('renamed_unread says the rename landed, in words that call nothing a refusal', async () => {
+    const unsure = await renameAnswered(new ApiError(502, 'the rename landed; read the source list again', { error: 'the rename landed; read the source list again', code: 'renamed_unread' }));
+    expect(unsure).toHaveBeenCalledWith('support-pg', 'id-support-pg');
+    expect(await screen.findByText('support-pg was renamed, but crew could not read it back: the list is read again.')).toBeTruthy();
+    expect(screen.queryByText(/refused/)).toBeNull();
+  });
+
+  it('renamed_unread is followed whatever its status', async () => {
+    const unsure = await renameAnswered(new ApiError(409, 'the rename landed; read the source list again', { error: 'x', code: 'renamed_unread' }));
+    expect(unsure).toHaveBeenCalledWith('support-pg', 'id-support-pg');
+  });
+
+  it("a 404 naming the source (another tab renamed or removed it) is followed and says so, not shown as crew's refusal", async () => {
+    const unsure = await renameAnswered(new ApiError(404, 'no MCP server named support-pg', { error: 'no MCP server named support-pg', code: 'unknown_server' }));
+    expect(unsure).toHaveBeenCalledWith('support-pg', 'id-support-pg');
+    expect(await screen.findByText('No source is named support-pg now: another tab may have renamed or removed it, so the list is read again.')).toBeTruthy();
+    expect(screen.queryByText(/no MCP server named/)).toBeNull();
   });
 
   it('a crew with no rename route says to update crew, not "not found"', async () => {
@@ -287,6 +328,49 @@ describe('the page and a rename it did not make (wicked-crew#1906)', () => {
       if (path === '/projects?status=active') return Promise.resolve({ projects: [] });
       return Promise.reject(new Error(`unexpected ${method} ${path}`));
     });
+  });
+
+  /** The page with an address it owns: every navigate lands in `search`, as the router does. */
+  let hops: string[];
+  function Routed({ start }: { start: string }) {
+    const [search, setSearch] = useState(start);
+    return <SourcesPage search={search} navigate={(to: string) => { hops.push(to); setSearch(to.includes('?') ? to.slice(to.indexOf('?')) : ''); }} />;
+  }
+  beforeEach(() => { hops = []; });
+  afterEach(() => { useCapabilities.setState({ trackerLinks: false }); });
+
+  it('an old address opens the renamed source in one step', async () => {
+    list = [RENAMED];
+    render(<Routed start="?source=support-pg" />);
+    await waitFor(() => expect(screen.getByTestId('source-sheet-title').textContent).toContain('billing-pg'));
+    expect(hops).toEqual(['/sources?source=billing-pg']);
+  });
+
+  it('a renamed project-management source is followed too', async () => {
+    useCapabilities.setState({ trackerLinks: true });
+    list = [{ name: 'acme-jira2', kind: 'mcp-http', pm: { system: 'jira' }, tools: [], id: 'id-jira', formerNames: ['acme-jira'] }];
+    render(<Routed start="?source=acme-jira" />);
+    await waitFor(() => expect(hops).toEqual(['/sources?source=acme-jira2']));
+    expect(await screen.findByTestId('pm-sheet')).toBeTruthy();
+  });
+
+  it('a name renamed away and back opens the source under it, and the in-between name follows it', async () => {
+    list = [{ ...pgServer(), id: 'id-support-pg', formerNames: ['billing-pg'] }];
+    render(<Routed start="?source=billing-pg" />);
+    await waitFor(() => expect(screen.getByTestId('source-sheet-title').textContent).toContain('support-pg'));
+    expect(hops).toEqual(['/sources?source=support-pg']);
+  });
+
+  it('a sheet whose source is gone is not handed to another source that once had its name', async () => {
+    // Another tab removed support-pg (id one), saved a new support-pg and renamed that one to billing-pg.
+    list = [{ ...pgServer(), id: 'id-support-pg' }];
+    render(<Routed start="?source=support-pg" />);
+    fireEvent.change(await screen.findByTestId('source-name'), { target: { value: 'other-name' } });
+    list = [{ ...RENAMED, id: 'id-another' }];
+    fireEvent.click(screen.getByTestId('source-rename-go'));
+    await screen.findByText('No source named support-pg.');
+    expect(hops).toEqual([]);
+    expect(screen.queryByTestId('source-sheet')).toBeNull();
   });
 
   it("an old address follows the source to its new name", async () => {
