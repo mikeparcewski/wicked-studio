@@ -194,8 +194,17 @@ export function repoSelector(target: { repo: string; source: string }, targets: 
 }
 
 /** A body as the card shows it: the parent's issue number is not known until it is sent, so `{{parent}}` reads as its key. */
+/**
+ * crew's own marker at the end of each issue's footer (`<!-- wicked-publish run=… key=… -->`, crew product-publish.ts):
+ * GitHub hides an HTML comment, so the card does too (studio#1419). Only that one comment, only at the end.
+ */
+const PUBLISH_MARKER = /\n?<!-- wicked-publish run=[^\s>]+ key=[^\s>]+ -->\s*$/;
+
 export function bodyShown(item: Pick<PublishItem, 'body' | 'parentKey'>): string {
-  return item.body.split('{{parent}}').join(item.parentKey === null ? 'its parent' : `the issue for ${item.parentKey}`);
+  return item.body
+    .replace(PUBLISH_MARKER, '')
+    .split('{{parent}}')
+    .join(item.parentKey === null ? 'its parent' : `the issue for ${item.parentKey}`);
 }
 
 /** How deep an item sits (epic 0, feature 1, story 2), for the card's indent. */

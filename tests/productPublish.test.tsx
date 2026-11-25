@@ -119,6 +119,11 @@ describe('reading crew’s answers', () => {
     expect(story.body).toContain('Part of {{parent}}');
     expect(bodyShown(story)).toContain('Part of the issue for e1.f1');
     expect(bodyShown(story)).not.toContain('{{parent}}');
+    // studio#1419: crew's footer marker is hidden, as GitHub hides it; the footer's words stay.
+    expect(story.body).toContain('<!-- wicked-publish run=');
+    expect(bodyShown(story)).not.toContain('<!--');
+    expect(bodyShown(story)).toContain('Published by wicked-crew from run');
+    expect(bodyShown({ body: 'keep <!-- wicked-publish run=r key=k --> in the middle', parentKey: null })).toContain('<!-- wicked-publish');
     expect(repoSelector({ repo: 'owner/app', source: 'gh' }, [{ repo: 'owner/app', source: 'gh' }])).toBe('owner/app');
     expect(repoSelector({ repo: 'owner/app', source: 'gh2' }, [{ repo: 'owner/app', source: 'gh' }, { repo: 'owner/app', source: 'gh2' }])).toBe('gh2:owner/app');
   });
