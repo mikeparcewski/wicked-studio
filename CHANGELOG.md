@@ -12,6 +12,10 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+
+- The stand-in card no longer says "the only helper signed in" when other helpers are signed in but not picked for the job (studio#1436). A launch's check counts only the picked helpers. The card now says, for example, "Only Claude Code is picked for this job. Codex and Pi CLI are signed in: pick one of them to have it checked by a different helper.", and offers "Pick another helper" (back to the helper options on the /runs/new form, or the wizard's options step) in place of "Sign in another helper". Benched, signed-out and reviewer-only helpers are not offered.
+
 ## [0.16.18] — 2026-11-25
 
 Patch release on the train-14 cut c705c91a, carrying 19 PRs since 0.16.17: #1391, #1392, #1393, #1394, #1395, #1398, #1396, #1403, #1404, #1409, #1407, #1412, #1410, #1408, #1413, #1420, #1415, #1421, #1422.

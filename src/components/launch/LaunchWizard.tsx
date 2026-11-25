@@ -22,7 +22,7 @@ import { REDUCED_RELAUNCH_WORDS } from '../session/GateRow.js';
 import { Switch } from '../ui/Switch.js';
 import { TechDetails } from '../ui/TechDetails.js';
 import { StandInChoice } from '../StandInChoice.js';
-import { helperNamer, saveStandInsEveryJob, standInChoiceOf, standInRelaunchBody, type StandInChoiceId, type StandInChoiceRefusal } from '../../board/standIn.js';
+import { helperNamer, saveStandInsEveryJob, standInChoiceOf, standInRelaunchBody, unpickedHelpers, type StandInChoiceId, type StandInChoiceRefusal } from '../../board/standIn.js';
 import { AGENTS_PATH } from '../../hooks/useRoute.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { useSignInHere } from '../agents/useSignInHere.js';
@@ -614,6 +614,8 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
     if (standIn === null || launchingRef.current) return;
     if (id === 'cancel') { setStandIn(null); setStandInError(null); return; }
     if (id === 'sign_in') { closeStore(); (navigate ?? goToPath)(AGENTS_PATH); return; }
+    // studio#1436: other helpers are signed in, only not picked: back to the step that picks them, nothing starts.
+    if (id === 'pick') { setStandIn(null); setStandInError(null); if (order.includes('options')) setStep('options'); return; }
     if (launchBlocker !== null) { setStandInError(launchBlocker); return; }
     launchingRef.current = true;
     setLaunching(true);
@@ -1050,7 +1052,7 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
           )}
           </>}
           {standIn !== null && launched === null && step === 'review' && (
-            <StandInChoice refusal={standIn} name={helperNamer(roster)} busy={standInBusy} error={standInError} testId="launch-wizard-standin"
+            <StandInChoice refusal={standIn} name={helperNamer(roster)} unpicked={unpickedHelpers(standIn, roster)} busy={standInBusy} error={standInError} testId="launch-wizard-standin"
               onChoose={(id) => { void chooseStandIn(id); }} />
           )}
           {error !== null && qeRefused === null && (

@@ -7,8 +7,11 @@ import { standInChoiceWords, type StandInChoiceId, type StandInChoiceRefusal } f
  * listed, each with what happens next. Nothing has started while this shows (DES §4: the refusal comes before any
  * write). The host form does what a choice means (`onChoose`).
  */
-export function StandInChoice({ refusal, name, busy, error = null, onChoose, testId }: {
+export function StandInChoice({ refusal, name, unpicked = [], busy, error = null, onChoose, testId }: {
   refusal: StandInChoiceRefusal;
+  /** (studio#1436) Helpers signed in but not picked for this job (`unpickedHelpers`): the card names them and offers
+   *  "Pick another helper" in place of signing one in. */
+  unpicked?: readonly string[];
   /** A helper key as studio names it ("claude" → "Claude Code"). */
   name: (cli: string) => string;
   /** The choice being carried out (its button says so; every button waits). */
@@ -18,7 +21,7 @@ export function StandInChoice({ refusal, name, busy, error = null, onChoose, tes
   onChoose: (id: StandInChoiceId) => void;
   testId: string;
 }): React.ReactElement {
-  const words = standInChoiceWords(refusal, name);
+  const words = standInChoiceWords(refusal, name, unpicked);
   const titleId = useId();
   return (
     <section role="group" aria-labelledby={titleId} data-testid={testId} className="wk-standin-choice">

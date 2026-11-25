@@ -8,7 +8,7 @@ import { api, ApiError, apiWire } from '../api/client.js';
 import { qeRefusalOf } from '../board/qeRefusal.js';
 import { QeRefusalWarning } from './QeRefusalWarning.js';
 import { StandInChoice } from './StandInChoice.js';
-import { helperNamer, saveStandInsEveryJob, standInChoiceOf, standInRelaunchBody, type StandInChoiceId, type StandInChoiceRefusal } from '../board/standIn.js';
+import { helperNamer, saveStandInsEveryJob, standInChoiceOf, standInRelaunchBody, unpickedHelpers, type StandInChoiceId, type StandInChoiceRefusal } from '../board/standIn.js';
 import type { BaseSkillPosture, BaseSkillRefusedResponse, DeliverTargetResponse, EntityMode, LaunchBodyWithDeliver, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from './composerDefaults.js';
 import { isShortcutsPaletteOpen } from '../hooks/useGlobalShortcuts.js';
@@ -1007,6 +1007,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     if (standIn === null || submitting || choosingRef.current) return;
     if (id === 'cancel') { setStandIn(null); setStandInError(null); return; }
     if (id === 'sign_in') { navigate?.(AGENTS_PATH); return; }
+    // studio#1436: other helpers are signed in, only not picked: back to the helper options, nothing starts.
+    if (id === 'pick') { setStandIn(null); setStandInError(null); setPopoverOpen(true); return; }
     // The form's own Send blockers, checked BEFORE the settings save, so a choice that cannot launch changes nothing
     // (codex delta 3 on #1361). `submit` checks them again when it runs.
     if (!problem.trim() || selectedClis.size === 0) { setStandInError('Say what the job is and pick a helper first.'); return; }
@@ -2260,7 +2262,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       )}
 
       {standIn !== null && (
-        <StandInChoice refusal={standIn.refusal} name={helperNamer(roster)} busy={standInBusy} error={standInError} testId="launch-standin"
+        <StandInChoice refusal={standIn.refusal} name={helperNamer(roster)} unpicked={unpickedHelpers(standIn.refusal, roster)} busy={standInBusy} error={standInError} testId="launch-standin"
           onChoose={(id) => { void chooseStandIn(id); }} />
       )}
 

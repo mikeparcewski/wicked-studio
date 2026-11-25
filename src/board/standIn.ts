@@ -18,7 +18,7 @@ import { ApiError } from '../api/errors.js';
 import { api } from '../api/client.js';
 import { cliLabel } from '../api/skillUsage.js';
 import type { LaunchBodyWithDeliver } from '../api/types.js';
-import { seatLabel, type SeatNameInput } from './seatNames.js';
+import { seatLabel, userSeats, type SeatNameInput } from './seatNames.js';
 
 /** The refusal's code (DES §4: `short && canStandIn && !consent` → `409 stand_in_choice`). */
 export const STAND_IN_CHOICE_CODE = 'stand_in_choice';
@@ -50,9 +50,11 @@ export interface IndependencePreflight {
   diversity?: unknown;
 }
 
-/** DES §5.2 choice ids. */
-export type StandInChoiceId = 'job' | 'always' | 'sign_in' | 'cancel';
+/** DES §5.2 choice ids, plus studio's own `pick` (studio#1436): it stands in for `sign_in` when other helpers are
+ *  signed in but not picked for this job. */
+export type StandInChoiceId = 'job' | 'always' | 'sign_in' | 'pick' | 'cancel';
 const CHOICE_IDS: readonly StandInChoiceId[] = ['job', 'always', 'sign_in', 'cancel'];
+
 
 /** DES §5.2 `StandInChoiceRefusal`. */
 export interface StandInChoiceRefusal {
@@ -196,6 +198,7 @@ const CHOICE_WORDS: Readonly<Record<StandInChoiceId, readonly [string, string]>>
   job: ['Use stand-ins for this job', 'Starts this job now. You will be asked again next time.'],
   always: ['Use stand-ins for every job', 'Starts this job now and stops asking. You can change this later in Settings.'],
   sign_in: ['Sign in another helper', 'Opens Helpers. Nothing starts; start the job again once another helper is signed in.'],
+  pick: ['Pick another helper', 'Nothing starts. Turn on another helper for this job, then start it again.'],
   cancel: ['Cancel', 'Nothing starts. What you wrote is kept.'],
 };
 
@@ -203,18 +206,24 @@ const CHOICE_WORDS: Readonly<Record<StandInChoiceId, readonly [string, string]>>
  * The card's words for a refusal. `name` turns a helper key into its name the way the rest of studio does
  * ("claude" → "Claude Code"; the launch form passes its roster's `seatLabel`).
  */
-export function standInChoiceWords(r: StandInChoiceRefusal, name: (cli: string) => string): StandInChoiceWords {
+export function standInChoiceWords(r: StandInChoiceRefusal, name: (cli: string) => string, unpicked: readonly string[] = []): StandInChoiceWords {
   const signedIn = uniq(r.preflight.signedIn.map(name));
+  // studio#1436: the launch's preflight counts only the PICKED helpers; others signed in are named, and picking one
+  // is the way on, not signing in.
+  const others = uniq(unpicked.map(name)).filter((n) => !signedIn.includes(n));
   const short = r.preflight.roles.filter((x) => x.shortBy > 0);
   const firm = uniq(short.filter((x) => !(x.conditional && x.role === 'council')).map(roleWords));
   const councils = short.filter((x) => x.conditional && x.role === 'council');
   const council = councils.length > 0 ? `a council of ${Math.max(...councils.map((c) => Math.max(c.needed, 1)))} if a disagreement comes up` : null;
 
-  const title = signedIn.length === 1 ? 'Only one helper can check this job'
+  const title = others.length > 0 ? (signedIn.length === 1 ? 'Only one helper is picked for this job' : 'Not enough helpers are picked for this job')
+    : signedIn.length === 1 ? 'Only one helper can check this job'
     : firm.length === 0 && councils.length > 0 ? standInsWord(Math.max(...councils.map((c) => c.shortBy)))
       : 'Not enough helpers can check this job';
 
-  const who = signedIn.length === 0 ? 'No other helper is signed in.'
+  const who = others.length > 0
+    ? `Only ${signedIn.length > 0 ? listWords(signedIn) : 'no helper'} ${signedIn.length > 1 ? 'are' : 'is'} picked for this job. ${listWords(others)} ${others.length > 1 ? 'are' : 'is'} signed in: pick ${others.length > 1 ? 'one of them' : 'it'} to have it checked by a different helper.`
+    : signedIn.length === 0 ? 'No other helper is signed in.'
     : signedIn.length === 1 ? `${signedIn[0]!} is the only helper signed in.`
       : `${listWords(signedIn)} are signed in.`;
   const needs = firm.length > 0
@@ -237,9 +246,29 @@ export function standInChoiceWords(r: StandInChoiceRefusal, name: (cli: string) 
     why: `${who} ${needs}${enough}`,
     meaning,
     record,
-    choices: r.choices.map((c) => ({ id: c.id, label: CHOICE_WORDS[c.id][0], next: CHOICE_WORDS[c.id][1] })),
+    choices: r.choices.map((c) => (others.length > 0 && c.id === 'sign_in' ? 'pick' : c.id)).map((id) => ({ id, label: CHOICE_WORDS[id][0], next: CHOICE_WORDS[id][1] })),
   };
 }
+
+/**
+ * studio#1436: the helpers signed in on the roster that this launch did not pick. The preflight's `signedIn` is the
+ * launch's own (picked) roster, so a helper signed in but left off the form is not in it. Only helpers a person can
+ * pick count (a CLI, not reviewer-only), signed in (`auth`, else `signed_in`), not benched in the preflight and not
+ * inactive. Pure; roster order.
+ */
+export function unpickedHelpers(r: StandInChoiceRefusal, roster: readonly RosterLike[] | null | undefined): string[] {
+  const picked = new Set(r.preflight.signedIn);
+  const benched = new Set(r.preflight.benched.map((b) => b.seat));
+  return userSeats(roster ?? []).filter((s) => {
+    if (picked.has(s.key) || benched.has(s.key)) return false;
+    const auth = (s as unknown as Record<string, unknown>)['auth'];
+    if (typeof auth === 'string' ? auth === 'signed_out' : s.signed_in === false) return false;
+    return s.health?.status !== 'inactive';
+  }).map((s) => s.key);
+}
+
+/** The roster fields `unpickedHelpers` reads. */
+type RosterLike = SeatNameInput & { signed_in?: boolean | null; health?: { status?: string } | null };
 
 // ── "Every job" ───────────────────────────────────────────────────────────────────────────────────────────────────
 
