@@ -25,6 +25,7 @@ import { launchChatId } from '../launch/launchChatId.js';
 import { QeOffNote } from '../QeOffNote.js';
 import { QeAcceptanceOptions, ReducedAssuranceOptIn } from './AssuranceReceipt.js';
 import { Switch } from '../ui/Switch.js';
+import { offersRestApi, REST_API_HINT, REST_API_LABEL, withRestApi } from '../../board/mcpRest.js';
 import { chatStartPower, readPowerDefault, usePowerDefaultOn, useReviewPlan } from '../../store/reviewPlan.js';
 
 /** What the composer calls on Enter while a card is on it: true when the work started (the composer then clears). */
@@ -86,6 +87,8 @@ export function InlineStart({
   const [skipQe, setSkipQe] = useState(false);
   const [skipQeReason, setSkipQeReason] = useState('');
   const [forceQe, setForceQe] = useState(false);
+  /** studio#1399: the MCP server workflow also exposes its tools as a REST API (off by default). */
+  const [restApi, setRestApi] = useState(false);
   useEffect(() => {
     let live = true;
     Promise.resolve().then(() => api.getHealth()).then((h) => {
@@ -108,7 +111,7 @@ export function InlineStart({
   const [error, setError] = useState<string | null>(null);
   const entryId = composerEntry?.id ?? null;
   // Another card, or another chat's composer (the page is reused across chats), starts its own choices and consent.
-  useEffect(() => { setPickedRepo(null); setPickedProject(null); setError(null); setReduced(false); setSkipQe(false); setSkipQeReason(''); setForceQe(false); setChoosing(false); setAllChoices(false); }, [entryId, composerKey]);
+  useEffect(() => { setPickedRepo(null); setPickedProject(null); setError(null); setReduced(false); setSkipQe(false); setSkipQeReason(''); setForceQe(false); setChoosing(false); setAllChoices(false); setRestApi(false); }, [entryId, composerKey]);
 
   // The project: the composer's (its chip, its chat), else the one picked here, else a sole project.
   const filed = projects.filter((p) => p.id !== 'default');
@@ -169,6 +172,8 @@ export function InlineStart({
   const skipReason = offerQe && !qeOff && skipQe ? skipQeReason : null;
   const forceAcceptance = offerQe && forceQe && (qeOff || !skipQe);
   const offerReview = powerDefaultOn === true && entry !== null && entry.launchKind === 'run';
+  const offerRest = entry !== null && entry.launchKind === 'run' && offersRestApi(entry.launchId);
+  const restOn = offerRest && restApi;
   // What the box shows now (the setting and the person's choice), for the start to check against.
   const shownDefault = useRef<boolean | null>(powerDefaultOn);
   shownDefault.current = powerDefaultOn;
@@ -193,7 +198,7 @@ export function InlineStart({
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const requestNow = useRef('');
-  requestNow.current = JSON.stringify([entry?.id ?? null, entry?.launchId ?? null, repoRef, project, words.trim(), seats, deliver, offerReduced && reduced, offerQe, qeOff, skipQe, skipQeReason, forceQe]);
+  requestNow.current = JSON.stringify([entry?.id ?? null, entry?.launchId ?? null, repoRef, project, words.trim(), seats, deliver, offerReduced && reduced, offerQe, qeOff, skipQe, skipQeReason, forceQe, restOn]);
   const blockerNow = useRef<string | null>(null);
   blockerNow.current = blocker;
 
@@ -265,7 +270,8 @@ export function InlineStart({
         const body = workflowLaunchBody({
           workflowId: entry.launchId,
           // Crew needs a problem: a start with no words (an optional form) sends the card's own summary.
-          intent: typed.trim() !== '' ? typed : (entry.summary.split('. ')[0] || entry.title),
+          // studio#1399: the REST ask is said in the intent the workflow reads.
+          intent: withRestApi(typed.trim() !== '' ? typed : (entry.summary.split('. ')[0] || entry.title), restOn),
           seats,
           repoRef,
           projectId: project,
@@ -352,6 +358,11 @@ export function InlineStart({
         <button type="button" data-testid="composer-start-catalog-retry" className="wk-btn wk-btn--link wk-btn--sm" onClick={() => { void readWorkflowCatalog(catalogProjectOf(project)); }}>Try again</button>
       )}
       {offerReduced && <ReducedAssuranceOptIn checked={reduced} onChange={setReduced} testId="composer-start-reduced" />}
+      {offerRest && (
+        <span data-testid="composer-start-rest" className="wk-composer-start-need">
+          <Switch label={REST_API_LABEL} checked={restApi} onChange={setRestApi} hint={REST_API_HINT} data-testid="composer-start-rest-toggle" />
+        </span>
+      )}
       {offerReview && (
         <span data-testid="composer-start-review-plan" className="wk-composer-start-need">
           <Switch label="Review plan" checked={reviewPlan} onChange={setReviewPlan} data-testid="composer-start-review-plan-toggle"

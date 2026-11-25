@@ -48,6 +48,8 @@ export interface LaunchDraft {
   /** launch-modal: the catalog card picked (two cards may launch one workflow; the shaping step reads
    *  this card's needs and form). null = opened by a workflow id, not from the catalog. */
   catalogEntryId: string | null;
+  /** studio#1399: the MCP server workflow also exposes its tools as a REST API (`board/mcpRest.ts`). Off when unset. */
+  restApi?: boolean;
 }
 
 /** The wizard's own job kind that is not a daemon workflow: drafting epics from a project's
@@ -121,7 +123,7 @@ export function withJobKind(draft: LaunchDraft, id: string): LaunchDraft {
   // codex r1 (S5): another kind of job starts its own options (nothing carried over).
   // launch-modal (xreview r2): and its own repository choice (a repository picked for one kind is not
   // carried into a kind that may need none, nor a "none" into one that needs one).
-  return { ...draft, workflowId: id, intent, intentsByKind, reduced: false, skipQe: false, skipQeReason: '', catalogEntryId: null, repoRef: null };
+  return { ...draft, workflowId: id, intent, intentsByKind, reduced: false, skipQe: false, skipQeReason: '', catalogEntryId: null, repoRef: null, restApi: false };
 }
 
 export const useLaunchWizard = create<LaunchWizardStore>((set, get) => ({

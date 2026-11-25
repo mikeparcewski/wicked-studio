@@ -50,6 +50,7 @@ import { addAboutChip, clearAboutChips } from '../../store/composerChips.js';
 import { pageComposerKey, seedComposer } from '../../store/composerSeed.js';
 import { useWorkflowCatalog } from '../../store/workflowCatalog.js';
 import { WorkflowCatalog } from './WorkflowCatalog.js';
+import { offersRestApi, REST_API_HINT, REST_API_LABEL, withRestApi } from '../../board/mcpRest.js';
 
 type Step = 'workflow' | 'what' | 'where' | 'options' | 'requirements' | 'demo' | 'review';
 const STEP_TITLE: Record<Step, string> = {
@@ -237,6 +238,10 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   const wordsLabel = textInputs[0]?.label ?? (wordsOptional ? 'Anything to focus on?' : 'What do you want done?');
   const moreWords = textInputs.slice(1);
   const problemText = draft.intent.trim() !== '' || entry === null ? draft.intent : (entry.summary.split('. ')[0] || entry.title);
+  // studio#1399: the MCP server workflow's REST option, said in the intent it sends.
+  const offerRest = !demoing && offersRestApi(draft.workflowId);
+  const restOn = offerRest && draft.restApi === true;
+  const sentIntent = withRestApi(problemText, restOn);
   const def = (defs ?? []).find((d) => d.id === draft.workflowId) ?? null;
   const offerQe = qeCap && !demoing && workflowRequiresQe(def);
 
@@ -449,7 +454,7 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   // And what is sent is what was checked (codex r4): if the request itself changed while the preview
   // was awaited (a catalog refresh re-derived the repository, say), the launch stops for a fresh look.
   const requestNow = useRef('');
-  requestNow.current = JSON.stringify([draft.workflowId, draft.catalogEntryId, repoRef, draft.projectId, problemText.trim(),
+  requestNow.current = JSON.stringify([draft.workflowId, draft.catalogEntryId, repoRef, draft.projectId, sentIntent.trim(),
     // Whole seats, as `clisJson` sends them (codex r5: a roster refresh can change a seat under one key).
     deliver, seats, lead, offerPower ? powerOn : null, offerReduced && draft.reduced, draft.skipQe, draft.skipQeReason]);
   const resolveConfirmStill = async (): Promise<Awaited<ReturnType<typeof preview.resolveHumanConfirm>>> => {
@@ -528,7 +533,7 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
       const chatId = launchChatId(key, chatIdOnLaunch);
       const body = workflowLaunchBody({
         workflowId: draft.workflowId,
-        intent: problemText,
+        intent: sentIntent,
         seats,
         repoRef,
         projectId: draft.projectId,
@@ -720,6 +725,12 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
                   </ul>
                 </div>
               )}
+            </div>
+          )}
+
+          {step === 'what' && offerRest && (
+            <div className="wk-launch-shape-option" data-testid="launch-wizard-rest">
+              <Switch label={REST_API_LABEL} checked={restOn} onChange={(v) => update({ restApi: v })} hint={REST_API_HINT} data-testid="launch-wizard-rest-toggle" />
             </div>
           )}
 
@@ -1018,6 +1029,7 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
             <dl className="wk-launch-wizard-review" data-testid="launch-wizard-review">
               <div><dt>Job</dt><dd>{jobName}</dd></div>
               <div><dt>What</dt><dd className="wk-launch-wizard-review-intent">{problemText.trim()}</dd></div>
+              {offerRest && <div data-testid="launch-wizard-review-rest"><dt>REST API</dt><dd>{restOn ? 'Yes: HTTP routes and an OpenAPI description beside MCP' : 'No: MCP only'}</dd></div>}
               <div><dt>Where</dt><dd>{repoName ?? 'No repository'}{projectName !== null ? ` · in ${projectName}` : ''}</dd></div>
               {seats.length > 0 && <div><dt>Helpers</dt><dd>{seats.map(seatLabel).join(', ')}</dd></div>}
               {offerLead && <div data-testid="launch-wizard-review-lead"><dt>Lead helper</dt><dd>{lead === null ? 'Random (picked when it starts)' : seatLabel(leadable.find((s) => s.key === lead)!)}</dd></div>}

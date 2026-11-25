@@ -3976,6 +3976,18 @@
       ]
     },
     {
+      "testId": "composer-start-rest",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-rest-toggle",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
       "testId": "composer-start-retry",
       "files": [
         "src/components/session/InlineStart.tsx"
@@ -10281,6 +10293,18 @@
       ]
     },
     {
+      "testId": "launch-wizard-rest",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-rest-toggle",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
       "testId": "launch-wizard-review",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
@@ -10300,6 +10324,12 @@
     },
     {
       "testId": "launch-wizard-review-qe-off",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-review-rest",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]
