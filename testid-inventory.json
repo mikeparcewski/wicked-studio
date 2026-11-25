@@ -6606,6 +6606,12 @@
       ]
     },
     {
+      "testId": "domain-followup-statement",
+      "files": [
+        "src/components/DomainModelView.tsx"
+      ]
+    },
+    {
       "testId": "domain-followup-where",
       "files": [
         "src/components/DomainModelView.tsx"
@@ -6639,6 +6645,12 @@
       "testId": "domain-model-headline",
       "files": [
         "src/components/DomainModelView.tsx"
+      ]
+    },
+    {
+      "testId": "domain-model-reread-error",
+      "files": [
+        "src/components/RequirementsModal.tsx"
       ]
     },
     {
@@ -6690,6 +6702,12 @@
       ]
     },
     {
+      "testId": "domain-scope-full",
+      "files": [
+        "src/components/launch/DomainScopeCard.tsx"
+      ]
+    },
+    {
       "testId": "domain-scope-loading",
       "files": [
         "src/components/launch/DomainScopeCard.tsx"
@@ -6721,6 +6739,12 @@
     },
     {
       "testId": "domain-scope-readonly",
+      "files": [
+        "src/components/launch/DomainScopeCard.tsx"
+      ]
+    },
+    {
+      "testId": "domain-scope-refresh",
       "files": [
         "src/components/launch/DomainScopeCard.tsx"
       ]

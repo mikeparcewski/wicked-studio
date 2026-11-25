@@ -97,6 +97,8 @@ async function liveMappingJob(repoId: string): Promise<MappingJob> {
   return { runId: run.session.id, line: repeatLineOf(events) };
 }
 
+const DOMAIN_TABS: ReadonlyArray<DomainTab | 'list'> = ['rules', 'followups', 'list'];
+
 export function RequirementsModal({ repoId, repoName, onClose, onNavigateComponent, onOpenRun }: Props): React.ReactElement {
   const [query, setQuery] = useState('');
   const [risk, setRisk] = useState<'all' | 'risk' | 'no-risk'>('all');
@@ -108,7 +110,9 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   const [onlyMismatch, setOnlyMismatch] = useState(false);
   const [page, setPage] = useState<RequirementsPage | null>(null);
   // J6 S1: the repository's domain model (schema 1.2.0), when the page carries one; its tabs, with today's list last.
-  const model = domainModelOf(page);
+  // The repository the page on screen was read for: a model is offered for rulings only under its own repository.
+  const pageRepo = useRef<string | null>(null);
+  const model = pageRepo.current === repoId ? domainModelOf(page) : null;
   const [tab, setTab] = useState<DomainTab | 'list'>('rules');
   const showList = model === null || tab === 'list';
   // "Config & data" is a filter only when the corpus holds some (crew 0.167.0 categories); a daemon from before the
@@ -148,10 +152,13 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
     viewRepo.current = repoId;
     readGen.current += 1; // reads for the previous repository are void from now, not from the next read
     setTab('rules');
+    // codex S1 r1: the previous repository's page (and its model's keys and hashes) never shows under this one.
+    setPage(null);
   }, [repoId]);
 
+  // The answer says whether the read landed (null) or why not, for a ruling that waits on it (J6 S1).
   const fetchPage = useCallback(
-    (q: string, r: typeof risk, cat: typeof category, off: number, mm: boolean) => {
+    (q: string, r: typeof risk, cat: typeof category, off: number, mm: boolean): Promise<string | null> => {
       const gen = ++readGen.current;
       inFlight.current = gen;
       const params: Parameters<typeof api.listRequirements>[1] = { offset: off, limit: PAGE_SIZE };
@@ -159,27 +166,31 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
       if (r !== 'all') params.risk = r;
       if (cat !== 'all') params.category = cat;
       if (mm) params.mismatch = 'yes';
-      api
+      return api
         .listRequirements(repoId, params)
-        .then((p) => {
+        .then((p): string | null => {
           if (inFlight.current === gen) inFlight.current = 0;
-          if (gen !== readGen.current) return;
+          if (gen !== readGen.current) return null;
           // A later page that came back empty (rows retired or gone since) steps back to the last page holding any, so
           // the rest stay reachable (studio#1386 review r2); the debounced read follows the new offset.
           if (p.items.length === 0 && off > 0) {
             const last = Math.max(0, Math.floor((Math.max(0, p.total) - 1) / PAGE_SIZE) * PAGE_SIZE);
             if (last < off) setOffset(last);
           }
+          pageRepo.current = repoId;
           setPage(p);
           setLoadError(null);
           setNotGenerated(null);
+          return null;
         })
-        .catch((e: unknown) => {
+        .catch((e: unknown): string | null => {
           if (inFlight.current === gen) inFlight.current = 0;
-          if (gen !== readGen.current) return;
+          if (gen !== readGen.current) return null;
           const missing = requirementsNotGenerated(e);
           setNotGenerated(missing);
-          setLoadError(missing !== null ? null : e instanceof Error ? e.message : String(e));
+          const said = missing !== null ? null : e instanceof Error ? e.message : String(e);
+          setLoadError(said);
+          return said;
         });
     },
     [repoId],
@@ -215,7 +226,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   const mismatches = mismatchCountOf(page);
   // A write's follow-up read uses the view's filters as they are WHEN it lands (codex r1), not as they were when it
   // started.
-  const refetchNow = useRef(() => {});
+  const refetchNow = useRef<() => Promise<string | null>>(() => Promise.resolve(null));
   refetchNow.current = () => fetchPage(query, risk, category, offset, onlyMismatch);
 
   function setFilter(r: 'all' | 'risk' | 'no-risk'): void {
@@ -256,7 +267,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
     const listed = page?.items.some((i) => i.key === key) ?? false;
     if (listed) setPage((prev) => (prev === null ? prev : { ...prev, items: prev.items.filter((i) => i.key !== key), total: Math.max(0, prev.total - 1) }));
     setSelectedKey((k) => (k === key ? null : k));
-    refetchNow.current();
+    void refetchNow.current();
   }
   // Every retire that lands reaches the modal on screen, whichever rail (or an earlier modal) sent it (review r2).
   const absorbRetiredRef = useRef(absorbRetired);
@@ -317,14 +328,31 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
 
         {/* J6 S1: a domain model's tabs (the rules, the follow-ups, then today's list). */}
         {model !== null && notGenerated === null && (
-          <div className="wk-domain-tabs" role="tablist" aria-label="Domain model">
+          <div
+            className="wk-domain-tabs"
+            role="tablist"
+            aria-label="Domain model"
+            onKeyDown={(e) => {
+              // The arrow keys move between the tabs (and focus follows), as a tab list does.
+              const order = DOMAIN_TABS;
+              const i = order.indexOf(tab);
+              const next = e.key === 'ArrowRight' ? order[(i + 1) % order.length] : e.key === 'ArrowLeft' ? order[(i + order.length - 1) % order.length] : e.key === 'Home' ? order[0] : e.key === 'End' ? order[order.length - 1] : undefined;
+              if (next === undefined) return;
+              e.preventDefault();
+              setTab(next);
+              document.getElementById(`domain-tab-${next}`)?.focus();
+            }}
+          >
             {([['rules', 'Rules'], ['followups', `Follow-ups${model.followups.some((f) => f.ruling === null) ? ` · ${model.followups.filter((f) => f.ruling === null).length}` : ''}`], ['list', 'Requirements']] as const).map(([id, label]) => (
               <button
                 key={id}
+                id={`domain-tab-${id}`}
                 type="button"
                 role="tab"
                 data-testid={`domain-tab-${id}`}
                 aria-selected={tab === id}
+                aria-controls="domain-tab-panel"
+                tabIndex={tab === id ? 0 : -1}
                 onClick={() => setTab(id)}
                 className="px-2.5 py-1 rounded-lg text-xs font-semibold"
                 style={{
@@ -414,9 +442,27 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
 
         {/* Body: list + edit rail */}
         <div className="flex-1 flex overflow-hidden">
-          <div className="flex-1 overflow-y-auto">
+          <div
+            className="flex-1 overflow-y-auto"
+            {...(model !== null && notGenerated === null ? { id: 'domain-tab-panel', role: 'tabpanel', 'aria-labelledby': `domain-tab-${tab}` } : {})}
+          >
             {notGenerated === null && model !== null && !showList ? (
-              <DomainModelView repoId={repoId} model={model} tab={tab === 'followups' ? 'followups' : 'rules'} onRuled={(forRepo) => { if (forRepo === viewRepo.current) refetchNow.current(); }} />
+              <>
+                {/* codex S1 r1: a read that failed after this model was shown is said, and the model is not offered for
+                    rulings until a read lands (it may be out of date). */}
+                {loadError !== null && (
+                  <p role="alert" data-testid="domain-model-reread-error" className="wk-domain-error text-xs px-5 pt-3">
+                    The model could not be read again, so what is shown may be out of date and rulings wait: {loadError}
+                  </p>
+                )}
+                <DomainModelView
+                  repoId={repoId}
+                  model={model}
+                  tab={tab === 'followups' ? 'followups' : 'rules'}
+                  held={loadError !== null}
+                  onRuled={(forRepo) => (forRepo === viewRepo.current ? refetchNow.current() : Promise.resolve(null))}
+                />
+              </>
             ) : notGenerated !== null ? (
               <NotGenerated repoName={repoName} workflow={notGenerated.workflow} onGenerate={generate} share={notGenerated.share} mapping={mapping} onOpenRun={onOpenRun} onRetryMapping={() => setMappingAsk((n) => n + 1)} />
             ) : loadError !== null ? (

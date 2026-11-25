@@ -262,7 +262,8 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   // J6 S1 (DES-j6-build S2): a domain model job shows, before Start, what its words cover in the code (crew's scope card
   // for these words and this repository). Start maps those words (crew's chat Start sends them as the scope).
   const domainJob = v.proposal.shape?.card === 'analyze-codebase' && v.proposal.shape.option === 'domain';
-  const domainWords = (v.proposal.words ?? v.proposal.brief ?? '').trim();
+  // The words crew's Start sends (crew routes.ts, the job launcher: brief first, then words), never another version.
+  const domainWords = (v.proposal.brief ?? v.proposal.words ?? '').trim();
   const chatScope = useDomainScope({ enabled: domainJob && preStart && v.phase !== 'interrupted', repoRef: v.proposal.repoRefs?.[0] ?? null, intent: domainWords, phrases: null });
 
   // ── the routes ────────────────────────────────────────────────────────────────────────────────────────────────────

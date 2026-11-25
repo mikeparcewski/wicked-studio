@@ -47,18 +47,19 @@ export function modelHeadline(m: DomainModel): string {
   ].join(' · ');
 }
 
-/** Groups by area (named order), business groups before any other kind, housekeeping last. */
+/** Groups by area (named order), business groups before any other kind, housekeeping last (an area can show in each part). */
 export function groupsByArea(m: DomainModel): Array<{ area: string; groups: DomainRuleGroup[] }> {
   const rank = (g: DomainRuleGroup): number => (g.kind === 'business' ? 0 : g.kind === 'housekeeping' ? 2 : 1);
   const sorted = [...m.ruleGroups].sort((a, b) => rank(a) - rank(b) || a.area.localeCompare(b.area) || a.title.localeCompare(b.title));
-  const out: Array<{ area: string; groups: DomainRuleGroup[] }> = [];
+  const out: Array<{ area: string; groups: DomainRuleGroup[]; rank: number }> = [];
   for (const g of sorted) {
     const area = g.area.trim() !== '' ? g.area : 'Other';
-    const last = out.find((x) => x.area === area);
+    // codex S1 r1: an area's housekeeping stays in the housekeeping part (last), never pulled up to its business groups.
+    const last = out.find((x) => x.area === area && x.rank === rank(g));
     if (last !== undefined) last.groups.push(g);
-    else out.push({ area, groups: [g] });
+    else out.push({ area, groups: [g], rank: rank(g) });
   }
-  return out;
+  return out.map(({ area, groups }) => ({ area, groups }));
 }
 
 const KIND_ORDER = ['flagged', 'open', 'refused', 'scope'];
@@ -119,11 +120,11 @@ export function rulingRefusalWords(e: unknown): string {
   switch (code) {
     case 'stale_code':
     case 'changed':
-      return `The code or the model changed since this was read; it has been read again.${tail}`;
+      return `The code or the model changed since this was read: look at it as it reads now.${tail}`;
     case 'not_open':
-      return `This was already settled; it has been read again.${tail}`;
+      return `This was already settled.${tail}`;
     case 'not_found':
-      return `The model no longer holds this; it has been read again.${tail}`;
+      return `The model no longer holds this.${tail}`;
     case 'note_required':
       return 'Say what is wrong to reject it.';
     default:
@@ -160,11 +161,14 @@ export function editPhrases(current: readonly string[] | null, card: DomainScope
   if (base === null) return null;
   if ('drop' in edit) return base.filter((p) => p !== edit.drop);
   const t = edit.add.trim();
-  if (t === '' || t.length > 200 || base.includes(t) || base.length >= 50) return [...base];
+  if (t === '' || t.length > 200 || base.includes(t) || base.length >= SCOPE_PHRASES_MAX) return [...base];
   return [...base, t];
 }
 
 /** The card's one-line size: "2 files · 4 targets". */
+/** crew's bound on a scope's phrases. */
+export const SCOPE_PHRASES_MAX = 50;
+
 export function scopeSizeLine(card: DomainScopeCard): string {
   return `${plural(card.files.length, 'file')} · ${plural(card.targets, 'target')}`;
 }

@@ -42,12 +42,16 @@ describe('the model on the page', () => {
     expect(modelHeadline(RULED)).toBe('1 rule · 2 checked statements · 1 follow-up · 3 of 4 targets accounted');
   });
 
-  it('lists business groups before housekeeping, by area', () => {
+  it('lists every business group before any housekeeping, by area (an area shows in each part)', () => {
     const chore = { ...BUILT.ruleGroups[0]!, id: 'h1', title: 'Close the files', kind: 'housekeeping', area: 'PAYCALC1' };
     const other = { ...BUILT.ruleGroups[0]!, id: 'b2', title: 'Job steps', area: 'PAYJOB' };
     const areas = groupsByArea({ ...BUILT, ruleGroups: [chore, other, ...BUILT.ruleGroups] });
-    expect(areas.map((a) => a.area)).toEqual(['PAYCALC1', 'PAYJOB']);
-    expect(areas[0]!.groups.map((g) => g.title)).toEqual(['Overtime pay', 'Close the files']);
+    // codex S1 r1: PAYCALC1's housekeeping is not pulled up ahead of PAYJOB's business rules.
+    expect(areas.map((a) => [a.area, a.groups.map((g) => g.title)])).toEqual([
+      ['PAYCALC1', ['Overtime pay']],
+      ['PAYJOB', ['Job steps']],
+      ['PAYCALC1', ['Close the files']],
+    ]);
   });
 });
 
@@ -88,7 +92,7 @@ describe('follow-ups', () => {
 
   it("says crew's refusals in words, keeping crew's sentence", () => {
     const stale = new ApiError(409, 'the code changed since the model was read', { error: 'the code changed since the model was read', code: 'stale_code' });
-    expect(rulingRefusalWords(stale)).toBe('The code or the model changed since this was read; it has been read again. (the code changed since the model was read)');
+    expect(rulingRefusalWords(stale)).toBe('The code or the model changed since this was read: look at it as it reads now. (the code changed since the model was read)');
     expect(rulingRefusalWords(new ApiError(409, 'already ruled', { code: 'not_open' }))).toMatch(/^This was already settled/);
     expect(rulingRefusalWords(new ApiError(403, 'only a person may rule', { code: 'ruling_refused' }))).toMatch(/^Only a person can rule/);
   });

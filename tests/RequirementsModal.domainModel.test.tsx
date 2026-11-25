@@ -80,23 +80,86 @@ describe('the domain model view (J6 S1)', () => {
     await waitFor(() => expect(screen.getByTestId('domain-model-headline')).toHaveTextContent('1 follow-up · 3 of 4 targets accounted'));
   });
 
-  it('a reject needs a note and sends it with the key; a stale read is said in words and read again', async () => {
+  it('a reject needs a note and sends it with the key; a stale read is said in words, held until the newer model shows', async () => {
     const user = userEvent.setup();
     domainRuling.mockRejectedValue(new ApiError(409, 'the code changed since the model was read', { error: 'the code changed since the model was read', code: 'stale_code' }));
     render(<RequirementsModal repoId="payroll" repoName="payroll" onClose={() => {}} />);
     await user.click(await screen.findByTestId('domain-tab-followups'));
     const open = screen.getAllByTestId('domain-followup')[1]!;
+    // The statement being ruled on is on the row (codex S1 r1).
+    const st = BUILT.statements.find((s) => s.id === BUILT.followups[1]!.statement)!;
+    expect(within(open).getByTestId('domain-followup-statement')).toHaveTextContent(st.text.split('\n')[0]!);
     await user.click(within(open).getByTestId('domain-followup-reject'));
     expect(within(open).getByTestId('domain-followup-reject-send')).toBeDisabled();
     await user.type(within(open).getByTestId('domain-followup-note'), 'The FD is out of scope.');
-    const reads = listRequirements.mock.calls.length;
+    // The read after the refusal is slow, and brings the newer model.
+    let land: (() => void) | null = null;
+    listRequirements.mockImplementation(() => new Promise((r) => { land = () => r(page(RULED)); }));
     await user.click(within(open).getByTestId('domain-followup-reject-send'));
-    const st = BUILT.statements.find((s) => s.id === BUILT.followups[1]!.statement)!;
     expect(domainRuling).toHaveBeenCalledWith('payroll', {
       statement: st.id, expect: st.key, expectTarget: BUILT.targets.find((t) => t.id === READ)!.targetHash, action: 'reject', note: 'The FD is out of scope.',
     });
-    expect(await within(open).findByTestId('domain-followup-error')).toHaveTextContent('The code or the model changed since this was read; it has been read again.');
-    await waitFor(() => expect(listRequirements.mock.calls.length).toBeGreaterThan(reads));
+    await waitFor(() => expect(land).not.toBeNull());
+    // Until the read lands, the row is held (never offered again on the model it was refused against).
+    expect(within(open).getByTestId('domain-followup-reject-send')).toBeDisabled();
+    expect(within(open).queryByTestId('domain-followup-error')).not.toBeInTheDocument();
+    land!();
+    await waitFor(() => expect(screen.getByTestId('domain-model-headline')).toHaveTextContent('1 follow-up · 3 of 4 targets accounted'));
+    expect(screen.getByTestId('domain-followup-error')).toHaveTextContent('The code or the model changed since this was read: look at it as it reads now. (the code changed since the model was read)');
+  });
+
+  it('a read that fails after a ruling is said, and the model is not offered for rulings until a read lands', async () => {
+    const user = userEvent.setup();
+    domainRuling.mockResolvedValue({ ruling: { action: 'confirm', by: 'local', at: 1, subject: 'target', id: MAIN }, build: { rebuilt: true, accounting: RULED.accounting } });
+    render(<RequirementsModal repoId="payroll" repoName="payroll" onClose={() => {}} />);
+    await user.click(await screen.findByTestId('domain-tab-followups'));
+    listRequirements.mockRejectedValue(new Error('crew is not answering'));
+    await user.click(within(screen.getAllByTestId('domain-followup')[3]!).getByTestId('domain-followup-confirm'));
+    expect(await screen.findByTestId('domain-model-reread-error')).toHaveTextContent('The model could not be read again, so what is shown may be out of date and rulings wait: crew is not answering');
+    expect(screen.getAllByTestId('domain-followup')[3]!).toHaveTextContent('Saved. The model could not be read again: crew is not answering');
+    for (const b of screen.getAllByTestId('domain-followup-confirm')) expect(b).toBeDisabled();
+    expect(domainRuling).toHaveBeenCalledTimes(1);
+  });
+
+  it('a ruling out survives a tab change: the row comes back held, and nothing is posted twice', async () => {
+    const user = userEvent.setup();
+    let answer: (() => void) | null = null;
+    domainRuling.mockImplementation(() => new Promise((r) => { answer = () => r({ ruling: { action: 'confirm', by: 'local', at: 1, subject: 'target', id: MAIN }, build: { rebuilt: true, accounting: RULED.accounting } }); }));
+    render(<RequirementsModal repoId="payroll" repoName="payroll" onClose={() => {}} />);
+    await user.click(await screen.findByTestId('domain-tab-followups'));
+    await user.click(within(screen.getAllByTestId('domain-followup')[3]!).getByTestId('domain-followup-confirm'));
+    await user.click(screen.getByTestId('domain-tab-rules'));
+    await user.click(screen.getByTestId('domain-tab-followups'));
+    const again = within(screen.getAllByTestId('domain-followup')[3]!).getByTestId('domain-followup-confirm');
+    expect(again).toBeDisabled();
+    await user.click(again);
+    expect(domainRuling).toHaveBeenCalledTimes(1);
+    listRequirements.mockResolvedValue(page(RULED));
+    answer!();
+    await waitFor(() => expect(screen.getByTestId('domain-model-headline')).toHaveTextContent('3 of 4 targets accounted'));
+  });
+
+  it("another repository's model is never offered under this one while its read is out", async () => {
+    const { rerender } = render(<RequirementsModal repoId="payroll" repoName="payroll" onClose={() => {}} />);
+    await screen.findByTestId('domain-model-headline');
+    listRequirements.mockImplementation(() => new Promise(() => {}));
+    rerender(<RequirementsModal repoId="ledger" repoName="ledger" onClose={() => {}} />);
+    await waitFor(() => expect(screen.queryByTestId('domain-model-headline')).not.toBeInTheDocument());
+    expect(screen.queryByTestId('domain-followup-confirm')).not.toBeInTheDocument();
+  });
+
+  it('the tabs move with the arrow keys and name their panel', async () => {
+    const user = userEvent.setup();
+    render(<RequirementsModal repoId="payroll" repoName="payroll" onClose={() => {}} />);
+    const rules = await screen.findByTestId('domain-tab-rules');
+    expect(rules).toHaveAttribute('aria-controls', 'domain-tab-panel');
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'domain-tab-rules');
+    rules.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(screen.getByTestId('domain-tab-followups')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('domain-tab-followups')).toHaveFocus();
+    await user.keyboard('{ArrowLeft}{ArrowLeft}');
+    expect(screen.getByTestId('domain-tab-list')).toHaveAttribute('aria-selected', 'true');
   });
 
   it('a page without a model (a 1.1.0 graph) shows the list as before, with no tabs', async () => {

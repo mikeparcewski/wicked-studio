@@ -59,3 +59,4 @@
   .wk-scope-phrase > button, .wk-scope-phrase > span:last-child { grid-column: 2; grid-row: 1; justify-self: end; }
   .wk-scope-phrase-code { grid-column: 1 / -1; grid-row: 2; }
 }
+.wk-scope-refresh { margin-left: var(--space-2, 0.5rem); font-size: inherit; }

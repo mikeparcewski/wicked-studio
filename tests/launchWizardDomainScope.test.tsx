@@ -20,15 +20,39 @@ import { clearCachedRoster, setCachedRoster } from '../src/store/rosterCache.js'
 import { clearCachedWorkflows, setCachedWorkflows } from '../src/store/workflowCache.js';
 import { useCapabilities } from '../src/store/capabilities.js';
 
+// The launch's own check (`resolveHumanConfirm`, which waits on crew's plan preview for a preset) held open by a test,
+// so the person can edit the scope while Launch waits on it. Unset: the real hook's answer.
+const held = vi.hoisted(() => ({ gate: null as Promise<string | undefined> | null }));
+vi.mock('../src/hooks/useLaunchPlan.js', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../src/hooks/useLaunchPlan.js')>();
+  return {
+    ...real,
+    useLaunchPreview: (input: Parameters<typeof real.useLaunchPreview>[0]) => {
+      const r = real.useLaunchPreview(input);
+      return { ...r, resolveHumanConfirm: () => held.gate ?? r.resolveHumanConfirm() };
+    },
+  };
+});
+
 const CARD = JSON.parse(readFileSync(join(__dirname, 'fixtures', 'domain-v3', 'scope-mini-cobol.crew.json'), 'utf8')) as DomainScopeCard;
 const seat = (key: string, signedIn = true): RosterSeat =>
   ({ key, display_name: key, binary: key, enabled_for_council: true, health: { status: 'active', since: 'x' }, signed_in: signedIn }) as RosterSeat;
+// crew's own signed-out seat: `seatStanding(seat, false)` (crew packages/crew/src/api/seat-standing.ts:264, as
+// roster-standing.ts:408 calls it) over a roster seat, printed by running it (j6-build S1 fold). A signed-out seat
+// is also not work-eligible, which studio's standing says first (codex S1 r1).
+const CODEX_SIGNED_OUT = {
+  key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true, health: { status: 'active', since: 'x' },
+  auth: 'signed_out', login_check: 'unverified',
+  login_note: 'login unverified — nothing asked codex whether its login works (no auth-status check), so its sign-in is read from its credential file; its first refused turn signs it out',
+  council_eligible: false, council_ineligible_reason: 'signed out — a council would bench this seat on its first ballot; sign it in from the Helpers page',
+  work_eligible: false, work_ineligible_reason: 'signed out — a council would bench this seat on its first ballot; sign it in from the Helpers page',
+} as unknown as RosterSeat;
 const WF = [{ id: 'domain-extraction', phases: [{ id: 'domain-run' }] }] as unknown as WorkflowDef[];
 const REPO = { id: 'repo-1', name: 'payroll', root_path: '/srv/payroll', default_branch: 'main', registered_at: 0 } as RepoEntry;
 const INTENT = 'How PAYCALC1 computes pay from the payroll file';
 
 let posts: Array<{ path: string; body: Record<string, unknown> }> = [];
-let preview: (body: Record<string, unknown>) => unknown = () => ({ posture: { power: false, deliver: 'none', autoDeliver: false }, scopeCard: CARD });
+let preview: (body: Record<string, unknown>) => unknown | Promise<unknown> = () => ({ posture: { power: false, deliver: 'none', autoDeliver: false }, scopeCard: CARD });
 function stubWire(roster: RosterSeat[]): void {
   posts = [];
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
@@ -37,7 +61,7 @@ function stubWire(roster: RosterSeat[]): void {
     if (init?.method === 'POST') {
       const body = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>;
       posts.push({ path, body });
-      if (path === '/runs/preview') return json(preview(body));
+      if (path === '/runs/preview') return Promise.resolve(preview(body)).then(json);
       return json({ runId: 'r-new' });
     }
     return json(path === '/roster' ? { roster } : path === '/repos' ? { repos: [REPO] } : path === '/workflows' ? { workflows: WF } : path === '/projects' ? { projects: [] } : {});
@@ -76,7 +100,7 @@ function setup(roster: RosterSeat[]): void {
   useCapabilities.setState({ launchPrimary: false });
 }
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); resetComposerSeats(); preview = () => ({ posture: { power: false, deliver: 'none', autoDeliver: false }, scopeCard: CARD }); });
+afterEach(() => { held.gate = null; cleanup(); vi.unstubAllGlobals(); resetComposerSeats(); preview = () => ({ posture: { power: false, deliver: 'none', autoDeliver: false }, scopeCard: CARD }); });
 
 describe('a domain model launch (J6 S1)', () => {
   beforeEach(() => setup([seat('claude'), seat('codex')]));
@@ -117,19 +141,46 @@ describe('a domain model launch (J6 S1)', () => {
     expect(posts.find((p) => p.path === '/runs')!.body['domainScope']).toEqual({ intent: INTENT, phrases: ['PAYCALC1', 'PAYJOB'], scopeHash: 'b'.repeat(64) });
   });
 
-  it("no card holds Launch, with crew's words on the card", async () => {
-    preview = () => ({ posture: { power: false, deliver: 'none', autoDeliver: false }, scopeError: 'repository repo-1 has no code graph yet' });
+  it("no card holds Launch, with crew's words on the card; Read the code again asks again", async () => {
+    let graph = false;
+    preview = () => ({ posture: { power: false, deliver: 'none', autoDeliver: false }, ...(graph ? { scopeCard: CARD } : { scopeError: 'repository repo-1 has no code graph yet' }) });
     await toReview();
     expect(await screen.findByTestId('domain-scope-error')).toHaveTextContent('No scope yet: repository repo-1 has no code graph yet');
     expect(screen.getByTestId('launch-wizard-blocker')).toHaveTextContent('There is no scope to start from yet: see the card.');
     fireEvent.click(screen.getByTestId('launch-wizard-launch'));
     await new Promise((r) => setTimeout(r, 20));
     expect(posts.some((p) => p.path === '/runs')).toBe(false);
+    // codex S1 r1: a failed answer is not final for the open form; the person asks again (the graph is built meanwhile).
+    graph = true;
+    const asked = scopeAsks().length;
+    fireEvent.click(screen.getByTestId('domain-scope-refresh'));
+    await waitFor(() => expect(screen.getByTestId('domain-scope-card').dataset.state).toBe('ready'));
+    expect(scopeAsks()).toHaveLength(asked + 1);
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
+  });
+
+  it('a phrase changed while Launch is being checked stops the launch instead of sending the older scope', async () => {
+    const second = { ...CARD, scopeHash: 'b'.repeat(64), phrases: { ...CARD.phrases, PAYJOB: ['app/jcl/PAYJOB.jcl'] } };
+    preview = (body) => ({ posture: { power: false, deliver: 'none', autoDeliver: false }, scopeCard: (body['domainScope'] as { phrases?: string[] }).phrases !== undefined ? second : CARD });
+    let hold: ((v: string | undefined) => void) | null = null;
+    await toReview();
+    await waitFor(() => expect(screen.getByTestId('domain-scope-card').dataset.state).toBe('ready'));
+    held.gate = new Promise((resolve) => { hold = resolve; });
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    await waitFor(() => expect(hold).not.toBeNull());
+    fireEvent.change(screen.getByTestId('domain-scope-add-input'), { target: { value: 'PAYJOB' } });
+    fireEvent.click(screen.getByTestId('domain-scope-add'));
+    await waitFor(() => expect(screen.getAllByTestId('domain-scope-phrase')).toHaveLength(2));
+    await act(async () => { hold!(undefined); await Promise.resolve(); });
+    await waitFor(() => expect(screen.getByTestId('launch-wizard-error')).toHaveTextContent('This job changed while it was being checked'));
+    expect(posts.some((p) => p.path === '/runs')).toBe(false);
+    held.gate = null;
   });
 });
 
 describe('a domain model launch with a helper signed out', () => {
-  beforeEach(() => setup([seat('claude'), seat('codex', false)]));
+  beforeEach(() => setup([seat('claude'), CODEX_SIGNED_OUT]));
 
   it('says which helper to sign in and launches nothing', async () => {
     await toReview();

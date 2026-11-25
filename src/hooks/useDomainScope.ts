@@ -12,8 +12,8 @@ import { DOMAIN_EXTRACTION_ID } from '../board/requirementsState.js';
 export type DomainScopeState =
   | { status: 'off' }
   | { status: 'loading' }
-  | { status: 'ready'; card: DomainScopeCard }
-  | { status: 'failed'; error: string };
+  | { status: 'ready'; card: DomainScopeCard; refresh?: () => void }
+  | { status: 'failed'; error: string; refresh?: () => void };
 
 const PAUSE_MS = 400;
 
@@ -24,7 +24,10 @@ export function domainScopeKey(repoRef: string | null, intent: string, phrases: 
 
 export function useDomainScope(opts: { enabled: boolean; repoRef: string | null; intent: string; phrases: readonly string[] | null }): DomainScopeState {
   const { enabled, repoRef, intent, phrases } = opts;
-  const key = domainScopeKey(repoRef, intent, phrases);
+  // codex S1 r1: an answer is kept for its inputs, so a failed one (or a card whose code has since moved) is asked
+  // again only by a person's "Read the code again", which counts as new inputs.
+  const [attempt, setAttempt] = useState(0);
+  const key = `${domainScopeKey(repoRef, intent, phrases)}#${attempt}`;
   const [answer, setAnswer] = useState<{ key: string; state: DomainScopeState } | null>(null);
   const asked = useRef<string | null>(null);
   const live = enabled && repoRef !== null && intent.trim() !== '';
@@ -59,5 +62,6 @@ export function useDomainScope(opts: { enabled: boolean; repoRef: string | null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live, key]);
   if (!live) return { status: 'off' };
-  return answer !== null && answer.key === key ? answer.state : { status: 'loading' };
+  if (answer === null || answer.key !== key) return { status: 'loading' };
+  return answer.state.status === 'ready' || answer.state.status === 'failed' ? { ...answer.state, refresh: () => setAttempt((n) => n + 1) } : answer.state;
 }

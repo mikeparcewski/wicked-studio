@@ -489,7 +489,10 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   const requestNow = useRef('');
   requestNow.current = JSON.stringify([draft.workflowId, draft.catalogEntryId, repoRef, draft.projectId, sentIntent.trim(),
     // Whole seats, as `clisJson` sends them (codex r5: a roster refresh can change a seat under one key).
-    deliver, seats, lead, offerPower ? powerOn : null, offerReduced && draft.reduced, draft.skipQe, draft.skipQeReason]);
+    deliver, seats, lead, offerPower ? powerOn : null, offerReduced && draft.reduced, draft.skipQe, draft.skipQeReason,
+    // codex S1 r1: the scope the card answered for (its phrases and hash), so a phrase edited while the check was
+    // awaited stops the launch instead of sending the older scope.
+    domainRun ? [scopePhrasesNow, domainScope.status === 'ready' ? domainScope.card.scopeHash : domainScope.status] : null]);
   const resolveConfirmStill = async (): Promise<Awaited<ReturnType<typeof preview.resolveHumanConfirm>>> => {
     const asked = requestNow.current;
     const confirm = await preview.resolveHumanConfirm();
