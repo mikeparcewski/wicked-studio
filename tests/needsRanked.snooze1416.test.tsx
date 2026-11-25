@@ -114,6 +114,21 @@ describe('Snooze on the ranked Needs-you page (studio#1416)', () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
+  it('a refusal that lands after the person moved on leaves their focus where it is (codex delta 2)', async () => {
+    let refuse: () => void = () => undefined;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => ((init?.method ?? 'GET') === 'PUT'
+      ? new Promise<Response>((r) => { refuse = () => r(json({ error: 'refused', code: 'human_operator_only' }, 403)); })
+      : Promise.resolve(answer(init?.method ?? 'GET', url)))));
+    view(snap());
+    await act(async () => { fireEvent.click(within(row('run:68c26704')).getByTestId('needs-item-snooze')); });
+    await act(async () => { fireEvent.click(within(row('run:68c26704')).getByTestId('needs-item-snooze-hour')); });
+    const elsewhere = screen.getByTestId('needs-snoozed-summary');
+    elsewhere.focus();
+    await act(async () => { refuse(); });
+    await waitFor(() => expect(within(row('run:68c26704')).getByTestId('needs-item-snooze-failed')).toBeTruthy());
+    expect(document.activeElement).toBe(elsewhere);
+  });
+
   it('says how many are snoozed, lists them with their end, and Wake now brings one back', async () => {
     view(snap());
     const held = screen.getByTestId('needs-snoozed');
@@ -278,6 +293,51 @@ describe('Snooze and Wake through crew\'s re-read (studio#1416 round 1)', () => 
     await act(async () => { late.forEach((f) => f()); });
     await waitFor(() => expect(screen.getByTestId('needs-sentence')).toHaveAttribute('data-count', '3'));
     await new Promise((r) => setTimeout(r, 20));
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('a press elsewhere right after Wake, before any timer runs, cancels the move (codex delta 2)', async () => {
+    await act(async () => { await useSystemStore.getState().refresh(); });
+    render(<Live />);
+    holdNext = true;
+    (screen.getByTestId('needs-snoozed') as HTMLDetailsElement).open = true;
+    const wake = screen.getByTestId('needs-snoozed-wake');
+    wake.focus();
+    act(() => { fireEvent.click(wake); fireEvent.pointerDown(document.body); });
+    await waitFor(() => expect(late).toHaveLength(1));
+    await act(async () => { late.forEach((f) => f()); });
+    await waitFor(() => expect(screen.getByTestId('needs-sentence')).toHaveAttribute('data-count', '3'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(row('run:290a7fee').contains(document.activeElement)).toBe(false);
+  });
+
+  it('the answer lands while focus is on another control: the move is spent, not kept for a later snapshot (codex delta 2)', async () => {
+    await act(async () => { await useSystemStore.getState().refresh(); });
+    render(<Live />);
+    holdNext = true;
+    await wakeFromKeyboard();
+    await waitFor(() => expect(late).toHaveLength(1));
+    const other = within(row('run:68c26704')).getByTestId('needs-item-snooze');
+    other.focus(); // a screen reader moves focus with no key or press on the document
+    await act(async () => { late.forEach((f) => f()); });
+    await waitFor(() => expect(screen.getByTestId('needs-sentence')).toHaveAttribute('data-count', '3'));
+    expect(document.activeElement).toBe(other);
+    other.blur();
+    await act(async () => { await useSystemStore.getState().refresh({ force: true }); });
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('leaving the page while a Wake is out: coming back finds no old move (codex delta 2)', async () => {
+    await act(async () => { await useSystemStore.getState().refresh(); });
+    const first = render(<Live />);
+    holdNext = true;
+    await wakeFromKeyboard();
+    await waitFor(() => expect(late).toHaveLength(1));
+    first.unmount();
+    await act(async () => { late.forEach((f) => f()); });
+    render(<Live />);
+    await waitFor(() => expect(screen.getByTestId('needs-sentence')).toHaveAttribute('data-count', '3'));
+    await act(async () => { await useSystemStore.getState().refresh({ force: true }); });
     expect(document.activeElement).toBe(document.body);
   });
 
