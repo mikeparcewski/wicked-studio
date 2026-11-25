@@ -1,11 +1,13 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { FileText, GitBranch, Palette } from 'lucide-react';
+import { Clapperboard, FileText, GitBranch, Palette } from 'lucide-react';
 import { api } from '../../api/client.js';
 import type { AskAnswer } from '../../api/ask.js';
 import { parseArtifactRef, type ArtifactProposal, type ChatProposalView, type ProposalEdits, type ProposalSource, type ProtectedEdit } from '../../api/chatArtifacts-wire.js';
 import type { SessionView } from '../../api/types.js';
 import { getVersions } from '../../api/interactive.js';
 import { useProjectsStore } from '../../store/projects.js';
+import { noteCutLanded } from '../../store/chatCutLanded.js';
+
 import { NewDocument } from '../everything/NewDocument.js';
 import {
   changeRoute,
@@ -38,6 +40,9 @@ import { canonicalDelta, effectiveAppearance, mergedAppearance, themePatchOf, us
 import { contrastWords, measureTheme, type ContrastCheck } from '../../theming/themeContrast.js';
 import { ThemeSwatches } from '../ThemeSwatches.js';
 import { AskCard, AskRecord } from '../ask/AskCard.js';
+
+/** How recent a cut card's decision must be for its version to play in the editor (crew#1814). */
+const CUT_LANDED_FRESH_MS = 10 * 60_000;
 
 /**
  * A CHAT'S PROPOSAL CARD (DES-CHAT-ARTIFACTS-001 §4.2, slice A2): what a seat proposed to make, drawn from crew's own
@@ -182,6 +187,14 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
   // How many edits the accepted Go kept: from crew's own accepting record, never from what this tab sent.
   const outcome = useRefineOutcome(p, view.state === 'decided' && view.decision === 'go' && p.kind === 'refine' && !stub ? run : null, keptByAccepted(view));
   const detailsId = useId();
+  // crew#1814: the version a cut card's Go made plays in the video's editor at once (told once per version, and only a
+  // decision of the last few minutes: an old card read back from history plays nothing).
+  const landedVersion = view.state === 'decided' && view.decision === 'go' && p.kind === 'cut' ? view.result?.version : undefined;
+  useEffect(() => {
+    if (landedVersion === undefined || p.target === undefined) return;
+    if (view.decidedAt !== undefined && Date.now() - view.decidedAt > CUT_LANDED_FRESH_MS) return;
+    noteCutLanded({ ref: p.target.ref, version: landedVersion, base: p.target.base });
+  }, [landedVersion]); // eslint-disable-line react-hooks/exhaustive-deps
   // A card that settles drops the note it showed while it was open.
   useEffect(() => {
     if (!open) {
@@ -296,9 +309,10 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
       ref={sectionRef}
     >
       <p className="wk-ask-who">
-        {p.kind === 'theme' ? <Palette size={16} aria-hidden /> : p.kind === 'onboard' ? <GitBranch size={16} aria-hidden /> : <FileText size={16} aria-hidden />}
+        {p.kind === 'theme' ? <Palette size={16} aria-hidden /> : p.kind === 'onboard' ? <GitBranch size={16} aria-hidden /> : p.kind === 'cut' ? <Clapperboard size={16} aria-hidden /> : <FileText size={16} aria-hidden />}
         <span>{p.kind === 'theme'
           ? (open ? `Theme proposal from ${seatName} · nothing changes until you apply it` : `Theme proposal from ${seatName}`)
+          : p.kind === 'cut' ? (open ? `Video change from ${seatName} · nothing changes until you choose` : `Video change from ${seatName}`)
           : (open ? `Proposal from ${seatName} · nothing starts until you choose` : `Proposal from ${seatName}`)}</span>
       </p>
       <p className="wk-ask-q" data-testid="artifact-proposal-what">{p.what.label}</p>
@@ -310,7 +324,10 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
       ) : null}
       {open && p.blocked !== null && (
         <p data-testid="artifact-proposal-blocked" className="wk-proposal-blocked">
-          <b>Can’t start here yet.</b> {p.blocked.charAt(0).toUpperCase() + p.blocked.slice(1)}. Nothing was started.
+          {p.kind === 'cut'
+            // (crew#1814) Crew's words on a cut are whole sentences that say what to do next.
+            ? <><b>Can’t change the video.</b> {p.blocked}</>
+            : <><b>Can’t start here yet.</b> {p.blocked.charAt(0).toUpperCase() + p.blocked.slice(1)}. Nothing was started.</>}
         </p>
       )}
       {(open || view.state === 'accepting') && stub && (
@@ -401,7 +418,13 @@ function ProposalLines({ p, id, theme }: { p: ArtifactProposal; id?: string; the
   const has = (v: string | null | undefined): v is string => v !== null && v !== undefined && v.trim() !== '';
   return (
     <dl {...(id !== undefined ? { id } : {})} className="wk-proposal-lines" data-testid="artifact-proposal-lines">
-      {p.target !== undefined && <Row k="Changes" testId="artifact-proposal-target">{p.target.title} · v{p.target.base}</Row>}
+      {p.kind === 'cut' && p.target !== undefined && <Row k="Video" testId="artifact-proposal-target">{p.target.title} · from version {p.target.base}</Row>}
+      {p.kind !== 'cut' && p.target !== undefined && <Row k="Changes" testId="artifact-proposal-target">{p.target.title} · v{p.target.base}</Row>}
+      {p.kind === 'cut' && p.cut !== undefined && (
+        <Row k="Changes" testId="artifact-proposal-cut">
+          <ol className="wk-proposal-cut-changes">{p.cut.changes.map((c, i) => <li key={i} data-testid="artifact-proposal-cut-change">{c}</li>)}</ol>
+        </Row>
+      )}
       {p.kind === 'refine' && has(p.brief) && <Row k="Ask" testId="artifact-proposal-brief">{p.brief}</Row>}
       {p.kind === 'create' && has(p.brief) && <Row k="Brief" testId="artifact-proposal-brief">{p.brief}</Row>}
       {p.touches !== undefined && p.touches.length > 0 && <Row k="Parts" testId="artifact-proposal-touches">{p.touches.join(', ')}</Row>}

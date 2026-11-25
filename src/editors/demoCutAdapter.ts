@@ -52,6 +52,9 @@ export class DemoCutAdapter implements HostAdapter {
   }
   private async load(): Promise<DemoCut> {
     const cut = this.shaped(await this.json<DemoCut>('cut'));
+    // Versions only grow (every change, Undo and Restore included, is a new one): a read that answers after a newer one
+    // (the idle re-read racing a chat's change, crew#1814 S3) never takes the editor back.
+    if (this.cut !== null && cut.version < this.cut.version) return this.cut;
     this.cut = cut; this.versionCuts.set(cut.version, cut); this.setHead(cut.version);
     return cut;
   }

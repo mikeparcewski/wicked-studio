@@ -24,6 +24,7 @@ import { askAbout } from '../../board/askAbout.js';
 import { artifactRefOf } from '../../api/chatArtifacts-wire.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { noteShown, noteWritten, placementEntry, registerInView } from '../../store/artifactInView.js';
+import { onCutLanded } from '../../store/chatCutLanded.js';
 import { FullShell, focusFullOptions } from './FullShell.js';
 import { useRunHost } from './RunHostContext.js';
 
@@ -58,6 +59,8 @@ export function clickedIn(frame: HTMLIFrameElement | null | undefined): boolean 
 }
 
 /** studio#1140: what the chat beside a video can't do, and where the video does change. */
+/** crew#1814: where the chat can change the cut, it says what to ask for (each change is a card the person approves). */
+const VIDEO_CHAT_NOTE_CHANGE = "Ask here to drop, move, rename or trim a chapter, or to change what a chapter's caption says. You see each change as a card and approve it before the video changes.";
 const VIDEO_CHAT_NOTE_CUT = "This chat can't change the video. Change it here by hand in Options: Chapters (rename, move, trim), Captions and Theme. Caption words can't be edited yet; for new words, make a new demo video.";
 const VIDEO_CHAT_NOTE_RECORDING = "This chat can't change the video. Once the run is done, Edit the cut makes a copy you can change by hand; at the review gate, Record it again records a new take.";
 
@@ -209,6 +212,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   // chat beside it) is about. The send reads the version it shows after its writes in flight have settled.
   // studio#1140: an edited demo cut (a document) too, where crew reads a cut as a video the chat can't change.
   const cutInView = useCapabilities((s) => s.chatCutInView);
+  const chatCut = useCapabilities((s) => s.chatCut);
   const inViewRef = binding.source === 'interactive-doc' || (binding.source === 'demo' && cutInView)
     ? artifactRefOf(binding.projectId, binding.docId)
     : null;
@@ -270,6 +274,23 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const pressOptionsRef = useRef<() => void>(() => undefined);
   openOptionsRef.current = openOptions;
 
+  /** The card's write line (its Undo), for a version a chat made (crew#1814). Set by the host effect below. */
+  const writtenRef = useRef<NonNullable<HostUi['written']> | null>(null);
+  // crew#1814: a version of this video that a chat's cut card made plays here at once, with Undo beside it. Only when it
+  // is the head the video tool now answers (R5): a later hand edit, or another chat's change, is never shown as this.
+  useEffect(() => {
+    if (adapter === null || inViewRef === null || binding.source !== 'demo') return undefined;
+    return onCutLanded(inViewRef, (l) => {
+      void Promise.resolve(adapter.refresh?.()).then(() => {
+        if (!live.current || adapter.artifact().head !== l.version) return;
+        if (hostRef.current?.alive === true) hostRef.current.adopt(l.version);
+        else pendingAdopt.current.push({ group, version: l.version });
+        hostRef.current?.artifactChanged(l.version, 'generated');
+        writtenRef.current?.({ version: l.version, base: l.base, summary: 'the video from the chat', words: 'the video from the chat', anchors: [], verb: 'changed' });
+      }).catch(() => undefined);
+    });
+  }, [adapter, inViewRef, binding.source, group]);
+
   // One host per mount (EP-D2): the frame is made once; card ↔ full is the same element. "Reload it" remounts.
   useEffect(() => {
     if (frameBox.current === null || adapter === null) return undefined;
@@ -283,6 +304,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       relay(group, 'card', { type: 'changed', head: w.version, kind: w.verb === 'restyled' ? 'theme' : 'deterministic' });
       if (live.current) setLine({ kind: 'edited', version: w.version, base: w.base, what: w.words ?? writtenWords(w.anchors, binding.kind as EditorKind), verb: w.verb });
     };
+    writtenRef.current = written;
     const start = async (): Promise<void> => {
       const decided = grantsProp !== undefined ? { grants: grantsProp, note: null } : await fetchGrants(editor.id, editor.version, editor.sha256, binding.projectId === '' ? null : binding.projectId);
       await adapter.refresh?.().catch(() => null);
@@ -707,10 +729,10 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
         gateActions={gate}
         actions={full ? <>{actionButtons}{optionsButton}</> : null}
         chat={run?.renderChat?.()}
-        // studio#1140: chat edits to a cut need crew's cut proposal and interactive's recut ops first; until then the
-        // drawer says how a video does change (the seat is told the same by crew). The slice that adds chat cut edits
-        // deletes this line. A cut (a document) changes by hand in Options; a run's recording only through its gate verbs.
-        chatNote={binding.source === 'demo' ? <p className="wk-host-note wk-full-drawer-note" data-testid="host-video-chat-note">{binding.docId !== undefined && binding.docId !== '' ? VIDEO_CHAT_NOTE_CUT : VIDEO_CHAT_NOTE_RECORDING}</p> : undefined}
+        // studio#1140: the drawer says how this video changes. Where crew draws cut cards (chatArtifacts.cut), a cut
+        // changes from this chat, one approved card at a time; on an older crew it changes by hand in Options (the seat
+        // is told the same by crew). A run's recording changes only through its gate verbs.
+        chatNote={binding.source === 'demo' ? <p className="wk-host-note wk-full-drawer-note" data-testid="host-video-chat-note">{binding.docId !== undefined && binding.docId !== '' ? (chatCut ? VIDEO_CHAT_NOTE_CHANGE : VIDEO_CHAT_NOTE_CUT) : VIDEO_CHAT_NOTE_RECORDING}</p> : undefined}
         onExit={onExit}
         onEscape={onEscape}
       >

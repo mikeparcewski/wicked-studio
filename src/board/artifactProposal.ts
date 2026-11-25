@@ -40,7 +40,7 @@ const KINDS: ReadonlySet<string> = new Set(['proposal', 'proposal_accepting', 'p
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): v is string => typeof v === 'string';
 const strOrNull = (v: unknown): boolean => v === null || typeof v === 'string';
-const KIND_SET: ReadonlySet<string> = new Set(['create', 'refine', 'theme', 'demo', 'onboard']);
+const KIND_SET: ReadonlySet<string> = new Set(['create', 'refine', 'theme', 'demo', 'onboard', 'cut']);
 const isSource = (s: unknown): boolean => isObj(s) && str(s['token']) && str(s['label']) && (s['status'] === 'ok' || s['status'] === 'struck')
   && (s['reason'] === undefined || str(s['reason']));
 /**
@@ -77,6 +77,10 @@ export function isArtifactProposal(p: unknown): p is ArtifactProposal {
   const onboard = p['onboard'];
   if (onboard !== undefined && !isOnboard(onboard)) return false;
   if (p['kind'] === 'onboard' && (onboard === undefined || (p['blocked'] === null && !onboardGoable(onboard as Record<string, unknown>, filed)))) return false;
+  // (crew#1814) A cut card: its ops and crew's words for each, one per op; Go needs the video and the version it changes.
+  const cut = p['cut'];
+  if (cut !== undefined && !isCut(cut)) return false;
+  if (p['kind'] === 'cut' && (cut === undefined || target === undefined)) return false;
   const touches = p['touches'];
   if (touches !== undefined && (!Array.isArray(touches) || !touches.every(str))) return false;
   // (A5) A refine's protected edits: each one the card can draw and the person can answer.
@@ -87,6 +91,10 @@ export function isArtifactProposal(p: unknown): p is ArtifactProposal {
 }
 
 const filled = (v: unknown): v is string => str(v) && v.trim() !== '';
+const CUT_OPS: ReadonlySet<string> = new Set(['chapter-rename', 'chapter-move', 'chapter-trim', 'chapter-say', 'chapter-drop']);
+const isCut = (c: unknown): boolean => isObj(c) && Array.isArray(c['ops']) && Array.isArray(c['changes'])
+  && c['ops'].length > 0 && c['ops'].length === c['changes'].length && c['changes'].every(str)
+  && c['ops'].every((o) => isObj(o) && str(o['op']) && CUT_OPS.has(o['op']) && str(o['chapter']));
 const isOnboard = (o: unknown): boolean => isObj(o) && str(o['url']) && str(o['name']) && strOrNull(o['checkout'])
   && strOrNull(o['projectId']) && strOrNull(o['projectName'])
   && (o['existing'] === null || (isObj(o['existing']) && filled(o['existing']['id']) && filled(o['existing']['name'])))
@@ -201,6 +209,7 @@ export const GO_WORDS: Readonly<Record<ArtifactProposalKind, string>> = {
   refine: 'Make the change',
   theme: 'Preview',
   onboard: 'Add it',
+  cut: 'Change the video',
 };
 
 const GO_SUB: Readonly<Record<ArtifactProposalKind, string>> = {
@@ -209,6 +218,7 @@ const GO_SUB: Readonly<Record<ArtifactProposalKind, string>> = {
   refine: 'Starts now; your edits are kept',
   theme: 'Nothing changes until you apply it',
   onboard: 'Clones it and starts onboarding',
+  cut: 'Makes a new version; the old one stays in Versions',
 };
 
 const GO_CONSEQUENCE: Readonly<Record<ArtifactProposalKind, string>> = {
@@ -217,6 +227,7 @@ const GO_CONSEQUENCE: Readonly<Record<ArtifactProposalKind, string>> = {
   refine: 'Studio starts the revision; the new version appears here. Your own edits are kept. One job at a time in a chat.',
   theme: 'Studio shows the theme on the Theme page. Nothing is saved until you apply it.',
   onboard: 'Studio clones the repository to this computer, registers it, adds it to the project and starts onboarding (it builds the code map). Nothing happens until you choose.',
+  cut: 'Studio makes a new version of the video with these changes and plays it in the editor when it’s ready. Undo, or Versions, brings back the one before.',
 };
 
 const CHANGE_SUB: Readonly<Record<ArtifactProposalKind, string>> = {
@@ -225,6 +236,7 @@ const CHANGE_SUB: Readonly<Record<ArtifactProposalKind, string>> = {
   refine: 'Edit the ask',
   theme: 'Compare and apply',
   onboard: 'Say it in the chat',
+  cut: 'Say it in the chat',
 };
 
 /** Change something's label: a theme's is "Open in Theme" (DES §4.2, mockup e). */
@@ -234,6 +246,7 @@ const CHANGE_WORDS: Readonly<Record<ArtifactProposalKind, string>> = {
   refine: 'Change something',
   theme: 'Open in Theme',
   onboard: 'Change something',
+  cut: 'Change something',
 };
 
 const NOT_NOW_SUB: Readonly<Record<ArtifactProposalKind, string>> = {
@@ -242,6 +255,7 @@ const NOT_NOW_SUB: Readonly<Record<ArtifactProposalKind, string>> = {
   refine: 'The document stays as it is',
   theme: 'Nothing changes',
   onboard: 'Nothing is cloned or registered',
+  cut: 'The video stays as it is',
 };
 
 /** What Go on an onboard card does, said for its own facts (no project = registered unfiled). */
@@ -276,6 +290,7 @@ export function changeRoute(kind: ArtifactProposalKind): { kind: 'form' } | { ki
     refine: 'Editing the ask here comes with refining from a chat. For now, say what to change in the chat and a new proposal replaces this one.',
     demo: 'Changing the address, audience and what to show comes with demo videos from a chat. For now, say what to change in the chat and a new proposal replaces this one.',
     onboard: 'To change the address, the name or the project, say so in the chat: a new proposal replaces this one.',
+    cut: 'To change what this does to the video, say so in the chat: a new proposal replaces this one. You can also change the video by hand in its editor.',
   };
   return { kind: 'stub', note: notes[kind] };
 }
@@ -349,7 +364,11 @@ export function proposalStarting(e: ProposalEntry, now: number, inFlight: boolea
 export function proposalRecordLine(e: ProposalEntry, starting = false): string | null {
   if (e.state === 'open') return null;
   if (e.state === 'superseded') return 'A newer proposal replaced this one. Nothing was started.';
-  if (e.state === 'accepting') return starting ? 'Starting it…' : 'Interrupted before it was recorded as started.';
+  if (e.state === 'accepting') {
+    // (crew#1814) A cut starts no run: the video tool renders the new version (seconds to a few minutes).
+    if (e.proposal.kind === 'cut') return starting ? 'Making the new version…' : 'Interrupted before the new version was recorded. Go again checks whether it was made.';
+    return starting ? 'Starting it…' : 'Interrupted before it was recorded as started.';
+  }
   // A theme's Go is recorded when the person APPLIED it (a preview records nothing).
   if (e.proposal.kind === 'theme' && e.decision === 'go') return 'You applied this theme';
   return `You chose: ${e.decision === 'go' ? goWords(e.proposal) : 'Not now'}`;
@@ -360,6 +379,8 @@ export function proposalResultWords(e: ProposalEntry): string | null {
   if (e.state !== 'decided' || e.decision !== 'go' || e.result === null || e.result === undefined) return null;
   if (e.result.stub) return 'Test configuration: recorded, nothing was made';
   if (e.proposal.kind === 'theme') return 'Saved to your studio settings · no job was started';
+  // (crew#1814) The version the change made: the editor plays it.
+  if (e.proposal.kind === 'cut') return e.result.version !== undefined ? `Changed · version ${e.result.version} · no job was started` : 'Changed · no job was started';
   const ob = e.proposal.onboard;
   if (e.proposal.kind === 'onboard' && ob !== undefined) {
     // (crew#1694) A project Go created is named as made, by the name the card showed.
