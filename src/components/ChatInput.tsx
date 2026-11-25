@@ -8,7 +8,7 @@ import { api, ApiError, apiWire } from '../api/client.js';
 import { qeRefusalOf } from '../board/qeRefusal.js';
 import { QeRefusalWarning } from './QeRefusalWarning.js';
 import { StandInChoice } from './StandInChoice.js';
-import { helperNamer, saveStandInsEveryJob, standInChoiceOf, standInRelaunchBody, type StandInChoiceId, type StandInChoiceRefusal } from '../board/standIn.js';
+import { helperNamer, saveStandInsEveryJob, standInChoiceOf, standInRelaunchBody, type StandInChoiceId, type StandInChoiceLineId, type StandInChoiceRefusal } from '../board/standIn.js';
 import type { BaseSkillPosture, BaseSkillRefusedResponse, DeliverTargetResponse, EntityMode, LaunchBodyWithDeliver, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from './composerDefaults.js';
 import { isShortcutsPaletteOpen } from '../hooks/useGlobalShortcuts.js';
@@ -25,7 +25,7 @@ import { clearRetryPrefill, confirmModeOf, peekRetryPrefill, type RetryPrefill }
 import { clearSteerPrefill, peekSteerPrefill } from '../store/steerPrefill.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { seatStandingWord } from './HealthRailSection.js';
-import { noCarryingSeatReason } from './gateVerdictModel.js';
+import { noCarryingSeatReason, seatJoinStanding } from './gateVerdictModel.js';
 import { assuranceNoticeOf, baseSkillRefusalOf, describeBaseSkill, gatePostureWord, LAUNCH_PROBE_AFTER_SECS, launchNeedsRepo, launchSubmit, newLaunchId, readyLead } from '../board/launchModel.js';
 import { isSystemWorkflowIn, setCachedWorkflows } from '../store/workflowCache.js';
 import { loadPresets, presetSystemFlag, usePlanCatalog } from '../store/planCatalog.js';
@@ -1003,10 +1003,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
   // DES-STANDIN-001 §2.1 step 3: what each choice does. A launching choice holds `submitting` from the click (Send
   // waits), so the settings save and the Send are one step (codex delta 2 on #1361).
-  async function chooseStandIn(id: StandInChoiceId): Promise<void> {
+  async function chooseStandIn(id: StandInChoiceLineId): Promise<void> {
     if (standIn === null || submitting || choosingRef.current) return;
     if (id === 'cancel') { setStandIn(null); setStandInError(null); return; }
     if (id === 'sign_in') { navigate?.(AGENTS_PATH); return; }
+    // studio#1436: a signed-in helper this job did not pick: the form's helper options open, nothing starts.
+    if (id === 'pick') { setStandIn(null); setStandInError(null); setPopoverOpen(true); return; }
     // The form's own Send blockers, checked BEFORE the settings save, so a choice that cannot launch changes nothing
     // (codex delta 3 on #1361). `submit` checks them again when it runs.
     if (!problem.trim() || selectedClis.size === 0) { setStandInError('Say what the job is and pick a helper first.'); return; }
@@ -2261,6 +2263,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
 
       {standIn !== null && (
         <StandInChoice refusal={standIn.refusal} name={helperNamer(roster)} busy={standInBusy} error={standInError} testId="launch-standin"
+          signedInNow={userSeats(roster).filter((s) => seatJoinStanding(s).state === 'ready').map((s) => s.key)}
           onChoose={(id) => { void chooseStandIn(id); }} />
       )}
 

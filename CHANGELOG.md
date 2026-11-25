@@ -12,6 +12,10 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+
+- The stand-in card on a launch no longer says a picked helper is "the only helper signed in" when other helpers are signed in but were not picked for the job. It says which helpers were picked, names the signed-in ones left out, and offers "Pick another helper", which opens the form's helper options (/runs/new) or the wizard's Options step, in place of "Sign in another helper" (studio#1436).
+
 ## [0.16.18] — 2026-11-25
 
 Patch release on the train-14 cut c705c91a, carrying 19 PRs since 0.16.17: #1391, #1392, #1393, #1394, #1395, #1398, #1396, #1403, #1404, #1409, #1407, #1412, #1410, #1408, #1413, #1420, #1415, #1421, #1422.

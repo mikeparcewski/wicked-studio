@@ -22,7 +22,7 @@ import { REDUCED_RELAUNCH_WORDS } from '../session/GateRow.js';
 import { Switch } from '../ui/Switch.js';
 import { TechDetails } from '../ui/TechDetails.js';
 import { StandInChoice } from '../StandInChoice.js';
-import { helperNamer, saveStandInsEveryJob, standInChoiceOf, standInRelaunchBody, type StandInChoiceId, type StandInChoiceRefusal } from '../../board/standIn.js';
+import { helperNamer, saveStandInsEveryJob, standInChoiceOf, standInRelaunchBody, type StandInChoiceId, type StandInChoiceLineId, type StandInChoiceRefusal } from '../../board/standIn.js';
 import { AGENTS_PATH } from '../../hooks/useRoute.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { useSignInHere } from '../agents/useSignInHere.js';
@@ -610,10 +610,12 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
   // DES-STANDIN-001 §2.1 step 3: what each choice does. A launching choice holds the wizard's launch lock from the
   // click (Launch, Back and Close wait), so the settings save and the launch are one step (codex delta 2 on #1361).
-  const chooseStandIn = async (id: StandInChoiceId): Promise<void> => {
+  const chooseStandIn = async (id: StandInChoiceLineId): Promise<void> => {
     if (standIn === null || launchingRef.current) return;
     if (id === 'cancel') { setStandIn(null); setStandInError(null); return; }
     if (id === 'sign_in') { closeStore(); (navigate ?? goToPath)(AGENTS_PATH); return; }
+    // studio#1436: a signed-in helper this job did not pick: back to the Options step, where helpers are turned on.
+    if (id === 'pick') { setStandIn(null); setStandInError(null); setStep('options'); return; }
     if (launchBlocker !== null) { setStandInError(launchBlocker); return; }
     launchingRef.current = true;
     setLaunching(true);
@@ -1051,6 +1053,7 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
           </>}
           {standIn !== null && launched === null && step === 'review' && (
             <StandInChoice refusal={standIn} name={helperNamer(roster)} busy={standInBusy} error={standInError} testId="launch-wizard-standin"
+              signedInNow={order.includes('options') ? eligible.filter((s) => seatJoinStanding(s).state === 'ready').map((s) => s.key) : undefined}
               onChoose={(id) => { void chooseStandIn(id); }} />
           )}
           {error !== null && qeRefused === null && (

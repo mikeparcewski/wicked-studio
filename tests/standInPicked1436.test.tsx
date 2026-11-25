@@ -70,6 +70,14 @@ describe('the words when other helpers are signed in but not picked', () => {
     expect(w.why).toMatch(/ Codex is signed in but not picked: pick it to have the work checked by a helper that did not build it\.$/);
   });
 
+  it('a helper the preflight benched is not one to pick', () => {
+    const body = structuredClone(CHOICE.body) as { preflight: { benched: Array<{ seat: string; reason: string }> } };
+    body.preflight.benched = [{ seat: 'pi', reason: 'out of quota' }];
+    const w = standInChoiceWords(standInChoiceOf(new ApiError(409, 'x', body))!, name, SIGNED_IN_NOW);
+    expect(w.why).toMatch(/ Codex is signed in but not picked: pick it /);
+    expect(w.why).not.toMatch(/Pi CLI/);
+  });
+
   it('nobody else signed in: the card still says sign in, as before', () => {
     const w = standInChoiceWords(standInChoiceOf(refusalError())!, name, [PICKED[0]!]);
     expect(w.title).toBe('Only one helper can check this job');
