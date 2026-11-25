@@ -129,6 +129,21 @@ describe('Snooze on the ranked Needs-you page (studio#1416)', () => {
     expect(document.activeElement).toBe(elsewhere);
   });
 
+  it('a refusal after a press on the page background (focus on the body) leaves focus there (codex delta 3)', async () => {
+    let refuse: () => void = () => undefined;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => ((init?.method ?? 'GET') === 'PUT'
+      ? new Promise<Response>((r) => { refuse = () => r(json({ error: 'bad end', code: 'desk_snooze_invalid' }, 400)); })
+      : Promise.resolve(answer(init?.method ?? 'GET', url)))));
+    view(snap());
+    await act(async () => { fireEvent.click(within(row('run:68c26704')).getByTestId('needs-item-snooze')); });
+    await act(async () => { fireEvent.click(within(row('run:68c26704')).getByTestId('needs-item-snooze-hour')); });
+    fireEvent.pointerDown(document.body);
+    (document.activeElement as HTMLElement | null)?.blur();
+    await act(async () => { refuse(); });
+    await waitFor(() => expect(within(row('run:68c26704')).getByTestId('needs-item-snooze-failed')).toBeTruthy());
+    expect(document.activeElement).toBe(document.body);
+  });
+
   it('says how many are snoozed, lists them with their end, and Wake now brings one back', async () => {
     view(snap());
     const held = screen.getByTestId('needs-snoozed');

@@ -336,17 +336,19 @@ export function namedInStuck(cli: string, items: readonly SystemAttention[]): bo
 /**
  * Where a keyboard user stands once a snooze or a wake lands (studio#1416). The control they used goes with its row
  * when crew's next answer is on the page, so the page keeps one intent: taken at the press only when that control held
- * focus, dropped at any press or key elsewhere before the answer (or a refusal), and spent by the first snapshot
- * committed after the change landed ({@link useSpendFocus}), on the first of `places` still there, else the heading.
- * A focus the person moved is never taken back: it is spent only while focus sits on the page body.
+ * focus, dropped at any press or key elsewhere before the answer, at a refusal, or on leaving the page, and spent by
+ * the first snapshot committed after the change landed ({@link useSpendFocus}), whether or not it moves focus. It moves
+ * focus only while focus sits on the page body, to the first of `places` still there, else the heading.
+ * Known limit: a screen reader's own focus move (no key or press on the document) that the same answer then removes
+ * is not told apart from focus lost with the control.
  */
 let focusIntent: { places: readonly string[]; ready: boolean; drop: () => void } | null = null;
 const focusLost = (): boolean => document.activeElement === null || document.activeElement === document.body;
 
 /** At the press: hold a place for the control's user, or nothing when the control never held focus (a pointer). */
-function holdFocus(control: Element, places: readonly string[]): { landed: () => void; drop: () => void } {
+function holdFocus(control: Element, places: readonly string[]): { landed: () => void; drop: () => void; held: () => boolean } {
   focusIntent?.drop();
-  const none = { landed: (): void => undefined, drop: (): void => undefined };
+  const none = { landed: (): void => undefined, drop: (): void => undefined, held: (): boolean => true };
   if (document.activeElement !== control) return none;
   const drop = (): void => {
     document.removeEventListener('pointerdown', drop, true);
@@ -358,7 +360,8 @@ function holdFocus(control: Element, places: readonly string[]): { landed: () =>
   document.addEventListener('keydown', drop, true);
   const intent = { places, ready: false, drop };
   focusIntent = intent;
-  return { landed: () => { intent.ready = true; }, drop };
+  // `held`: nothing the person did since the press gave the place up (a refusal hands focus back only then).
+  return { landed: () => { intent.ready = true; }, drop, held: () => focusIntent === intent };
 }
 
 /** Spend the intent on the first snapshot committed after the change landed (an answer a later read superseded never
@@ -383,15 +386,15 @@ const reread = (): void => { void useSystemStore.getState().refresh({ force: tru
 /** Snooze on a ranked item (studio#1416): crew's key and rank, the inbox's ends and refusal words. Mounted per key. */
 function RankedSnooze({ snooze: sn, now }: { snooze: { key: string; rank: number }; now: number }): React.ReactElement {
   const snooze = useDeskSnoozes((st) => st.snooze);
-  const [state, setState] = useState<{ kind: 'idle' | 'choose' | 'sending' } | { kind: 'failed'; words: string }>({ kind: 'idle' });
+  const [state, setState] = useState<{ kind: 'idle' | 'choose' | 'sending' } | { kind: 'failed'; words: string; refocus: boolean }>({ kind: 'idle' });
   const opener = useRef<HTMLButtonElement>(null);
   const firstChoice = useRef<HTMLButtonElement>(null);
   const back = useRef(false);
   useEffect(() => {
     if (state.kind === 'choose') firstChoice.current?.focus();
     // Back to Snooze after Cancel or a refusal, only when focus went with the choices (never from where the person moved).
-    else if (state.kind === 'failed' || (state.kind === 'idle' && back.current)) { back.current = false; if (focusLost()) opener.current?.focus(); }
-  }, [state.kind]);
+    else if ((state.kind === 'failed' && state.refocus) || (state.kind === 'idle' && back.current)) { back.current = false; if (focusLost()) opener.current?.focus(); }
+  }, [state]);
   if (state.kind === 'idle' || state.kind === 'failed') {
     return (
       <span className="wk-needs-snooze">
@@ -410,7 +413,7 @@ function RankedSnooze({ snooze: sn, now }: { snooze: { key: string; rank: number
             const place = holdFocus(e.currentTarget, ['[data-testid="needs-snoozed-summary"]']);
             setState({ kind: 'sending' });
             void snooze(sn.key, c.until, sn.rank).then((why) => {
-              if (why === null) { place.landed(); setState({ kind: 'idle' }); reread(); } else { place.drop(); setState({ kind: 'failed', words: why }); }
+              if (why === null) { place.landed(); setState({ kind: 'idle' }); reread(); } else { const refocus = place.held(); place.drop(); setState({ kind: 'failed', words: why, refocus }); }
             });
           }}>
           {c.label}
