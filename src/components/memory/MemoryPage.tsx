@@ -66,6 +66,14 @@ export const ADD_TIER_WORDS: Record<FileProposalTier, string> = {
   episodic: 'Something that happened',
 };
 
+/** What to do when an older crew refused the kind and/or the repository (crew#1878 adds them). */
+export function scopeRefusedWords(refused: ReadonlyArray<'tier' | 'repo'>): string {
+  const what = [refused.includes('tier') ? 'a kind other than a fact' : null, refused.includes('repo') ? 'a repository' : null].filter((x) => x !== null).join(' or ');
+  const instead = refused.includes('tier') && refused.includes('repo') ? 'save it as a fact on any repository'
+    : refused.includes('tier') ? 'save it as a fact' : 'save it for any repository';
+  return `This crew can’t save ${what} yet, so nothing was saved. Update wicked-crew, or ${instead}.`;
+}
+
 /** Where a memory applies, in words: its project and repository facets, else its scope, else everywhere. */
 function whereWords(m: MemoryItem, projectName: (id: string) => string | null, repoName: (id: string) => string | null = () => null): string {
   const project = m.facets.project;
@@ -95,6 +103,16 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
 
   // ── Reads ────────────────────────────────────────────────────────────────────────────────────
   const [memories, setMemories] = useState<MemoryItem[]>([]);
+  // (studio#1095) A memory scoped to one repository names it: the list is read once a listed memory has one (the one
+  // session cache; no read for a list with none).
+  const [repoList, setRepoList] = useState<RepoEntry[] | null>(getCachedRepos());
+  const scopedToRepo = memories.some((m) => typeof m.facets['repo'] === 'string' && m.facets['repo'] !== '');
+  useEffect(() => {
+    if (!scopedToRepo) return undefined;
+    let live = true;
+    Promise.resolve().then(fetchReposCached).then((r) => { if (live) setRepoList(r); }, () => { /* the id stands in */ });
+    return () => { live = false; };
+  }, [scopedToRepo]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Failure | null>(null);
   const [unsupported, setUnsupported] = useState(false);
@@ -225,7 +243,7 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
 
   const memoryRow = (m: MemoryItem): React.ReactElement => {
     // (studio#1095) The repository a memory is scoped to is part of where it applies, not a tag.
-    const where = whereWords(m, projectName, (id) => getCachedRepos()?.find((r) => r.id === id)?.name ?? null);
+    const where = whereWords(m, projectName, (id) => repoList?.find((r) => r.id === id)?.name ?? null);
     const tags = Object.entries(m.facets).filter(([k]) => k !== 'project' && k !== 'repo');
     const origin = memoryOrigin(m);
     const added = typeof m.created_at === 'number' ? shortDate(m.created_at * 1000) : null;
@@ -406,17 +424,23 @@ function AddMemoryDialog({ background, project, projects, onClose, onDone }: {
   const [tier, setTier] = useState<FileProposalTier>('semantic');
   const [repo, setRepo] = useState<string>('');
   const [repos, setRepos] = useState<RepoEntry[] | null>(getCachedRepos());
+  /** The repository list could not be read: said beside the picker, with a retry that keeps the form. */
+  const [reposFailed, setReposFailed] = useState(false);
+  const [reposTry, setReposTry] = useState(0);
   useEffect(() => {
     let live = true;
-    Promise.resolve().then(fetchReposCached).then((r) => { if (live) setRepos(r); }, () => { if (live) setRepos((cur) => cur ?? []); });
+    setReposFailed(false);
+    Promise.resolve().then(fetchReposCached).then((r) => { if (live) setRepos(r); }, () => { if (live) setReposFailed(true); });
     return () => { live = false; };
-  }, []);
+  }, [reposTry]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
+  /** An older crew refused the kind or the repository (nothing was filed): what to change, said plainly. */
+  const [refused, setRefused] = useState<{ text: string; raw: string } | null>(null);
   const words = text.trim();
   const save = async (): Promise<void> => {
     if (words === '' || busy) return;
-    setBusy(true); setError(null);
+    setBusy(true); setError(null); setRefused(null);
     try {
       await addMemory({ content: words, tier, ...(where === '' ? {} : { project: where }), ...(repo === '' ? {} : { repo }) });
       onDone(`Added: ${shortContent(words)}`, 'ok');
@@ -424,7 +448,7 @@ function AddMemoryDialog({ background, project, projects, onClose, onDone }: {
       if (e instanceof AddMemoryApproveError) onDone(`Filed as a proposal, but approving it failed (${e.message}). It waits under Proposals; nothing was remembered yet.`, 'fail');
       else if (e instanceof AddMemoryScopeUnsupported) {
         // Nothing was filed: the dialog stays open with the words, and says what to change.
-        setError({ kind: 'error', message: `This crew can’t save ${[tier !== 'semantic' ? 'a kind other than a fact' : null, repo !== '' ? 'a repository' : null].filter(Boolean).join(' or ')} yet, so nothing was saved. Update wicked-crew, or save it as a fact on every repository. (crew said: ${e.message})` });
+        setRefused({ text: scopeRefusedWords(e.refused), raw: e.message });
         setBusy(false);
       } else { setError(failure(e)); setBusy(false); }
     }
@@ -457,7 +481,19 @@ function AddMemoryDialog({ background, project, projects, onClose, onDone }: {
           <option value="">Any repository</option>
           {(repos ?? []).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
+        {reposFailed && (
+          <span className="wk-field-note" data-testid="memory-add-repo-failed" role="status">
+            Couldn’t read your repositories.{' '}
+            <button type="button" className="wk-link" data-testid="memory-add-repo-retry" onClick={() => setReposTry((n) => n + 1)}>Try again</button>
+          </span>
+        )}
       </label>
+      {refused !== null && (
+        <div className="wk-state-banner wk-state-banner--fail" role="alert" data-testid="memory-add-refused">
+          <p className="wk-state-banner-text">{refused.text}</p>
+          <TechDetails text={refused.raw} />
+        </div>
+      )}
       {error !== null && <StateBanner kind={error.kind} what="the new memory" error={error.message} onRetry={() => void save()} />}
       <div className="wk-se-dialog-actions">
         <button type="button" className="wk-btn wk-btn--secondary" data-testid="memory-add-cancel" onClick={onClose}>Cancel</button>

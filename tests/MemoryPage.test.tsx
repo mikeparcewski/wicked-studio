@@ -32,6 +32,7 @@ const { MemoryPage } = await import('../src/components/memory/MemoryPage.js');
 const { ApiError } = await import('../src/api/errors.js');
 const { useProjectsStore } = await import('../src/store/projects.js');
 const { useCapabilities } = await import('../src/store/capabilities.js');
+const { clearRepoCache } = await import('../src/store/repoCache.js');
 type MemoryItem = import('../src/api/memory.js').MemoryItem;
 type Proposal = import('../src/api/proposals.js').Proposal;
 
@@ -145,6 +146,7 @@ async function search(user: ReturnType<typeof userEvent.setup>, words: string): 
 }
 
 beforeEach(() => {
+  clearRepoCache();
   apiFetch.mockReset();
   navigate.mockReset();
   useProjectsStore.setState({ projects: [{ id: 'p-wicked', name: 'Wicked' }] } as never);
@@ -321,30 +323,112 @@ describe('MemoryPage — Add a memory (a proposal you approve as you add it)', (
     await waitFor(() => expect(bodies['/proposals']).toEqual([{ content: 'The Friday deploy broke search', repo: 'r-web', tier: 'episodic' }]));
   });
 
-  it('studio#1095: an older crew refuses a kind or a repository (400, its strict schema): nothing is filed, the words stay, and it says what to do', async () => {
-    const { calls } = wire([]);
+  /** An older crew's strict schema refusing `keys` (crew routes.ts `invalidBody`: its error sentence and zod's issues). */
+  const unknownFields = (keys: string[]): InstanceType<typeof ApiError> => new ApiError(400,
+    `Invalid proposal body: unknown field${keys.length > 1 ? 's' : ''} ${keys.map((k) => `\`${k}\``).join(', ')} — this endpoint does not accept ${keys.length > 1 ? 'them' : 'it'}, and ignoring ${keys.length > 1 ? 'them' : 'it'} would run a different request than you sent`,
+    { error: 'Invalid proposal body', details: [{ code: 'unrecognized_keys', keys, path: [], message: `Unrecognized key(s) in object: ${keys.map((k) => `'${k}'`).join(', ')}` }] });
+  /** The fake crew, older: it refuses `tier` and `repo` as unknown fields, as its strict schema did before crew#1878. */
+  const olderCrew = (): void => {
     const base = apiFetch.getMockImplementation()!;
     apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) => {
       const b = init?.body !== undefined ? JSON.parse(init.body) as Record<string, unknown> : {};
-      return String(path) === '/proposals' && init?.method === 'POST' && ('tier' in b || 'repo' in b)
-        ? Promise.reject(new ApiError(400, 'body/ must NOT have additional properties'))
-        : base(path, init);
+      const unknown = ['tier', 'repo'].filter((k) => k in b);
+      return String(path) === '/proposals' && init?.method === 'POST' && unknown.length > 0 ? Promise.reject(unknownFields(unknown)) : base(path, init);
     });
+  };
+  async function addWith(user: ReturnType<typeof userEvent.setup>, tier: string, repo: string): Promise<HTMLElement> {
+    await openAdd(user);
+    const dialog = await screen.findByTestId('memory-add-dialog');
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-api' })).toHaveLength(1));
+    await user.type(within(dialog).getByTestId('memory-add-text'), 'Run the migrations before the tests');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-tier'), tier);
+    await user.selectOptions(within(dialog).getByTestId('memory-add-repo'), repo);
+    await user.click(within(dialog).getByTestId('memory-add-save'));
+    return dialog;
+  }
+
+  it('studio#1095: an older crew refuses a kind (unknown field): nothing is filed, the words stay, and it says what to do in plain view', async () => {
+    const { calls } = wire([]);
+    olderCrew();
     page();
     const user = userEvent.setup();
     await screen.findByTestId('memories-empty');
-    await openAdd(user);
-    const dialog = await screen.findByTestId('memory-add-dialog');
-    await user.type(within(dialog).getByTestId('memory-add-text'), 'Run the migrations before the tests');
-    await user.selectOptions(within(dialog).getByTestId('memory-add-tier'), 'procedural');
-    await user.click(within(dialog).getByTestId('memory-add-save'));
-    await waitFor(() => expect(dialog).toHaveTextContent(/This crew can’t save a kind other than a fact yet, so nothing was saved\. Update wicked-crew, or save it as a fact on every repository\./));
+    const dialog = await addWith(user, 'procedural', '');
+    const refused = await within(dialog).findByTestId('memory-add-refused');
+    // The plain line is the alert itself, not behind Technical details.
+    expect(refused.querySelector('.wk-state-banner-text')).toHaveTextContent('This crew can’t save a kind other than a fact yet, so nothing was saved. Update wicked-crew, or save it as a fact.');
     expect(within(dialog).getByTestId('memory-add-text')).toHaveValue('Run the migrations before the tests');
     expect(calls.some((c) => c.endsWith('/approve'))).toBe(false);
     // As a fact on any repository it is the body an older crew takes.
     await user.selectOptions(within(dialog).getByTestId('memory-add-tier'), 'semantic');
     await user.click(within(dialog).getByTestId('memory-add-save'));
     await waitFor(() => expect(calls).toContain('/proposals/pref-1/approve'));
+  });
+
+  it('studio#1095: a fact on one repository sends {content, repo} (no tier); an older crew refusing it says to drop the repository', async () => {
+    wire([]);
+    olderCrew();
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    const dialog = await addWith(user, 'semantic', 'r-api');
+    await within(dialog).findByTestId('memory-add-refused');
+    // What was sent (the older crew refused it before the fake's own record): the fact's body has no tier.
+    const sent = apiFetch.mock.calls.filter(([p, i]) => p === '/proposals' && (i as { method?: string } | undefined)?.method === 'POST').map(([, i]) => JSON.parse((i as { body: string }).body) as unknown);
+    expect(sent).toEqual([{ content: 'Run the migrations before the tests', repo: 'r-api' }]);
+    expect(within(dialog).getByTestId('memory-add-refused')).toHaveTextContent('This crew can’t save a repository yet, so nothing was saved. Update wicked-crew, or save it for any repository.');
+  });
+
+  it('studio#1095: both refused names both', async () => {
+    wire([]);
+    olderCrew();
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    const dialog = await addWith(user, 'episodic', 'r-web');
+    expect(await within(dialog).findByTestId('memory-add-refused')).toHaveTextContent('This crew can’t save a kind other than a fact or a repository yet, so nothing was saved. Update wicked-crew, or save it as a fact on any repository.');
+  });
+
+  it('studio#1095: any other 400 with a kind is the refusal it was (not "update crew")', async () => {
+    wire([]);
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) =>
+      String(path) === '/proposals' && init?.method === 'POST'
+        ? Promise.reject(new ApiError(400, 'Invalid proposal body: `content` — String must contain at most 4000 character(s)', { error: 'x', details: [{ code: 'too_big', path: ['content'], message: 'too long' }] }))
+        : base(path, init));
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    const dialog = await addWith(user, 'procedural', '');
+    await waitFor(() => expect(within(dialog).getByTestId('state-banner')).toBeInTheDocument());
+    expect(within(dialog).queryByTestId('memory-add-refused')).toBeNull();
+  });
+
+  it('studio#1095: a repository list that cannot be read says so beside the picker, and Try again keeps the form', async () => {
+    wire([]);
+    const base = apiFetch.getMockImplementation()!;
+    let fail = true;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) =>
+      String(path) === '/repos' && fail ? Promise.reject(new ApiError(503, 'unavailable')) : base(path, init));
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    await openAdd(user);
+    const dialog = await screen.findByTestId('memory-add-dialog');
+    await user.type(within(dialog).getByTestId('memory-add-text'), 'keep these words');
+    expect(await within(dialog).findByTestId('memory-add-repo-failed')).toHaveTextContent('Couldn’t read your repositories.');
+    fail = false;
+    await user.click(within(dialog).getByTestId('memory-add-repo-retry'));
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-api' })).toHaveLength(1));
+    expect(within(dialog).queryByTestId('memory-add-repo-failed')).toBeNull();
+    expect(within(dialog).getByTestId('memory-add-text')).toHaveValue('keep these words');
+  });
+
+  it('studio#1095: a listed memory scoped to a repository names it, without opening Add a memory', async () => {
+    wire([{ ...M2, id: 'm-r', facets: { repo: 'r-web' } }]);
+    page();
+    const row = (await screen.findAllByTestId('memory-row'))[0]!;
+    await waitFor(() => expect(row).toHaveTextContent('Repository northwind-web'));
   });
 
   it('an approve that fails after the file says the proposal waits and nothing was remembered', async () => {

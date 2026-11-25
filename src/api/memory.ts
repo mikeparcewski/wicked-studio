@@ -198,7 +198,8 @@ export async function addMemory(body: { content: string; project?: string; repo?
   try {
     ({ id } = await fileProposal(wire));
   } catch (e) {
-    if ((wire.tier !== undefined || wire.repo !== undefined) && e instanceof ApiError && e.status === 400) throw new AddMemoryScopeUnsupported(e);
+    const refused = scopeFieldsRefused(e);
+    if (refused.length > 0) throw new AddMemoryScopeUnsupported(e as ApiError, refused);
     throw e;
   }
   try {
@@ -210,10 +211,26 @@ export async function addMemory(body: { content: string; project?: string; repo?
   }
 }
 
-/** crew refused a kind or a repository (a 400 on a body that carried one): nothing was filed. An older crew's strict
- *  schema answers so; the page says which part to drop, or to update crew. */
+/**
+ * The fields an older crew refused as unknown (its strict schema, before crew#1878): `tier` and/or `repo`, read from
+ * crew's `invalidBody` answer (`details[].code === 'unrecognized_keys'`, routes.ts `invalidBody`). Any other 400 (too
+ * long, a bad value) is not this, and stays the error it was.
+ */
+export function scopeFieldsRefused(e: unknown): Array<'tier' | 'repo'> {
+  if (!(e instanceof ApiError) || e.status !== 400) return [];
+  const details = (e.body as { details?: unknown } | undefined)?.details;
+  if (!Array.isArray(details)) return [];
+  const keys = new Set<string>();
+  for (const d of details) {
+    const issue = d as { code?: unknown; keys?: unknown };
+    if (issue.code === 'unrecognized_keys' && Array.isArray(issue.keys)) for (const k of issue.keys) if (typeof k === 'string') keys.add(k);
+  }
+  return (['tier', 'repo'] as const).filter((k) => keys.has(k));
+}
+
+/** crew refused a kind or a repository as a field it does not know (an older crew): nothing was filed. */
 export class AddMemoryScopeUnsupported extends Error {
-  constructor(readonly reason: ApiError) {
+  constructor(readonly reason: ApiError, readonly refused: Array<'tier' | 'repo'>) {
     super(reason.message);
     this.name = 'AddMemoryScopeUnsupported';
   }

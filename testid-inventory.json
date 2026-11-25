@@ -12082,7 +12082,25 @@
       ]
     },
     {
+      "testId": "memory-add-refused",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
       "testId": "memory-add-repo",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-repo-failed",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-repo-retry",
       "files": [
         "src/components/memory/MemoryPage.tsx"
       ]
