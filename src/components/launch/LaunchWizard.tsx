@@ -188,6 +188,7 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   // A choice launches the job as the form shows it THEN, through `launch` itself (codex r1+delta on #1361): nothing is
   // replayed from the refused attempt, so an edit made after the refusal (or during the settings save) is what is sent.
   const [standIn, setStandIn] = useState<StandInChoiceRefusal | null>(null);
+  const [standInSent, setStandInSent] = useState('');
   const [standInBusy, setStandInBusy] = useState<StandInChoiceId | null>(null);
   const [standInError, setStandInError] = useState<string | null>(null);
   const drafting = draft.workflowId === DRAFT_EPICS_ID;
@@ -279,15 +280,9 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   const isOff = (key: string): boolean => (offUnlessPicked(key) ? !picked.includes(key) : seatOff(key, dropped, picked));
   const seats = eligible.filter((s) => !isOff(s.key));
   // studio#1436 (codex r1): the card answers the helpers that were sent. A changed pick is a different request, so the
-  // card goes (its "not picked" words would be stale); Launch asks crew again. Back and Next alone keep it.
-  const seatKeys = seats.map((s) => s.key).join('\n');
-  const seatKeysAtCard = useRef(seatKeys);
-  useEffect(() => {
-    if (seatKeysAtCard.current === seatKeys) return;
-    seatKeysAtCard.current = seatKeys;
-    setStandIn(null);
-    setStandInError(null);
-  }, [seatKeys]);
+  // card is not shown (its "not picked" words would be stale); Launch asks crew again. Back and Next alone keep it.
+  // The card shows only while the form would send the helpers the refused launch sent (`standInSent`).
+  const seatKeys = seats.map((s) => s.key).sort().join('\n');
   const offerReduced = reducedCap && seats.length === 1;
   // The Lead agent (DES-TEAMING-002 §8.1): offered when the daemon takes it and there is a choice to
   // make; a pick whose helper was turned off reads as Random again (never a stale seat sent).
@@ -480,6 +475,7 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   const launch = async (standInChoice?: { refusal: StandInChoiceRefusal; scope: 'job' | 'always' }): Promise<void> => {
     // A stand-in choice holds the launch lock through its settings save and hands it on here (codex delta 2).
     if (draft.workflowId === null || (launching && standInChoice === undefined) || launchBlocker !== null) return;
+    const sentSeats = seatKeys;
     if (demoing) {
       launchingRef.current = true;
       setLaunching(true);
@@ -582,7 +578,7 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
       // Too few helpers to check it: the choice, not an error (nothing was created; DES §4).
       const choice = standInChoiceOf(err);
       setStandInError(null);
-      if (choice !== null) { setStandIn(choice); return; }
+      if (choice !== null) { setStandIn(choice); setStandInSent(sentSeats); return; }
       setStandIn(null);
       setError(err instanceof Error ? err.message : String(err));
       attemptRef.current += 1;
@@ -1061,7 +1057,7 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
               navigate={(p) => { closeStore(); (navigate ?? goToPath)(p); }} />
           )}
           </>}
-          {standIn !== null && launched === null && step === 'review' && (
+          {standIn !== null && launched === null && step === 'review' && (standInSent === seatKeys || standInBusy !== null || standInError !== null) && (
             <StandInChoice refusal={standIn} name={helperNamer(roster)} busy={standInBusy} error={standInError} testId="launch-wizard-standin"
               signedInNow={order.includes('options') ? eligible.filter((s) => seatJoinStanding(s).state === 'ready').map((s) => s.key) : undefined}
               onChoose={(id) => { void chooseStandIn(id); }} />

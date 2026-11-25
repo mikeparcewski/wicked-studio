@@ -149,6 +149,9 @@ export function teamReceiptLine(text: string): string {
   return `✓ Sent to the team: "${clipped}" · queued for their next turn · the plan gate stays open`;
 }
 
+/** A helper selection as one comparable string (order-free). */
+const helperKeys = (keys: ReadonlySet<string>): string => [...keys].sort().join('\n');
+
 export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOverride, mode, injectTarget, onClearInjectTarget, navigate, lockedProjectId = null }: Props): React.ReactElement {
   const shownText = useDisplayText();
   const clearGate = useGateStore((s) => s.clearGate);
@@ -590,7 +593,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // A choice sends the job as the form shows it THEN, through `submit` itself (codex r1+delta on #1361): nothing is
   // replayed from the refused attempt, so an edit made after the refusal (or during the settings save) is what is sent.
   // `override`: the refused Send had overridden the no-repo preflight (the choice keeps that answer).
-  const [standIn, setStandIn] = useState<{ refusal: StandInChoiceRefusal; override: boolean } | null>(null);
+  // `sent`: the helper keys the refused Send carried (studio#1436): the card answers those, so it shows only while the
+  // form would send the same helpers again (or a choice is under way or failed, so its outcome stays in view).
+  const [standIn, setStandIn] = useState<{ refusal: StandInChoiceRefusal; override: boolean; sent: string } | null>(null);
   const [standInBusy, setStandInBusy] = useState<StandInChoiceId | null>(null);
   const [standInError, setStandInError] = useState<string | null>(null);
   /** studio#404: the id this launch was sent under (client-minted), while its POST is outstanding. */
@@ -799,10 +804,6 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   }, [popoverOpen]);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
-  // studio#1436 (codex r1): the card answers the helpers that were sent. A changed pick is a different request, so the
-  // card goes (its "not picked" words would be stale); Send asks crew again.
-  useEffect(() => { setStandIn(null); setStandInError(null); }, [selectedClis]);
-
   function toggleCli(key: string): void {
     clisTouched.current = true;
     setSelectedClis((prev) => {
@@ -826,6 +827,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   async function submit(preflightOverride = false, standInChoice?: { refusal: StandInChoiceRefusal; scope: 'job' | 'always' }): Promise<void> {
     // A stand-in choice holds `submitting` through its settings save and hands it on here (codex delta 2 on #1361).
     if (!problem.trim() || selectedClis.size === 0 || (submitting && standInChoice === undefined)) return;
+    const sentKeys = helperKeys(selectedClis);
     // (studio#1150) What the form shows as Send is pressed: crew's answer for these fields, captured now (never re-read
     // after the awaits below, when another answer may have landed).
     const postureKeyAtSend = posturePreview.key;
@@ -982,7 +984,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       const refused = baseSkillRefusalOf(err);
       // Too few helpers to check it: the choice, not an error (nothing was created; DES-STANDIN-001 §4).
       const choice = standInChoiceOf(err);
-      setStandIn(choice !== null ? { refusal: choice, override: preflightOverride } : null);
+      setStandIn(choice !== null ? { refusal: choice, override: preflightOverride, sent: sentKeys } : null);
       setStandInError(null);
       if (choice !== null) return;
       if (refused !== null) setBaseSkillRefusal(refused);
@@ -2265,7 +2267,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         <QeRefusalWarning kind="launch" refusalKey={qeRefusal.key} detail={qeRefusal.detail} forced={qeRefusal.forced} navigate={navigate} testId="launch-qe-refused" />
       )}
 
-      {standIn !== null && (
+      {standIn !== null && (standIn.sent === helperKeys(selectedClis) || standInBusy !== null || standInError !== null) && (
         <StandInChoice refusal={standIn.refusal} name={helperNamer(roster)} busy={standInBusy} error={standInError} testId="launch-standin"
           signedInNow={userSeats(roster).filter((s) => seatJoinStanding(s).state === 'ready').map((s) => s.key)}
           onChoose={(id) => { void chooseStandIn(id); }} />
