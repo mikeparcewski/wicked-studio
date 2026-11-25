@@ -179,6 +179,15 @@
 .wk-needs-more { align-self: flex-start; margin-top: 6px; padding: 2px 4px; border: 0; background: transparent; font: inherit; font-size: var(--text-body); cursor: pointer; }
 .wk-needs-toggle { border: 0; background: transparent; font: inherit; font-size: var(--text-body); cursor: pointer; padding: 0 4px; align-self: center; }
 .wk-needs-row-btn { min-height: 36px; padding: 0 14px; font-size: var(--text-body); flex-shrink: 0; }
+/* studio#1416: Snooze on a ranked item, and the items a snooze holds back. */
+.wk-needs-snooze { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; flex-shrink: 0; }
+.wk-needs-snooze .wk-home-btn { display: inline-flex; align-items: center; gap: 6px; }
+.wk-needs-snooze-cancel { font-size: var(--text-body); background: none; border: 0; padding: 0 4px; cursor: pointer; }
+.wk-needs-snooze-failed { flex-basis: 100%; font-size: var(--text-sm); color: var(--ink-muted); }
+.wk-needs-snoozed-list { list-style: none; margin: 0; padding: 0 0 8px; display: flex; flex-direction: column; }
+.wk-needs-snoozed-item { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; padding: 14px 0; border-top: 1px solid var(--border-subtle); font-size: var(--text-body); }
+.wk-needs-snoozed-what { flex: 1 1 16rem; min-width: 0; color: var(--ink-high); overflow-wrap: anywhere; }
+.wk-needs-snoozed-until { color: var(--ink-muted); font-size: var(--text-sm); }
 .wk-needs-group { display: flex; flex-direction: column; }
 .wk-needs-members { margin: 0 0 8px 24px; }
 .wk-needs-worth > summary { cursor: pointer; display: inline-block; }

@@ -113,6 +113,14 @@ export interface SystemAttention {
   waitedSince?: number | null;
   /** (ranked crew) The run the item points at, when it points at one. */
   runId?: string | null;
+  /** (crew api-types 0.231.0, studio#1416) How a person snoozes this item: `PUT /desk/snoozes/:key {until, severity:
+   *  rank}`. `null` when crew offers no snooze for it (a component of the system, an older crew). */
+  snooze?: { key: string; rank: number } | null;
+}
+
+/** (crew api-types 0.231.0) An attention item a snooze holds back, with the snooze's end (unix millis). */
+export interface SystemSnoozed extends SystemAttention {
+  until: number;
 }
 
 /** (crew api-types 0.140.0) One run nobody has resolved, with what it cost. */
@@ -233,6 +241,9 @@ export interface SystemSnapshot {
   /** Crew's own light (with a ranked crew: green only when attention and unresolved are both empty). */
   level?: 'green' | 'yellow' | 'red' | null;
   attention: SystemAttention[];
+  /** (crew api-types 0.231.0, studio#1416) What a person snoozed, held back out of `attention` by crew: its length is
+   *  the "N snoozed" number. Empty against an older crew. */
+  snoozed?: SystemSnoozed[];
   /** (ranked crew) Work nobody resolved; `[]` from an older crew. */
   unresolved?: SystemUnresolved[];
   /** (ranked crew) `unresolved`'s summed cost, `null` when none is known. */
@@ -309,6 +320,29 @@ function modeWords(v: unknown): string | null {
  * The snapshot, read defensively: anything the wire does not say is absent (`null`, `[]`). An
  * attention item without a severity is `yellow` (it needs a look) — never dropped, never red by guess.
  */
+function attentionOf(x: unknown, i: number): SystemAttention {
+  const a = bag(x);
+  const target = bag(a['target']);
+  const kind = a['kind'] === 'prevents' || a['kind'] === 'slows' ? a['kind'] : null;
+  const sn = bag(a['snooze']);
+  const key = str(sn['key']);
+  const rank = sn['rank'];
+  return {
+    id: str(a['id']) ?? `attention-${i}`,
+    level: a['severity'] === 'red' ? 'red' : 'yellow',
+    panel: PANEL_OF[String(a['source'])] ?? 'infra',
+    text: str(a['title']) ?? 'something needs a look',
+    reason: str(a['reason']),
+    remedy: str(a['remedy']),
+    action: a['action'] === null || a['action'] === undefined ? null : action(bag(a['action']), target),
+    kind,
+    blockedRunIds: list(a['blockedRunIds']).map(str).filter((id): id is string => id !== null),
+    waitedSince: when(a['waitedSince']),
+    runId: target['kind'] === 'run' ? str(target['runId']) : null,
+    snooze: key !== null && typeof rank === 'number' && Number.isInteger(rank) ? { key, rank } : null,
+  };
+}
+
 export function normalizeSnapshot(input: unknown): SystemSnapshot {
   const b = bag(input);
   const spend = bag(b['unresolvedSpend']);
@@ -318,23 +352,10 @@ export function normalizeSnapshot(input: unknown): SystemSnapshot {
     // The ranked contract's own field; `readTick` also requires the capability.
     ranked: Array.isArray(b['unresolved']),
     level: level === 'green' || level === 'yellow' || level === 'red' ? level : null,
-    attention: list(b['attention']).map((x, i) => {
-      const a = bag(x);
-      const target = bag(a['target']);
-      const kind = a['kind'] === 'prevents' || a['kind'] === 'slows' ? a['kind'] : null;
-      return {
-        id: str(a['id']) ?? `attention-${i}`,
-        level: a['severity'] === 'red' ? 'red' : 'yellow',
-        panel: PANEL_OF[String(a['source'])] ?? 'infra',
-        text: str(a['title']) ?? 'something needs a look',
-        reason: str(a['reason']),
-        remedy: str(a['remedy']),
-        action: a['action'] === null || a['action'] === undefined ? null : action(bag(a['action']), target),
-        kind,
-        blockedRunIds: list(a['blockedRunIds']).map(str).filter((id): id is string => id !== null),
-        waitedSince: when(a['waitedSince']),
-        runId: target['kind'] === 'run' ? str(target['runId']) : null,
-      };
+    attention: list(b['attention']).map(attentionOf),
+    snoozed: list(b['snoozed']).flatMap((x, i) => {
+      const until = when(bag(x)['until']);
+      return until === null ? [] : [{ ...attentionOf(x, i), until }];
     }),
     unresolved: list(b['unresolved']).map((x) => {
       const u = bag(x);

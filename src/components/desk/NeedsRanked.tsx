@@ -1,7 +1,10 @@
 import { useSeatImageRebuild } from '../../store/seatImageRebuild.js';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { AlarmClock } from 'lucide-react';
+import { snoozeChoices, snoozeEndWords } from '../../board/deskSnooze.js';
+import { useDeskSnoozes } from '../../store/deskSnoozes.js';
 import { api } from '../../api/client.js';
-import type { SystemAttention, SystemSnapshot, SystemUnresolved } from '../../api/system.js';
+import type { SystemAttention, SystemSnapshot, SystemSnoozed, SystemUnresolved } from '../../api/system.js';
 import type { SessionView } from '../../api/types.js';
 import { needSection } from '../../board/needsQueue.js';
 import type { NeedRow } from '../../board/needsYou.js';
@@ -85,6 +88,7 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
                   {rowLead(a, causes.get(a.id) ?? null) !== null && <span className="wk-needs-card-line">{rowLead(a, causes.get(a.id) ?? null)}</span>}
                   {a.remedy !== null && a.remedy !== 'Re-check.' && <span className="wk-needs-card-remedy">{a.remedy}</span>}
                 </span>
+                {a.snooze != null && <RankedSnooze key={a.snooze.key} snooze={a.snooze} now={now} />}
                 {a.action !== null && <button type="button" className="wk-home-btn wk-home-btn--primary" data-testid="needs-item-act" disabled={a.action?.kind === 'rebuild-seat-images' && (starting || rebuilding)} onClick={() => act(a)}>{a.action.label ?? rowVerb(a, null)}</button>}
               </article>
             ))}
@@ -114,6 +118,7 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
                         : <span className="wk-needs-row-title">{rowHeadline(a, cause)}</span>}
                       <span className="wk-needs-row-line">{meta}</span>
                     </span>
+                    {a.snooze != null && <RankedSnooze key={a.snooze.key} snooze={a.snooze} now={now} />}
                     {path !== null
                       ? <a href={path} onClick={go(path)} className="wk-home-link wk-needs-row-act" data-testid="needs-item-act">{rowVerb(a, gateKind)} <span aria-hidden>→</span></a>
                       : a.action !== null && <button type="button" className="wk-home-btn wk-home-btn--secondary" data-testid="needs-item-act" disabled={a.action?.kind === 'rebuild-seat-images' && (starting || rebuilding)} onClick={() => act(a)}>{rowVerb(a, null)}</button>}
@@ -125,6 +130,8 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
         )}
 
         {items.length === 0 && <p className="wk-home-calm" data-testid="needs-calm">Nothing is waiting on you.</p>}
+
+        {(snapshot.snoozed ?? []).length > 0 && <SnoozedItems items={snapshot.snoozed ?? []} now={now} />}
 
         {foldCount > 0 && (
           <details className="wk-needs-worth wk-ue-fold" data-testid="needs-worth">
@@ -322,4 +329,86 @@ function ResolveRow({ u, view, navigate }: { u: SystemUnresolved; view: SessionV
 export function namedInStuck(cli: string, items: readonly SystemAttention[]): boolean {
   const word = new RegExp(`\\b${cli.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
   return items.some((a) => word.test(`${a.reason ?? ''} ${a.remedy ?? ''}`));
+}
+
+/** After a snooze or a wake, crew's list is read again: the list, its number and every count follow crew. */
+const reread = (): void => { void useSystemStore.getState().refresh({ force: true }); };
+
+/** Snooze on a ranked item (studio#1416): crew's key and rank, the inbox's ends and refusal words. Mounted per key. */
+function RankedSnooze({ snooze: sn, now }: { snooze: { key: string; rank: number }; now: number }): React.ReactElement {
+  const snooze = useDeskSnoozes((st) => st.snooze);
+  const [state, setState] = useState<{ kind: 'idle' | 'choose' | 'sending' } | { kind: 'failed'; words: string }>({ kind: 'idle' });
+  const opener = useRef<HTMLButtonElement>(null);
+  const firstChoice = useRef<HTMLButtonElement>(null);
+  const back = useRef(false);
+  useEffect(() => {
+    if (state.kind === 'choose') firstChoice.current?.focus();
+    else if (state.kind === 'failed' || (state.kind === 'idle' && back.current)) { back.current = false; opener.current?.focus(); }
+  }, [state.kind]);
+  if (state.kind === 'idle' || state.kind === 'failed') {
+    return (
+      <span className="wk-needs-snooze">
+        <button ref={opener} type="button" data-testid="needs-item-snooze" className="wk-home-btn wk-home-btn--secondary wk-needs-row-btn" onClick={() => setState({ kind: 'choose' })}>
+          <AlarmClock size={13} aria-hidden />Snooze
+        </button>
+        {state.kind === 'failed' && <span role="status" className="wk-needs-snooze-failed" data-testid="needs-item-snooze-failed">{state.words}</span>}
+      </span>
+    );
+  }
+  return (
+    <span className="wk-needs-snooze" role="group" aria-label="Snooze until">
+      {snoozeChoices(now).map((c, i) => (
+        <button key={c.id} ref={i === 0 ? firstChoice : undefined} type="button" data-testid={`needs-item-snooze-${c.id}`} className="wk-home-btn wk-home-btn--secondary wk-needs-row-btn" disabled={state.kind === 'sending'}
+          onClick={() => {
+            setState({ kind: 'sending' });
+            void snooze(sn.key, c.until, sn.rank).then((why) => {
+              if (why === null) { setState({ kind: 'idle' }); reread(); } else setState({ kind: 'failed', words: why });
+            });
+          }}>
+          {c.label}
+        </button>
+      ))}
+      <button type="button" data-testid="needs-item-snooze-cancel" className="wk-home-link wk-needs-snooze-cancel" disabled={state.kind === 'sending'} onClick={() => { back.current = true; setState({ kind: 'idle' }); }}>Cancel</button>
+    </span>
+  );
+}
+
+/** "N snoozed": what crew holds back for a person's snooze, each with when it comes back and Wake now. */
+function SnoozedItems({ items, now }: { items: readonly SystemSnoozed[]; now: number }): React.ReactElement {
+  return (
+    <details className="wk-needs-worth wk-ue-fold" data-testid="needs-snoozed">
+      <summary className="wk-ue-fold-sum" data-testid="needs-snoozed-summary">
+        <span className="wk-ue-fold-words">
+          <span className="wk-ue-row-title">{items.length} snoozed</span>
+          <span className="wk-ue-row-sub">Not counted until they come back, or sooner if they get worse.</span>
+        </span>
+        <span aria-hidden className="wk-ue-fold-chev">›</span>
+      </summary>
+      <ul className="wk-needs-snoozed-list">
+        {items.map((a) => <SnoozedItem key={a.id} item={a} now={now} />)}
+      </ul>
+    </details>
+  );
+}
+
+function SnoozedItem({ item, now }: { item: SystemSnoozed; now: number }): React.ReactElement {
+  const wake = useDeskSnoozes((st) => st.wake);
+  const [state, setState] = useState<{ kind: 'idle' | 'sending' } | { kind: 'failed'; words: string }>({ kind: 'idle' });
+  const key = item.snooze?.key ?? null;
+  return (
+    <li className="wk-needs-snoozed-item" data-testid="needs-snoozed-item" data-id={item.id}>
+      <span className="wk-needs-snoozed-what">{item.text}</span>
+      <span className="wk-needs-snoozed-until" data-testid="needs-snoozed-until">Back {snoozeEndWords(new Date(item.until).toISOString(), now)}</span>
+      {key !== null && (
+        <button type="button" data-testid="needs-snoozed-wake" className="wk-home-btn wk-home-btn--secondary wk-needs-row-btn" disabled={state.kind === 'sending'}
+          onClick={() => {
+            setState({ kind: 'sending' });
+            void wake(key).then((why) => { if (why === null) { setState({ kind: 'idle' }); reread(); } else setState({ kind: 'failed', words: why }); });
+          }}>
+          Wake now
+        </button>
+      )}
+      {state.kind === 'failed' && <span role="status" className="wk-needs-snooze-failed">{state.words}</span>}
+    </li>
+  );
 }
