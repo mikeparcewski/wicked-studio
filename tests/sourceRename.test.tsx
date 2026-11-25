@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const apiFetch = vi.fn();
 vi.mock('../src/api/client.js', () => ({ apiFetch: (...a: unknown[]) => apiFetch(...a) }));
@@ -279,6 +279,15 @@ describe('rename follow-ups (wicked-crew#1906)', () => {
   it('renamed_unread is followed whatever its status', async () => {
     const unsure = await renameAnswered(new ApiError(409, 'the rename landed; read the source list again', { error: 'x', code: 'renamed_unread' }));
     expect(unsure).toHaveBeenCalledWith('support-pg', 'id-support-pg');
+    expect(await screen.findByText('support-pg was renamed, but crew could not read it back: the list is read again.')).toBeTruthy();
+    expect(screen.queryByText(/refused/)).toBeNull();
+  });
+
+  it("any other 4xx is crew's refusal: its words, and nothing is read again", async () => {
+    const unsure = await renameAnswered(new ApiError(403, 'renaming a source is a human operator\'s only', { error: 'renaming a source is a human operator\'s only', code: 'rename_human_only' }));
+    expect(unsure).not.toHaveBeenCalled();
+    expect(await screen.findByText(/human operator/)).toBeTruthy();
+    expect(screen.queryByText(/did not say whether|read again/)).toBeNull();
   });
 
   it("a 404 naming the source (another tab renamed or removed it) is followed and says so, not shown as crew's refusal", async () => {
@@ -316,13 +325,16 @@ describe('rename follow-ups (wicked-crew#1906)', () => {
 
 describe('the page and a rename it did not make (wicked-crew#1906)', () => {
   let list: unknown[];
+  /** crew's answer to the page's rename: by default the 404 of a name another tab renamed or removed. */
+  let pageRename: () => Promise<unknown>;
   beforeEach(() => {
+    pageRename = () => Promise.reject(new ApiError(404, 'no MCP server named support-pg', { error: 'no MCP server named support-pg', code: 'unknown_server' }));
     useCapabilities.setState({ loaded: true, dataSources: true });
     apiFetch.mockImplementation((path: string, init?: RequestInit) => {
       const method = init?.method ?? 'GET';
       calls.push({ path, method, body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined });
       if (path === '/mcp/servers' && method === 'GET') return Promise.resolve({ servers: list, discovered: [] });
-      if (path === '/mcp/servers/support-pg/rename') return Promise.reject(new ApiError(404, 'no MCP server named support-pg', { error: 'no MCP server named support-pg', code: 'unknown_server' }));
+      if (path === '/mcp/servers/support-pg/rename') return pageRename();
       if (/^\/sources\/[^/]+\/catalog$/.test(path)) return Promise.resolve({ name: 'support-pg', kind: 'sql', catalog: CATALOG, privileges: WRITER, descriptorHash: 'd' });
       if (/^\/sources\/[^/]+\/agent-queries$/.test(path)) return Promise.resolve({ name: 'x', known: true, queries: [] });
       if (path === '/projects?status=active') return Promise.resolve({ projects: [] });
@@ -332,8 +344,11 @@ describe('the page and a rename it did not make (wicked-crew#1906)', () => {
 
   /** The page with an address it owns: every navigate lands in `search`, as the router does. */
   let hops: string[];
+  /** Go to an address, as a person following a link does. */
+  let go: (search: string) => void;
   function Routed({ start }: { start: string }) {
     const [search, setSearch] = useState(start);
+    go = setSearch;
     return <SourcesPage search={search} navigate={(to: string) => { hops.push(to); setSearch(to.includes('?') ? to.slice(to.indexOf('?')) : ''); }} />;
   }
   beforeEach(() => { hops = []; });
@@ -368,9 +383,40 @@ describe('the page and a rename it did not make (wicked-crew#1906)', () => {
     fireEvent.change(await screen.findByTestId('source-name'), { target: { value: 'other-name' } });
     list = [{ ...RENAMED, id: 'id-another' }];
     fireEvent.click(screen.getByTestId('source-rename-go'));
-    await screen.findByText('No source named support-pg.');
+    await screen.findByText('The source open here as support-pg was removed.');
     expect(hops).toEqual([]);
     expect(screen.queryByTestId('source-sheet')).toBeNull();
+  });
+
+  it('a sheet whose source is gone is not handed to another source saved under its name since', async () => {
+    list = [{ ...pgServer(), id: 'id-support-pg' }];
+    render(<Routed start="?source=support-pg" />);
+    fireEvent.change(await screen.findByTestId('source-name'), { target: { value: 'other-name' } });
+    // Another tab removed support-pg (id one) and saved a new support-pg.
+    list = [{ ...pgServer(), id: 'id-another' }];
+    fireEvent.click(screen.getByTestId('source-rename-go'));
+    await screen.findByText('The source open here as support-pg was removed.');
+    expect(screen.queryByTestId('source-sheet')).toBeNull();
+    expect(hops).toEqual([]);
+  });
+
+  it("a late answer from a sheet since closed does not hold the next sheet on that name to the old source", async () => {
+    let answer!: (e: unknown) => void;
+    pageRename = () => new Promise((_, reject) => { answer = reject; });
+    list = [{ ...pgServer(), id: 'id-support-pg' }];
+    render(<Routed start="?source=support-pg" />);
+    fireEvent.change(await screen.findByTestId('source-name'), { target: { value: 'other-name' } });
+    fireEvent.click(screen.getByTestId('source-rename-go'));
+    fireEvent.click(screen.getByTestId('source-sheet-close'));
+    await waitFor(() => expect(screen.queryByTestId('source-sheet')).toBeNull());
+    // support-pg (id one) is removed, a new support-pg is saved and opened here, and renamed in another tab.
+    list = [{ ...pgServer(), id: 'id-another' }];
+    act(() => go('?source=support-pg'));
+    await waitFor(() => expect(screen.getByTestId('source-sheet-title').textContent).toContain('support-pg'));
+    list = [{ ...RENAMED, id: 'id-another' }];
+    await act(async () => { answer(new ApiError(404, 'no MCP server named support-pg', { error: 'no MCP server named support-pg', code: 'unknown_server' })); });
+    await waitFor(() => expect(hops.at(-1)).toBe('/sources?source=billing-pg'));
+    expect(screen.queryByText('No source named support-pg.')).toBeNull();
   });
 
   it("an old address follows the source to its new name", async () => {
