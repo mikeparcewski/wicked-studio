@@ -8,7 +8,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RepoEntry, WorkflowDef } from '../src/api/types.js';
 import { LaunchWizard } from '../src/components/launch/LaunchWizard.js';
-import { openLaunchWizard, resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
+import { openLaunchWizard, resetLaunchWizard, useLaunchWizard, withJobKind } from '../src/store/launchWizard.js';
 import { resetPlanCatalog } from '../src/store/planCatalog.js';
 import { clearRepoCache } from '../src/store/repoCache.js';
 import { clearCachedWorkflows, setCachedWorkflows } from '../src/store/workflowCache.js';
@@ -877,5 +877,103 @@ describe('catalog repository context (#1053)', () => {
   it('has no repository context note when opened without a repository', async () => {
     await openCatalog();
     expect(screen.queryByTestId('launch-catalog-context-repo')).toBeNull();
+  });
+});
+
+describe('studio#1399: the MCP server workflow’s “Also expose as a REST API” option', () => {
+  const mcp = {
+    id: 'mcp-server', category: 'analyze', title: 'Build an MCP server', summary: 'Build an MCP server that gives agents a tool. More words.',
+    outcome: 'An MCP server', needs: ['runs'], inputs: [], status: 'available', launch: { kind: 'run', workflow: 'mcp-server' },
+    usage: { launches: 0, lastUsedAt: null, medianMinutes: null },
+  };
+  const toReview = async (): Promise<void> => {
+    for (let i = 0; i < 4 && screen.getByTestId('launch-wizard-step').dataset.step !== 'review'; i += 1) {
+      fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    }
+    expect(screen.getByTestId('launch-wizard-step').dataset.step).toBe('review');
+  };
+  const launched = async (): Promise<Record<string, unknown>> => {
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
+    return posts.find((p) => p.path === '/runs')!.body;
+  };
+
+  it('is off by default, says what it adds, and an unticked launch sends the words as they are', async () => {
+    catalog = { categories: [{ id: 'analyze', title: 'Analyze' }], entries: [mcp] };
+    await openCatalog();
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-mcp-server'));
+    const toggle = screen.getByTestId('launch-wizard-rest-toggle');
+    expect(toggle).toHaveAttribute('role', 'switch');
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(toggle).toHaveTextContent('Also expose as a REST API');
+    expect(screen.getByTestId('launch-wizard-rest')).toHaveTextContent('Adds HTTP routes and an OpenAPI description, built from the same tools.');
+    fireEvent.change(screen.getByTestId('launch-wizard-intent'), { target: { value: 'Wrap the weather API' } });
+    await toReview();
+    expect(screen.getByTestId('launch-wizard-review-rest')).toHaveTextContent('REST APINo: MCP only');
+    const body = await launched();
+    expect(body.workflow).toBe('mcp-server');
+    expect(body.problem).toBe('Wrap the weather API');
+  });
+
+  it('ticked: the review says so and the intent carries the REST ask the mcp-server workflow reads (scaffold --rest)', async () => {
+    catalog = { categories: [{ id: 'analyze', title: 'Analyze' }], entries: [mcp] };
+    await openCatalog();
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-mcp-server'));
+    fireEvent.change(screen.getByTestId('launch-wizard-intent'), { target: { value: 'Wrap the weather API' } });
+    fireEvent.click(screen.getByTestId('launch-wizard-rest-toggle'));
+    expect(screen.getByTestId('launch-wizard-rest-toggle')).toHaveAttribute('aria-checked', 'true');
+    await toReview();
+    expect(screen.getByTestId('launch-wizard-review-rest')).toHaveTextContent('Yes: HTTP routes and an OpenAPI description beside MCP');
+    const body = await launched();
+    expect(body.problem).toBe('Wrap the weather API\n\nAlso expose the tools as a REST API (mcp-scaffold --rest): HTTP routes and an OpenAPI description built from the same tools.');
+  });
+
+  it('another workflow never shows it, and changing jobs turns it off', async () => {
+    catalog = { categories: [{ id: 'analyze', title: 'Analyze' }], entries: [mcp, { ...mcp, id: 'review', title: 'Review', launch: { kind: 'run', workflow: 'review-recent-work' } }] };
+    await openCatalog();
+    fireEvent.click(screen.getByTestId('launch-wizard-workflow-mcp-server'));
+    fireEvent.click(screen.getByTestId('launch-wizard-rest-toggle'));
+    expect(useLaunchWizard.getState().draft?.restApi).toBe(true);
+    act(() => useLaunchWizard.getState().update(withJobKind(useLaunchWizard.getState().draft!, 'review-recent-work')));
+    expect(useLaunchWizard.getState().draft?.restApi).toBe(false);
+    expect(screen.queryByTestId('launch-wizard-rest-toggle')).toBeNull();
+  });
+});
+
+describe('studio#1399: another card for the same workflow starts with the REST switch off', () => {
+  it('a reopen naming another card, and New job’s own pick of another card, both clear it', async () => {
+    const mcp = (id: string) => ({ id, category: 'analyze', title: id, summary: `${id}. More.`, outcome: 'x', needs: ['runs'], inputs: [], status: 'available',
+      launch: { kind: 'run', workflow: 'mcp-server' }, usage: { launches: 0, lastUsedAt: null, medianMinutes: null } });
+    catalog = { categories: [{ id: 'analyze', title: 'Analyze' }], entries: [mcp('mcp-a'), mcp('mcp-b')] };
+    await openCatalog();
+    fireEvent.click(screen.getAllByTestId('launch-wizard-workflow-mcp-server')[0]!);
+    fireEvent.click(screen.getByTestId('launch-wizard-rest-toggle'));
+    expect(useLaunchWizard.getState().draft?.restApi).toBe(true);
+    const first = useLaunchWizard.getState().draft!.catalogEntryId;
+    act(() => openLaunchWizard({ workflowId: 'mcp-server', catalogEntryId: first === 'mcp-a' ? 'mcp-b' : 'mcp-a' }));
+    expect(useLaunchWizard.getState().draft?.restApi).toBe(false);
+    await waitFor(() => expect(screen.getByTestId('launch-wizard-rest-toggle')).toHaveAttribute('aria-checked', 'false'));
+  });
+
+  it('Change job, then the other card for the same workflow: the switch is off and the launch has no REST line', async () => {
+    const mcp = (id: string, title: string) => ({ id, category: 'analyze', title, summary: `${title}. More.`, outcome: 'x', needs: ['runs'], inputs: [], status: 'available',
+      launch: { kind: 'run', workflow: 'mcp-server' }, usage: { launches: 0, lastUsedAt: null, medianMinutes: null } });
+    catalog = { categories: [{ id: 'analyze', title: 'Analyze' }], entries: [mcp('mcp-a', 'MCP A'), mcp('mcp-b', 'MCP B')] };
+    await openCatalog();
+    const cards = (): HTMLElement[] => screen.getAllByTestId('launch-wizard-workflow-mcp-server');
+    fireEvent.click(cards()[0]!);
+    const picked = useLaunchWizard.getState().draft!.catalogEntryId;
+    fireEvent.change(screen.getByTestId('launch-wizard-intent'), { target: { value: 'Wrap the weather API' } });
+    fireEvent.click(screen.getByTestId('launch-wizard-rest-toggle'));
+    // Change job sits on the 'what' step, beside the switch.
+    fireEvent.click(screen.getByTestId('launch-wizard-change'));
+    const other = cards().find((c) => !c.textContent?.includes(picked === 'mcp-a' ? 'MCP A' : 'MCP B'))!;
+    fireEvent.click(other);
+    expect(useLaunchWizard.getState().draft?.catalogEntryId).not.toBe(picked);
+    expect(screen.getByTestId('launch-wizard-rest-toggle')).toHaveAttribute('aria-checked', 'false');
+    for (let i = 0; i < 4 && screen.getByTestId('launch-wizard-step').dataset.step !== 'review'; i += 1) fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
+    expect(posts.find((p) => p.path === '/runs')!.body.problem).toBe('Wrap the weather API');
   });
 });
