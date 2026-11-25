@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
+import { ApiError } from '../api/errors.js';
 import type { CoveragePerApp, CoverageReport, GraphKind, RepoEntry, UnaccountedNode } from '../api/types.js';
 
 /**
@@ -306,6 +307,17 @@ function UnaccountedList({ nodes }: { nodes: UnaccountedNode[] }): React.ReactEl
   );
 }
 
+/** studio#1402: crew's answer for a registered repository with no code graph yet. Its coverage read answers
+ *  `404 {code: 'not_indexed'}`; its graph summary answers `200 {kinds: [], code: 'not_indexed', error}` (crew#1887),
+ *  or the same 404 on a daemon before it. */
+const NOT_INDEXED = Symbol('not indexed');
+const saysNotIndexed = (b: unknown): boolean =>
+  typeof b === 'object' && b !== null && (b as { code?: unknown }).code === 'not_indexed';
+function notIndexedOr(e: unknown): typeof NOT_INDEXED {
+  if (e instanceof ApiError && e.status === 404 && saysNotIndexed(e.body)) return NOT_INDEXED;
+  throw e;
+}
+
 export function CoverageView(): React.ReactElement {
   const [report, setReport] = useState<CoverageReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -322,6 +334,8 @@ export function CoverageView(): React.ReactElement {
   // #122: the repo's code-graph summary (node counts by kind). Only meaningful per-repo — the daemon
   // store has no repo code graph — so it's null for the daemon-wide view.
   const [graphKinds, setGraphKinds] = useState<GraphKind[] | null>(null);
+  // studio#1402: the chosen repo has no code graph yet (crew's `not_indexed`), so there is nothing to measure.
+  const [notIndexed, setNotIndexed] = useState(false);
 
   /** Ends the read in flight: its requests and its deadline (a new read, leaving the pane). */
   const endRead = useRef<(() => void) | null>(null);
@@ -341,18 +355,25 @@ export function CoverageView(): React.ReactElement {
     // The pane never shows one read's numbers under another's question (a switched repo, a timed-out refresh).
     setReport(null);
     setGraphKinds(null);
+    setNotIndexed(false);
     try {
       const signal = ctl.signal;
       // Coverage + graph summary for the chosen repo, in parallel (#122); the daemon-wide view has no code graph.
       const read = repoRef
-        ? Promise.all([api.getCoverageReportForRepo(repoRef, { signal }), api.getGraphKindsForRepo(repoRef, { signal })])
-          .then(([{ report: r }, { kinds }]) => ({ report: r, kinds: kinds as GraphKind[] | null }))
+        ? Promise.all([
+          api.getCoverageReportForRepo(repoRef, { signal }).catch(notIndexedOr),
+          api.getGraphKindsForRepo(repoRef, { signal }).catch(notIndexedOr),
+        ])
+          .then(([cov, graph]) => (cov === NOT_INDEXED || graph === NOT_INDEXED || saysNotIndexed(graph)
+            ? { report: null, kinds: null, notIndexed: true }
+            : { report: cov.report, kinds: graph.kinds as GraphKind[] | null, notIndexed: false }))
           .catch((e: unknown) => { ctl.abort(); throw e; }) // one half failed: end the other
-        : api.getCoverageReport({ signal }).then(({ report: r }) => ({ report: r, kinds: null }));
+        : api.getCoverageReport({ signal }).then(({ report: r }) => ({ report: r, kinds: null, notIndexed: false }));
       const got = await Promise.race([read, deadline]);
       if (readGen.current !== gen) return;
       setReport(got.report);
       setGraphKinds(got.kinds);
+      setNotIndexed(got.notIndexed);
     } catch (e) {
       if (readGen.current !== gen) return;
       if (e instanceof CoverageReadTimeout) setTimedOut(true);
@@ -436,7 +457,13 @@ export function CoverageView(): React.ReactElement {
         </div>
       )}
 
-      {!loading && error === null && report === null && (
+      {!loading && error === null && notIndexed && (
+        <p data-testid="coverage-not-indexed" className="text-xs" style={{ color: 'var(--ink-dim)' }}>
+          {repos.find((r) => r.id === repoRef)?.name ?? 'This repository'} is not indexed yet, so there is no coverage to measure. Indexing the repository builds its code graph.
+        </p>
+      )}
+
+      {!loading && error === null && !notIndexed && report === null && (
         <p className="text-xs" style={{ color: 'var(--ink-dim)' }}>
           No coverage data — run{' '}
           <code className="font-mono" style={{ color: 'var(--ink-muted)' }}>wicked-core rules ingest</code>{' '}
