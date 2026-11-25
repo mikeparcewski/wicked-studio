@@ -35,6 +35,7 @@ import { HotspotsView } from './HotspotsView.js';
 import { LanguageBar } from './LanguageBar.js';
 import { Modal } from './Modal.js';
 import { RepoFindings, findingNeedsReonboard } from './RepoFindings.js';
+import { RepoSeatToolchain } from './RepoSeatToolchain.js';
 import { KnowMarks } from './RepoKnowledge.js';
 import { RepoTrackers } from './RepoTrackers.js';
 import { RequirementsModal } from './RequirementsModal.js';
@@ -679,6 +680,8 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                     <TechDetails data-testid="repo-detail-path" summary="Its folder on this computer" text={repo.root_path} />
                     {gitLink !== null && <a className="wk-link wk-rp-more" href={gitLink} target="_blank" rel="noopener noreferrer">View on the web</a>}
                   </section>
+                  {/* core#1043: the toolchain layers this repository's seats get; crew's answer replaces the row shown. */}
+                  <RepoSeatToolchain key={repo.id} repo={repo} onChanged={(r) => { if (repoRef.current === r.id) setRepo(r); }} />
                 </div>
               </div>
             )}

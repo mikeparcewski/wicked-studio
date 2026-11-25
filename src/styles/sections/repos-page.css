@@ -92,6 +92,14 @@
 .wk-rp-upkeep > p { grid-column: 1; margin: 0; font-size: var(--text-sm); color: var(--ink-muted); line-height: 1.5; }
 .wk-rp-upkeep > .wk-btn { grid-column: 2; grid-row: 1 / span 2; }
 .wk-rp-state { display: flex; align-items: center; gap: 8px; font-size: var(--text-sm); color: var(--ink-body); }
+/* core#1043: the Seat toolchain card, one row per layer: a switch, or the layer and why it is off. */
+.wk-rp-layers { border: 0; margin: var(--space-2) 0 0; padding: 0; min-width: 0; }
+.wk-rp-layers > ul { list-style: none; margin: 0; padding: 0; }
+.wk-rp-layers li { padding: 10px 0; border-top: 1px solid var(--border-subtle); min-width: 0; }
+.wk-rp-layers li:first-child { border-top: 0; }
+.wk-rp-layer-fixed > b { color: var(--ink-high); font-weight: var(--weight-semi); }
+.wk-rp-layer-fixed > p { margin: 2px 0 0; font-size: var(--text-sm); color: var(--ink-muted); line-height: 1.5; }
+[data-testid="repo-seat-layers"] > .wk-field-note--bad { margin: var(--space-2) 0 0; }
 
 @media (max-width: 1100px) { .wk-rp-two { grid-template-columns: minmax(0, 1fr); } }
 

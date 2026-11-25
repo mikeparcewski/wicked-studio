@@ -739,6 +739,14 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ minPct }),
     }),
+  /** (wicked-core#1043) Turn this repo's seat toolchain layers off: `off` is the full list (`[]` clears the repo's own
+   *  switch). Crew answers the repo's row as `GET /repos` shows it; see `src/api/seatLayers.ts` for its refusals. */
+  setRepoSeatLayers: (repoId: string, off: string[]) =>
+    apiFetch<RepoEntry>(`/repos/${encodeURIComponent(repoId)}/seat-layers`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ off }),
+    }),
   getRequirement: (repoId: string, key: string) =>
     apiFetch<{ requirement: import('./types.js').RequirementDetail }>(`/repos/${encodeURIComponent(repoId)}/requirements/${encodeURIComponent(key)}`),
   patchRequirement: (repoId: string, key: string, patch: import('./types.js').RequirementPatch) =>

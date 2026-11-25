@@ -18230,6 +18230,36 @@
       ]
     },
     {
+      "testId": "repo-seat-layer",
+      "files": [
+        "src/components/RepoSeatToolchain.tsx"
+      ]
+    },
+    {
+      "testId": "repo-seat-layer-switch",
+      "files": [
+        "src/components/RepoSeatToolchain.tsx"
+      ]
+    },
+    {
+      "testId": "repo-seat-layers",
+      "files": [
+        "src/components/RepoSeatToolchain.tsx"
+      ]
+    },
+    {
+      "testId": "repo-seat-layers-error",
+      "files": [
+        "src/components/RepoSeatToolchain.tsx"
+      ]
+    },
+    {
+      "testId": "repo-seat-layers-none",
+      "files": [
+        "src/components/RepoSeatToolchain.tsx"
+      ]
+    },
+    {
       "testId": "repo-source",
       "files": [
         "src/components/RepositoriesPanel.tsx"
