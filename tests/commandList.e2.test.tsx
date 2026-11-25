@@ -1088,3 +1088,78 @@ describe('F41: a command typed in a new chat opens on the repository its words n
     expect(seedOf()!['repoRefs']).toBeUndefined();
   });
 });
+
+describe('studio#1399: /new mcp offers “Also expose as a REST API” on the job chip (the v2 flow)', () => {
+  it('off by default with its one line; ticked, the job’s words carry the REST ask; another pick starts off', async () => {
+    render(<Harness />);
+    await ready();
+    await list('/new mcp');
+    pickRow('/new mcp');
+    const toggle = await screen.findByTestId('composer-job-rest-toggle');
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(toggle).toHaveTextContent('Also expose as a REST API');
+    expect(screen.getByTestId('composer-job-rest')).toHaveTextContent('Adds HTTP routes and an OpenAPI description, built from the same tools.');
+    fireEvent.click(toggle);
+    expect(screen.getByTestId('composer-job-rest-toggle')).toHaveAttribute('aria-checked', 'true');
+    type('Wrap the weather API');
+    enter();
+    await waitFor(() => expect(proposals()).toHaveLength(1));
+    expect(proposals()[0]).toMatchObject({
+      card: 'start-new', option: 'mcp-server',
+      words: 'Wrap the weather API\n\nAlso expose the tools as a REST API (mcp-scaffold --rest): HTTP routes and an OpenAPI description built from the same tools.',
+    });
+    expect(launches()).toEqual([]);
+    // The next pick of the same job is its own start: the switch is off again.
+    await list('/new mcp');
+    pickRow('/new mcp');
+    await waitFor(() => expect(screen.getByTestId('composer-job-rest-toggle')).toHaveAttribute('aria-checked', 'false'));
+  });
+
+  it('unticked, the words go as typed; a job that is not an MCP server has no such switch', async () => {
+    render(<Harness />);
+    await ready();
+    await list('/new mcp');
+    pickRow('/new mcp');
+    await screen.findByTestId('composer-job-rest-toggle');
+    type('Wrap the weather API');
+    enter();
+    await waitFor(() => expect(proposals()).toHaveLength(1));
+    expect(proposals()[0]!['words']).toBe('Wrap the weather API');
+    await list('/new cli');
+    pickRow('/new cli');
+    await waitFor(() => expect(chipsOf(useComposerChips.getState(), 'c1').some((c) => c.kind === 'workflow')).toBe(true));
+    expect(screen.queryByTestId('composer-job-rest-toggle')).toBeNull();
+  });
+});
+
+describe('studio#1399 round 2: the REST line is studio’s, not the person’s words', () => {
+  const seedOf = (): Record<string, unknown> | undefined => nonGets().find((c) => c.path === '/chats')?.body ?? undefined;
+  it('a new chat opens on the repository the person named, even when a repository is named like a word in the REST line', async () => {
+    const real = globalThis.fetch;
+    const both = [REPO, { ...REPO, id: 'mcp-scaffold', name: 'mcp-scaffold', root_path: '/srv/mcp-scaffold' }];
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => (new URL(url, 'http://x').pathname.endsWith('/repos')
+      ? Promise.resolve(new Response(JSON.stringify({ repos: both }), { status: 200, headers: { 'content-type': 'application/json' } }))
+      : (real as (u: string, i?: RequestInit) => Promise<Response>)(url, init))));
+    render(<Harness chatId={null} composerKey="new" />);
+    await ready();
+    await list('/new mcp');
+    pickRow('/new mcp');
+    fireEvent.click(await screen.findByTestId('composer-job-rest-toggle'));
+    type('Wrap the weather API in repo-1');
+    enter();
+    await waitFor(() => expect(seedOf()).toBeDefined());
+    expect(seedOf()).toMatchObject({ repoRefs: ['repo-1'] });
+    expect(String((seedOf()!['seed'] as { words: string }).words)).toContain('(mcp-scaffold --rest)');
+  });
+
+  it('the choice belongs to the pick: a composer that remounts keeps it, and the same request sends the same words', async () => {
+    const { unmount } = render(<Harness />);
+    await ready();
+    await list('/new mcp');
+    pickRow('/new mcp');
+    fireEvent.click(await screen.findByTestId('composer-job-rest-toggle'));
+    unmount();
+    render(<Harness />);
+    await waitFor(() => expect(screen.getByTestId('composer-job-rest-toggle')).toHaveAttribute('aria-checked', 'true'));
+  });
+});

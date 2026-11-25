@@ -213,6 +213,30 @@
       ]
     },
     {
+      "testId": "agents-login-link",
+      "files": [
+        "src/components/agents/containerSignIn.tsx"
+      ]
+    },
+    {
+      "testId": "agents-login-link-copy",
+      "files": [
+        "src/components/agents/containerSignIn.tsx"
+      ]
+    },
+    {
+      "testId": "agents-login-link-note",
+      "files": [
+        "src/components/agents/containerSignIn.tsx"
+      ]
+    },
+    {
+      "testId": "agents-login-link-url",
+      "files": [
+        "src/components/agents/containerSignIn.tsx"
+      ]
+    },
+    {
       "testId": "agents-login-scrim",
       "files": [
         "src/components/agents/containerSignIn.tsx"
@@ -3896,6 +3920,18 @@
       ]
     },
     {
+      "testId": "composer-job-rest",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-job-rest-toggle",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
       "testId": "composer-menu",
       "files": [
         "src/components/session/SlashMenu.tsx"
@@ -4055,6 +4091,18 @@
     },
     {
       "testId": "composer-start-repos",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-rest",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-rest-toggle",
       "files": [
         "src/components/session/InlineStart.tsx"
       ]
@@ -10371,6 +10419,18 @@
       ]
     },
     {
+      "testId": "launch-wizard-rest",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-rest-toggle",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
       "testId": "launch-wizard-review",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
@@ -10390,6 +10450,12 @@
     },
     {
       "testId": "launch-wizard-review-qe-off",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-review-rest",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]

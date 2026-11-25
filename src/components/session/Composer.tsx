@@ -43,6 +43,9 @@ import { SlashMenu, type AtItem } from './SlashMenu.js';
 import { openLaunchWizard } from '../../store/launchWizard.js';
 import { usePhone } from '../../hooks/usePhone.js';
 import { VoiceMicButton } from '../voice/VoiceMicButton.js';
+import { Switch } from '../ui/Switch.js';
+import { offersRestApi, REST_API_HINT, REST_API_LABEL, withRestApi } from '../../board/mcpRest.js';
+import { useRestPicks } from '../../store/mcpRestPicks.js';
 
 let cmdSeq = 0;
 /** Each composer's typed-command draft key, kept as long as its draft (the module's life, as `sessionDrafts`): a retry
@@ -481,6 +484,10 @@ export function Composer({
       : namedDropped ? `${namedHelper?.label ?? 'The helper you named'} is named to answer but is left out of the helpers row — turn it on, or remove the chip.`
         : null;
   const [jobBusy, setJobBusy] = useState(false);
+  /** studio#1399: whether this job pick (its chip key) also exposes a REST API; kept per pick, so a remount keeps it. */
+  const restPicked = useRestPicks((s) => (jobChip !== null && s.on[jobChip.key] === true));
+  const offerJobRest = jobChip !== null && offersRestApi(jobChip.workflowId);
+  const jobRestOn = offerJobRest && restPicked;
   const jobBusyRef = useRef(false);
 
   const canSend = answerOnly ? answerOptional || text.trim() !== ''
@@ -618,7 +625,8 @@ export function Composer({
     // Lane E2 (§4.6, §8.4): a job chip, or a command typed whole, posts the person-made proposal: into this chat, or as
     // a new chat's seed. Never a launch route.
     if (jobChip !== null) {
-      void sendJob({ card: jobChip.card ?? jobChip.entryId ?? '', option: jobChip.option ?? null, depth: jobChip.depth ?? null, words: text, source: 'pick', pickKey: jobChip.key, chipKey: jobChip.key });
+      // studio#1399: the REST ask rides the job's words, the intent the mcp-server workflow reads.
+      void sendJob({ card: jobChip.card ?? jobChip.entryId ?? '', option: jobChip.option ?? null, depth: jobChip.depth ?? null, words: withRestApi(text, jobRestOn), repoWords: text, source: 'pick', pickKey: jobChip.key, chipKey: jobChip.key });
       return;
     }
     // A `/` line before the daemon's capabilities are read is held: which list and which path is the daemon's to say.
@@ -677,7 +685,7 @@ export function Composer({
     setNote(null);
   };
 
-  const sendJob = async (j: { card: string; option: string | null; depth: 'quick' | 'standard' | 'deep' | null; words: string; source: 'pick' | 'command'; pickKey: string; chipKey: string | null; renewCmd?: boolean }): Promise<void> => {
+  const sendJob = async (j: { card: string; option: string | null; depth: 'quick' | 'standard' | 'deep' | null; words: string; repoWords?: string; source: 'pick' | 'command'; pickKey: string; chipKey: string | null; renewCmd?: boolean }): Promise<void> => {
     // A ref, not the render's state: two Enters before a re-render post once (pi r1).
     if (jobBusyRef.current) return;
     jobBusyRef.current = true;
@@ -688,7 +696,7 @@ export function Composer({
     const helper = chips.find((c) => c.kind === 'about' && c.key.startsWith('h:'));
     try {
       const out = await postJob({
-        card: j.card, option: j.option, depth: j.depth, words: j.words, source: j.source,
+        card: j.card, option: j.option, depth: j.depth, words: j.words, source: j.source, ...(j.repoWords !== undefined ? { repoWords: j.repoWords } : {}),
         // An `@project` chip names where the job goes: a new chat in that project, never this chat (codex r1).
         chatId: project !== null ? null : jobChatId,
         projectId: project?.projectId ?? contextProjectId, repoRef: project !== null ? null : sessionRepo, pickKey: j.pickKey,
@@ -790,6 +798,11 @@ export function Composer({
           {jobChip !== null && refusal === null && (
             <span data-testid="composer-job-line" role="status" className="wk-composer-note">
               {jobBusy ? 'Putting the job in the chat…' : 'Enter puts this job in the chat for you to look over. Nothing runs until you press Start.'}
+            </span>
+          )}
+          {jobChip !== null && offerJobRest && (
+            <span data-testid="composer-job-rest" className="wk-composer-start-need">
+              <Switch label={REST_API_LABEL} checked={jobRestOn} onChange={(v) => useRestPicks.getState().set(jobChip.key, v)} disabled={jobBusy ? 'Putting the job in the chat…' : null} hint={REST_API_HINT} data-testid="composer-job-rest-toggle" />
             </span>
           )}
           {/* first-run-2 N5: beside the plain "No helper is signed in yet" line, the daemon's no-seat refusal is the
