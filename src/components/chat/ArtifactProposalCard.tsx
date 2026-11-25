@@ -16,6 +16,7 @@ import {
   noteSettled,
   proposalAsk,
   proposalRecordLine,
+  proposalRecordState,
   proposalRefusal,
   proposalStarting,
   proposalStartingMs,
@@ -373,7 +374,7 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
           testIds={{ root: 'artifact-proposal-ask', confirm: 'artifact-proposal-confirm' }} />
       ) : view.state === 'accepting' ? (
         <div className="wk-proposal-again">
-          <AskRecord line={line ?? ''} testId="artifact-proposal-record" />
+          <AskRecord line={line ?? ''} testId="artifact-proposal-record" state={proposalRecordState(view, starting, cutPending)} />
           {!starting && !answering && <button type="button" data-testid="artifact-proposal-go-again" className="wk-btn wk-btn--primary wk-btn--sm" disabled={busy} onClick={() => decide('go')}>Go again</button>}
           {/* An interrupted Go resumes with its accepted choices; only its helpers may change (one may have signed out). */}
           {!starting && !answering && p.kind === 'create' && (
