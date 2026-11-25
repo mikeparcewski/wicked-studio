@@ -8,7 +8,7 @@ import { useDisplayText } from '../../hooks/useHomePath.js';
 import { TechDetails } from '../ui/index.js';
 import { FLOOR_OVERRIDDEN_LABEL, isToolCheckOverride, overrideLabel, overrideWhere } from '../../board/floorOverride.js';
 import { stepWord } from '../../board/runConversation.js';
-import { cliLabel, standInBase } from '../../board/seatNames.js';
+import { seatKeyName } from '../../board/seatNames.js';
 
 /** "you" opens a sentence as "You"; a person's own id is said as recorded. */
 const capitalize = (s: string): string => (s === 'you' ? 'You' : s);
@@ -178,8 +178,9 @@ function howWords(r: RuleRow): string {
 }
 
 /** A rule's seat key as shown: a stand-in (`claude~2`) is named, never bare (studio#1437); other keys as before. */
+/** A recorded seat key as said: a stand-in by its name and "(stand-in)", any other key as recorded. */
 function seatShown(seat: string): string {
-  return standInBase(seat) !== null ? cliLabel(seat) : seat;
+  return seatKeyName(seat, null);
 }
 
 /** One side's reading: "Rule judge (claude): broken, “…”". */
@@ -422,7 +423,7 @@ export function DeliveryAssuranceLines({ recorded, testIdPrefix }: { recorded: D
           {qe.status === 'waived' || qe.status === 'skipped'
             ? showText(qe.status === 'waived' ? `QE acceptance: waived (${qe.reason.replace(/^waived:\s*/, '')})` : qeSkippedText(qe.reason))
             : qe.satisfied
-              ? `QE acceptance: PASS${qe.reviewer !== null ? ` by ${qe.reviewer}` : ''}${qe.verdictId !== null ? ` (${qe.verdictId})` : ''}`
+              ? `QE acceptance: PASS${qe.reviewer !== null ? ` by ${seatShown(qe.reviewer)}` : ''}${qe.verdictId !== null ? ` (${qe.verdictId})` : ''}`
               : `QE acceptance not met: ${showText(qe.reason)}`}
         </p>
       )}

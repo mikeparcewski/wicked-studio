@@ -189,7 +189,7 @@ function StepSheet({ r, tab, runs, navigate }: { r: Extract<ObjectRef, { kind: '
       {messaging && can === null && <MessageBox runId={r.runId} target={unit?.assigned_cli ?? 'all'} can={can} />}
       {tab === 'happening' && (
         <div data-testid="sheet-happening" className="wk-sheet-section">
-          <p className="wk-sheet-line"><b>{name}</b> is {unit !== null ? (unit.ord === live ? 'working' : UNIT_WORD[unit.status] ?? unit.status) : 'not started'}{unit?.assigned_cli ? ` · ${unit.assigned_cli}` : ''}.</p>
+          <p className="wk-sheet-line"><b>{name}</b> is {unit !== null ? (unit.ord === live ? 'working' : UNIT_WORD[unit.status] ?? unit.status) : 'not started'}{unit?.assigned_cli ? ` · ${seatKeyName(unit.assigned_cli, null)}` : ''}.</p>
           {unit !== null && unit.ord === live && <LiveNarration runId={r.runId} ord={unit.ord} phase={name} />}
           {unit === null && <p className="wk-session-grey">Nothing has run for this step yet.</p>}
           {/* DC-S8 (B10): the rules this step was given — considered · set aside · cited (unchecked). */}

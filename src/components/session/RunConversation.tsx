@@ -385,7 +385,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null, madeEl
     passed,
     tests: testCountOf(acceptance?.summary?.line, gateVerdict?.reason),
     nothing: noEvidenceSummary?.nothing === true,
-    reviewers: approvingReviewers(view, isReviewUnit, (ord) => reviewVerdicts.get(ord) ?? null),
+    reviewers: approvingReviewers(view, isReviewUnit, (ord) => reviewVerdicts.get(ord) ?? null).map((cli) => seatKeyName(cli, roster)),
     overridden: finalOverridden,
     deliveryVerified,
   }) : null;
