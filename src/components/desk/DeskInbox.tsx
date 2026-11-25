@@ -227,10 +227,10 @@ function SnoozeAct({ row, now }: { row: NeedRow; now: number }): React.ReactElem
   const opener = useRef<HTMLButtonElement>(null);
   const firstChoice = useRef<HTMLButtonElement>(null);
   const backToOpener = useRef(false);
-  // Keyboard: the choices take focus when they open; Cancel hands it back to Snooze.
+  // Keyboard: the choices take focus when they open; Cancel or a refusal hands it back to Snooze.
   useEffect(() => {
     if (state.kind === 'choose') firstChoice.current?.focus();
-    else if (state.kind === 'idle' && backToOpener.current) { backToOpener.current = false; opener.current?.focus(); }
+    else if (state.kind === 'failed' || (state.kind === 'idle' && backToOpener.current)) { backToOpener.current = false; opener.current?.focus(); }
   }, [state.kind]);
   if (state.kind === 'idle' || state.kind === 'failed') {
     return (

@@ -128,9 +128,11 @@ export interface NeedRow {
   tone: NarrationTone;
   /** The honest clock, or null when no wire carries one ("age unknown"). */
   at: number | null;
-  /** Which occurrence of the subject this is, from the daemon's own identity (a gate's `ord`, a run's terminal clock,
-   *  a proposal's id, the newest steer ask's id, a repo's `registered_at`): the same live and after a reload. Absent
-   *  when only studio's clock tells occurrences apart; such a row can't be snoozed (crew#1124). */
+  /** Which occurrence of the subject this is, from the daemon's own identity (a run's terminal clock, a proposal's
+   *  id, a repo's `registered_at`, a failed onboarding run's id and end): the same live and after a reload. Absent when
+   *  the wire names no occurrence; such a row can't be snoozed (crew#1124). A gate has none yet: a run can ask again at
+   *  the same `ord`, and neither the live frame nor the gate read carries crew's `interactionId`. A steer ask's id is
+   *  minted by this browser and not kept across a reload. */
   instance?: string;
   /** Where the row's body links (the subject's own surface). */
   subjectPath: string;
@@ -385,6 +387,7 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
     const onboard = repoOnboard(mine, repo.id);
     if (onboard.state === 'failed' && onboard.run !== null) {
       const runId = onboard.run.session.id;
+      const onboardEnd = endedAtMs(onboard.run) ?? finishedAtMs(onboard.run);
       suppressed.add(runId);
       rows.push({
         key: `repo:${repo.id}`,
@@ -395,6 +398,8 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         text: 'Graph build failed — the fleet is blind on this repo',
         tone: 'fail',
         at: failedAt[runId] ?? attachedAt[runId] ?? null,
+        // The failed onboarding run and its end: a later onboarding of the same repo is a new occurrence.
+        ...(onboardEnd !== null ? { instance: `run:${runId}@ended:${onboardEnd}` } : {}),
         subjectPath: `/repo-detail/${encodeURIComponent(repo.id)}`,
         action: {
           kind: 'reindex-prefill',
@@ -457,8 +462,6 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         question: plainGateQuestion(gate?.prompt, gate?.gateKind),
         tone: 'gate',
         at: gate?.receivedAt ?? attachedAt[s.id] ?? null,
-        // The gate's event ordinal: crew's, so a live gate and the same gate read after a reload match.
-        ...(gate !== undefined ? { instance: `ord:${gate.ord}` } : {}),
         subjectPath: sessionPath('run:' + s.id),
         action: {
           kind: 'open',
@@ -682,8 +685,6 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
       text: `Agent asks for direction — ${clipLine(newest.message)}`,
       tone: 'gate',
       at: oldest.ts,
-      // A new ask on the run is a new occurrence.
-      instance: `ask:${newest.id}`,
       subjectPath: runOpenPath(runId),
       action: { kind: 'open', path: runOpenPath(runId), label: 'Steer ›', ack: asks.map((a) => a.id) },
     });
