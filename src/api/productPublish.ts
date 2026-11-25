@@ -1,14 +1,14 @@
 /**
- * Product publish (wicked-crew#372, api-types 0.228.0): a finished compose run's plan, published as GitHub issues in a
+ * Product publish (wicked-crew#372, api-types 0.229.0): a finished compose run's plan, published as GitHub issues in a
  * repository linked to the project as a tracker. `GET /projects/:id/product/publish/:runId` says whether the run can be
  * published (and why not, before any click), which repositories it can go to, and every publication of the run read
  * back; `POST /projects/:id/product/publish` answers the card (nothing sent), creates on a confirm of the card's hash,
  * and settles one `unsure` item on a resolve.
  *
- * A NARROW mirror of the contract block in `wicked-crew-api-types` 0.228.0 (only the fields studio reads) while studio's
+ * A NARROW mirror of the contract block in `wicked-crew-api-types` 0.229.0 (only the fields studio reads) while studio's
  * pin lags it: every answer is read defensively here, and one unreadable part makes the whole answer unreadable.
  *
- * TODO(api-types >= 0.228.0): once studio pins `wicked-crew-api-types` 0.228.0 or later, these types become
+ * TODO(api-types >= 0.229.0): once studio pins `wicked-crew-api-types` 0.229.0 or later, these types become
  * re-exports from the package.
  */
 import { apiFetch } from './client.js';
@@ -16,15 +16,15 @@ import { ApiError, isRouteAbsent } from './errors.js';
 
 export type PublishKind = 'epic' | 'feature' | 'story';
 
-/** (0.228.0) One issue a publication creates; `body` carries `{{parent}}` until it is sent. */
+/** (0.229.0) One issue a publication creates; `body` carries `{{parent}}` until it is sent. */
 export interface PublishItem { key: string; kind: PublishKind; title: string; body: string; parentKey: string | null }
 
-/** (0.228.0) What a confirm would create, where, and as whom. */
+/** (0.229.0) What a confirm would create, where, and as whom. */
 export interface ProductPublishCard { runId: string; projectId: string; repo: string; source: string; identity: string; items: PublishItem[] }
 
 export type PublicationItemStateWord = 'created' | 'sending' | 'not_sent' | 'unsure' | 'absent' | 'missing';
 
-/** (0.228.0) One item of a publication now. */
+/** (0.229.0) One item of a publication now. */
 export interface PublicationItemState {
   key: string;
   kind: PublishKind;
@@ -36,15 +36,15 @@ export interface PublicationItemState {
   why?: string;
 }
 
-/** (0.228.0) One run published to one repository. */
+/** (0.229.0) One run published to one repository. */
 export interface PublicationState { repo: string; source: string; publishHash: string; items: PublicationItemState[]; published: boolean }
 
-/** (0.228.0) `POST /projects/:id/product/publish` 200. */
+/** (0.229.0) `POST /projects/:id/product/publish` 200. */
 export type ProductPublishResponse =
   | { done: false; card: ProductPublishCard; publishHash: string; publication: PublicationState | null }
   | { done: true; card: ProductPublishCard; publication: PublicationState };
 
-/** (0.228.0) `GET /projects/:id/product/publish/:runId`. */
+/** (0.229.0) `GET /projects/:id/product/publish/:runId`. */
 export interface ProductPublicationsResponse {
   runId: string;
   publishable: { ok: true; items: number } | { ok: false; code: string; error: string };
@@ -52,7 +52,7 @@ export interface ProductPublicationsResponse {
   publications: PublicationState[];
 }
 
-/** (0.228.0) The POST body. */
+/** (0.229.0) The POST body. */
 export interface ProductPublishBody { runId: string; repo: string; confirm?: string; resolve?: { key: string; issue: number | null } }
 
 const enc = encodeURIComponent;
