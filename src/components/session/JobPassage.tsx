@@ -59,6 +59,8 @@ import { coverageHeadline, DOMAIN_EXTRACTION_ID, domainJobResultOf, requirements
 import { projectRequirementsPath } from '../../hooks/useRoute.js';
 import { fetchReposCached } from '../../store/repoCache.js';
 import { RequirementsModal } from '../RequirementsModal.js';
+import { DomainScopeCard, domainScopeSeat } from '../launch/DomainScopeCard.js';
+import { useDomainScope } from '../../hooks/useDomainScope.js';
 
 /**
  * WICKED'S PASSAGE (DES-CATALOG-002 rev 7 §2.8.1, the v4 "Ink" direction, mockup new-job-v5): the job, inline in the
@@ -256,6 +258,12 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   // Who leads, from the proposal drawn (what Go accepted once started), never a version Go did not take.
   const lead = (v.proposal.seats?.lead ?? null);
   const leadName = lead !== null ? seatResponder(lead, roster).name : 'The lead';
+
+  // J6 S1 (DES-j6-build S2): a domain model job shows, before Start, what its words cover in the code (crew's scope card
+  // for these words and this repository). Start maps those words (crew's chat Start sends them as the scope).
+  const domainJob = v.proposal.shape?.card === 'analyze-codebase' && v.proposal.shape.option === 'domain';
+  const domainWords = (v.proposal.words ?? v.proposal.brief ?? '').trim();
+  const chatScope = useDomainScope({ enabled: domainJob && preStart && v.phase !== 'interrupted', repoRef: v.proposal.repoRefs?.[0] ?? null, intent: domainWords, phrases: null });
 
   // ── the routes ────────────────────────────────────────────────────────────────────────────────────────────────────
   const decide = (decision: 'go' | 'not_now', reduced = false): void => {
@@ -650,6 +658,10 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
             </Fragment>
           ))}
         </p>
+      )}
+
+      {domainJob && preStart && v.phase !== 'interrupted' && (
+        <DomainScopeCard scope={chatScope} writer={domainScopeSeat(roster, 'claude', 'Claude Code')} checker={domainScopeSeat(roster, 'codex', 'Codex')} />
       )}
 
       {question !== null && (
@@ -1222,7 +1234,7 @@ function DomainResultLine({ run, read, navigate }: { run: SessionView; read: Out
       <p data-testid="job-passage-domain-result" data-state={result === null ? 'loading' : result === 'failed' ? 'failed' : result.built ? 'built' : 'not-built'} className="wk-pass-sub">
         {words}{' '}
         {result === 'failed' && <><button type="button" className="wk-pass-inl" data-testid="job-passage-domain-retry" onClick={read.again}>Try again</button>{' · '}</>}
-        <button type="button" className="wk-pass-inl" data-testid="job-passage-requirements-open" onClick={() => setOpen(true)}>Open the requirements</button>
+        <button type="button" className="wk-pass-inl" data-testid="job-passage-requirements-open" onClick={() => setOpen(true)}>{result !== null && result !== 'failed' && result.model != null ? 'Open the model' : 'Open the requirements'}</button>
       </p>
       {/* What the requirements view changed (a lowered minimum, a built map) is read again once it closes. */}
       {open && <RequirementsModal repoId={repoId} repoName={repoName ?? repoId} onClose={() => { setOpen(false); read.again(); }} />}
@@ -1232,6 +1244,8 @@ function DomainResultLine({ run, read, navigate }: { run: SessionView; read: Out
 
 /** "Mapped 85% real requirements · minimum 80%, across 12 business domains." */
 export function domainResultWords(r: DomainJobResult): string {
+  // J6 S1: a 1.2.0 model is said as the model view's header says it; open it to read the rules and the follow-ups.
+  if (r.model !== undefined && r.model !== null) return `Mapped the domain: ${r.model}.`;
   const share = r.coverage !== null ? coverageHeadline(r.coverage) : null;
   const domains = r.domains !== null && r.domains > 0 ? `${r.domains} business ${r.domains === 1 ? 'domain' : 'domains'}` : null;
   if (!r.built) {

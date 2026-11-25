@@ -50,6 +50,11 @@ import { addAboutChip, clearAboutChips } from '../../store/composerChips.js';
 import { pageComposerKey, seedComposer } from '../../store/composerSeed.js';
 import { useWorkflowCatalog } from '../../store/workflowCatalog.js';
 import { WorkflowCatalog } from './WorkflowCatalog.js';
+import { DomainScopeCard, domainScopeSeat } from './DomainScopeCard.js';
+import { useDomainScope } from '../../hooks/useDomainScope.js';
+import { editPhrases } from '../../board/domainModel.js';
+import type { DomainScope } from '../../api/domainModel-wire.js';
+import { DOMAIN_EXTRACTION_ID } from '../../board/requirementsState.js';
 import { offersRestApi, REST_API_HINT, REST_API_LABEL, withRestApi } from '../../board/mcpRest.js';
 
 type Step = 'workflow' | 'what' | 'where' | 'options' | 'requirements' | 'demo' | 'review';
@@ -234,8 +239,10 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   // Words are required unless the catalog says otherwise: a workflow whose form has no text input,
   // or whose first one is optional. Crew still needs a problem (`problem` min 1), so a launch with no
   // words sends the workflow's own summary.
-  const wordsOptional = entry !== null && entry.launchKind === 'run' && entry.form && textInputs.every((i) => !i.required);
-  const wordsLabel = textInputs[0]?.label ?? (wordsOptional ? 'Anything to focus on?' : 'What do you want done?');
+  // J6 S1: a domain model launch always needs the person's words: they are what the model covers.
+  const domainRun = draft.workflowId === DOMAIN_EXTRACTION_ID;
+  const wordsOptional = !domainRun && entry !== null && entry.launchKind === 'run' && entry.form && textInputs.every((i) => !i.required);
+  const wordsLabel = domainRun ? 'What should the model cover?' : textInputs[0]?.label ?? (wordsOptional ? 'Anything to focus on?' : 'What do you want done?');
   const moreWords = textInputs.slice(1);
   const problemText = draft.intent.trim() !== '' || entry === null ? draft.intent : (entry.summary.split('. ')[0] || entry.title);
   // studio#1399: the MCP server workflow's REST option, said in the intent it sends.
@@ -254,6 +261,18 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   }, [repos, draft.contextRepo]);
   // A workflow that works without a repository starts with none (it is offered, not assumed).
   const repoRef = draft.repoRef !== null ? (draft.repoRef === '' ? null : draft.repoRef) : repoRequired ? defaultRepo : null;
+  // J6 S1 (DES-j6-build S2): the scope card, asked for on the review step for the words and repository shown, and the
+  // phrases the person kept or typed there (null: the words decide). New words or another repository start over.
+  const [scopePhrases, setScopePhrases] = useState<string[] | null>(null);
+  const scopeInputs = JSON.stringify([draft.intent.trim(), repoRef]);
+  const scopeInputsSeen = useRef(scopeInputs);
+  useEffect(() => {
+    if (scopeInputsSeen.current === scopeInputs) return;
+    scopeInputsSeen.current = scopeInputs;
+    setScopePhrases(null);
+  }, [scopeInputs]);
+  const scopePhrasesNow = scopeInputsSeen.current === scopeInputs ? scopePhrases : null;
+  const domainScope = useDomainScope({ enabled: domainRun && step === 'review', repoRef, intent: draft.intent, phrases: scopePhrasesNow });
   // A named def that runs no code is not a delivering launch; an unknown one (a preset) may deliver.
   // A demo video never delivers (crew launches it with `deliver: 'none'`) and its gates are the preset's own.
   // A job with no repository has nothing to deliver a pull request to.
@@ -279,6 +298,19 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   const isOff = (key: string): boolean => (offUnlessPicked(key) ? !picked.includes(key) : seatOff(key, dropped, picked));
   const seats = eligible.filter((s) => !isOff(s.key));
   const offerReduced = reducedCap && seats.length === 1;
+  // J6 S1: a domain model run writes with Claude Code and checks with Codex, whichever helpers are picked here
+  // (DES-j6-build §2, the calibrated pair); either signed out stops the run, so Launch says so first.
+  const scopeWriter = domainScopeSeat(roster, 'claude', 'Claude Code');
+  const scopeChecker = domainScopeSeat(roster, 'codex', 'Codex');
+  const domainBlocker: string | null = !domainRun ? null
+    : draft.intent.trim().length > 2000 ? 'Shorten what the model covers to 2,000 characters.'
+    : scopeWriter.missing === true ? 'Set up Claude Code on this computer to write the rules (Agents).'
+    : scopeChecker.missing === true ? 'Set up Codex on this computer to check the rules (Agents).'
+    : scopeWriter.signedOut === true ? 'Sign in Claude Code to write the rules.'
+    : scopeChecker.signedOut === true ? 'Sign in Codex to check the rules.'
+    : scopePhrasesNow !== null && scopePhrasesNow.length === 0 ? 'Keep at least one phrase, or add one.'
+    : domainScope.status === 'loading' ? 'Reading the code for the scope…'
+    : domainScope.status === 'failed' ? 'There is no scope to start from yet: see the card.' : null;
   // The Lead agent (DES-TEAMING-002 §8.1): offered when the daemon takes it and there is a choice to
   // make; a pick whose helper was turned off reads as Random again (never a stale seat sent).
   // Only a seat that can take work may lead: crew refuses a signed-out, benched or not-work-eligible lead by name.
@@ -356,6 +388,7 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
     : draft.workflowId === null ? 'Choose the kind of job.'
       : draft.intent.trim() === '' && !wordsOptional ? 'Say what you want done.'
         : repoRequired && repoRef === null ? 'Choose the repository this works in.'
+          : domainBlocker !== null ? domainBlocker
           : eligible.length > 0 && seats.length === 0 ? 'Turn on at least one helper.'
             : onlyReviewersChosen(seats) ? NO_WORKER_PICKED
             : offerQe && !qeOff && draft.skipQe && draft.skipQeReason.trim() === '' ? 'Say why QE acceptance is skipped.'
@@ -550,6 +583,15 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
       if (offerPower) {
         const shown = postureKey(postureFieldsOfBody(body), powerChoice) === postureKeyAtLaunch && postureAtLaunch.status === 'ready' ? postureAtLaunch.posture : null;
         (body as typeof body & { power?: boolean }).power = powerToSend(true, shown) === true;
+      }
+      // J6 S1: the scope the card on screen answered for, with its hash (the run refuses when the code moved since).
+      if (domainRun) {
+        if (domainScope.status !== 'ready') return;
+        (body as typeof body & { domainScope?: DomainScope }).domainScope = {
+          intent: draft.intent.trim(),
+          ...(scopePhrasesNow !== null ? { phrases: scopePhrasesNow } : {}),
+          scopeHash: domainScope.card.scopeHash,
+        };
       }
       if (offerQe && force && (qeOff || !draft.skipQe)) body.forceQeAcceptance = true;
       forcedRef.current = body.forceQeAcceptance === true;
@@ -1040,6 +1082,15 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
               {offerQe && !qeOff && draft.skipQe && <div><dt>QE acceptance</dt><dd>Skipped: {draft.skipQeReason.trim()}</dd></div>}
               {offerQe && qeOff && <div data-testid="launch-wizard-review-qe-off"><dt>QE acceptance</dt><dd>{force ? 'Required for this job' : 'Off on this computer (the job says it was skipped)'}</dd></div>}
             </dl>
+          )}
+          {step === 'review' && domainRun && (
+            <DomainScopeCard
+              scope={domainScope}
+              writer={scopeWriter}
+              checker={scopeChecker}
+              onDrop={(p) => setScopePhrases(editPhrases(scopePhrasesNow, domainScope.status === 'ready' ? domainScope.card : null, { drop: p }))}
+              onAdd={(p) => setScopePhrases(editPhrases(scopePhrasesNow, domainScope.status === 'ready' ? domainScope.card : null, { add: p }))}
+            />
           )}
 
           {/* A launch refused because QE acceptance is required: why, and the way to the setting (the

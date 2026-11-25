@@ -32,15 +32,14 @@ import {
   codeDriftLine,
   codeDriftOf,
   codeMismatchOf,
-  minimumLine,
-  minimumOf,
   mismatchCountOf,
   type RequirementsCoverage,
-  type RequirementsMinimum,
 } from '../board/requirementsState.js';
 import { workflowLabel } from '../board/workflowNames.js';
 import { isLiveStatus, REPEAT_LINE_EVENTS, repeatLineOf } from '../board/repeatProgress.js';
 import { RequirementsCoverageSummary } from './RequirementsCoverageSummary.js';
+import { DomainModelHeadline, DomainModelView, type DomainTab } from './DomainModelView.js';
+import { domainModelOf } from '../board/domainModel.js';
 
 const T = {
   canvas: 'var(--surface-base)',
@@ -108,8 +107,10 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   // Operator ruling 2026-11-06: the rows whose code does not meet them, as a filter.
   const [onlyMismatch, setOnlyMismatch] = useState(false);
   const [page, setPage] = useState<RequirementsPage | null>(null);
-  // The minimum in force and where it comes from (crew 0.197.0), from the page or the notGenerated answer.
-  const [minimum, setMinimum] = useState<RequirementsMinimum | null>(null);
+  // J6 S1: the repository's domain model (schema 1.2.0), when the page carries one; its tabs, with today's list last.
+  const model = domainModelOf(page);
+  const [tab, setTab] = useState<DomainTab | 'list'>('rules');
+  const showList = model === null || tab === 'list';
   // "Config & data" is a filter only when the corpus holds some (crew 0.167.0 categories); a daemon from before the
   // count keeps it, and nothing shows before the first read.
   const configData = configDataCountOf(page);
@@ -146,7 +147,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   useEffect(() => {
     viewRepo.current = repoId;
     readGen.current += 1; // reads for the previous repository are void from now, not from the next read
-    setMinimum(null);
+    setTab('rules');
   }, [repoId]);
 
   const fetchPage = useCallback(
@@ -170,7 +171,6 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
             if (last < off) setOffset(last);
           }
           setPage(p);
-          setMinimum(minimumOf(p));
           setLoadError(null);
           setNotGenerated(null);
         })
@@ -178,7 +178,6 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
           if (inFlight.current === gen) inFlight.current = 0;
           if (gen !== readGen.current) return;
           const missing = requirementsNotGenerated(e);
-          setMinimum(missing !== null && e instanceof ApiError ? minimumOf(e.body) : null);
           setNotGenerated(missing);
           setLoadError(missing !== null ? null : e instanceof Error ? e.message : String(e));
         });
@@ -282,7 +281,8 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
     onClose();
     openLaunchWizard({
       workflowId: workflow,
-      intent: `Map the domain of ${repoName}: the requirements its code implements, grouped by domain, and how much of the code they cover.`,
+      // J6 S1: the person says what the model covers ("What should the model cover?"); the scope card follows from it.
+      intent: '',
       contextRepo: repoId,
       composerKey: `repo:${repoId}`,
     });
@@ -303,23 +303,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
           </span>
           {page !== null && <GraphCoverage page={page} />}
           {page !== null && notGenerated === null && <CodeAge page={page} onRefresh={() => generate(DOMAIN_EXTRACTION_ID)} />}
-          {minimum !== null && (
-            <MinimumControl
-              key={repoId}
-              repoId={repoId}
-              minimum={minimum}
-              onChanged={(m, forRepo) => {
-                if (forRepo !== viewRepo.current) return;
-                if (m !== null) {
-                  setMinimum(m);
-                  // Every minimum on the page says the same number until the next read (codex r2).
-                  setPage((prev) => withMinPct(prev, m.pct));
-                  setNotGenerated((prev) => (prev === null || prev.share === null ? prev : { ...prev, share: { ...prev.share, minPct: m.pct } }));
-                }
-                refetchNow.current();
-              }}
-            />
-          )}
+          {model !== null && notGenerated === null && <DomainModelHeadline model={model} />}
           <button
             type="button"
             onClick={onClose}
@@ -331,8 +315,32 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
           </button>
         </div>
 
+        {/* J6 S1: a domain model's tabs (the rules, the follow-ups, then today's list). */}
+        {model !== null && notGenerated === null && (
+          <div className="wk-domain-tabs" role="tablist" aria-label="Domain model">
+            {([['rules', 'Rules'], ['followups', `Follow-ups${model.followups.some((f) => f.ruling === null) ? ` · ${model.followups.filter((f) => f.ruling === null).length}` : ''}`], ['list', 'Requirements']] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                data-testid={`domain-tab-${id}`}
+                aria-selected={tab === id}
+                onClick={() => setTab(id)}
+                className="px-2.5 py-1 rounded-lg text-xs font-semibold"
+                style={{
+                  background: tab === id ? T.surface2 : 'transparent',
+                  color: tab === id ? T.ink : T.faint,
+                  border: `1px solid ${tab === id ? T.hairlineS : 'transparent'}`,
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Toolbar: search (server-side) + risk filter. Nothing to search before the graph exists. */}
-        {notGenerated === null && (
+        {notGenerated === null && showList && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-2.5 border-b shrink-0" style={{ borderColor: T.hairline }}>
           <input
             type="text"
@@ -407,7 +415,9 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
         {/* Body: list + edit rail */}
         <div className="flex-1 flex overflow-hidden">
           <div className="flex-1 overflow-y-auto">
-            {notGenerated !== null ? (
+            {notGenerated === null && model !== null && !showList ? (
+              <DomainModelView repoId={repoId} model={model} tab={tab === 'followups' ? 'followups' : 'rules'} onRuled={(forRepo) => { if (forRepo === viewRepo.current) refetchNow.current(); }} />
+            ) : notGenerated !== null ? (
               <NotGenerated repoName={repoName} workflow={notGenerated.workflow} onGenerate={generate} share={notGenerated.share} mapping={mapping} onOpenRun={onOpenRun} onRetryMapping={() => setMappingAsk((n) => n + 1)} />
             ) : loadError !== null ? (
               <p className="text-xs p-6" style={{ color: T.deny }}>{loadError}</p>
@@ -435,7 +445,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
               </div>
             )}
             {/* Pagination */}
-            {notGenerated === null && page !== null && (page.total > PAGE_SIZE || offset > 0) && (
+            {notGenerated === null && showList && page !== null && (page.total > PAGE_SIZE || offset > 0) && (
               <div className="flex items-center justify-center gap-4 py-3">
                 <button
                   type="button"
@@ -566,13 +576,6 @@ function GraphCoverage({ page }: { page: RequirementsPage }): React.ReactElement
   );
 }
 
-/** `page` with its coverage held to `pct`, or as it is when it carries no coverage. */
-function withMinPct(page: RequirementsPage | null, pct: number): RequirementsPage | null {
-  const cov = (page as { coverage?: unknown } | null)?.coverage;
-  if (page === null || cov === null || cov === undefined || typeof cov !== 'object') return page;
-  return { ...page, coverage: { ...(cov as object), minPct: pct } } as RequirementsPage;
-}
-
 /**
  * How old the code behind the listed graph is (operator ruling 2026-11-06): "Built from code N commits old (date)",
  * with Refresh map (the same mapping job "Keep mapping" opens). Nothing when the graph is current or the daemon cannot
@@ -587,98 +590,6 @@ function CodeAge({ page, onRefresh }: { page: RequirementsPage; onRefresh: () =>
       <button type="button" onClick={onRefresh} data-testid="requirements-refresh-map" className="text-xs font-semibold underline" style={{ color: T.link }}>
         Refresh map
       </button>
-    </div>
-  );
-}
-
-/**
- * The minimum in force and where it comes from (operator 2026-11-06, P3): a repository's own minimum (set when a job's
- * "Lower the minimum" was answered) can be changed or cleared here, so it is never stuck lower than Settings.
- */
-function MinimumControl({
-  repoId,
-  minimum,
-  onChanged,
-}: {
-  repoId: string;
-  minimum: RequirementsMinimum;
-  /** After a write: the minimum the daemon answered with (applied at once), then a fresh read. */
-  onChanged: (minimum: RequirementsMinimum | null, forRepo: string) => void;
-}): React.ReactElement {
-  const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(String(minimum.pct));
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const n = Number(text);
-  const valid = /^\d{1,3}$/u.test(text.trim()) && n >= 1 && n <= 100;
-  function open(): void {
-    // Every edit starts from the minimum in force, never a discarded draft (codex/pi r1).
-    setText(String(minimum.pct));
-    setError(null);
-    setEditing(true);
-  }
-  function save(pct: number | null): void {
-    setBusy(true);
-    setError(null);
-    api
-      .setRequirementsMinimum(repoId, pct)
-      .then((out) => {
-        setEditing(false);
-        onChanged(minimumOf(out), repoId);
-      })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
-      .finally(() => setBusy(false));
-  }
-  return (
-    <div className="order-last basis-full min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1" data-testid="requirements-minimum" data-source={minimum.source}>
-      <span className="text-xs" style={{ color: T.muted }}>{minimumLine(minimum)}</span>
-      {editing ? (
-        <form
-          className="contents"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (valid && !busy) save(n);
-          }}
-        >
-          <input
-            autoFocus
-            disabled={busy}
-            type="number"
-            min={1}
-            max={100}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            aria-label="Minimum for this repository"
-            data-testid="requirements-minimum-input"
-            className="wk-field w-16 text-xs px-1.5 py-0.5"
-          />
-          <button type="submit" disabled={!valid || busy} data-testid="requirements-minimum-save" className="text-xs font-semibold" style={{ color: T.link }}>
-            Save
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              setEditing(false);
-              setError(null);
-            }}
-            className="text-xs"
-            style={{ color: T.faint }}
-          >
-            Cancel
-          </button>
-        </form>
-      ) : (
-        <button type="button" disabled={busy} onClick={open} data-testid="requirements-minimum-change" className="text-xs font-semibold underline" style={{ color: T.link }}>
-          Change
-        </button>
-      )}
-      {minimum.source === 'repo' && !editing && (
-        <button type="button" disabled={busy} onClick={() => save(null)} data-testid="requirements-minimum-clear" className="text-xs font-semibold underline" style={{ color: T.link }}>
-          Use Settings{minimum.settingsPct !== null ? ` (${minimum.settingsPct}%)` : ''}
-        </button>
-      )}
-      {error !== null && <span role="alert" className="text-xs" style={{ color: T.deny }}>{error}</span>}
     </div>
   );
 }

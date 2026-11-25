@@ -179,15 +179,6 @@ describe('code age, minimum and mismatches (crew api-types 0.197.0)', () => {
     expect(m.codeDriftLine(m.codeDriftOf({ codeDrift: { builtFromCommit: 'abc1234', builtAt: '2025-12-24T00:00:00Z', commitsBehind: 2 } }), now))
       .toMatch(/^Built from code 2 commits old \(Dec 2[34], 2025\)$/);
   });
-  it('reads the minimum and its source, and nothing malformed', () => {
-    const repo = m.minimumOf({ minimum: { pct: 66, source: 'repo', repoPct: 66, settingsPct: 80 } });
-    expect(repo && m.minimumLine(repo)).toBe("Minimum 66%, this repository's own (Settings: 80%)");
-    const settings = m.minimumOf({ minimum: { pct: 80, source: 'settings', repoPct: null, settingsPct: 80 } });
-    expect(settings && m.minimumLine(settings)).toBe('Minimum 80%, from Settings');
-    expect(m.minimumOf({ minimum: { pct: 0, source: 'repo' } })).toBeNull();
-    expect(m.minimumOf({ minimum: { pct: 80, source: 'guess' } })).toBeNull();
-    expect(m.minimumOf({})).toBeNull();
-  });
   it('reads a code mismatch and the count, and nothing from an older daemon', () => {
     expect(m.codeMismatchOf({ codeMismatch: ' skips the first ' })).toBe('skips the first');
     expect(m.codeMismatchOf({ codeMismatch: '  ' })).toBeNull();

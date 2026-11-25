@@ -1070,6 +1070,11 @@
     "steering-usage-rules": "steer-health",
     "steering-usage-rules-note": "steer-health",
     "steering-usage-runs": "steer-health",
-    "steering-usage-top": "steer-health"
+    "steering-usage-top": "steer-health",
+    "requirements-minimum": "domain-model-headline",
+    "requirements-minimum-change": "domain-followup-confirm",
+    "requirements-minimum-clear": "domain-followup-reject",
+    "requirements-minimum-input": "domain-followup-note",
+    "requirements-minimum-save": "domain-followup-reject-send"
   }
 }

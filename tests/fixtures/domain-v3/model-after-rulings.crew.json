@@ -1,0 +1,347 @@
+{
+  "schemaVersion": "1.2.0",
+  "accounting": {
+    "targets": 4,
+    "accounted": 3,
+    "open": 2,
+    "stale": 0
+  },
+  "statements": [
+    {
+      "id": "ts-cobol . . . app/cbl/PAYCALC1/PAYCALC1#READ-PARA().#0",
+      "key": "v1:3dc31cb7d7ef923bb48e0815dd9262c85ebe980c50d8792fca3c551715cef085",
+      "requirementKey": "app/cbl/PAYCALC1.cbl::REQ-001",
+      "status": "Checked",
+      "text": "Runs: READ-PARA (app/cbl/PAYCALC1.cbl:20-29)\n- When `PAY-HOURS > 40`: `PAY-AMOUNT` gets the overtime rate [25-26]\n- Always: `PAY-AMOUNT` is `PAY-RATE * PAY-HOURS` [27-28]",
+      "located": true,
+      "target": "ts-cobol . . . app/cbl/PAYCALC1/PAYCALC1#READ-PARA().",
+      "sourceRef": "app/cbl/PAYCALC1.cbl#L20-L29",
+      "claims": [
+        {
+          "i": 0,
+          "type": "condition",
+          "text": "`PAY-HOURS > 40`",
+          "ranges": [
+            {
+              "file": "app/cbl/PAYCALC1.cbl",
+              "from": 24,
+              "to": 24
+            }
+          ]
+        },
+        {
+          "i": 1,
+          "type": "effect",
+          "text": "`PAY-AMOUNT` gets the overtime rate",
+          "when": [
+            0
+          ],
+          "ranges": [
+            {
+              "file": "app/cbl/PAYCALC1.cbl",
+              "from": 25,
+              "to": 26
+            }
+          ]
+        },
+        {
+          "i": 2,
+          "type": "else",
+          "text": "`PAY-AMOUNT` is `PAY-RATE * PAY-HOURS`",
+          "ranges": [
+            {
+              "file": "app/cbl/PAYCALC1.cbl",
+              "from": 27,
+              "to": 28
+            }
+          ]
+        }
+      ],
+      "checkedBy": "codex",
+      "ruling": null
+    },
+    {
+      "id": "ts-cobol . . . app/cbl/PAYCALC1/PAYCALC1#READ-PARA().#1",
+      "key": "v1:e197d3dcdd2608d9bf92ac1b178af1ace98556ed633e1ea181facb45c6bf55b0",
+      "requirementKey": "app/cbl/PAYCALC1.cbl::REQ-001",
+      "status": "confirmed",
+      "text": "Runs: READ-PARA (app/cbl/PAYCALC1.cbl:20-29)\n- When the read reaches the end of `PAY-FILE`: `WS-EOF` is set to `'Y'` [22]",
+      "located": true,
+      "target": "ts-cobol . . . app/cbl/PAYCALC1/PAYCALC1#READ-PARA().",
+      "sourceRef": "app/cbl/PAYCALC1.cbl#L20-L29",
+      "claims": [
+        {
+          "i": 0,
+          "type": "condition",
+          "text": "the read reaches the end of `PAY-FILE`",
+          "ranges": [
+            {
+              "file": "app/cbl/PAYCALC1.cbl",
+              "from": 21,
+              "to": 22
+            }
+          ]
+        },
+        {
+          "i": 1,
+          "type": "effect",
+          "text": "`WS-EOF` is set to `'Y'`",
+          "when": [
+            0
+          ],
+          "ranges": [
+            {
+              "file": "app/cbl/PAYCALC1.cbl",
+              "from": 22,
+              "to": 22
+            }
+          ]
+        }
+      ],
+      "checkedBy": "you",
+      "ruling": {
+        "action": "confirm",
+        "by": "ana",
+        "at": 1795593124
+      }
+    },
+    {
+      "id": "ts-cobol . . . app/cbl/PAYCALC1/PAYCALC1#READ-PARA().#3",
+      "key": "v1:90bfc21e3686893621eff0b33238e2338a47098fb807ab127c0142cbef37454b",
+      "requirementKey": "app/cbl/PAYCALC1.cbl::REQ-001",
+      "status": "open",
+      "text": "Runs: READ-PARA (app/cbl/PAYCALC1.cbl:20-29)\n- When `PAY-HOURS > 40`: `PAY-AMOUNT` is set to zero [25-26]",
+      "located": true,
+      "target": "ts-cobol . . . app/cbl/PAYCALC1/PAYCALC1#READ-PARA().",
+      "sourceRef": "app/cbl/PAYCALC1.cbl#L20-L29",
+      "claims": [
+        {
+          "i": 0,
+          "type": "condition",
+          "text": "`PAY-HOURS > 40`",
+          "ranges": [
+            {
+              "file": "app/cbl/PAYCALC1.cbl",
+              "from": 24,
+              "to": 24
+            }
+          ]
+        },
+        {
+          "i": 1,
+          "type": "effect",
+          "text": "`PAY-AMOUNT` is set to zero",
+          "when": [
+            0
+          ],
+          "ranges": [
+            {
+              "file": "app/cbl/PAYCALC1.cbl",
+              "from": 25,
+              "to": 26
+            }
+          ]
+        }
+      ],
+      "checkedBy": null,
+      "ruling": null
+    }
+  ],
+  "ruleGroups": [
+    {
+      "id": "6b50a714e01ef046",
+      "title": "Overtime pay",
+      "area": "PAYCALC1",
+      "kind": "business",
+      "rule": {
+        "id": "g1.r",
+        "text": "Hours over forty are paid at the overtime rate.",
+        "cites": [
+          "ts-cobol . . . app/cbl/PAYCALC1/PAYCALC1#READ-PARA().#0"
+        ]
+      },
+      "details": [],
+      "withheld": [
+        {
+          "id": "g1.d1",
+          "text": "Every overtime hour is paid double.",
+          "cites": [
+            "ts-cobol . . . app/cbl/PAYCALC1/PAYCALC1#READ-PARA().#0"
+          ],
+          "reason": "OVERREACH : QUANTIFIER: the statements give no multiplier"
+        }
+      ],
+      "stale": false
+    }
+  ],
+  "followups": [
+    {
+      "id": "26bcf51c5a65e58e",
+      "n": 1,
+      "kind": "flagged",
+      "statement": "ts-cobol . . . app/cbl/PAYCALC1/PAYCALC1#READ-PARA().#3",
+      "target": "ts-cobol . . . app/cbl/PAYCALC1/PAYCALC1#READ-PARA().",
+      "where": {
+        "file": "app/cbl/PAYCALC1.cbl",
+        "lines": [
+          20,
+          29
+        ]
+      },
+      "unknown": "`PAY-AMOUNT` is computed from the overtime rate, never zero (line 25)",
+      "check": "Whether claim 1 holds: \"`PAY-AMOUNT` is set to zero\". The automatic repair failed its checks: repair returned no statement Reached from 1 site: PAYCALC1.cbl:17.",
+      "ruling": null
+    },
+    {
+      "id": "ccff866ff50d18fd",
+      "n": 2,
+      "kind": "open",
+      "statement": "ts-cobol . . . app/cbl/PAYCALC1/PAYCALC1#READ-PARA().#1",
+      "target": "ts-cobol . . . app/cbl/PAYCALC1/PAYCALC1#READ-PARA().",
+      "where": {
+        "file": "app/cbl/PAYCALC1.cbl",
+        "lines": [
+          20,
+          29
+        ]
+      },
+      "unknown": "claim 0 (condition) \"the read reaches the end of `PAY-FILE`\" could not be confirmed from the excerpt; the checker needs: the FD of PAY-FILE",
+      "check": "the excerpt does not show what AT END covers Reached from 1 site: PAYCALC1.cbl:17.",
+      "ruling": {
+        "action": "confirm",
+        "by": "ana",
+        "at": 1795593124
+      }
+    },
+    {
+      "id": "6930625d2a297312",
+      "n": 3,
+      "kind": "open",
+      "statement": "ts-cobol . . . app/cbl/PAYCALC1/PAYCALC1#READ-PARA().#2",
+      "target": "ts-cobol . . . app/cbl/PAYCALC1/PAYCALC1#READ-PARA().",
+      "where": {
+        "file": "app/cbl/PAYCALC1.cbl",
+        "lines": [
+          20,
+          29
+        ]
+      },
+      "unknown": "the statement failed its mechanical checks: M1 claim 1 `when` [0] must list indices of this statement's condition claims",
+      "check": "Run the extraction again, or confirm the statement against its cited lines.",
+      "ruling": {
+        "action": "reject",
+        "by": "ana",
+        "at": 1795593124,
+        "note": "Covers the end of file only; the FD is out of scope."
+      }
+    },
+    {
+      "id": "0872db86655d2dc6",
+      "n": 4,
+      "kind": "refused",
+      "statement": null,
+      "target": "ts-cobol . . . app/cbl/PAYCALC1/PAYCALC1#MAIN-PARA().",
+      "where": {
+        "file": "app/cbl/PAYCALC1.cbl",
+        "lines": [
+          15,
+          19
+        ]
+      },
+      "unknown": "not extracted: M7 not_rule app/cbl/PAYCALC1.cbl:15-19 holds a decision on line(s) [17]: state it as a statement with that test as a condition claim; M7 target lines not accounted by any statement anchor or not_rule: 15-19",
+      "check": "State the decision in these lines as a rule, or confirm it is plumbing.",
+      "ruling": {
+        "action": "confirm",
+        "by": "ana",
+        "at": 1795593124
+      }
+    }
+  ],
+  "targets": [
+    {
+      "id": "app/jcl/PAYJOB.jcl:L1-L1",
+      "file": "app/jcl/PAYJOB.jcl",
+      "lines": [
+        1,
+        1
+      ],
+      "targetHash": "d487b8205758b40360c574a9dea0e3b92da22ff1076cf816d86a20fe2c720b28",
+      "accounted": true,
+      "stale": false,
+      "statements": [],
+      "rejected": [],
+      "unaccountedReasons": [],
+      "ruling": null
+    },
+    {
+      "id": "jcl synthetic app/jcl/PAYJOB.jcl::PAYJOB::STEP1:",
+      "file": "app/jcl/PAYJOB.jcl",
+      "lines": [
+        2,
+        4
+      ],
+      "targetHash": "319ecbf5db92736662717f85f1c55bf81d7d185cfc80433aca27ab461e4dc15f",
+      "accounted": true,
+      "stale": false,
+      "statements": [],
+      "rejected": [],
+      "unaccountedReasons": [],
+      "ruling": null
+    },
+    {
+      "id": "ts-cobol . . . app/cbl/PAYCALC1/PAYCALC1#MAIN-PARA().",
+      "file": "app/cbl/PAYCALC1.cbl",
+      "lines": [
+        15,
+        19
+      ],
+      "targetHash": "ae775e68a24bd6aeffc5a7d035f2b6193937ad23feb48c245b334d66948f65d5",
+      "accounted": true,
+      "stale": false,
+      "statements": [],
+      "rejected": [],
+      "unaccountedReasons": [
+        "M7 not_rule app/cbl/PAYCALC1.cbl:15-19 holds a decision on line(s) [17]: state it as a statement with that test as a condition claim",
+        "M7 target lines not accounted by any statement anchor or not_rule: 15-19"
+      ],
+      "ruling": {
+        "action": "confirm",
+        "by": "ana",
+        "at": 1795593124
+      }
+    },
+    {
+      "id": "ts-cobol . . . app/cbl/PAYCALC1/PAYCALC1#READ-PARA().",
+      "file": "app/cbl/PAYCALC1.cbl",
+      "lines": [
+        20,
+        29
+      ],
+      "targetHash": "9b5154c88c14cdffb0266ff6c47e6882a838d3304d01ff9ee4e8e614a9e4b6d7",
+      "accounted": false,
+      "stale": false,
+      "statements": [
+        "ts-cobol . . . app/cbl/PAYCALC1/PAYCALC1#READ-PARA().#0",
+        "ts-cobol . . . app/cbl/PAYCALC1/PAYCALC1#READ-PARA().#1",
+        "ts-cobol . . . app/cbl/PAYCALC1/PAYCALC1#READ-PARA().#2",
+        "ts-cobol . . . app/cbl/PAYCALC1/PAYCALC1#READ-PARA().#3"
+      ],
+      "rejected": [
+        {
+          "id": "ts-cobol . . . app/cbl/PAYCALC1/PAYCALC1#READ-PARA().#2",
+          "key": "v1:372ca8725d1c7674b4618c9e828ef8ef5c84fe9053d81ea1639fc0bb58861783",
+          "text": "Runs: READ-PARA (app/cbl/PAYCALC1.cbl:20-29)\n- Triggered by: performed until `WS-EOF = 'Y'` [17]\n- When performed until `WS-EOF = 'Y'`: `PAY-RATE` is read [25-26]",
+          "ruling": {
+            "action": "reject",
+            "by": "ana",
+            "at": 1795593124,
+            "note": "Covers the end of file only; the FD is out of scope."
+          }
+        }
+      ],
+      "unaccountedReasons": [],
+      "ruling": null
+    }
+  ],
+  "builtAt": 1795593124
+}

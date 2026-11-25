@@ -6558,9 +6558,201 @@
       ]
     },
     {
+      "testId": "domain-area",
+      "files": [
+        "src/components/DomainModelView.tsx"
+      ]
+    },
+    {
+      "testId": "domain-followup",
+      "files": [
+        "src/components/DomainModelView.tsx"
+      ]
+    },
+    {
+      "testId": "domain-followup-confirm",
+      "files": [
+        "src/components/DomainModelView.tsx"
+      ]
+    },
+    {
+      "testId": "domain-followup-error",
+      "files": [
+        "src/components/DomainModelView.tsx"
+      ]
+    },
+    {
+      "testId": "domain-followup-note",
+      "files": [
+        "src/components/DomainModelView.tsx"
+      ]
+    },
+    {
+      "testId": "domain-followup-reject",
+      "files": [
+        "src/components/DomainModelView.tsx"
+      ]
+    },
+    {
+      "testId": "domain-followup-reject-send",
+      "files": [
+        "src/components/DomainModelView.tsx"
+      ]
+    },
+    {
+      "testId": "domain-followup-ruled",
+      "files": [
+        "src/components/DomainModelView.tsx"
+      ]
+    },
+    {
+      "testId": "domain-followup-where",
+      "files": [
+        "src/components/DomainModelView.tsx"
+      ]
+    },
+    {
+      "testId": "domain-followups",
+      "files": [
+        "src/components/DomainModelView.tsx"
+      ]
+    },
+    {
+      "testId": "domain-followups-empty",
+      "files": [
+        "src/components/DomainModelView.tsx"
+      ]
+    },
+    {
       "testId": "domain-graph-coverage",
       "files": [
         "src/components/RepoGraphModal.tsx"
+      ]
+    },
+    {
+      "testId": "domain-group",
+      "files": [
+        "src/components/DomainModelView.tsx"
+      ]
+    },
+    {
+      "testId": "domain-model-headline",
+      "files": [
+        "src/components/DomainModelView.tsx"
+      ]
+    },
+    {
+      "testId": "domain-rules",
+      "files": [
+        "src/components/DomainModelView.tsx"
+      ]
+    },
+    {
+      "testId": "domain-rules-empty",
+      "files": [
+        "src/components/DomainModelView.tsx"
+      ]
+    },
+    {
+      "testId": "domain-scope-add",
+      "files": [
+        "src/components/launch/DomainScopeCard.tsx"
+      ]
+    },
+    {
+      "testId": "domain-scope-add-input",
+      "files": [
+        "src/components/launch/DomainScopeCard.tsx"
+      ]
+    },
+    {
+      "testId": "domain-scope-card",
+      "files": [
+        "src/components/launch/DomainScopeCard.tsx"
+      ]
+    },
+    {
+      "testId": "domain-scope-drop",
+      "files": [
+        "src/components/launch/DomainScopeCard.tsx"
+      ]
+    },
+    {
+      "testId": "domain-scope-error",
+      "files": [
+        "src/components/launch/DomainScopeCard.tsx"
+      ]
+    },
+    {
+      "testId": "domain-scope-files",
+      "files": [
+        "src/components/launch/DomainScopeCard.tsx"
+      ]
+    },
+    {
+      "testId": "domain-scope-loading",
+      "files": [
+        "src/components/launch/DomainScopeCard.tsx"
+      ]
+    },
+    {
+      "testId": "domain-scope-phrase",
+      "files": [
+        "src/components/launch/DomainScopeCard.tsx"
+      ]
+    },
+    {
+      "testId": "domain-scope-phrases",
+      "files": [
+        "src/components/launch/DomainScopeCard.tsx"
+      ]
+    },
+    {
+      "testId": "domain-scope-questions",
+      "files": [
+        "src/components/launch/DomainScopeCard.tsx"
+      ]
+    },
+    {
+      "testId": "domain-scope-reached",
+      "files": [
+        "src/components/launch/DomainScopeCard.tsx"
+      ]
+    },
+    {
+      "testId": "domain-scope-readonly",
+      "files": [
+        "src/components/launch/DomainScopeCard.tsx"
+      ]
+    },
+    {
+      "testId": "domain-scope-seats",
+      "files": [
+        "src/components/launch/DomainScopeCard.tsx"
+      ]
+    },
+    {
+      "testId": "domain-scope-size",
+      "files": [
+        "src/components/launch/DomainScopeCard.tsx"
+      ]
+    },
+    {
+      "testId": "domain-sentence",
+      "files": [
+        "src/components/DomainModelView.tsx"
+      ]
+    },
+    {
+      "testId": "domain-sentence-statements",
+      "files": [
+        "src/components/DomainModelView.tsx"
+      ]
+    },
+    {
+      "testId": "domain-withheld",
+      "files": [
+        "src/components/DomainModelView.tsx"
       ]
     },
     {
@@ -19022,36 +19214,6 @@
       ]
     },
     {
-      "testId": "requirements-minimum",
-      "files": [
-        "src/components/RequirementsModal.tsx"
-      ]
-    },
-    {
-      "testId": "requirements-minimum-change",
-      "files": [
-        "src/components/RequirementsModal.tsx"
-      ]
-    },
-    {
-      "testId": "requirements-minimum-clear",
-      "files": [
-        "src/components/RequirementsModal.tsx"
-      ]
-    },
-    {
-      "testId": "requirements-minimum-input",
-      "files": [
-        "src/components/RequirementsModal.tsx"
-      ]
-    },
-    {
-      "testId": "requirements-minimum-save",
-      "files": [
-        "src/components/RequirementsModal.tsx"
-      ]
-    },
-    {
       "testId": "requirements-mismatch-filter",
       "files": [
         "src/components/RequirementsModal.tsx"
@@ -28559,6 +28721,12 @@
       "pattern": "desk-window-*",
       "files": [
         "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "pattern": "domain-tab-*",
+      "files": [
+        "src/components/RequirementsModal.tsx"
       ]
     },
     {

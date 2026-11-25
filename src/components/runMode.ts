@@ -66,7 +66,7 @@ const WORKFLOW_ROW_WORDS: Readonly<Record<string, string>> = {
   feature: 'Feature',
   migration: 'Migration',
   onboarding: 'Onboarding',
-  'domain-extraction': 'Domain extraction',
+  'domain-extraction': 'Map the domain',
   'qe-author-tests': 'Test',
 };
 

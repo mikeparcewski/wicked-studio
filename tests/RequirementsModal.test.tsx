@@ -498,7 +498,8 @@ describe('RequirementsModal', () => {
       expect(open).toBe(true);
       expect(draft?.workflowId).toBe('domain-extraction');
       expect(draft?.contextRepo).toBe('r1');
-      expect(draft?.intent).toMatch(/^Map the domain of wicked-crew/);
+      // J6 S1: the person says what the model covers ("What should the model cover?"); nothing is filled in for them.
+      expect(draft?.intent).toBe('');
       expect(launchRun).not.toHaveBeenCalled();
     });
   });

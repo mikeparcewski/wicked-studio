@@ -4,6 +4,7 @@ import { chatAdmissionOf } from './chatOpen.js';
 import { seatLabel } from './seatNames.js';
 import { healthText } from './rowHeadline.js';
 import { noCarryingSeatReason, seatCanCarry } from '../components/gateVerdictModel.js';
+import { DOMAIN_EXTRACTION_ID } from './requirementsState.js';
 
 /**
  * THE LAUNCH RULES (DES-STUDIO-REBUILD-001 §5.5, slice S7), extracted from ChatInput so every
@@ -248,8 +249,22 @@ export interface WorkflowLaunchChoices {
   power?: boolean | null;
 }
 
+/**
+ * J6 S1: a domain model run maps what the words say it covers (crew api-types 0.230.0 `domainScope`, required on that
+ * workflow). The launch form replaces it with the phrases and the hash of the scope card it showed; every other start (a
+ * composer's `/` pick, an inline start, a retry from its words) sends the words alone and the run derives the scope.
+ * Leaves any other body, and one that already carries a scope, as it is.
+ */
+export function withWordsAsDomainScope<B extends { problem?: string | undefined; workflow?: string | undefined }>(body: B): B {
+  const b = body as B & { domainScope?: unknown };
+  const words = (body.problem ?? '').trim();
+  if (body.workflow === DOMAIN_EXTRACTION_ID && b.domainScope === undefined && words !== '') b.domainScope = { intent: words };
+  return body;
+}
+
 export function workflowLaunchBody(c: WorkflowLaunchChoices): LaunchBodyWithDeliver {
   const body: LaunchBodyWithDeliver = { problem: c.intent.trim(), workflow: c.workflowId };
+  withWordsAsDomainScope(body);
   if (c.reducedAssurance) body.reducedAssurance = true;
   if (c.seats.length > 0) body.clisJson = JSON.stringify(c.seats);
   if (c.repoRef !== null) body.repoRef = c.repoRef;

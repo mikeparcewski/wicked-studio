@@ -1,0 +1,19 @@
+{
+  "scopeHash": "a4e596a6916041c94971c5b17f131c1a527b4453eb0e64c869943a97d6f22479",
+  "phrases": {
+    "PAYCALC1": [
+      "app/cbl/PAYCALC1.cbl"
+    ]
+  },
+  "unmatchedPhrases": [],
+  "files": [
+    "app/cbl/PAYCALC1.cbl",
+    "app/jcl/PAYJOB.jcl"
+  ],
+  "targets": 4,
+  "reachedFrom": [
+    "STEP1 -> PAYCALC1 (app/jcl/PAYJOB.jcl:2)"
+  ],
+  "reachedMore": 0,
+  "questions": []
+}
