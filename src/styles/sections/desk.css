@@ -934,6 +934,14 @@
 .wk-inbox-read .wk-need-why { margin: 0; padding: 0; border: 0; }
 .wk-inbox-confirm { display: inline-flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; font-size: var(--text-xs); color: var(--ink-body); }
 .wk-inbox-members { margin: 0; padding-left: var(--space-4); font-size: var(--text-sm); display: flex; flex-direction: column; gap: 6px; }
+/* Snooze (crew#1124): the ends offered in one wrapping line; the Snoozed folder lists each item with when it is back. */
+.wk-inbox-snooze { display: inline-flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; font-size: var(--text-xs); }
+.wk-inbox-snoozed { padding: var(--space-3) 0; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.wk-work-top .wk-inbox-snoozed { max-height: 520px; }
+.wk-inbox-snoozed > .wk-viz-state { color: var(--ink-muted); }
+.wk-inbox-snoozed-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.wk-inbox-snoozed-item { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--text-sm); }
+.wk-inbox-snoozed-what { flex: 1 1 16rem; min-width: 0; overflow-wrap: anywhere; }
 .wk-inbox-foot { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-3); padding-top: var(--space-3); margin-top: auto; border-top: 1px solid var(--border-subtle); font-size: var(--text-xs); }
 
 @media (max-width: 767px) {

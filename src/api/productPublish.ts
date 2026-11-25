@@ -193,9 +193,18 @@ export function repoSelector(target: { repo: string; source: string }, targets: 
   return targets.filter((t) => t.repo === target.repo).length > 1 ? `${target.source}:${target.repo}` : target.repo;
 }
 
+/**
+ * crew's own marker at the end of each issue's footer (`<!-- wicked-publish run=… key=… -->`, crew product-publish.ts):
+ * GitHub hides an HTML comment, so the card does too (studio#1419). Only that one comment, only at the end.
+ */
+const PUBLISH_MARKER = /\r?\n?<!-- wicked-publish run=[^\s>]+ key=[^\s>]+ -->\s*$/;
+
 /** A body as the card shows it: the parent's issue number is not known until it is sent, so `{{parent}}` reads as its key. */
 export function bodyShown(item: Pick<PublishItem, 'body' | 'parentKey'>): string {
-  return item.body.split('{{parent}}').join(item.parentKey === null ? 'its parent' : `the issue for ${item.parentKey}`);
+  return item.body
+    .replace(PUBLISH_MARKER, '')
+    .split('{{parent}}')
+    .join(item.parentKey === null ? 'its parent' : `the issue for ${item.parentKey}`);
 }
 
 /** How deep an item sits (epic 0, feature 1, story 2), for the card's indent. */
@@ -233,7 +242,7 @@ export function publishRefusal(e: unknown): string {
     case 'credential_unpinned': return 'The GitHub source has no sign-in of its own, so crew can’t be sure which account would post. Give the source its own sign-in. Nothing was sent.';
     case 'unresolved': return 'An earlier publish couldn’t tell whether some issues were created. Say for each one below whether it exists, then publish again. Nothing was sent.';
     case 'journal_unreadable': return 'crew can’t read its record of this publication, so it sends nothing more. Some issues may already be on GitHub: look at the repository before anything else.';
-    case 'in_progress': return 'This publication is being sent right now. Look again in a moment.';
+    case 'in_progress': return 'A publish is being sent or settled right now. Look again in a moment.'; // this one or, for a card, any (wicked-crew#1911)
     case 'not_unsure': return `That issue isn’t waiting for an answer any more${because}.`;
     case 'resolve_differs': return 'That issue isn’t this item: its title or body isn’t what was approved for it. Nothing was recorded.';
     case 'registry_unavailable': return 'crew couldn’t read its tracker list just now. Nothing was sent: try again.';

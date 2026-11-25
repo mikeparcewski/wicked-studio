@@ -4264,6 +4264,12 @@
       ]
     },
     {
+      "testId": "coverage-not-indexed",
+      "files": [
+        "src/components/CoverageView.tsx"
+      ]
+    },
+    {
       "testId": "coverage-reading",
       "files": [
         "src/components/CoverageView.tsx"
@@ -5553,6 +5559,48 @@
       ]
     },
     {
+      "testId": "desk-inbox-snooze",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-snooze-cancel",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-snooze-failed",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-snooze-row",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-snoozed",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-snoozed-item",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-snoozed-until",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
       "testId": "desk-inbox-subtitle",
       "files": [
         "src/components/desk/DeskInbox.tsx"
@@ -5562,6 +5610,12 @@
       "testId": "desk-inbox-view",
       "files": [
         "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-wake",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
       ]
     },
     {
@@ -28713,6 +28767,12 @@
     },
     {
       "pattern": "desk-inbox-folder-*",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "pattern": "desk-inbox-snooze-*",
       "files": [
         "src/components/desk/DeskInbox.tsx"
       ]
