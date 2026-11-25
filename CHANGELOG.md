@@ -12,6 +12,35 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.16.18] — 2026-11-25
+
+Patch release on the train-14 cut c705c91a, carrying 19 PRs since 0.16.17: #1391, #1392, #1393, #1394, #1395, #1398, #1396, #1403, #1404, #1409, #1407, #1412, #1410, #1408, #1413, #1420, #1415, #1421, #1422.
+
+### Added
+
+- Start at login card over crew's start-on-login read (#1324) (#1394)
+- Retire a requirement whose code was deleted (#1386) (#1395)
+- Client for crew's cross-repo project graph routes (#1079 A) (#1398)
+- Blast radius drawn as rings by hop in place of the first 30 (#1290) (#1396)
+- Also expose as a REST API on the MCP server workflow (studio#1399) (#1404)
+- The video editor's chat changes the cut, and the editor plays the new version (studio#1140) (#1409)
+- Rename a saved data source (wicked-crew#1514) (#1407)
+- Publish a finished Compose run's plan to GitHub from the run panel (wicked-crew#372) (#1413)
+- Snooze a Needs-you item from the inbox (crew#1124 studio half) (#1421)
+
+### Fixed
+
+- The run panel says Not installed after a consent Decline, not Cancelled (studio#1383) (#1391)
+- An unregistered MCP install reads as that on the header, the passage edge and its lead (studio#1382) (#1392)
+- Say a seat-refused denial in plain words on the gate, the peek and the step card (studio#1384) (#1393)
+- The sign-in link shows above the terminal, clickable and with Copy link (studio#1362) (#1403)
+- The cut card's words, said once and true in every state (studio#1140 R2) (#1412)
+- The Languages bar names the sample it counts (studio#1406) (#1410)
+- Space bar keeps, transcribes and sends nothing unless Space is held (#1400) (#1408)
+- Hide crew's marker in the card preview; in_progress words; fixture provenance (#1419) (#1420)
+- A repository not indexed yet says so, not a failed read (studio#1402) (#1415)
+- A created issue crew has not checked yet reads 'not checked on GitHub yet' (wicked-crew#1919) (#1422)
+
 ## [0.16.17] — 2026-11-24
 
 Patch release on the train-13 cut 26eaf7c6, carrying 62 PRs since 0.16.16: #1287, #1286, #1288, #1292, #1293, #1291, #1299, #1303, #1307, #1306, #1297, #1298, #1308, #1300, #1309, #1304, #1302, #1313, #1310, #1315, #1316, #1317, #1318, #1320, #1325, #1328, #1326, #1321, #1323, #1322, #1336, #1333, #1334, #1339, #1338, #1340, #1341, #1343, #1345, #1349, #1350, #1351, #1355, #1356, #1352, #1353, #1358, #1359, #1360, #1361, #1375, #1374, #1373, #1377, #1376, #1381, #1378, #1380, #1379, #1385, #1387, #1389.
