@@ -236,3 +236,76 @@ describe('the page follows a rename (crew#1514)', () => {
     expect(screen.queryByTestId('source-rename-apps')).toBeNull();
   });
 });
+
+// wicked-crew#1906 — the studio half of coord's round-2 follow-ups (R2-6 to R2-10). Each refusal body is the one crew's
+// route writes: `fail()` in packages/crew/src/api/mcp.ts answers `{error, code, ...detail}`; the 404 of a crew with no
+// rename route is its not-found handler's `{error: 'not found'}` (packages/crew/src/api/server.ts).
+describe('rename follow-ups (wicked-crew#1906)', () => {
+  it('the rename line says jobs already running with the old name picked cannot reach it', () => {
+    sheet();
+    fireEvent.change(screen.getByTestId('source-name'), { target: { value: 'billing-pg' } });
+    expect(screen.getByTestId('source-rename').textContent).toContain('Jobs already running with support-pg picked can’t reach it after the rename.');
+  });
+
+  it('a crew with no rename route says to update crew, not "not found"', async () => {
+    renameAnswer = () => Promise.reject(new ApiError(404, 'not found', { error: 'not found' }));
+    const unsure = vi.fn();
+    render(<SourceSheet target={{ mode: 'saved', server: { ...pgServer(), id: 'id-support-pg' } }} existing={['support-pg']} onSaved={vi.fn()} onRenamed={vi.fn()} onRenameUnsure={unsure} onAllowWrites={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.change(screen.getByTestId('source-name'), { target: { value: 'billing-pg' } });
+    fireEvent.click(screen.getByTestId('source-rename-go'));
+    await screen.findByText('This crew can’t rename sources yet: update crew.');
+    expect(unsure).not.toHaveBeenCalled();
+  });
+
+  it("crew's refusals outside 4xx are shown as refusals; only renamed_unread is not known", async () => {
+    const unsure = vi.fn();
+    const said = 'the rename was not made, but rule SEC-X could not be put back and still names billing-pg (disk full): remove the mcp:billing-pg tokens from it before anything is saved as billing-pg';
+    renameAnswer = () => Promise.reject(new ApiError(500, said, { error: said, code: 'rules_unrestored', rules: ['SEC-X'] }));
+    render(<SourceSheet target={{ mode: 'saved', server: { ...pgServer(), id: 'id-support-pg' } }} existing={['support-pg']} onSaved={vi.fn()} onRenamed={vi.fn()} onRenameUnsure={unsure} onAllowWrites={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.change(screen.getByTestId('source-name'), { target: { value: 'billing-pg' } });
+    fireEvent.click(screen.getByTestId('source-rename-go'));
+    await screen.findByText(said);
+    expect(unsure).not.toHaveBeenCalled();
+    renameAnswer = () => Promise.reject(new ApiError(502, 'the rename landed; read the source list again', { error: 'the rename landed; read the source list again', code: 'renamed_unread' }));
+    fireEvent.click(screen.getByTestId('source-rename-go'));
+    await waitFor(() => expect(unsure).toHaveBeenCalledWith('support-pg', 'id-support-pg'));
+  });
+});
+
+describe('the page and a rename it did not make (wicked-crew#1906)', () => {
+  let list: unknown[];
+  beforeEach(() => {
+    useCapabilities.setState({ loaded: true, dataSources: true });
+    apiFetch.mockImplementation((path: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      calls.push({ path, method, body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined });
+      if (path === '/mcp/servers' && method === 'GET') return Promise.resolve({ servers: list, discovered: [] });
+      if (path === '/mcp/servers/support-pg/rename') return Promise.reject(new ApiError(404, 'no MCP server named support-pg', { error: 'no MCP server named support-pg', code: 'unknown_server' }));
+      if (/^\/sources\/[^/]+\/catalog$/.test(path)) return Promise.resolve({ name: 'support-pg', kind: 'sql', catalog: CATALOG, privileges: WRITER, descriptorHash: 'd' });
+      if (/^\/sources\/[^/]+\/agent-queries$/.test(path)) return Promise.resolve({ name: 'x', known: true, queries: [] });
+      if (path === '/projects?status=active') return Promise.resolve({ projects: [] });
+      return Promise.reject(new Error(`unexpected ${method} ${path}`));
+    });
+  });
+
+  it("an old address follows the source to its new name", async () => {
+    list = [RENAMED];
+    const navigate = vi.fn();
+    render(<SourcesPage navigate={navigate} search="?source=support-pg" />);
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/sources?source=billing-pg', { replace: true }));
+    expect(screen.queryByText('No source named support-pg.')).toBeNull();
+  });
+
+  it('a rename another tab made first: the 404 reads the list again and follows the source by its id', async () => {
+    list = [{ ...pgServer(), id: 'id-support-pg' }];
+    const navigate = vi.fn();
+    render(<SourcesPage navigate={navigate} search="?source=support-pg" />);
+    fireEvent.change(await screen.findByTestId('source-name'), { target: { value: 'other-name' } });
+    list = [RENAMED];
+    const reads = calls.filter((c) => c.path === '/mcp/servers').length;
+    fireEvent.click(screen.getByTestId('source-rename-go'));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/sources?source=billing-pg', { replace: true }));
+    expect(calls.filter((c) => c.path === '/mcp/servers').length).toBeGreaterThan(reads);
+    expect(calls.filter((c) => c.path.endsWith('/rename'))).toHaveLength(1);
+  });
+});
