@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Archive, ExternalLink, Inbox, RotateCcw } from 'lucide-react';
+import { AlarmClock, Archive, ExternalLink, Inbox, RotateCcw } from 'lucide-react';
 import { api } from '../../api/client.js';
 import type { SessionView } from '../../api/types.js';
 import type { NeedRow } from '../../board/needsYou.js';
@@ -21,6 +21,8 @@ import { handleTabKeyDown } from '../ui/tabKeys.js';
 import { InlineUndo } from '../InlineUndo.js';
 import { gateKeyOf } from '../../board/gateActions.js';
 import { batchFailedResult } from './BatchFailures.js';
+import { useDeskSnoozes } from '../../store/deskSnoozes.js';
+import { snoozable, snoozeChoices, snoozeEndWords, snoozeKey, snoozeRank, splitSnoozed } from '../../board/deskSnooze.js';
 
 /**
  * NEEDS YOU, AS AN INBOX (DES-desk-v2 §2.1). The rows are the needs fold (`useNeedsRows` →
@@ -30,12 +32,17 @@ import { batchFailedResult } from './BatchFailures.js';
  * bold while unread. Selecting a row opens it in the reading pane, where it is answered in place
  * through the moves studio already has: a gate's answers (`QuestionRow`), a failure's See why +
  * Retry (a prefill, nothing posted) + Mark done (archive, `POST /runs/:id/archive`), a group's
- * batch answers. There is no snooze on the wire (DES §6 ask), so there is none here.
+ * batch answers.
+ *
+ * SNOOZE (crew#1124, DES §6 item 6): a single item can be snoozed for an hour, until tomorrow 9:00 or for three days.
+ * It leaves the folders and the count until then, or sooner when it gets worse (`board/deskSnooze.ts`), and waits in
+ * a Snoozed folder with its end time and Wake now. It stays in crew's attention read; only this inbox defers it. A
+ * daemon without the snooze route offers none.
  *
  * Unread is this browser's own memory of which rows you opened (`localStorage`), said as such.
  */
 
-type Folder = 'all' | NeedSection;
+type Folder = 'all' | NeedSection | 'snoozed';
 const FOLDERS: readonly { id: Folder; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'decision', label: 'Decisions' },
@@ -52,7 +59,7 @@ function readSeen(): Set<string> {
 
 function seenId(row: NeedRow): string { return `${row.key}@${row.at ?? ''}`; }
 
-export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra = null, setupCount = 0, missing = [], onRetry, retrying = false, asPage = false }: {
+export function DeskInbox({ rows: allRows, runs, navigate, now, settled, agentName, extra = null, setupCount = 0, missing = [], onRetry, retrying = false, asPage = false }: {
   /** The inbox IS the page (`/needs`): its name is the page's one title (h1), no second header above it. */
   asPage?: boolean;
   /** Studio's own setup items above the list (codex r2: the inbox never reads all-clear beside them). */
@@ -72,6 +79,15 @@ export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra
   agentName: (cli: string) => string;
 }): React.ReactElement {
   const [folder, setFolder] = useState<Folder>('all');
+  // Snoozed items leave the folders and the count; the snoozes are read when the inbox opens.
+  const snoozes = useDeskSnoozes();
+  const loadSnoozes = snoozes.load;
+  useEffect(() => { void loadSnoozes(); }, [loadSnoozes]);
+  // A failed read hides nothing and offers nothing; it is tried again on the inbox's next minute.
+  const retrySnoozesAt = snoozes.phase === 'failed' ? now : null;
+  useEffect(() => { if (retrySnoozesAt !== null) void loadSnoozes(); }, [retrySnoozesAt, loadSnoozes]);
+  const { awake: rows, snoozed } = useMemo(() => splitSnoozed(allRows, snoozes.byKey, now), [allRows, snoozes.byKey, now]);
+  const canSnooze = snoozes.phase === 'ready';
   const tabPrefix = useId();
   const tabId = (f: Folder): string => `${tabPrefix}-tab-${f}`;
   const panelId = (f: Folder): string => `${tabPrefix}-panel-${f}`;
@@ -81,15 +97,16 @@ export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra
     const m = new Map<Folder, number>();
     m.set('all', needCount(rows));
     for (const f of FOLDERS) if (f.id !== 'all') m.set(f.id, needCount(rows.filter((r) => needSection(r) === f.id)));
+    m.set('snoozed', snoozed.length);
     return m;
-  }, [rows]);
+  }, [rows, snoozed.length]);
   // A folder is the same queue over its section's rows (the queue's own ranking, groups and keys).
-  const inFolder = useMemo(() => (folder === 'all' ? rows : rows.filter((r) => needSection(r) === folder)), [rows, folder]);
+  const inFolder = useMemo(() => (folder === 'all' ? rows : folder === 'snoozed' ? [] : rows.filter((r) => needSection(r) === folder)), [rows, folder]);
   const queue = useNeedsQueue(inFolder, navigate, now);
   // An emptied folder of a non-empty inbox says so; the calm all-clear is only for the whole queue.
   const total = byFolder.get('all') ?? 0;
   const folderEmpty = folder !== 'all' && total > 0
-    ? `Nothing in ${FOLDERS.find((f) => f.id === folder)?.label ?? 'this folder'} now · ${total}${settled === 'partial' ? '+' : ''} still waiting in All.`
+    ? `Nothing in ${folderLabel(folder)} now · ${total}${settled === 'partial' ? '+' : ''} still waiting in All.`
     : total === 0 && setupCount > 0 ? 'Nothing else needs you right now' : undefined;
   const flat = useMemo(() => queue.rows.flatMap((r) => [r, ...(r.members ?? [])]), [queue.rows]);
   const current = flat.find((r) => r.key === selected) ?? null;
@@ -130,12 +147,12 @@ export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra
         <div className="wk-inbox-heading">
           <div className="wk-inbox-title-row">
             {asPage ? <h1 id="desk-inbox-title" className="wk-desk2-title">Needs you</h1> : <h2 id="desk-inbox-title" className="wk-desk2-title">Needs you</h2>}
-            {settled !== 'loading' && <span className="wk-viz-meta wk-inbox-count" data-testid="desk-inbox-count" data-phase={settled} data-count={needCount(rows)}>{byFolder.get('all') === 0 ? (settled === 'partial' ? 'not everything could be read' : setupCount > 0 ? `${setupCount} to set up` : 'nothing is waiting for you') : `${byFolder.get('all')}${settled === 'partial' ? '+' : ''} waiting${unread > 0 ? ` · ${unread} unread` : ''}`}</span>}
+            {settled !== 'loading' && <span className="wk-viz-meta wk-inbox-count" data-testid="desk-inbox-count" data-phase={settled} data-count={needCount(rows)}>{byFolder.get('all') === 0 ? (settled === 'partial' ? 'not everything could be read' : setupCount > 0 ? `${setupCount} to set up` : 'nothing is waiting for you') : `${byFolder.get('all')}${settled === 'partial' ? '+' : ''} waiting${unread > 0 ? ` · ${unread} unread` : ''}`}{snoozed.length > 0 ? ` · ${snoozed.length} snoozed` : ''}</span>}
           </div>
           <p data-testid="desk-inbox-subtitle" className="wk-inbox-subtitle">Decisions, questions and problems waiting on you</p>
         </div>
         <div role="tablist" aria-label="Show" className="wk-inbox-folders">
-          {FOLDERS.filter((f) => f.id === 'all' || (byFolder.get(f.id) ?? 0) > 0 || folder === f.id).map((f) => (
+          {[...FOLDERS, SNOOZED_FOLDER].filter((f) => f.id === 'all' || (byFolder.get(f.id) ?? 0) > 0 || folder === f.id).map((f) => (
             <button key={f.id} type="button" role="tab" id={tabId(f.id)} aria-controls={panelId(f.id)} tabIndex={folder === f.id ? 0 : -1}
               aria-selected={folder === f.id} data-testid={`desk-inbox-folder-${f.id}`} className="wk-chip wk-inbox-folder"
               onKeyDown={handleTabKeyDown} onClick={() => setFolder(f.id)}>
@@ -146,17 +163,25 @@ export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra
       </header>
       {/* A partial read never reads as all clear: it names what did not answer and offers a retry. */}
       {settled === 'partial' && missing.length > 0 && <StateBanner data-testid="desk-needs-partial" kind="partial" what={missing.join(', ')} {...(onRetry !== undefined ? { onRetry } : {})} retrying={retrying} />}
-      {settled === 'loading' && rows.length === 0 && extra === null ? <div role="tabpanel" id={panelId(folder)} aria-labelledby={tabId(folder)} className="wk-inbox-empty" data-testid="desk-loading" aria-busy="true"><Skeleton rows={4} variant="row" /></div> : (
+      {folder === 'snoozed' ? (
+        <div role="tabpanel" id={panelId(folder)} aria-labelledby={tabId(folder)} className="wk-inbox-snoozed" data-testid="desk-inbox-snoozed">
+          {snoozed.length === 0 ? <p className="wk-viz-state">Nothing is snoozed now.</p> : (
+            <ul className="wk-inbox-snoozed-list">
+              {snoozed.map(({ row, snooze }) => <SnoozedItem key={snooze.key} row={row} until={snooze.until} now={now} navigate={navigate} />)}
+            </ul>
+          )}
+        </div>
+      ) : settled === 'loading' && allRows.length === 0 && extra === null ? <div role="tabpanel" id={panelId(folder)} aria-labelledby={tabId(folder)} className="wk-inbox-empty" data-testid="desk-loading" aria-busy="true"><Skeleton rows={4} variant="row" /></div> : (
         <div role="tabpanel" id={panelId(folder)} aria-labelledby={tabId(folder)} className={`wk-inbox-split${queue.rows.length === 0 ? ' wk-inbox-split--calm' : ''}`}>
           <div className="wk-inbox-list" data-testid="desk-inbox-list">
             {extra}
             {/* Not read yet (or the read failed): never a "nothing needs you" verdict, only the placeholder. */}
-            {settled === 'loading' && rows.length === 0 ? <div data-testid="desk-loading" aria-busy="true"><Skeleton rows={3} variant="row" /></div> : <NeedsYouQueue queue={queue} runs={runs} navigate={navigate} now={now} inbox={look} partial={settled === 'partial'} {...(folderEmpty !== undefined ? { emptyCopy: folderEmpty } : {})} />}
+            {settled === 'loading' && allRows.length === 0 ? <div data-testid="desk-loading" aria-busy="true"><Skeleton rows={3} variant="row" /></div> : <NeedsYouQueue queue={queue} runs={runs} navigate={navigate} now={now} inbox={look} partial={settled === 'partial'} {...(folderEmpty !== undefined ? { emptyCopy: folderEmpty } : {})} />}
           </div>
           {queue.rows.length > 0 && (
             <div className="wk-inbox-pane" data-testid="desk-inbox-pane" aria-live="polite">
               {current === null ? <p className="wk-viz-state">Pick an item to read it here.</p> : (
-                <ReadingPane row={current} view={runOf(current)} queueAct={queue.act} navigate={navigate} now={now} agentName={agentName} />
+                <ReadingPane row={current} view={runOf(current)} queueAct={queue.act} navigate={navigate} now={now} agentName={agentName} canSnooze={canSnooze} />
               )}
             </div>
           )}
@@ -164,10 +189,73 @@ export function DeskInbox({ rows, runs, navigate, now, settled, agentName, extra
       )}
       <footer className="wk-inbox-foot">
         <a href="/watch?filter=decision" onClick={(e) => { e.preventDefault(); navigate('/watch?filter=decision'); }} className="wk-link" data-testid="desk-inbox-all">
-          {settled === 'loading' ? 'See all in Nerve Center' : `See all in Nerve Center (${needCount(rows)})`}
+          {settled === 'loading' ? 'See all in Nerve Center' : `See all in Nerve Center (${needCount(allRows)})`}
         </a>
       </footer>
     </section>
+  );
+}
+
+const SNOOZED_FOLDER: { id: Folder; label: string } = { id: 'snoozed', label: 'Snoozed' };
+const folderLabel = (f: Folder): string => [...FOLDERS, SNOOZED_FOLDER].find((x) => x.id === f)?.label ?? 'this folder';
+
+/** A snoozed item: what it is, when it comes back, and Wake now. */
+function SnoozedItem({ row, until, now, navigate }: { row: NeedRow; until: string; now: number; navigate: Navigate }): React.ReactElement {
+  const wake = useDeskSnoozes((st) => st.wake);
+  const [state, setState] = useState<{ kind: 'idle' | 'sending' } | { kind: 'failed'; words: string }>({ kind: 'idle' });
+  return (
+    <li data-testid="desk-inbox-snoozed-item" data-key={row.key} className="wk-inbox-snoozed-item">
+      <span className="wk-inbox-snoozed-what">
+        <a href={row.subjectPath} onClick={(e) => { e.preventDefault(); navigate(row.subjectPath); }} className="wk-link">{subjectOf(row)}</a>
+        <span className="wk-viz-meta"> · {plainRunTitle(row.subject)}</span>
+      </span>
+      <span className="wk-viz-meta" data-testid="desk-inbox-snoozed-until">Back {snoozeEndWords(until, now)}</span>
+      <button type="button" data-testid="desk-inbox-wake" className="wk-btn wk-btn--quiet wk-btn--sm" disabled={state.kind === 'sending'}
+        onClick={() => { setState({ kind: 'sending' }); void wake(snoozeKey(row)).then((why) => setState(why === null ? { kind: 'idle' } : { kind: 'failed', words: why })); }}>
+        Wake now
+      </button>
+      {state.kind === 'failed' && <span role="status" className="wk-viz-meta">{state.words}</span>}
+    </li>
+  );
+}
+
+/** Snooze the item in the reading pane: the ends offered, then what happened. */
+/** Snooze in the reading pane. Mounted per item instance ({@link snoozeKey}), so a new occurrence starts fresh. */
+function SnoozeAct({ row, now }: { row: NeedRow; now: number }): React.ReactElement {
+  const snooze = useDeskSnoozes((st) => st.snooze);
+  const [state, setState] = useState<{ kind: 'idle' | 'choose' | 'sending' } | { kind: 'failed'; words: string }>({ kind: 'idle' });
+  const opener = useRef<HTMLButtonElement>(null);
+  const firstChoice = useRef<HTMLButtonElement>(null);
+  const backToOpener = useRef(false);
+  // Keyboard: the choices take focus when they open; Cancel or a refusal hands it back to Snooze.
+  useEffect(() => {
+    if (state.kind === 'choose') firstChoice.current?.focus();
+    else if (state.kind === 'failed' || (state.kind === 'idle' && backToOpener.current)) { backToOpener.current = false; opener.current?.focus(); }
+  }, [state.kind]);
+  if (state.kind === 'idle' || state.kind === 'failed') {
+    return (
+      <span className="wk-inbox-snooze">
+        <button ref={opener} type="button" data-testid="desk-inbox-snooze" className="wk-btn wk-btn--quiet wk-btn--sm" onClick={() => setState({ kind: 'choose' })}>
+          <AlarmClock size={13} aria-hidden />Snooze
+        </button>
+        {state.kind === 'failed' && <span role="status" className="wk-viz-meta" data-testid="desk-inbox-snooze-failed">{state.words}</span>}
+      </span>
+    );
+  }
+  return (
+    <span className="wk-inbox-snooze" role="group" aria-label="Snooze until">
+      {snoozeChoices(now).map((c, i) => (
+        <button key={c.id} ref={i === 0 ? firstChoice : undefined} type="button" data-testid={`desk-inbox-snooze-${c.id}`} className="wk-btn wk-btn--secondary wk-btn--sm" disabled={state.kind === 'sending'}
+          onClick={() => {
+            setState({ kind: 'sending' });
+            // Done: the item leaves the list (and this pane with it); were it still shown, the controls settle back.
+            void snooze(snoozeKey(row), c.until, snoozeRank(row)).then((why) => setState(why === null ? { kind: 'idle' } : { kind: 'failed', words: why }));
+          }}>
+          {c.label}
+        </button>
+      ))}
+      <button type="button" data-testid="desk-inbox-snooze-cancel" className="wk-btn wk-btn--quiet wk-btn--sm" disabled={state.kind === 'sending'} onClick={() => { backToOpener.current = true; setState({ kind: 'idle' }); }}>Cancel</button>
+    </span>
   );
 }
 
@@ -192,13 +280,15 @@ function snippetOf(row: NeedRow, v: SessionView | null): string {
   return v !== null ? jobTitle(v.session) : plainRunTitle(row.subject);
 }
 
-function ReadingPane({ row, view, queueAct, navigate, now, agentName }: {
+function ReadingPane({ row, view, queueAct, navigate, now, agentName, canSnooze }: {
   row: NeedRow;
   view: SessionView | null;
   queueAct: (a: NeedRow['action'], key?: string) => void;
   navigate: Navigate;
   now: number;
   agentName: (cli: string) => string;
+  /** The daemon keeps snoozes (crew#1124) and they were read. */
+  canSnooze: boolean;
 }): React.ReactElement {
   const [archive, setArchive] = useState<'idle' | 'confirm' | 'sending' | 'done' | 'failed'>('idle');
   const gate = useGateStore((st) => (view === null ? undefined : st.gates[view.session.id]));
@@ -285,6 +375,7 @@ function ReadingPane({ row, view, queueAct, navigate, now, agentName }: {
               : <button type="button" className="wk-btn wk-btn--primary wk-btn--sm" onClick={() => queueAct(a, row.key)}>{deskVerb(a.label)}</button>}
           </div>
         )}
+        {canSnooze && snoozable(row) && <div className="wk-inbox-read-acts" data-testid="desk-inbox-snooze-row"><SnoozeAct key={snoozeKey(row)} row={row} now={now} /></div>}
       </div>
     </article>
   );
