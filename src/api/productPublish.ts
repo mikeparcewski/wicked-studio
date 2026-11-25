@@ -242,7 +242,7 @@ export function publishRefusal(e: unknown): string {
     case 'credential_unpinned': return 'The GitHub source has no sign-in of its own, so crew can’t be sure which account would post. Give the source its own sign-in. Nothing was sent.';
     case 'unresolved': return 'An earlier publish couldn’t tell whether some issues were created. Say for each one below whether it exists, then publish again. Nothing was sent.';
     case 'journal_unreadable': return 'crew can’t read its record of this publication, so it sends nothing more. Some issues may already be on GitHub: look at the repository before anything else.';
-    case 'in_progress': return 'This publication is being sent right now. Look again in a moment.';
+    case 'in_progress': return 'A publish is being sent right now. Look again in a moment.'; // this one or, for a card, any (wicked-crew#1911)
     case 'not_unsure': return `That issue isn’t waiting for an answer any more${because}.`;
     case 'resolve_differs': return 'That issue isn’t this item: its title or body isn’t what was approved for it. Nothing was recorded.';
     case 'registry_unavailable': return 'crew couldn’t read its tracker list just now. Nothing was sent: try again.';

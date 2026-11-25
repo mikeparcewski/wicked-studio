@@ -138,6 +138,8 @@ describe('reading crew’s answers', () => {
     expect(publishRefusal(refusal('post-card-changed'))).toMatch(/card changed .* Nothing was sent/);
     expect(publishRefusal(new ApiError(409, 'an earlier publish could not tell…', { code: 'unresolved', error: 'x' }))).toMatch(/Say for each one below whether it exists/);
     expect(publishRefusal(new ApiError(404, 'Not Found'))).toMatch(/update crew/);
+    // A card is refused while any publish is being sent (wicked-crew#1911), so the words name no publication.
+    expect(publishRefusal(new ApiError(409, 'busy', { code: 'in_progress', error: 'x' }))).toBe('A publish is being sent right now. Look again in a moment.');
   });
 
   it('each item state has its words', () => {
