@@ -9,6 +9,11 @@
  * here; no graph yet ⇒ the honest not-indexed state, never an invented mix.
  * The unit is FILES INDEXED (not linguist's bytes) and the label says so.
  *
+ * SAMPLE HONESTY (studio#1406): that graph is the served SLICE (capped by the node limit), and crew sends no
+ * per-language count for the whole index, so on a repository bigger than the slice the mix is the slice's. `slice`
+ * says how many files the slice holds and, when the wire has it, how many the repository has indexed: the label then
+ * reads "in the 24 of 217 files shown". Only a slice known to be the whole repository reads "by number of files".
+ *
  * COLOR EXEMPTION (§3.3): language colors are a universal developer convention
  * (GitHub's linguist palette); overriding them with the token accent would
  * make TypeScript look indigo-violet, destroying recognition. This is the ONLY
@@ -48,9 +53,19 @@ interface Props {
   /** studio#461: what to say when there is no mix to draw — the page knows whether the graph was
    *  never built, built with no code in it, or not read. Defaults to the not-built sentence. */
   emptyText?: string;
+  /** The files in the graph slice the breakdown came from, and the files the repository has indexed (`null` when the
+   *  wire did not say). Omitted: the breakdown is the whole repository. */
+  slice?: { files: number; total: number | null };
 }
 
-export function LanguageBar({ breakdown, emptyText }: Props): React.ReactElement {
+/** What the percentages are of: the whole repository, or the files shown (studio#1406). */
+function basis(slice: Props['slice']): { text: string; sample: boolean } {
+  if (slice === undefined || (slice.total !== null && slice.total <= slice.files)) return { text: 'by number of files', sample: false };
+  if (slice.total === null) return { text: `in the ${slice.files.toLocaleString('en-US')} ${slice.files === 1 ? 'file' : 'files'} shown`, sample: true };
+  return { text: `in the ${slice.files.toLocaleString('en-US')} of ${slice.total.toLocaleString('en-US')} files shown`, sample: true };
+}
+
+export function LanguageBar({ breakdown, emptyText, slice }: Props): React.ReactElement {
   const entries = breakdown === null ? [] : Object.entries(breakdown).filter(([, n]) => n > 0);
   const total = entries.reduce((a, [, n]) => a + n, 0);
 
@@ -65,9 +80,10 @@ export function LanguageBar({ breakdown, emptyText }: Props): React.ReactElement
   }
 
   const sorted = entries.sort(([, a], [, b]) => b - a);
+  const of = basis(slice);
 
   return (
-    <div data-testid="language-bar" data-state="ready" data-langs={sorted.length}>
+    <div data-testid="language-bar" data-state="ready" data-langs={sorted.length} data-sample={of.sample ? 'true' : 'false'}>
       <div
         style={{
           display: 'flex',
@@ -103,9 +119,7 @@ export function LanguageBar({ breakdown, emptyText }: Props): React.ReactElement
             {langMeta(lang).label} {Math.round((files / total) * 100)}%
           </span>
         ))}
-        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}>
-          by number of files
-        </span>
+        <span data-testid="language-basis" style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}>{of.text}</span>
       </div>
     </div>
   );
