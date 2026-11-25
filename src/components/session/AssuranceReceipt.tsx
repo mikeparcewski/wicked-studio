@@ -161,9 +161,9 @@ const NO_RULING_CODE = /\b(?:no_quorum|timeout|seats_benched|cap|error|incomplet
  *  council's. A disputed row says nothing here: its reason says why no ruling stands. */
 function howWords(r: RuleRow): string {
   const ruled = councilRulingOf(r);
-  const arbiter = r.council?.arbiter;
+  const arbiter = r.council?.arbiter !== undefined ? seatShown(r.council.arbiter) : undefined;
   if (ruled !== null) {
-    const who = [ruled.seats.join(', '), ...(ruled.uncounted.length > 0 ? [`${ruled.uncounted.join(', ')} not counted`] : [])].filter((x) => x !== '').join('; ');
+    const who = [ruled.seats.map(seatShown).join(', '), ...(ruled.uncounted.length > 0 ? [`${ruled.uncounted.map(seatShown).join(', ')} not counted`] : [])].filter((x) => x !== '').join('; ');
     const seats = who !== '' ? ` (${who})` : '';
     const lead = arbiter !== undefined
       ? ruled.ruling === 'waived' ? `kept only on your instruction by one arbiter, ${arbiter}: confirm or skip it` : `settled by one arbiter: ${arbiter}`
@@ -218,7 +218,7 @@ function RuleItem({ r }: { r: RuleRow }): React.ReactElement {
             <li data-testid="assurance-rule-votes">
               {c.arbiter !== undefined ? "Arbiter's vote:" : 'Council votes:'} {c.votes.map((v, i) => (
                 <span key={`v${i}`} data-testid="assurance-rule-vote" data-counted={v.counted ? 'true' : 'false'}>
-                  {i > 0 ? ' · ' : ''}{v.seat}: {v.status !== undefined ? RULE_WORD[v.status] ?? v.status : 'no vote'}
+                  {i > 0 ? ' · ' : ''}{seatShown(v.seat)}: {v.status !== undefined ? RULE_WORD[v.status] ?? v.status : 'no vote'}
                   {!v.counted && (v.status !== undefined ? ` (not counted${v.whyNot !== undefined ? `: ${showText(v.whyNot)}` : ''})` : v.whyNot !== undefined ? ` (${showText(v.whyNot)})` : '')}
                 </span>
               ))}

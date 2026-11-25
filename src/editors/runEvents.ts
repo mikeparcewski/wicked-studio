@@ -101,7 +101,7 @@ export function sourceTypes(patterns: readonly string[]): string[] {
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const word = (v: unknown, max = 40): string | null => (typeof v === 'string' && /^[A-Za-z0-9_.:-]{1,80}$/u.test(v) ? v.slice(0, max) : null);
 /** A seat key: a `word`, or a stand-in's (`claude~1`: the base seat, the engine's reserved `~`, a number; studio#1437). */
-const seatWord = (v: unknown): string | null => (typeof v === 'string' && /^[A-Za-z0-9_.:-]{1,70}~\d{1,6}$/u.test(v) ? v : word(v));
+const seatWord = (v: unknown): string | null => (typeof v === 'string' && /^[A-Za-z0-9_.:#-]{1,70}~\d{1,6}$/u.test(v) ? v : word(v));
 
 /** `fix — Fix wicked-crew issue …` → `fix`: only the step id at the head, never the intent text after it. */
 export function stepIdOf(description: unknown): string | null {

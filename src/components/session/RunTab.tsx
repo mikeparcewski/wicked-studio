@@ -444,7 +444,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
                     <button type="button" className="wk-run-tab-name" onClick={() => openSheet({ kind: 'helper', runId: id, cli })}>
                       {seatKeyName(cli, roster)}
                     </button>{' '}<span className="wk-run-tab-muted">{reviews ? 'reviews' : 'builds'}</span>
-                    {standIns.get(cli)?.label != null && <span data-testid="run-tab-agent-standin" className="wk-run-tab-muted">{' · '}{standIns.get(cli)!.label}</span>}
+                    {standIns.get(cli)?.label != null && <span data-testid="run-tab-agent-standin" className="wk-run-tab-muted wk-run-tab-standin">{standIns.get(cli)!.label}</span>}
                   </li>
                 );
               })}
@@ -456,7 +456,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
               {[...standIns.values()].filter((s) => !clis.includes(s.key)).map((s) => (
                 <li key={s.key} data-testid="run-tab-agent" data-cli={s.key} className="wk-run-tab-agent">
                   <span className="wk-run-tab-name">{s.name}</span>{' '}<span className="wk-run-tab-muted">{s.role === 'judge' ? 'judges' : 'checks'}</span>
-                  {s.label !== null && <span data-testid="run-tab-agent-standin" className="wk-run-tab-muted">{' · '}{s.label}</span>}
+                  {s.label !== null && <span data-testid="run-tab-agent-standin" className="wk-run-tab-muted wk-run-tab-standin">{s.label}</span>}
                 </li>
               ))}
             </ul>

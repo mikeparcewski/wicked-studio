@@ -135,7 +135,8 @@ describe('studio#1437: a seated stand-in is named as one (run b0ade71f)', () => 
   it('an answered stand-in is something that checked, even with nothing else run', () => {
     const r: AssuranceReceipt = { mode: 'full', required: ['judge'], ran: [], skipped: [{ instrument: 'judge', reason: 'stand_in', detail: null }], creator: 'claude', evaluator: null, judge: null, tree: null, attempt: 0, standIns: [{ role: 'judge', seat: 'claude~2', label: JUDGE }] };
     expect(passedWord(r)).toBe('Passed, judged by a stand-in');
-    expect(passedWord({ ...r, standIns: undefined, skipped: [] })).toBe('Nothing verified');
+    const none: AssuranceReceipt = { mode: r.mode, required: r.required, ran: [], skipped: [], creator: 'claude', evaluator: null, judge: null, tree: null, attempt: 0 };
+    expect(passedWord(none)).toBe('Nothing verified');
   });
 
   it('an unlabelled stand-in still shows, by its name and role', () => {

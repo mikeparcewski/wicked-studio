@@ -628,7 +628,10 @@ export function deliveryReceiptOf(
         judgeNotDue ??= s;
         continue;
       }
-      if (!out.skipped.some((k) => k.instrument === s.instrument)) out.skipped.push(s);
+      const at = out.skipped.findIndex((k) => k.instrument === s.instrument);
+      if (at < 0) out.skipped.push(s);
+      // (studio#1437) A stand-in that answered is not a missing check: another gate's real skip reason wins over it.
+      else if (out.skipped[at]!.reason === 'stand_in' && s.reason !== 'stand_in') out.skipped[at] = s;
     }
   }
   if (judgeNotDue !== null && !out.ran.includes('judge') && !out.skipped.some((k) => k.instrument === 'judge')) out.skipped.push(judgeNotDue);
@@ -849,10 +852,11 @@ export function assuranceKind(r: AssuranceReceipt): AssuranceKind {
  */
 export function passedWord(r: AssuranceReceipt | null): string {
   if (r === null) return 'Passed';
-  // What ran, not the kind: a skipped distinct evaluator alone reads `same-seat` with nothing run (codex r1 on #1350).
-  if (r.ran.length === 0) return 'Nothing verified';
   // (studio#1437) A judge a stand-in answered is a judge that ran, said as a stand-in's: never "No judge ran".
   const standInJudged = (r.standIns ?? []).some((s) => s.role === 'judge');
+  // What ran, not the kind: a skipped distinct evaluator alone reads `same-seat` with nothing run (codex r1 on #1350).
+  // An answered stand-in is something that checked.
+  if (r.ran.length === 0 && (r.standIns?.length ?? 0) === 0) return 'Nothing verified';
   const judgeSkips = r.skipped.filter((s) => s.instrument === 'judge' && !(s.reason === 'stand_in' && standInJudged));
   if (judgeSkips.some((s) => s.reason === 'reduced_assurance')) return 'Judge skipped (reduced assurance)';
   const operatorJudged = (r.operatorJudges ?? []).some((j) => j.floorOverride === undefined);
@@ -945,8 +949,13 @@ export function receiptWords(r: AssuranceReceipt, passed: boolean | null = null)
   if (evaluator !== null) seats.push(`evaluated by ${evaluator}`);
   // (studio#1437) The roles a stand-in answered, named as stand-ins (the engine leaves evaluator/judge null for them).
   const standInSeats = (role: string): string[] => [...new Set((r.standIns ?? []).filter((s) => s.role === role).map((s) => (standInBase(s.seat) !== null ? cliLabel(s.seat) : `${cliLabel(s.seat)} (stand-in)`)))];
-  if (evaluator === null && standInSeats('evaluator').length > 0) seats.push(`evaluated by ${standInSeats('evaluator').join(', ')}`);
-  if ((r.judge ?? '') === '' && standInSeats('judge').length > 0) seats.push(`judged by ${standInSeats('judge').join(', ')}`);
+  // Merged per role with the ordinary seats: a delivery can carry a stand-in gate beside an ordinary one.
+  const evaluatedIdx = seats.findIndex((x) => x.startsWith('evaluated by '));
+  if (standInSeats('evaluator').length > 0) {
+    if (evaluatedIdx >= 0) seats[evaluatedIdx] = `${seats[evaluatedIdx]}, ${standInSeats('evaluator').join(', ')}`;
+    else seats.push(`evaluated by ${standInSeats('evaluator').join(', ')}`);
+  }
+  const judgeStandIns = standInSeats('judge');
   // A fallback judge is named by the engine's own line, never as a plain "judged by" (operator ruling 2026-10-14);
   // every other judge keeps its plain words (a delivery can mix the run's own judges and a fallback).
   const fallbacks = r.judgeFallbacks ?? [];
@@ -956,7 +965,8 @@ export function receiptWords(r: AssuranceReceipt, passed: boolean | null = null)
   });
   // The operator's judgment (`judge: "operator:<who>"`) is said as such, never as a seat that judged.
   const ownJudges = (r.judge ?? '').split(', ').filter((j) => j !== '' && !fallbackSeats.includes(j) && !j.startsWith('operator:'));
-  if (ownJudges.length > 0) seats.push(`judged by ${ownJudges.map((j) => (standInBase(j) !== null ? cliLabel(j) : j)).join(', ')}`);
+  const judgeNames = [...ownJudges.map((j) => (standInBase(j) !== null ? cliLabel(j) : j)), ...judgeStandIns.filter((n) => !ownJudges.some((j) => cliLabel(j) === n))];
+  if (judgeNames.length > 0) seats.push(`judged by ${judgeNames.join(', ')}`);
   // (api-types 0.135.0) A floor the operator overrode is said as such — the engine's label — never as a judge.
   const overriders = [...new Set((r.operatorJudges ?? []).filter((j) => j.floorOverride !== undefined && !isToolCheckOverride(j.floorOverride)).map((j) => actorWords(j.by)))];
   // wicked-core#1318: a tool check the operator overrode is said in its own label.
