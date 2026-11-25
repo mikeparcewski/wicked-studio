@@ -44,6 +44,8 @@ import { useHostPanel } from '../../editors/hostApi.js';
 import { useNarrow } from '../editorHost/HostPanel.js';
 import { isDeliverGate } from '../gateMoveModel.js';
 import { runSections } from '../RightPanel.js';
+import { ProductPublish } from '../product/ProductPublish.js';
+import { looksComposed } from '../../api/productPublish.js';
 import { useIsSystemWorkflow } from '../../store/workflowCache.js';
 import { FileViewer } from '../FileViewer.js';
 import { ActivityTail, EvidenceTab, GoalBrief, HelpersList, RunSection, SignIns, StepsList } from '../sheets/ObjectSheet.js';
@@ -391,6 +393,8 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
             {panelShown && <DeliverCredentialsNotice view={view} />}
           </div>
         )}
+        {/* wicked-crew#372: a finished Compose run's plan, published as GitHub issues (crew says up front when it can't be). */}
+        {session.status === 'completed' && runProject !== null && looksComposed(session.problem) && <ProductPublish projectId={runProject} runId={id} />}
         <div data-testid="run-tab-download" className="wk-run-tab-download"><CodebaseDownload view={view} /></div>
         <Item section="changes" id="changes">{(close) => <ChangesItem runId={id} close={close} />}</Item>
         {deliveryItem && <Item section="changes" id="delivery">{() => <RunSection id="delivery" view={view} runs={allRuns} navigate={go} />}</Item>}

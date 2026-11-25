@@ -14,7 +14,7 @@ import type { Item, VisibleModel, ModelEdge } from '../../graph/ringModel.js';
 import { RING_STEP } from '../../graph/ringModel.js';
 import { resolveToken, resolveTokenValue, resolveTokenPx } from '../../styles/resolveToken.js';
 import {
-  observeTheme, ringPosition, labelGeom, placeLabels, formatPerLevel,
+  observeTheme, ringPosition, labelGeom, placeLabels, formatPerLevel, fitZoom, labelInView,
   type FontKind, type LabelInput, type Measure,
 } from './cytoBase.js';
 
@@ -32,6 +32,8 @@ export interface RingGraphProps {
 }
 
 const PADDING = 48;
+/** The clear edge, in screen px, the label-aware fit keeps around the outermost label (studio#1290 r3). */
+const FIT_PAD = 16;
 const BOUNDING = 2000; // a fixed layout box centred on 0; the transform overrides radii anyway
 const CAPTION_FALLBACK = 12;
 
@@ -179,13 +181,50 @@ function applyLabels(ctx: Ctx, selectedId: string | null, hoverLevel: number | n
   const zoom = ctx.cy.zoom() || 1;
   const inputs = buildLabelInputs(ctx, selectedId, hoverLevel);
   const placed = placeLabels(inputs, zoom, ctx.cap, ctx.measure, RING_STEP);
+  // A label is drawn only inside the canvas (studio#1290 r3): one that would run off an edge (a
+  // phone's short canvas, or after a pan) is hidden, as a collision hides one; a tap still names it.
+  const width = ctx.cy.width();
+  const height = ctx.cy.height();
+  const clip = hasBox(ctx.cy);
+  const pan = ctx.cy.pan();
   for (const input of inputs) {
     const node = ctx.cy.$id(input.id);
     if (node.empty()) continue;
     const g = labelGeom(input, zoom, ctx.cap, ctx.measure);
+    if (clip && placed.shown.has(input.id) && !labelInView(g.rect, pan, width, height)) {
+      placed.shown.delete(input.id);
+      if (input.kind === 'guide') placed.guidesHidden += 1;
+      else {
+        placed.hidden.add(input.id);
+        if (input.level >= 1) placed.perLevelShown.set(input.level, (placed.perLevelShown.get(input.level) ?? 1) - 1);
+      }
+    }
     node.data({ dlabel: placed.shown.has(input.id) ? g.text : '', fsize: g.fontSizeModelPx, mx: g.marginXModelPx, my: g.marginYModelPx, rot: g.rotation });
   }
   return placed;
+}
+
+/** Whether the canvas has a laid-out box (headless cytoscape and an unlaid jsdom container report 1×1). */
+const hasBox = (cy: cytoscape.Core): boolean => cy.width() > 2 * FIT_PAD && cy.height() > 2 * FIT_PAD;
+
+/**
+ * The view that fits the rings and their labels to the canvas, centred on the focus (studio#1290 r3);
+ * null where the canvas has no size (headless), and the caller uses cytoscape's own fit.
+ */
+function fitView(ctx: Ctx): { zoom: number; pan: { x: number; y: number } } | null {
+  if (!hasBox(ctx.cy)) return null;
+  const width = ctx.cy.width();
+  const height = ctx.cy.height();
+  const z = fitZoom(buildLabelInputs(ctx, null, null), width, height, FIT_PAD, ctx.cap, ctx.measure);
+  if (!Number.isFinite(z) || z <= 0) return null;
+  const zoom = Math.min(ctx.cy.maxZoom(), Math.max(ctx.cy.minZoom(), z));
+  return { zoom, pan: { x: width / 2, y: height / 2 } };
+}
+
+function applyFit(ctx: Ctx): void {
+  const view = fitView(ctx);
+  if (view === null) ctx.cy.fit(ctx.cy.nodes(), PADDING);
+  else ctx.cy.viewport(view);
 }
 
 /** Reflect selection + the selected chain + hover dimming as classes. Selection never dims. */
@@ -439,8 +478,26 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
 
     // First paint: no animation; fit synchronously and write the attributes.
     applyStateClasses(ctx, selectedId, hoverLevel);
-    cy.fit(cy.nodes(), PADDING);
+    applyFit(ctx);
     refresh();
+
+    // The canvas's box changes when a panel beside or below it opens or closes: refit to the space
+    // left rather than clip (studio#1290 r3). A real renderer only; jsdom has no layout.
+    let lastSize = `${host.clientWidth}x${host.clientHeight}`;
+    const resizeObs = renders && typeof ResizeObserver === 'function'
+      ? new ResizeObserver(() => {
+        if (cy.destroyed()) return;
+        const size = `${host.clientWidth}x${host.clientHeight}`;
+        if (size === lastSize) return;
+        lastSize = size;
+        cy.resize();
+        cy.stop();
+        applyFit(ctx);
+        refresh();
+        host.dataset.animating = 'false';
+      })
+      : null;
+    resizeObs?.observe(host);
     host.dataset.selectedXy = selectedXY(cy);
     host.dataset.animating = 'false';
 
@@ -449,6 +506,7 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
 
     return () => {
       stopTheme();
+      resizeObs?.disconnect();
       if (rafRef.current !== null) {
         if (frameIsTimeoutRef.current) clearTimeout(rafRef.current);
         else if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(rafRef.current);
@@ -492,8 +550,10 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
 
     // Animate only when there is a renderer to animate and motion is allowed (a headless instance has
     // no render loop; cy.animate's rAF step would dereference a missing viewport).
+    const view = fitView(ctx);
     if (reducedMotion() || !rendersRef.current) {
-      cy.fit(cy.nodes(), PADDING);
+      if (view === null) cy.fit(cy.nodes(), PADDING);
+      else cy.viewport(view);
       host.dataset.selectedXy = selectedXY(cy);
       host.dataset.animating = 'false';
     } else {
@@ -502,7 +562,7 @@ export function RingGraph({ model, view, selectedId, hoverLevel, onSelect, onAct
       // data-animating cannot read false while a later animation is still running (F5).
       cy.stop();
       cy.animate({
-        fit: { eles: cy.nodes(), padding: PADDING }, duration: 300,
+        ...(view === null ? { fit: { eles: cy.nodes(), padding: PADDING } } : { zoom: view.zoom, pan: view.pan }), duration: 300,
         easing: (resolveTokenValue('--ease-out') || 'ease-out') as cytoscape.Css.TransitionTimingFunction,
         complete: () => { host.dataset.selectedXy = selectedXY(cy); host.dataset.animating = 'false'; },
       });

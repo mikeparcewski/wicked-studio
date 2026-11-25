@@ -9,6 +9,12 @@
  * here; no graph yet ⇒ the honest not-indexed state, never an invented mix.
  * The unit is FILES INDEXED (not linguist's bytes) and the label says so.
  *
+ * SAMPLE HONESTY (studio#1406): that graph is the served SLICE (capped by the node limit), and crew sends no
+ * per-language count for the whole index, so on a repository bigger than the slice the mix is the slice's. The label
+ * names the files the percentages count (the breakdown's own sum) against `indexedFiles`, the repository's whole-store
+ * file count: "in 24 of the 217 files indexed". Only a breakdown that counts every indexed file reads "by number of
+ * files"; with no usable whole-store count it reads "in the 24 files shown".
+ *
  * COLOR EXEMPTION (§3.3): language colors are a universal developer convention
  * (GitHub's linguist palette); overriding them with the token accent would
  * make TypeScript look indigo-violet, destroying recognition. This is the ONLY
@@ -48,9 +54,22 @@ interface Props {
   /** studio#461: what to say when there is no mix to draw — the page knows whether the graph was
    *  never built, built with no code in it, or not read. Defaults to the not-built sentence. */
   emptyText?: string;
+  /** The files the repository has indexed (the wire's whole-store count), when the breakdown is a graph slice; `null`
+   *  when the wire did not say. Omitted: the breakdown is the whole repository. */
+  indexedFiles?: number | null;
 }
 
-export function LanguageBar({ breakdown, emptyText }: Props): React.ReactElement {
+const files = (n: number): string => `${n.toLocaleString('en-US')} ${n === 1 ? 'file' : 'files'}`;
+
+/** What the percentages are of (studio#1406): `counted` files, the breakdown's own sum, against the files indexed. */
+function basis(counted: number, indexedFiles: number | null | undefined): { text: string; sample: boolean } {
+  if (indexedFiles === undefined || indexedFiles === counted) return { text: 'by number of files', sample: false };
+  // No whole-store count, or one smaller than what was counted (read at another moment): only the slice is known.
+  if (indexedFiles === null || indexedFiles < counted) return { text: `in the ${files(counted)} shown`, sample: true };
+  return { text: `in ${counted.toLocaleString('en-US')} of the ${files(indexedFiles)} indexed`, sample: true };
+}
+
+export function LanguageBar({ breakdown, emptyText, indexedFiles }: Props): React.ReactElement {
   const entries = breakdown === null ? [] : Object.entries(breakdown).filter(([, n]) => n > 0);
   const total = entries.reduce((a, [, n]) => a + n, 0);
 
@@ -65,9 +84,10 @@ export function LanguageBar({ breakdown, emptyText }: Props): React.ReactElement
   }
 
   const sorted = entries.sort(([, a], [, b]) => b - a);
+  const of = basis(total, indexedFiles);
 
   return (
-    <div data-testid="language-bar" data-state="ready" data-langs={sorted.length}>
+    <div data-testid="language-bar" data-state="ready" data-langs={sorted.length} data-sample={of.sample ? 'true' : 'false'}>
       <div
         style={{
           display: 'flex',
@@ -103,9 +123,7 @@ export function LanguageBar({ breakdown, emptyText }: Props): React.ReactElement
             {langMeta(lang).label} {Math.round((files / total) * 100)}%
           </span>
         ))}
-        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}>
-          by number of files
-        </span>
+        <span data-testid="language-basis" style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}>{of.text}</span>
       </div>
     </div>
   );
