@@ -205,7 +205,13 @@ const CHOICE_WORDS: Readonly<Record<StandInChoiceId, readonly [string, string]>>
  */
 export function standInChoiceWords(r: StandInChoiceRefusal, name: (cli: string) => string): StandInChoiceWords {
   const signedIn = uniq(r.preflight.signedIn.map(name));
-  const short = r.preflight.roles.filter((x) => x.shortBy > 0);
+  // (wicked-crew#1932, coord N5) A stand-in fills only a role every run needs (a reviewer, a judge, a tester). No stand-in
+  // fills a council, the monitors or a rules check, so when such a role is short too the card leaves it out: the run
+  // meets it as it would with no stand-ins. A crew that asks for those alone (before wicked-crew#1936) keeps the
+  // council's words.
+  const shortAll = r.preflight.roles.filter((x) => x.shortBy > 0);
+  const everyRun = shortAll.filter((x) => !x.conditional);
+  const short = everyRun.length > 0 ? everyRun : shortAll;
   const firm = uniq(short.filter((x) => !(x.conditional && x.role === 'council')).map(roleWords));
   const councils = short.filter((x) => x.conditional && x.role === 'council');
   const council = councils.length > 0 ? `a council of ${Math.max(...councils.map((c) => Math.max(c.needed, 1)))} if a disagreement comes up` : null;
