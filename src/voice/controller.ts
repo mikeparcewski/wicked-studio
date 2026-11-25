@@ -220,6 +220,11 @@ let mic: MicSource | null = null;
 const vad = new Vad();
 let partialTimer: ReturnType<typeof setInterval> | null = null;
 let partialBusy = false;
+/** The turn being recorded: one the detector began (a mode that listens by pauses), one held (Space or the mic button),
+ *  or none. The mic keeps samples only while a turn is open (studio#1400: Space bar hears nothing between holds). */
+let turn: 'pause' | 'hold' | null = null;
+/** Bumped by every turn that starts or is dropped, so a partial transcribed for an older turn shows nothing. */
+let turnSeq = 0;
 let gateUnsub: (() => void) | null = null;
 let summaryUnsub: (() => void) | null = null;
 let generation = 0;
@@ -302,12 +307,27 @@ function onFrame(level: number, bars: number[]): void {
   const s = S.getState();
   // Never hear ourselves: the detector rests while the reply is read aloud.
   const listening = s.speaking !== 'it' && s.status?.ready === true && (listensByPause() || s.holding);
-  if (!listening) { set({ bars }); vad.reset(); return; }
+  // A turn the detector began ends here, unsent, once nothing listens by pauses (Space bar chosen mid-sentence, or a
+  // reply read aloud): its samples are dropped, not left to grow into the next turn.
+  if (!listening) { set({ bars }); dropPauseTurn(); return; }
   set({ bars, speaking: level > 0.02 ? 'you' : s.speaking === 'you' ? 'idle' : s.speaking });
-  if (!listensByPause()) return;
+  if (!listensByPause()) { dropPauseTurn(); return; }
   const ev = vad.feed(level, deps.now());
-  if (ev === 'start') { recordingAsk = S.getState().openAsk; mic?.record(); startPartials(); }
-  if (ev === 'end') { stopPartials(); void finishTurn(); }
+  if (ev === 'start') { turn = 'pause'; turnSeq += 1; recordingAsk = S.getState().openAsk; mic?.record(); startPartials(); }
+  // The turn is over: a partial still on its way for it shows nothing (the final words replace it).
+  if (ev === 'end' && turn === 'pause') { turn = null; turnSeq += 1; stopPartials(); void finishTurn('pause'); }
+}
+
+/** End a turn the detector began without sending it: the partials stop, the kept samples and the partial line go. */
+function dropPauseTurn(): void {
+  vad.reset();
+  if (turn !== 'pause') return;
+  turn = null;
+  turnSeq += 1;
+  stopPartials();
+  mic?.take();
+  recordingAsk = null;
+  dropPartial();
 }
 
 function startPartials(): void {
@@ -324,14 +344,16 @@ function stopPartials(): void {
 /** A streaming partial: the turn so far, shown as a muted line with a caret. A busy engine just skips a beat, and a
  *  finished recording waiting its turn goes first (the engine takes one at a time, and one waiting). */
 async function partial(): Promise<void> {
-  if (partialBusy || mic === null || finals.length > 0) return;
+  // Only a turn the detector began shows partials; a held turn is written down once, on release.
+  if (turn !== 'pause' || partialBusy || mic === null || finals.length > 0) return;
   const wav = mic.peek();
   if (wav === null) return;
   partialBusy = true;
   const gen = generation;
+  const seq = turnSeq;
   try {
     const text = (await deps.stt.transcribe(wav)).trim();
-    if (gen !== generation || text === '') return;
+    if (gen !== generation || seq !== turnSeq || text === '') return;
     const s = S.getState();
     const last = s.lines.at(-1);
     if (last?.who === 'you' && last.partial === true) patchLine(last.id, { text });
@@ -341,7 +363,7 @@ async function partial(): Promise<void> {
 
 /** Finished recordings not yet turned into text, oldest first: kept until transcribed or reported lost. The queue is
  *  the current voice session's: opening or closing voice empties it. */
-const finals: Array<{ wav: Blob; ask: number | null }> = [];
+const finals: Array<{ wav: Blob; ask: number | null; kind: 'pause' | 'hold'; dropped?: true }> = [];
 /** The question on screen when the current recording STARTED: words are for the card they were begun under. */
 let recordingAsk: number | null = null;
 const BUSY_NOTE = 'The speech engine is busy. Holding on to what you said…';
@@ -352,13 +374,13 @@ const BUSY_TRIES = 4;
 const BUSY_WAIT_MS = 1500;
 
 /** The turn ended (a pause, or Space released): queue its recording, then transcribe each in turn and act on it. */
-async function finishTurn(): Promise<void> {
+async function finishTurn(kind: 'pause' | 'hold'): Promise<void> {
   const wav = mic?.take() ?? null;
   if (wav === null) return;
   // The question words were said under: the one on screen when the recording started, and still on screen when it
   // ended. A card that came or went mid-sentence leaves the words for no card (-1 never matches one).
   const endAsk = S.getState().openAsk;
-  finals.push({ wav, ask: recordingAsk === endAsk ? endAsk : -1 });
+  finals.push({ wav, ask: recordingAsk === endAsk ? endAsk : -1, kind });
   set({ transcribing: true });
   await drainFinals();
 }
@@ -382,6 +404,8 @@ async function drainFinals(): Promise<void> {
       let text: string | null = null;
       let failure: string | null = null;
       for (let tries = 1; ; tries++) {
+        // Dropped (a listening mode was chosen after it was recorded): never sent, or not sent again.
+        if (item.dropped === true) break;
         try {
           text = (await deps.stt.transcribe(wav)).trim();
         } catch (e) {
@@ -405,6 +429,7 @@ async function drainFinals(): Promise<void> {
       if (finals[0] === item) finals.shift();
       set({ transcribing: finals.length > 0 });
       if (S.getState().heard === BUSY_NOTE) set({ heard: null });
+      if (item.dropped === true) { dropPartial(); continue; }
       if (failure !== null) {
         dropPartial();
         void sayError(failure);
@@ -1038,8 +1063,16 @@ function enterFull(): void {
 }
 
 export function chooseMode(mode: ListenMode): void {
+  // Words the detector heard under the mode question and not yet acted on when it is answered are for no card: the
+  // turn still going, the recordings waiting to be written down (one in flight acts on nothing), any partial on its
+  // way and the partial line shown are all dropped, never sent.
+  dropPauseTurn();
+  for (const f of finals) if (f.kind === 'pause') f.dropped = true;
+  for (let i = finals.length - 1; i >= 1; i--) if (finals[i]!.dropped === true) finals.splice(i, 1);
+  set({ transcribing: finals.some((f) => f.dropped !== true) });
+  turnSeq += 1;
+  dropPartial();
   set({ mode });
-  vad.reset();
   const words = mode === 'stream'
     ? 'Streaming. I’m listening; I answer when you pause. Say “stop listening” or press Esc to leave.'
     : 'Space bar. Hold Space, or the mic button, while you talk. Press Esc to leave.';
@@ -1054,13 +1087,19 @@ export function holdToTalk(down: boolean): void {
     if (s.holding) return;
     deps.speaker.cancel();
     set({ holding: true, speaking: 'you' });
+    // A held turn holds only what is said from the press: anything kept before it is dropped first.
+    dropPauseTurn();
+    mic.take();
+    turn = 'hold';
+    turnSeq += 1;
     recordingAsk = S.getState().openAsk;
     mic.record();
     return;
   }
   if (!s.holding) return;
   set({ holding: false, speaking: 'idle' });
-  void finishTurn();
+  turn = null;
+  void finishTurn('hold');
 }
 
 /** Leave voice mode (No, Esc, "leave voice", the button). The mic is released and nothing is kept. */
@@ -1068,6 +1107,8 @@ export function closeVoice(): void {
   generation += 1;
   finals.length = 0;
   recordingAsk = null;
+  turn = null;
+  turnSeq += 1;
   stopPartials();
   vad.reset();
   mic?.stop();
