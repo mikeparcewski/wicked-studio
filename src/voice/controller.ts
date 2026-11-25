@@ -314,7 +314,8 @@ function onFrame(level: number, bars: number[]): void {
   if (!listensByPause()) { dropPauseTurn(); return; }
   const ev = vad.feed(level, deps.now());
   if (ev === 'start') { turn = 'pause'; turnSeq += 1; recordingAsk = S.getState().openAsk; mic?.record(); startPartials(); }
-  if (ev === 'end' && turn === 'pause') { turn = null; stopPartials(); void finishTurn(); }
+  // The turn is over: a partial still on its way for it shows nothing (the final words replace it).
+  if (ev === 'end' && turn === 'pause') { turn = null; turnSeq += 1; stopPartials(); void finishTurn('pause'); }
 }
 
 /** End a turn the detector began without sending it: the partials stop, the kept samples and the partial line go. */
@@ -362,7 +363,7 @@ async function partial(): Promise<void> {
 
 /** Finished recordings not yet turned into text, oldest first: kept until transcribed or reported lost. The queue is
  *  the current voice session's: opening or closing voice empties it. */
-const finals: Array<{ wav: Blob; ask: number | null }> = [];
+const finals: Array<{ wav: Blob; ask: number | null; kind: 'pause' | 'hold'; dropped?: true }> = [];
 /** The question on screen when the current recording STARTED: words are for the card they were begun under. */
 let recordingAsk: number | null = null;
 const BUSY_NOTE = 'The speech engine is busy. Holding on to what you said…';
@@ -373,13 +374,13 @@ const BUSY_TRIES = 4;
 const BUSY_WAIT_MS = 1500;
 
 /** The turn ended (a pause, or Space released): queue its recording, then transcribe each in turn and act on it. */
-async function finishTurn(): Promise<void> {
+async function finishTurn(kind: 'pause' | 'hold'): Promise<void> {
   const wav = mic?.take() ?? null;
   if (wav === null) return;
   // The question words were said under: the one on screen when the recording started, and still on screen when it
   // ended. A card that came or went mid-sentence leaves the words for no card (-1 never matches one).
   const endAsk = S.getState().openAsk;
-  finals.push({ wav, ask: recordingAsk === endAsk ? endAsk : -1 });
+  finals.push({ wav, ask: recordingAsk === endAsk ? endAsk : -1, kind });
   set({ transcribing: true });
   await drainFinals();
 }
@@ -403,6 +404,8 @@ async function drainFinals(): Promise<void> {
       let text: string | null = null;
       let failure: string | null = null;
       for (let tries = 1; ; tries++) {
+        // Dropped (a listening mode was chosen after it was recorded): never sent, or not sent again.
+        if (item.dropped === true) break;
         try {
           text = (await deps.stt.transcribe(wav)).trim();
         } catch (e) {
@@ -426,6 +429,7 @@ async function drainFinals(): Promise<void> {
       if (finals[0] === item) finals.shift();
       set({ transcribing: finals.length > 0 });
       if (S.getState().heard === BUSY_NOTE) set({ heard: null });
+      if (item.dropped === true) { dropPartial(); continue; }
       if (failure !== null) {
         dropPartial();
         void sayError(failure);
@@ -1059,8 +1063,15 @@ function enterFull(): void {
 }
 
 export function chooseMode(mode: ListenMode): void {
-  // Words begun under the mode question and still going when it is answered are for no card: dropped, never sent.
+  // Words the detector heard under the mode question and not yet acted on when it is answered are for no card: the
+  // turn still going, the recordings waiting to be written down (one in flight acts on nothing), any partial on its
+  // way and the partial line shown are all dropped, never sent.
   dropPauseTurn();
+  for (const f of finals) if (f.kind === 'pause') f.dropped = true;
+  for (let i = finals.length - 1; i >= 1; i--) if (finals[i]!.dropped === true) finals.splice(i, 1);
+  set({ transcribing: finals.some((f) => f.dropped !== true) });
+  turnSeq += 1;
+  dropPartial();
   set({ mode });
   const words = mode === 'stream'
     ? 'Streaming. I’m listening; I answer when you pause. Say “stop listening” or press Esc to leave.'
@@ -1088,7 +1099,7 @@ export function holdToTalk(down: boolean): void {
   if (!s.holding) return;
   set({ holding: false, speaking: 'idle' });
   turn = null;
-  void finishTurn();
+  void finishTurn('hold');
 }
 
 /** Leave voice mode (No, Esc, "leave voice", the button). The mic is released and nothing is kept. */

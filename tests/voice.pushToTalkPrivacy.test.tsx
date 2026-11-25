@@ -159,6 +159,78 @@ describe('push-to-talk keeps nothing unless Space is held (studio#1400)', () => 
     expect(sent.flat()).not.toContain('room');
   });
 
+  it('a partial and finished recordings still on their way when Space bar is tapped show nothing and are never sent (codex r1)', async () => {
+    await enterFull();
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    // Every transcription waits until the test lets it land.
+    const waiting: Array<{ tags: string[]; land: (t: string) => void }> = [];
+    setVoiceDeps({ stt: { transcribe: (wav) => new Promise<string>((r) => { const tags = tagsOf(wav); sent.push(tags); waiting.push({ tags, land: r }); }) } });
+    const quiet = async (ms: number): Promise<void> => {
+      for (let t = 0; t < ms; t += 100) await act(async () => { clock += 100; mic.frame('quiet', 0.001); vi.advanceTimersByTime(100); });
+    };
+    // Turn A under the mode question: long enough for a partial to be asked for, then a pause ends it (its final goes).
+    await room(2000, 'a');
+    expect(sent.length).toBe(1);
+    await quiet(1000);
+    expect(sent.length).toBe(2);
+    // Turn B: recorded and ended while A's final is still being written down, so B waits its turn, unsent.
+    await room(800, 'b');
+    await quiet(1000);
+    expect(sent.length).toBe(2);
+    await tapMode('Space bar');
+    expect(useVoiceStore.getState().mode).toBe('space');
+    // Everything lands now: A's partial and A's final act on nothing, and B is never sent.
+    for (const w of waiting) await act(async () => { w.land('the room is talking'); });
+    await settle();
+    await room(3000);
+    await settle();
+    expect(sent.flat()).not.toContain('b');
+    expect(sent.flat()).not.toContain('room');
+    expect(youLines()).toEqual([]);
+    expect(useVoiceStore.getState().lines.some((l) => /was said while/.test(l.text))).toBe(false);
+    expect(useVoiceStore.getState().transcribing).toBe(false);
+  });
+
+  it('a partial line already shown, of a turn that ended and is still being written down, goes when Space bar is tapped (codex r1)', async () => {
+    await enterFull();
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let finalLands!: (t: string) => void;
+    setVoiceDeps({ stt: { transcribe: (wav) => { const tags = tagsOf(wav); sent.push(tags); return sent.length === 1 ? Promise.resolve('the room is talking') : new Promise<string>((r) => { finalLands = r; }); } } });
+    await room(2000);
+    expect(youLines()).toMatchObject([{ partial: true, text: 'the room is talking' }]);
+    // A pause ends the turn; its final is on its way, so the partial line is still up.
+    for (let t = 0; t < 1000; t += 100) await act(async () => { clock += 100; mic.frame('quiet', 0.001); vi.advanceTimersByTime(100); });
+    expect(sent.length).toBe(2);
+    expect(youLines()).toMatchObject([{ partial: true }]);
+    await tapMode('Space bar');
+    expect(youLines()).toEqual([]);
+    await act(async () => { finalLands('the room is talking'); });
+    await settle();
+    expect(youLines()).toEqual([]);
+    expect(mic.kept).toBeNull();
+  });
+
+  it('streaming: a turn open when a reply starts being read aloud is dropped, so it never carries the read-aloud (pi r1)', async () => {
+    await enterFull();
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    await tapMode('Streaming');
+    await settle();
+    sent = [];
+    await room(600, 'me');
+    expect(mic.kept).not.toBeNull();
+    await act(async () => { useVoiceStore.setState({ speaking: 'it' }); });
+    await room(1000, 'reply');
+    expect(mic.kept).toBeNull();
+    await act(async () => { useVoiceStore.setState({ speaking: 'idle' }); });
+    reply = () => 'what is running';
+    await room(600, 'next');
+    for (let t = 0; t < 1000; t += 100) await act(async () => { clock += 100; mic.frame('quiet', 0.001); vi.advanceTimersByTime(100); });
+    await settle();
+    const finals = sent.filter((tags) => tags.includes('quiet'));
+    expect(finals.length).toBe(1);
+    expect(finals[0]!.filter((t) => t !== 'quiet' && t !== 'next')).toEqual([]);
+  });
+
   it('the mic button held: only its own audio, never what came before the press', async () => {
     await enterFull();
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
