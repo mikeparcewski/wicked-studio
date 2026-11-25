@@ -424,6 +424,62 @@ describe('MemoryPage — Add a memory (a proposal you approve as you add it)', (
     expect(within(dialog).getByTestId('memory-add-text')).toHaveValue('keep these words');
   });
 
+  it('studio#1095: a repository list that could not be read is read again on Refresh, and the row names it then', async () => {
+    wire([{ ...M2, id: 'm-r', facets: { repo: 'r-web' } }]);
+    const base = apiFetch.getMockImplementation()!;
+    let fail = true;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) =>
+      String(path) === '/repos' && fail ? Promise.reject(new ApiError(503, 'unavailable')) : base(path, init));
+    page();
+    const user = userEvent.setup();
+    const row = (await screen.findAllByTestId('memory-row'))[0]!;
+    await waitFor(() => expect(row).toHaveTextContent('Repository r-web'));
+    fail = false;
+    await user.click(screen.getByTestId('memory-more-button'));
+    await user.click(screen.getByTestId('memories-refresh'));
+    await waitFor(() => expect(screen.getAllByTestId('memory-row')[0]!).toHaveTextContent('Repository northwind-web'));
+    // Once read, Refresh never reads it again (the one session cache).
+    const reads = (): number => apiFetch.mock.calls.filter((c) => String(c[0]) === '/repos').length;
+    const before = reads();
+    await user.click(screen.getByTestId('memory-more-button'));
+    await user.click(screen.getByTestId('memories-refresh'));
+    await waitFor(() => expect(screen.getAllByTestId('memory-row')[0]!).toHaveTextContent('Repository northwind-web'));
+    expect(reads()).toBe(before);
+  });
+
+  it('studio#1095: the list Add a memory reads names the rows too (after the page’s own read failed)', async () => {
+    wire([{ ...M2, id: 'm-r', facets: { repo: 'r-web' } }]);
+    const base = apiFetch.getMockImplementation()!;
+    let fail = true;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) =>
+      String(path) === '/repos' && fail ? Promise.reject(new ApiError(503, 'unavailable')) : base(path, init));
+    page();
+    const user = userEvent.setup();
+    const row = (await screen.findAllByTestId('memory-row'))[0]!;
+    await waitFor(() => expect(row).toHaveTextContent('Repository r-web'));
+    fail = false;
+    await openAdd(user);
+    const dialog = await screen.findByTestId('memory-add-dialog');
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-web' })).toHaveLength(1));
+    await user.click(within(dialog).getByTestId('memory-add-cancel'));
+    await waitFor(() => expect(screen.getAllByTestId('memory-row')[0]!).toHaveTextContent('Repository northwind-web'));
+  });
+
+  it('studio#1095: no repository read for the queue, or for a list where no row names a repository', async () => {
+    const reads = (): number => apiFetch.mock.calls.filter((c) => String(c[0]) === '/repos').length;
+    wire([{ ...M2, id: 'm-r', facets: { repo: 'r-web' } }]);
+    const queue = page('?view=proposals');
+    await screen.findByTestId('memory-proposals');
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(reads()).toBe(0);
+    queue.unmount();
+    wire([M2]);
+    page();
+    await screen.findAllByTestId('memory-row');
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(reads()).toBe(0);
+  });
+
   it('studio#1095: a listed memory scoped to a repository names it, without opening Add a memory', async () => {
     wire([{ ...M2, id: 'm-r', facets: { repo: 'r-web' } }]);
     page();

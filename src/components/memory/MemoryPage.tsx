@@ -106,13 +106,8 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
   // (studio#1095) A memory scoped to one repository names it: the list is read once a listed memory has one (the one
   // session cache; no read for a list with none).
   const [repoList, setRepoList] = useState<RepoEntry[] | null>(getCachedRepos());
-  const scopedToRepo = memories.some((m) => typeof m.facets['repo'] === 'string' && m.facets['repo'] !== '');
-  useEffect(() => {
-    if (!scopedToRepo) return undefined;
-    let live = true;
-    Promise.resolve().then(fetchReposCached).then((r) => { if (live) setRepoList(r); }, () => { /* the id stands in */ });
-    return () => { live = false; };
-  }, [scopedToRepo]);
+  /** Bumped by Refresh: a repository list that could not be read is read again (a warm one is not). */
+  const [repoTry, setRepoTry] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Failure | null>(null);
   const [unsupported, setUnsupported] = useState(false);
@@ -234,7 +229,18 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
     { id: 'table', label: 'Edit as a table', testId: 'memory-add-table', onSelect: () => setPanel('table') },
     { id: 'retired', label: 'Show retired', testId: 'memory-add-retired', onSelect: () => setPanel('retired') },
   ];
-  const refresh = (): void => { reread(); setReviewTick((t) => t + 1); setRejectedRev((r) => r + 1); setProposalsRev((r) => r + 1); setRetiredRev((r) => r + 1); };
+  // Only rows on screen that name a repository ask for the list (never the queue, the table or the retired list).
+  const namesWanted = view === 'memories' && panel !== 'table' && panel !== 'retired'
+    && visible.some((m) => typeof m.facets['repo'] === 'string' && m.facets['repo'] !== '');
+  useEffect(() => {
+    if (!namesWanted) return undefined;
+    const warm = getCachedRepos();
+    if (warm !== null) { setRepoList(warm); return undefined; }
+    let live = true;
+    Promise.resolve().then(fetchReposCached).then((r) => { if (live) setRepoList(r); }, () => { /* the id stands in until Refresh */ });
+    return () => { live = false; };
+  }, [namesWanted, repoTry]);
+  const refresh = (): void => { setRepoTry((t) => t + 1); reread(); setReviewTick((t) => t + 1); setRejectedRev((r) => r + 1); setProposalsRev((r) => r + 1); setRetiredRev((r) => r + 1); };
   // Operator 2026-11-01: no header button; Add a memory is the ⋯ menu's first item, the pills switch the list.
   const action = (
     <CalmMenu menuLabel="More for memory" menuTestId={/* testid */ 'memory-more'}
@@ -379,7 +385,7 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
         </div>
       </div>
       {adding !== null && (
-        <AddMemoryDialog key={adding} background={scrollRef} project={project} projects={projects} onClose={() => setAdding(null)}
+        <AddMemoryDialog key={adding} background={scrollRef} project={project} projects={projects} onClose={() => setAdding(null)} onRepos={setRepoList}
           onDone={(text, tone) => { const mine = adding; setAdding((cur) => (cur === mine ? null : cur)); setNote({ tone, text }); reread(); setReviewTick((t) => t + 1); setProposalsRev((r) => r + 1); }} />
       )}
       {editing !== null && (
@@ -414,8 +420,10 @@ function Dialog({ title, sub, testId, background, onClose, children }: {
 }
 
 /** Add a memory: filed as a proposal and approved in one step (crew has no direct memory write). */
-function AddMemoryDialog({ background, project, projects, onClose, onDone }: {
+function AddMemoryDialog({ background, project, projects, onClose, onDone, onRepos }: {
   background: React.RefObject<HTMLElement | null>; project: string | null; projects: readonly { id: string; name: string }[]; onClose: () => void; onDone: Done;
+  /** The repository list this dialog read: the page's rows name their repositories with it too. */
+  onRepos?: (repos: RepoEntry[]) => void;
 }): React.ReactElement {
   const [text, setText] = useState('');
   const [where, setWhere] = useState<string>(project !== null && project !== 'default' ? project : '');
@@ -430,9 +438,9 @@ function AddMemoryDialog({ background, project, projects, onClose, onDone }: {
   useEffect(() => {
     let live = true;
     setReposFailed(false);
-    Promise.resolve().then(fetchReposCached).then((r) => { if (live) setRepos(r); }, () => { if (live) setReposFailed(true); });
+    Promise.resolve().then(fetchReposCached).then((r) => { onRepos?.(r); if (live) setRepos(r); }, () => { if (live) setReposFailed(true); });
     return () => { live = false; };
-  }, [reposTry]);
+  }, [reposTry, onRepos]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
   /** An older crew refused the kind or the repository (nothing was filed): what to change, said plainly. */
