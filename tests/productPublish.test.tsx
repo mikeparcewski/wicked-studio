@@ -26,7 +26,7 @@ const WIRE = JSON.parse(readFileSync(join(__dirname, 'fixtures', 'product-publis
 const A = (name: string): Answer => structuredClone(WIRE.answers[name]!);
 const RUN = WIRE.view.session.id;
 const PID = (WIRE.view.session as unknown as { project_id: string }).project_id;
-type Pub = { repo: string; source: string; published: boolean; items: Array<Record<string, unknown>> };
+type Pub = { repo: string; source: string; publishHash: string; published: boolean; items: Array<Record<string, unknown>> };
 /** A GET answer for this run with `publications` replaced (each one a publication crew's routes answered). */
 const getWith = (publications: unknown[], from = 'get-before'): Record<string, unknown> => ({ ...A(from).body, publications });
 const pubOf = (name: string): Pub => (A(name).body as { publication: Pub }).publication;
@@ -86,6 +86,27 @@ describe('reading crew’s answers', () => {
     expect(publicationOf(numberless)).toBeNull();
     expect(publicationOf(pubOf('post-done'))).not.toBeNull();
     expect(publicationOf(partial())).not.toBeNull();
+  });
+
+  it('duplicates, an out-of-range number, or a publication that isn’t the card’s are unreadable', () => {
+    const twice = getWith([pubOf('post-done'), pubOf('post-unsure')]);
+    expect(publicationsOf(twice, RUN)).toBeNull();
+    const dupKey = pubOf('post-unsure');
+    dupKey.items[1]!['key'] = 'e1';
+    expect(publicationOf(dupKey)).toBeNull();
+    const huge = pubOf('post-done');
+    Object.assign(huge.items[0]!, { number: 10_000_000_000, url: 'https://github.com/owner/app/issues/10000000000' });
+    expect(publicationOf(huge)).toBeNull();
+    const otherRepo = A('post-unsure').body as { publication: Pub };
+    otherRepo.publication.repo = 'owner/other';
+    expect(publishResponseOf(otherRepo, RUN, PID)).toBeNull();
+    const otherItems = A('post-done').body as { publication: Pub };
+    otherItems.publication.items = otherItems.publication.items.slice(0, 3);
+    expect(publishResponseOf(otherItems, RUN, PID)).toBeNull();
+    // crew names repositories lower-cased; an upper-cased one is read the same way.
+    const upper = getWith([pubOf('post-done')]);
+    upper['targets'] = [{ repo: 'Owner/App', source: 'gh' }];
+    expect(publicationsOf(upper, RUN)!.targets).toEqual([{ repo: 'owner/app', source: 'gh' }]);
   });
 
   it('an issue number is 1 to 9,999,999,999, with or without #', () => {
@@ -219,7 +240,8 @@ describe('the Publish block', () => {
 
   it('a refresh that fails after a write keeps what crew said happened, and says so', async () => {
     read.mockResolvedValueOnce(A('get-before').body).mockRejectedValueOnce(new ApiError(503, 'the publish journal could not be read now', { code: 'journal_unavailable', error: 'x' }));
-    post.mockResolvedValueOnce(A('post-card').body).mockResolvedValueOnce(A('post-unsure').body);
+    // The card whose hash crew's `post-unsure` approved (each capture ran with its own credential, so its own hash).
+    post.mockResolvedValueOnce({ ...A('post-card').body, publishHash: pubOf('post-unsure').publishHash }).mockResolvedValueOnce(A('post-unsure').body);
     await mount();
     await act(async () => { fireEvent.click(screen.getByTestId('product-publish-show')); });
     await act(async () => { fireEvent.click(screen.getByTestId('product-publish-confirm')); });
@@ -318,10 +340,21 @@ describe('the Publish block', () => {
     await act(async () => { r.rerender(<ProductPublish projectId={PID} runId={RUN_B} />); });
     expect(read).toHaveBeenLastCalledWith(PID, RUN_B);
     expect(screen.getByTestId('product-publish-resolve-absent')).not.toBeDisabled();
+    // Run B's own resolve sends while A's is still out; A's late answer releases nothing of B's.
+    const resolveB = deferred<unknown>();
+    post.mockReturnValueOnce(resolveB.promise);
+    await act(async () => { fireEvent.click(screen.getByTestId('product-publish-resolve-absent')); });
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(post).toHaveBeenLastCalledWith(PID, { runId: RUN_B, repo: 'owner/app', resolve: { key: 'e1', issue: null } });
     await act(async () => { lateResolve.res(A('post-resolve-absent').body); });
     expect(screen.getAllByTestId('product-publish-item').map((li) => li.dataset['state'])).toEqual(['unsure', 'missing', 'missing', 'missing']);
+    expect(screen.getByTestId('product-publish-resolve-absent')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('product-publish-resolve-absent'));
+    expect(post).toHaveBeenCalledTimes(2);
+    read.mockResolvedValueOnce(forB());
+    await act(async () => { resolveB.rej(new ApiError(409, 'e1 is not waiting to be resolved', { code: 'not_unsure', error: 'x' })); });
     expect(screen.getByTestId('product-publish-resolve-absent')).not.toBeDisabled();
-    expect(read).toHaveBeenCalledTimes(2);
+    expect(read).toHaveBeenCalledTimes(3);
     // A first read for run A answered after the panel moved to run B is dropped too.
     cleanup();
     const lateRead = deferred<unknown>();
@@ -330,6 +363,75 @@ describe('the Publish block', () => {
     await act(async () => { r.rerender(<ProductPublish projectId={PID} runId={RUN_B} />); });
     await act(async () => { lateRead.res(A('get-after').body); });
     expect(screen.queryByTestId('product-publish-verdict')).toHaveTextContent('Not fully published');
+  });
+
+  it('a publication crew refuses a card over (publication_differs) is shown at once', async () => {
+    read.mockResolvedValue(A('get-before').body);
+    post.mockRejectedValueOnce(new ApiError(409, 'this run was already published to owner/app with other content; nothing more is sent to it', { code: 'publication_differs', error: 'x', publication: pubOf('post-done') }));
+    await mount();
+    await act(async () => { fireEvent.click(screen.getByTestId('product-publish-show')); });
+    expect(screen.getByTestId('product-publish-refused')).toHaveTextContent('already published to that repository with other content');
+    expect(screen.getAllByTestId('product-publish-link')).toHaveLength(4);
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it('a refresh that answers Not Found after a write keeps crew’s answer', async () => {
+    read.mockResolvedValueOnce(A('get-before').body).mockRejectedValueOnce(new ApiError(404, 'Not Found'));
+    post.mockResolvedValueOnce(A('post-card').body).mockResolvedValueOnce(A('post-done').body);
+    await mount();
+    await act(async () => { fireEvent.click(screen.getByTestId('product-publish-show')); });
+    await act(async () => { fireEvent.click(screen.getByTestId('product-publish-confirm')); });
+    expect(screen.getByTestId('product-publish-verdict')).toHaveTextContent('Published: all 4');
+    expect(screen.getByTestId('product-publish-refresh-note')).toHaveTextContent('update crew');
+  });
+
+  it('a write’s answer outranks a read sent before it', async () => {
+    const other = { ...pubOf('post-unsure'), repo: 'owner/other' };
+    other.items = other.items.map((i, k) => (k === 0 ? { key: i['key'], kind: i['kind'], title: i['title'], state: 'sending', number: null, url: null, readBack: null } : i));
+    const start = getWith([other]);
+    start['targets'] = [{ repo: 'owner/app', source: 'gh' }, { repo: 'owner/other', source: 'gh' }];
+    const stale = deferred<unknown>();
+    const after = getWith([other, pubOf('post-done')]);
+    after['targets'] = start['targets'];
+    read.mockResolvedValueOnce(start).mockReturnValueOnce(stale.promise).mockResolvedValue(after);
+    post.mockResolvedValueOnce(A('post-card').body).mockResolvedValueOnce(A('post-done').body);
+    await mount();
+    await act(async () => { fireEvent.click(screen.getByTestId('product-publish-refresh')); });
+    await act(async () => { fireEvent.click(screen.getByTestId('product-publish-show')); });
+    await act(async () => { fireEvent.click(screen.getByTestId('product-publish-confirm')); });
+    // The read sent before the write answers last, saying owner/app has nothing: crew's write answer stays.
+    expect(read).toHaveBeenCalledTimes(3);
+    await act(async () => { stale.res(start); });
+    const app = screen.getAllByTestId('product-publish-publication').find((d) => d.dataset['repo'] === 'owner/app')!;
+    expect(app).toHaveAttribute('data-published', 'true');
+  });
+
+  it('polling goes on after a failed look, and a card is withdrawn once its repository holds a not-known issue', async () => {
+    vi.useFakeTimers();
+    try {
+      const other = { ...pubOf('post-unsure'), repo: 'owner/other' };
+      other.items = other.items.map((i, k) => (k === 0 ? { key: i['key'], kind: i['kind'], title: i['title'], state: 'sending', number: null, url: null, readBack: null } : i));
+      const start = getWith([other]);
+      start['targets'] = [{ repo: 'owner/app', source: 'gh' }, { repo: 'owner/other', source: 'gh' }];
+      const later = getWith([other, pubOf('post-unsure')]);
+      later['targets'] = start['targets'];
+      read.mockResolvedValueOnce(start).mockRejectedValueOnce(new ApiError(503, 'x', { code: 'journal_unavailable', error: 'x' })).mockResolvedValueOnce(later);
+      post.mockResolvedValueOnce(A('post-card').body);
+      await mount();
+      await act(async () => { fireEvent.click(screen.getByTestId('product-publish-show')); });
+      expect(screen.getByTestId('product-publish-card')).toBeTruthy();
+      await act(async () => { vi.advanceTimersByTime(3000); });
+      expect(read).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId('product-publish-refresh-note')).toBeTruthy();
+      await act(async () => { vi.advanceTimersByTime(3000); });
+      expect(read).toHaveBeenCalledTimes(3);
+      // Another person's send left owner/app not known: the card goes, the held line and the resolve come.
+      expect(screen.queryByTestId('product-publish-card')).toBeNull();
+      expect(screen.getByTestId('product-publish-held')).toHaveTextContent('owner/app');
+      expect(post).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('a resolve naming an issue sends its number', async () => {

@@ -3,6 +3,7 @@ import { ApiError, isRouteAbsent } from '../../api/errors.js';
 import {
   bodyShown,
   depthOf,
+  ISSUE_MAX,
   productPublishApi,
   publicationOf,
   publicationsOf,
@@ -27,6 +28,13 @@ type Ask =
   | { phase: 'done'; publication: PublicationState }
   | { phase: 'refused'; words: string };
 
+/** The publication a refusal carries (`unresolved`, `publication_differs`), when it is crew's shape. */
+function errorPublication(e: unknown): PublicationState | null {
+  const body = e instanceof ApiError && typeof e.body === 'object' && e.body !== null ? (e.body as Record<string, unknown>) : {};
+  const code = publishRefusalCode(e);
+  return (code === 'unresolved' || code === 'publication_differs') && body['publication'] !== undefined ? publicationOf(body['publication']) : null;
+}
+
 const UNREADABLE = 'crew answered in a form this studio can’t read. Look at the repository before trying again.';
 /** The refusals whose way on is a new Compose run (an old run, or a plan crew can't confirm is the launched one). */
 const COMPOSE_AGAIN: ReadonlySet<string> = new Set(['not_a_compose', 'compose_unverified']);
@@ -50,8 +58,6 @@ const KIND_WORD = { epic: 'Epic', feature: 'Feature', story: 'Story' } as const;
 
 /** How often a panel showing an issue being sent looks again. */
 const SENDING_POLL_MS = 3000;
-/** The largest issue number crew accepts in a resolve. */
-const ISSUE_MAX = 9_999_999_999;
 
 /** The issue number a person typed (`12` or `#12`), or `null` when it is not one crew accepts. Pure. */
 export function issueNumberOf(typed: string): number | null {
@@ -81,6 +87,8 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
   const [resolveNote, setResolveNote] = useState<Record<string, string>>({});
   /** A refresh that failed AFTER crew's state was shown: the state shown stays (it is crew's last word), this says so. */
   const [refreshNote, setRefreshNote] = useState<string | null>(null);
+  /** Each finished read attempt (landed, failed or overtaken): what re-arms the look-again while an issue is sending. */
+  const [tick, setTick] = useState(0);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   /** Each run's generation: an answer for an earlier run never lands on this one. */
@@ -94,27 +102,35 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
 
   const load = useCallback((mine: number, keep: boolean): void => {
     const turn = ++seq.current;
+    const settle = (land: () => void): void => {
+      if (!mounted.current || gen.current !== mine) return;
+      setTick((t) => t + 1);
+      // Overtaken by a newer read, or by a write's own answer: this one says nothing.
+      if (seq.current === turn) land();
+    };
     productPublishApi.read(projectId, runId).then(
-      (raw) => {
-        if (!mounted.current || gen.current !== mine || seq.current !== turn) return;
+      (raw) => settle(() => {
         const body = publicationsOf(raw, runId);
         if (body === null && keep) { setRefreshNote('crew’s latest answer couldn’t be read; this is what it said before.'); return; }
         setRefreshNote(null);
         setRead(body === null ? { phase: 'failed', words: 'crew’s answer about publishing this plan couldn’t be read.' } : { phase: 'ok', body });
-      },
-      (e: unknown) => {
-        if (!mounted.current || gen.current !== mine || seq.current !== turn) return;
-        if (isRouteAbsent(e)) { setRead({ phase: 'absent' }); return; }
-        // A failed refresh never erases what crew already said happened.
-        setRead((prev) => (keep && prev.phase === 'ok' ? prev : { phase: 'failed', words: publishRefusal(e) }));
-        if (keep) setRefreshNote(`${publishRefusal(e)} What is shown is crew’s last answer.`);
-      },
+      }),
+      (e: unknown) => settle(() => {
+        // A failed refresh never erases what crew already said happened (not even a route that went away).
+        if (keep) {
+          setRead((prev) => (prev.phase === 'ok' ? prev : isRouteAbsent(e) ? { phase: 'absent' } : { phase: 'failed', words: publishRefusal(e) }));
+          setRefreshNote(`${publishRefusal(e)} What is shown is crew’s last answer.`);
+          return;
+        }
+        setRead(isRouteAbsent(e) ? { phase: 'absent' } : { phase: 'failed', words: publishRefusal(e) });
+      }),
     );
   }, [projectId, runId]);
 
   /** A publication crew answered on a write: shown at once (replacing that repository's), ahead of any read in flight. */
-  const merge = (p: PublicationState | null | undefined): void => {
-    if (p === null || p === undefined) return;
+  const merge = (p: PublicationState | null | undefined, repo: string): void => {
+    // Only a publication for the repository asked about is taken (the answer's own card is checked by its reader).
+    if (p === null || p === undefined || p.repo !== repo) return;
     seq.current++;
     setRead((prev) => (prev.phase !== 'ok' ? prev : { phase: 'ok', body: { ...prev.body, publications: [...prev.body.publications.filter((x) => x.repo !== p.repo), p] } }));
   };
@@ -141,9 +157,9 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
     const mine = gen.current;
     const t = setTimeout(() => { if (here(mine)) load(mine, true); }, SENDING_POLL_MS);
     return () => clearTimeout(t);
-    // Re-armed by each answer while it still says `sending`.
+    // Re-armed by each read attempt (landed, failed or overtaken) and each write's answer while it still says `sending`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [read, sendingNow]);
+  }, [read, tick, sendingNow]);
 
   if (read.phase === 'absent') return null;
   const titleId = `product-publish-title-${runId}`;
@@ -188,19 +204,21 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
     try {
       const answer = publishResponseOf(await productPublishApi.post(projectId, { runId, repo: repoSelector(target, targets) }), runId, projectId);
       if (!here(mine)) return;
-      if (answer === null || answer.done) { setAsk({ phase: 'refused', words: UNREADABLE }); return; }
-      merge(answer.publication);
+      if (answer === null || answer.done || answer.card.repo !== target.repo) { setAsk({ phase: 'refused', words: UNREADABLE }); return; }
+      merge(answer.publication, target.repo);
       // A card over an attempt that must be settled first is not offered: the publication above says what to do.
       const unsettled = answer.publication?.items.some((i) => i.state === 'unsure' || i.state === 'sending') === true;
       setAsk(unsettled ? { phase: 'idle' } : { phase: 'card', card: answer.card, hash: answer.publishHash, publication: answer.publication });
     } catch (e) {
       if (!here(mine)) return;
+      // `publication_differs` carries the publication crew already holds for this repository: it is shown.
+      merge(errorPublication(e), target.repo);
       setAsk({ phase: 'refused', words: publishRefusal(e) });
     }
   });
 
   const confirm = (): Promise<void> => once(async (mine) => {
-    if (ask.phase !== 'card') return;
+    if (ask.phase !== 'card' || heldOf(ask.card.repo) !== undefined) return;
     const { card, hash, publication } = ask;
     setAsk({ phase: 'sending', card, hash, publication });
     seq.current++;
@@ -208,8 +226,9 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
       // The card's own repository and the card's hash: nothing else rides along.
       const answer = publishResponseOf(await productPublishApi.post(projectId, { runId, repo: repoSelector({ repo: card.repo, source: card.source }, targets), confirm: hash }), runId, projectId);
       if (!here(mine)) return;
-      if (answer !== null && answer.done) {
-        merge(answer.publication);
+      // The answer is this card's: its repository, and the publication the confirmed hash approved.
+      if (answer !== null && answer.done && answer.card.repo === card.repo && answer.publication.publishHash === hash) {
+        merge(answer.publication, card.repo);
         setAsk({ phase: 'done', publication: answer.publication });
       } else {
         setAsk({ phase: 'refused', words: UNREADABLE });
@@ -218,7 +237,7 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
       if (!here(mine)) return;
       const body = e instanceof ApiError && typeof e.body === 'object' && e.body !== null ? (e.body as Record<string, unknown>) : {};
       // `unresolved` and `publication_differs` carry the publication as crew holds it now: it is shown.
-      if (body['publication'] !== undefined) merge(publicationOf(body['publication']));
+      merge(errorPublication(e), card.repo);
       // The card changed since it was shown: crew's fresh card waits for a new click (nothing was sent).
       const fresh = publishRefusalCode(e) === 'card_changed' ? publishResponseOf({ done: false, card: body['card'], publishHash: body['publishHash'], publication: null }, runId, projectId) : null;
       setAsk(fresh !== null && !fresh.done ? { phase: 'card', card: fresh.card, hash: fresh.publishHash, publication, note: publishRefusal(e) } : { phase: 'refused', words: publishRefusal(e) });
@@ -235,7 +254,7 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
       const answer = publishResponseOf(await productPublishApi.post(projectId, { runId, repo: repoSelector({ repo: p.repo, source: p.source }, targets.some((t) => t.repo === p.repo) ? targets : [{ repo: p.repo, source: p.source }]), resolve: { key: item.key, issue } }), runId, projectId);
       if (!here(mine)) return;
       if (answer === null) setResolveNote((m) => ({ ...m, [slot]: UNREADABLE }));
-      else merge(answer.publication);
+      else merge(answer.publication, p.repo);
     } catch (e) {
       if (!here(mine)) return;
       setResolveNote((m) => ({ ...m, [slot]: publishRefusal(e) }));
@@ -247,7 +266,8 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
 
   const composeAgain = (): void => openLaunchWizard({ workflowId: DRAFT_EPICS_ID, projectId, composerKey: 'desk' });
   const busy = ask.phase === 'asking' || ask.phase === 'sending' || resolving !== null;
-  const card = ask.phase === 'card' || ask.phase === 'sending' ? ask.card : null;
+  // A card waiting for a click is withdrawn once crew says its repository holds an issue being sent or not known.
+  const card = ask.phase === 'sending' || (ask.phase === 'card' && heldOf(ask.card.repo) === undefined) ? ask.card : null;
   // What a confirm would create now: the card's items not already created (a retry sends only the rest).
   const already = card === null ? new Map<string, PublicationItemState>() : new Map((pubOf(card.repo)?.items ?? []).filter((i) => i.state === 'created').map((i) => [i.key, i]));
   const toCreate = card === null ? 0 : card.items.filter((i) => !already.has(i.key)).length;

@@ -72,6 +72,11 @@ const KINDS: ReadonlySet<string> = new Set(['epic', 'feature', 'story']);
 const STATES: ReadonlySet<string> = new Set(['created', 'sending', 'not_sent', 'unsure', 'absent', 'missing']);
 const READ_BACK: ReadonlySet<string> = new Set(['ok', 'differs', 'unreadable']);
 const KEY = /^e\d+(?:\.f\d+(?:\.s\d+)?)?$/;
+/** `owner/repo` (crew names it lower-cased, `trackers/set.ts`; compared lower-cased here too). */
+const REPO = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
+/** The largest issue number crew accepts (its resolve schema). */
+export const ISSUE_MAX = 9_999_999_999;
+const distinct = (keys: readonly string[]): boolean => new Set(keys).size === keys.length;
 const HASH = /^[0-9a-f]{64}$/;
 /** A reason crew sends is shown as text, cut to 400 characters. */
 export const WHY_MAX = 400;
@@ -97,16 +102,16 @@ function itemOf(v: unknown): PublishItem | null {
 
 /** crew's card for exactly this run in this project, or `null`. */
 export function publishCardOf(v: unknown, runId: string, projectId: string): ProductPublishCard | null {
-  if (!isObj(v) || v.runId !== runId || v.projectId !== projectId || !isText(v.repo) || !isText(v.source) || !isText(v.identity)) return null;
+  if (!isObj(v) || v.runId !== runId || v.projectId !== projectId || typeof v.repo !== 'string' || !REPO.test(v.repo) || !isText(v.source) || !isText(v.identity)) return null;
   const items = allOf(v.items, itemOf);
-  if (items === null || items.length === 0) return null;
-  return { runId, projectId, repo: v.repo, source: v.source, identity: v.identity, items };
+  if (items === null || items.length === 0 || !distinct(items.map((i) => i.key))) return null;
+  return { runId, projectId, repo: v.repo.toLowerCase(), source: v.source, identity: v.identity, items };
 }
 
 function itemStateOf(v: unknown): PublicationItemState | null {
   if (!isObj(v) || typeof v.key !== 'string' || !KEY.test(v.key) || typeof v.kind !== 'string' || !KINDS.has(v.kind) || typeof v.title !== 'string'
     || typeof v.state !== 'string' || !STATES.has(v.state)) return null;
-  const number = v.number === null ? null : typeof v.number === 'number' && Number.isSafeInteger(v.number) && v.number > 0 ? v.number : undefined;
+  const number = v.number === null ? null : typeof v.number === 'number' && Number.isSafeInteger(v.number) && v.number > 0 && v.number <= ISSUE_MAX ? v.number : undefined;
   const url = v.url === null ? null : typeof v.url === 'string' ? v.url : undefined;
   const readBack = v.readBack === null ? null : typeof v.readBack === 'string' && READ_BACK.has(v.readBack) ? (v.readBack as 'ok' | 'differs' | 'unreadable') : undefined;
   if (number === undefined || url === undefined || readBack === undefined) return null;
@@ -119,8 +124,6 @@ function itemStateOf(v: unknown): PublicationItemState | null {
   };
 }
 
-/** `owner/repo` as crew names a repository (lower-cased), or `null`. */
-const REPO = /^[a-z0-9_.-]{1,100}\/[a-z0-9_.-]{1,100}$/;
 
 /**
  * One publication as crew sends it, or `null`. Its parts must agree: a link is this repository's page for exactly that
@@ -129,8 +132,8 @@ const REPO = /^[a-z0-9_.-]{1,100}\/[a-z0-9_.-]{1,100}$/;
 export function publicationOf(v: unknown): PublicationState | null {
   if (!isObj(v) || typeof v.repo !== 'string' || !REPO.test(v.repo) || !isText(v.source) || typeof v.publishHash !== 'string' || !HASH.test(v.publishHash) || typeof v.published !== 'boolean') return null;
   const items = allOf(v.items, itemStateOf);
-  if (items === null || items.length === 0) return null;
-  const repo = v.repo;
+  if (items === null || items.length === 0 || !distinct(items.map((i) => i.key))) return null;
+  const repo = v.repo.toLowerCase();
   if (items.some((i) => i.url !== null && i.url.toLowerCase() !== `https://github.com/${repo}/issues/${i.number}`)) return null;
   if (v.published !== items.every((i) => i.state === 'created' && i.readBack === 'ok')) return null;
   return { repo, source: v.source, publishHash: v.publishHash, items, published: v.published };
@@ -144,12 +147,17 @@ export function publishResponseOf(raw: unknown, runId: string, projectId: string
   if (raw.done === false) {
     if (typeof raw.publishHash !== 'string' || !HASH.test(raw.publishHash)) return null;
     const publication = raw.publication === null ? null : publicationOf(raw.publication);
-    if (raw.publication !== null && publication === null) return null;
+    if (raw.publication !== null && (publication === null || !sameAs(publication, card))) return null;
     return { done: false, card, publishHash: raw.publishHash, publication };
   }
   if (raw.done !== true) return null;
   const publication = publicationOf(raw.publication);
-  return publication === null ? null : { done: true, card, publication };
+  return publication === null || !sameAs(publication, card) ? null : { done: true, card, publication };
+}
+
+/** A publication answered beside a card is that card's: the same repository and the same items, in order. */
+function sameAs(p: PublicationState, card: ProductPublishCard): boolean {
+  return p.repo === card.repo && p.items.length === card.items.length && p.items.every((i, k) => i.key === card.items[k]!.key);
 }
 
 /** crew's GET answer for exactly this run, or `null`. */
@@ -160,9 +168,11 @@ export function publicationsOf(raw: unknown, runId: string): ProductPublications
   if (p.ok === true && typeof p.items === 'number' && Number.isInteger(p.items) && p.items > 0) publishable = { ok: true, items: p.items };
   else if (p.ok === false && isText(p.code) && isText(p.error)) publishable = { ok: false, code: p.code, error: cut(p.error) };
   else return null;
-  const targets = allOf(raw.targets, (t) => (isObj(t) && isText(t.repo) && isText(t.source) ? { repo: t.repo, source: t.source } : null));
+  const targets = allOf(raw.targets, (t) => (isObj(t) && typeof t.repo === 'string' && REPO.test(t.repo) && isText(t.source) ? { repo: t.repo.toLowerCase(), source: t.source } : null));
   const publications = allOf(raw.publications, publicationOf);
-  return targets === null || publications === null ? null : { runId, publishable, targets, publications };
+  // crew keeps one publication per run and repository: two for one repository is not crew's answer.
+  if (targets === null || publications === null || !distinct(publications.map((p) => p.repo))) return null;
+  return { runId, publishable, targets, publications };
 }
 
 // ── what studio shows ─────────────────────────────────────────────────────────────────────────────────
