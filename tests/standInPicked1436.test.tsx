@@ -150,6 +150,23 @@ describe('/runs/new: Pick another helper opens the helper options', () => {
     expect(launch).toHaveBeenCalledTimes(1);
   });
 
+  it('a click on a control its own click removed is not a click outside the helper options (Pick, in a browser)', async () => {
+    // In a browser React commits a click's update (the card goes) and runs its effects (the options' outside-click
+    // listener) while that click is still bubbling, so the document sees the click on a button no longer on the page.
+    // jsdom's act() defers those effects, so this models that order directly: a control that removes itself.
+    await sendClaudeOnly();
+    if (screen.queryByTestId('launch-seat-codex') === null) fireEvent.click(screen.getByRole('button', { name: 'Open launch options' }));
+    expect(screen.getByTestId('launch-seat-codex')).toBeTruthy();
+    const gone = document.createElement('button');
+    document.body.appendChild(gone);
+    gone.addEventListener('click', () => gone.remove());
+    act(() => { gone.click(); });
+    expect(screen.queryByTestId('launch-seat-codex')).not.toBeNull();
+    // A click on the page outside the options still closes them.
+    act(() => { document.body.click(); });
+    expect(screen.queryByTestId('launch-seat-codex')).toBeNull();
+  });
+
   it('the card says a signed-out helper is neither picked nor one to pick', async () => {
     await sendClaudeOnly();
     expect(screen.getByTestId('launch-standin-why').textContent).not.toMatch(/OpenCode/);
