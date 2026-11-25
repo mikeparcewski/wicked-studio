@@ -7,7 +7,7 @@ import { getSteeringDraft, keepDraftedRules, type SteeringDraftResponse } from '
 import { approveProposal, landingFailure, listProposals, memoryPayload, policyPayload, proposalKind, rejectProposal, type Proposal } from '../../api/proposals.js';
 import { authorSteeringRules } from '../../api/steering.js';
 import type { Ask, AskAnswer } from '../../api/ask.js';
-import type { RepoEntry, SessionView } from '../../api/types.js';
+import type { LaunchBodyWithDeliver, RepoEntry, SessionView } from '../../api/types.js';
 import {
   jobLine, repoStyleProblem, STYLE_KIND_WORDS, styleStations, TEAM_DOCS_INSTRUCTIONS, writingStyleNotes,
   type StyleJob, type StyleKind, type StyleSource,
@@ -16,6 +16,8 @@ import type { Navigate } from '../../hooks/useRoute.js';
 import { useFirstRun } from '../../store/firstRun.js';
 import { useProvenanceStore } from '../../store/provenance.js';
 import { sessionPath } from '../../board/sessionModel.js';
+import { standInChoiceOf, type StandInChoiceRefusal } from '../../board/standIn.js';
+import { useStandInChoice, type StandInRetry } from '../../hooks/useStandInChoice.js';
 import { AskCard, AskRecord } from '../ask/AskCard.js';
 import { readFileText } from '../fileText.js';
 import { LearnTopics, startLearnTopic } from './LearnPage.js';
@@ -77,6 +79,20 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
     setRecord(r);
     void saveRecord(r).catch(() => undefined);
   };
+  // The jobs of the last Learn my style, so a job started again from the stand-in card joins them.
+  const batch = useRef<StyleRecord | null>(null);
+  const keepJob = (job: StyleJob): void => {
+    const next = { jobs: [...(batch.current?.jobs ?? []), job], startedAt: batch.current?.startedAt ?? Date.now() };
+    batch.current = next;
+    keepHere(next);
+  };
+  const launchRepo = async (body: LaunchBodyWithDeliver, label: string): Promise<StyleJob> => {
+    const { runId } = await api.launchRun(body);
+    useProvenanceStore.getState().markLaunchedHere(runId);
+    return { runId, kind: 'repo', sources: [label] };
+  };
+  // (wicked-crew#1932) A repo's job crew answered with the stand-in choice: the card, not a line of text.
+  const standIn = useStandInChoice<string>(async (body, label) => keepJob(await launchRepo(body, label)), navigate);
   useEffect(() => {
     api.listRepos().then((r) => setRepos(r.repos), () => setRepos([]));
     api.getAppearanceSettings().then((s) => { if (!decidedHere.current) setRecord(readRecord(s.settings)); }, () => undefined);
@@ -110,6 +126,8 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
     const docs = sources.filter((s) => s.kind === 'doc');
     const writing = sources.filter((s) => s.kind === 'writing');
     const repoSources = sources.filter((s) => s.kind === 'repo');
+    const held: StandInRetry<string>[] = [];
+    let refusal: StandInChoiceRefusal | null = null;
     const mark = (runId: string): void => useProvenanceStore.getState().markLaunchedHere(runId);
     try {
       if (docs.length > 0) {
@@ -127,11 +145,13 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
         } catch (e) { failed.push(`team docs: ${e instanceof Error ? e.message : String(e)}`); }
       }
       for (const r of repoSources) {
+        const body: LaunchBodyWithDeliver = { problem: repoStyleProblem(r.label), repoRef: r.repoId!, workflow: 'capture-learnings' };
         try {
-          const { runId } = await api.launchRun({ problem: repoStyleProblem(r.label), repoRef: r.repoId!, workflow: 'capture-learnings' });
-          mark(runId);
-          jobs.push({ runId, kind: 'repo', sources: [r.label] });
-        } catch (e) { failed.push(`${r.label}: ${e instanceof Error ? e.message : String(e)}`); }
+          jobs.push(await launchRepo(body, r.label));
+        } catch (e) {
+          const choice = standInChoiceOf(e);
+          if (choice !== null) { refusal ??= choice; held.push({ body, meta: r.label }); } else failed.push(`${r.label}: ${e instanceof Error ? e.message : String(e)}`);
+        }
       }
       if (writing.length > 0) {
         try {
@@ -145,15 +165,18 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
         } catch (e) { failed.push(`writing: ${e instanceof Error ? e.message : String(e)}`); }
       }
       if (failed.length > 0) setLaunchError(`Not started: ${failed.join('; ')}`);
+      const startedAt = Date.now();
+      batch.current = { jobs, startedAt };
       if (jobs.length > 0) {
-        keepHere({ jobs, startedAt: Date.now() });
+        keepHere({ jobs, startedAt });
       }
+      standIn.ask(refusal, held);
     } finally {
       setLaunching(false);
     }
   };
 
-  const startOver = (): void => keepHere(null);
+  const startOver = (): void => { batch.current = null; standIn.ask(null, []); keepHere(null); };
 
   return (
     <div data-testid="learn-style">
@@ -204,7 +227,7 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
           <LearnTopics navigate={navigate} embedded />
         </div>
         <StylePipeline record={record} launching={launching} sourceCount={sources.length} onLearn={() => void launch()} onReset={startOver}
-          launchError={launchError} navigate={navigate} resultsEl={resultsEl} onDecided={keepHere} />
+          launchError={launchError} standInCard={standIn.card('style-standin')} navigate={navigate} resultsEl={resultsEl} onDecided={keepHere} />
       </div>
       <div ref={setResultsEl} className="wk-learn-results" />
     </div>
@@ -212,9 +235,11 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
 }
 
 /** The four stations, the ticker, and once drafted the two pick-several asks. */
-function StylePipeline({ record, launching, sourceCount, onLearn, onReset, launchError, navigate, onDecided, resultsEl }: {
+function StylePipeline({ record, launching, sourceCount, onLearn, onReset, launchError, standInCard = null, navigate, onDecided, resultsEl }: {
   record: StyleRecord | null; launching: boolean; sourceCount: number; onLearn: () => void; onReset: () => void;
   launchError: string | null; navigate: Navigate; onDecided: (r: StyleRecord) => void;
+  /** The stand-in choice for a job crew held back (wicked-crew#1932). */
+  standInCard?: React.ReactElement | null;
   /** Where the review renders (full width under the grid); absent = in place. */
   resultsEl?: HTMLElement | null;
 }): React.ReactElement {
@@ -348,6 +373,7 @@ function StylePipeline({ record, launching, sourceCount, onLearn, onReset, launc
         </span>
       </div>
       {launchError !== null && <p className="wk-learn-quiet wk-learn-bad" role="alert" data-testid="style-launch-error">{launchError}</p>}
+      {standInCard}
       {waitingElsewhere.length > 0 && (
         <p className="wk-learn-quiet" data-testid="style-waiting">
           {waitingElsewhere.length === 1 ? 'A job is waiting for you before it can go on: ' : `${waitingElsewhere.length} jobs are waiting for you before they can go on: `}

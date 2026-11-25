@@ -3,15 +3,17 @@ import { Code2, FolderGit2, TerminalSquare, UserRound } from 'lucide-react';
 import { api, apiFetch } from '../../api/client.js';
 import type { Ask, AskAnswer } from '../../api/ask.js';
 import { getSetupKnown, putPersona, type SetupKnown } from '../../api/learn.js';
-import type { RepoEntry } from '../../api/types.js';
+import type { LaunchBodyWithDeliver, RepoEntry } from '../../api/types.js';
 import { recordLine } from '../../board/askModel.js';
 import {
   firstNameOf, firstRunOpen, nextSetupAsk, PERSONA_PRESETS, previewAnswer, repoStyleProblem, SETUP_ASKS, shareWords, siteOfEmail,
   STARTER_RULES, starterAdoption, type SetupAnswer, type SetupAskKey,
 } from '../../board/learnHub.js';
 import type { AgentRow } from '../../board/agentsModel.js';
+import { standInChoiceOf } from '../../board/standIn.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { usePhone } from '../../hooks/usePhone.js';
+import { useStandInChoice } from '../../hooks/useStandInChoice.js';
 import { useFirstRun } from '../../store/firstRun.js';
 import { useProvenanceStore } from '../../store/provenance.js';
 import { AskCard, AskRecord } from '../ask/AskCard.js';
@@ -44,6 +46,20 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
   const [flash, setFlash] = useState<SetupAskKey | null>(null);
   // Ignored here, the one line with Undo shows until the page is left; ignored before, nothing shows.
   const [justIgnored, setJustIgnored] = useState(false);
+
+  /** The style ask's job: started, then filed under Learn → Style so Style follows it. */
+  const startStyleJob = async (body: LaunchBodyWithDeliver, name: string): Promise<void> => {
+    const { runId } = await api.launchRun(body);
+    useProvenanceStore.getState().markLaunchedHere(runId);
+    await apiFetch('/settings', { method: 'PUT', body: JSON.stringify({ 'studio.learn.style': { jobs: [{ runId, kind: 'repo', sources: [name] }], startedAt: Date.now() } }) });
+  };
+  // (wicked-crew#1932) The style ask's job crew answered with the stand-in choice: the card; the ask is answered once
+  // the job starts.
+  const styleStandIn = useStandInChoice<{ name: string; answer: SetupAnswer }>(async (body, m) => {
+    await startStyleJob(body, m.name);
+    setFlash('style');
+    await useFirstRun.getState().answer('style', m.answer);
+  }, navigate);
 
   useEffect(() => { if (read === 'idle') void useFirstRun.getState().load(); }, [read]);
   useEffect(() => {
@@ -92,15 +108,23 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
         await record(key, { line, done: yes, words: yes && who !== undefined ? `${who.name}: ${who.login ?? 'sign in on Helpers'}; I’ll notice` : `${ready.length} of ${agents.length} ready · later` });
         if (yes && who !== undefined && who.login === null) navigate('/agents?setup=1');
       } else if (key === 'style') {
+        styleStandIn.ask(null, []);
+        const styleAnswer: SetupAnswer = { line, done: a.option !== 'later', words: a.option === 'later' ? 'later · Learn keeps a reminder' : opt?.label ?? '' };
         if (a.option?.startsWith('repo:') === true) {
           const repo = (repos ?? []).find((r) => r.id === a.option!.slice('repo:'.length));
           if (repo !== undefined) {
-            const { runId } = await api.launchRun({ problem: repoStyleProblem(repo.name), repoRef: repo.id, workflow: 'capture-learnings' });
-            useProvenanceStore.getState().markLaunchedHere(runId);
-            await apiFetch('/settings', { method: 'PUT', body: JSON.stringify({ 'studio.learn.style': { jobs: [{ runId, kind: 'repo', sources: [repo.name] }], startedAt: Date.now() } }) });
+            const body: LaunchBodyWithDeliver = { problem: repoStyleProblem(repo.name), repoRef: repo.id, workflow: 'capture-learnings' };
+            try {
+              await startStyleJob(body, repo.name);
+            } catch (e) {
+              const choice = standInChoiceOf(e);
+              if (choice === null) throw e;
+              styleStandIn.ask(choice, [{ body, meta: { name: repo.name, answer: styleAnswer } }]);
+              return;
+            }
           }
         }
-        await record(key, { line, done: a.option !== 'later', words: a.option === 'later' ? 'later · Learn keeps a reminder' : opt?.label ?? '' });
+        await record(key, styleAnswer);
         if (a.option === 'pick') navigate(learnPath('style'));
       } else if (key === 'rules') {
         // A starter the team already has is their copy (maybe edited): first run never rewrites it. One in force is
@@ -189,6 +213,7 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
               </div>
             );
           })}
+          {styleStandIn.card('first-run-standin')}
           {fail !== null && <p className="wk-learn-quiet wk-learn-bad" role="alert" data-testid="first-run-error">{fail}</p>}
           {saveFailed && <p className="wk-learn-quiet wk-learn-bad" role="alert" data-testid="first-run-save-failed">That answer wasn’t saved. Answer it again.</p>}
         </div>
