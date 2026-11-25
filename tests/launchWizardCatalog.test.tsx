@@ -954,4 +954,26 @@ describe('studio#1399: another card for the same workflow starts with the REST s
     expect(useLaunchWizard.getState().draft?.restApi).toBe(false);
     await waitFor(() => expect(screen.getByTestId('launch-wizard-rest-toggle')).toHaveAttribute('aria-checked', 'false'));
   });
+
+  it('Change job, then the other card for the same workflow: the switch is off and the launch has no REST line', async () => {
+    const mcp = (id: string, title: string) => ({ id, category: 'analyze', title, summary: `${title}. More.`, outcome: 'x', needs: ['runs'], inputs: [], status: 'available',
+      launch: { kind: 'run', workflow: 'mcp-server' }, usage: { launches: 0, lastUsedAt: null, medianMinutes: null } });
+    catalog = { categories: [{ id: 'analyze', title: 'Analyze' }], entries: [mcp('mcp-a', 'MCP A'), mcp('mcp-b', 'MCP B')] };
+    await openCatalog();
+    const cards = (): HTMLElement[] => screen.getAllByTestId('launch-wizard-workflow-mcp-server');
+    fireEvent.click(cards()[0]!);
+    const picked = useLaunchWizard.getState().draft!.catalogEntryId;
+    fireEvent.change(screen.getByTestId('launch-wizard-intent'), { target: { value: 'Wrap the weather API' } });
+    fireEvent.click(screen.getByTestId('launch-wizard-rest-toggle'));
+    // Change job sits on the 'what' step, beside the switch.
+    fireEvent.click(screen.getByTestId('launch-wizard-change'));
+    const other = cards().find((c) => !c.textContent?.includes(picked === 'mcp-a' ? 'MCP A' : 'MCP B'))!;
+    fireEvent.click(other);
+    expect(useLaunchWizard.getState().draft?.catalogEntryId).not.toBe(picked);
+    expect(screen.getByTestId('launch-wizard-rest-toggle')).toHaveAttribute('aria-checked', 'false');
+    for (let i = 0; i < 4 && screen.getByTestId('launch-wizard-step').dataset.step !== 'review'; i += 1) fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
+    expect(posts.find((p) => p.path === '/runs')!.body.problem).toBe('Wrap the weather API');
+  });
 });

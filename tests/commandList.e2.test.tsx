@@ -1131,3 +1131,35 @@ describe('studio#1399: /new mcp offers “Also expose as a REST API” on the jo
     expect(screen.queryByTestId('composer-job-rest-toggle')).toBeNull();
   });
 });
+
+describe('studio#1399 round 2: the REST line is studio’s, not the person’s words', () => {
+  const seedOf = (): Record<string, unknown> | undefined => nonGets().find((c) => c.path === '/chats')?.body ?? undefined;
+  it('a new chat opens on the repository the person named, even when a repository is named like a word in the REST line', async () => {
+    const real = globalThis.fetch;
+    const both = [REPO, { ...REPO, id: 'mcp-scaffold', name: 'mcp-scaffold', root_path: '/srv/mcp-scaffold' }];
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => (new URL(url, 'http://x').pathname.endsWith('/repos')
+      ? Promise.resolve(new Response(JSON.stringify({ repos: both }), { status: 200, headers: { 'content-type': 'application/json' } }))
+      : (real as (u: string, i?: RequestInit) => Promise<Response>)(url, init))));
+    render(<Harness chatId={null} composerKey="new" />);
+    await ready();
+    await list('/new mcp');
+    pickRow('/new mcp');
+    fireEvent.click(await screen.findByTestId('composer-job-rest-toggle'));
+    type('Wrap the weather API in repo-1');
+    enter();
+    await waitFor(() => expect(seedOf()).toBeDefined());
+    expect(seedOf()).toMatchObject({ repoRefs: ['repo-1'] });
+    expect(String((seedOf()!['seed'] as { words: string }).words)).toContain('(mcp-scaffold --rest)');
+  });
+
+  it('the choice belongs to the pick: a composer that remounts keeps it, and the same request sends the same words', async () => {
+    const { unmount } = render(<Harness />);
+    await ready();
+    await list('/new mcp');
+    pickRow('/new mcp');
+    fireEvent.click(await screen.findByTestId('composer-job-rest-toggle'));
+    unmount();
+    render(<Harness />);
+    await waitFor(() => expect(screen.getByTestId('composer-job-rest-toggle')).toHaveAttribute('aria-checked', 'true'));
+  });
+});
