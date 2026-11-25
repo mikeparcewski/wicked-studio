@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
-import { Terminal } from '../src/components/Terminal.js';
+import { LINK_SCAN_MS, Terminal } from '../src/components/Terminal.js';
 import * as client from '../src/api/client.js';
 
 // ── mock xterm.js + the fit addon (jsdom has no canvas/renderer) ──────────────
@@ -21,6 +21,7 @@ const h = vi.hoisted(() => ({
     osc: Map<number, (data: string) => boolean>;
     keyHandler: ((ev: KeyboardEvent) => boolean) | null;
     attachCustomKeyEventHandler: ReturnType<typeof vi.fn>;
+    parsed: Array<() => void>;
   }>,
 }));
 
@@ -50,6 +51,9 @@ vi.mock('@xterm/xterm', () => {
     registerLinkProvider = vi.fn((p: (typeof this.linkProviders)[number]) => { this.linkProviders.push(p); return { dispose: vi.fn() }; });
     parser = { registerOscHandler: vi.fn((id: number, cb: (data: string) => boolean) => { this.osc.set(id, cb); return { dispose: vi.fn() }; }) };
     attachCustomKeyEventHandler = vi.fn((cb: (ev: KeyboardEvent) => boolean) => { this.keyHandler = cb; });
+    // (studio#1362) What the program drew was parsed: the terminal's own signal to read the screen for links.
+    parsed: Array<() => void> = [];
+    onWriteParsed = vi.fn((cb: () => void) => { this.parsed.push(cb); return { dispose: vi.fn(() => { this.parsed = this.parsed.filter((c) => c !== cb); }) }; });
     hasSelection = (): boolean => this.selection !== '';
     getSelection = (): string => this.selection;
     get buffer(): unknown {
@@ -362,6 +366,35 @@ describe('Terminal (DES-TERMINAL-001 §6 — the web bridge)', () => {
       } finally {
         open.mockRestore();
       }
+    });
+
+    it('a host that asks (onLinks) is told the addresses on screen a moment after the program draws, at most every LINK_SCAN_MS', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        const seen: string[][] = [];
+        render(<Terminal cwd="." onLinks={(u) => seen.push([...u])} />);
+        await waitFor(() => expect(h.terminals[0]?.onWriteParsed).toHaveBeenCalled());
+        const term = h.terminals[0]!;
+        term.lines = ['Browser didn\'t open? Use the url below to sign in:', '', ...wrapped(LINK, 80), '', 'Paste code here if prompted >'];
+        // A burst of draws (a spinner) reads the screen once, after LINK_SCAN_MS.
+        act(() => { for (let i = 0; i < 5; i++) for (const cb of term.parsed) cb(); });
+        expect(seen).toEqual([]);
+        await act(async () => { await vi.advanceTimersByTimeAsync(LINK_SCAN_MS); });
+        expect(seen).toEqual([[LINK]]);
+        // A newer link drawn later is told after it, oldest first.
+        term.lines = [...term.lines, 'or https://example.com/help'];
+        act(() => { for (const cb of term.parsed) cb(); });
+        await act(async () => { await vi.advanceTimersByTimeAsync(LINK_SCAN_MS); });
+        expect(seen[1]).toEqual([LINK, 'https://example.com/help']);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('a terminal nobody asked for links never reads its screen for them', async () => {
+      render(<Terminal cwd="." />);
+      await waitFor(() => expect(h.terminals[0]?.registerLinkProvider).toHaveBeenCalled());
+      expect(h.terminals[0]!.onWriteParsed).not.toHaveBeenCalled();
     });
 
     it('an OSC 52 copy is offered, never done on its own: Copy it copies, a refusal says how to copy by hand (review r1)', async () => {
