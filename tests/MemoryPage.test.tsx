@@ -454,14 +454,30 @@ describe('MemoryPage — Add a memory (a proposal you approve as you add it)', (
     expect(bodies['/proposals']).toBeUndefined();
     await user.selectOptions(within(dialog).getByTestId('memory-add-project'), 'p-north');
     await waitFor(() => expect(held['/projects/p-north']).toBeDefined());
-    // Wicked's answer lands after Northwind was chosen: it offers nothing and unlocks nothing.
-    await act(async () => { held['/projects/p-wicked']!.go(); await Promise.resolve(); });
-    expect(within(dialog).queryByRole('option', { name: 'northwind-api' })).toBeNull();
-    expect(within(dialog).getByTestId('memory-add-save')).toBeDisabled();
+    // Northwind answers first and the person picks its repository; Wicked's answers land after, a success and then
+    // (once Wicked is asked again and abandoned) a failure. Neither replaces Northwind's repositories or locks Save.
     await act(async () => { held['/projects/p-north']!.go(); await Promise.resolve(); });
     await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-web' })).toHaveLength(1));
-    expect(within(dialog).queryByRole('option', { name: 'northwind-api' })).toBeNull();
     await user.selectOptions(within(dialog).getByTestId('memory-add-repo'), 'r-web');
+    await act(async () => { held['/projects/p-wicked']!.go(); await Promise.resolve(); await Promise.resolve(); });
+    const settled = (): void => {
+      expect(within(dialog).getByTestId('memory-add-project')).toHaveValue('p-north');
+      expect(within(dialog).getByTestId('memory-add-repo')).toHaveValue('r-web');
+      expect(within(dialog).queryByRole('option', { name: 'northwind-api' })).toBeNull();
+      expect(within(dialog).queryByTestId('memory-add-repo-failed')).toBeNull();
+      expect(within(dialog).getByTestId('memory-add-save')).toBeEnabled();
+    };
+    settled();
+    delete held['/projects/p-wicked']; delete held['/projects/p-north'];
+    await user.selectOptions(within(dialog).getByTestId('memory-add-project'), 'p-wicked');
+    await waitFor(() => expect(held['/projects/p-wicked']).toBeDefined());
+    await user.selectOptions(within(dialog).getByTestId('memory-add-project'), 'p-north');
+    await waitFor(() => expect(held['/projects/p-north']).toBeDefined());
+    await act(async () => { held['/projects/p-north']!.go(); await Promise.resolve(); });
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-web' })).toHaveLength(1));
+    await user.selectOptions(within(dialog).getByTestId('memory-add-repo'), 'r-web');
+    await act(async () => { held['/projects/p-wicked']!.fail(); await Promise.resolve(); await Promise.resolve(); });
+    settled();
     await user.click(within(dialog).getByTestId('memory-add-save'));
     await waitFor(() => expect(bodies['/proposals']).toEqual([{ content: 'Run the migrations before the tests', project: 'p-north', repo: 'r-web' }]));
   });
@@ -529,7 +545,7 @@ describe('MemoryPage — Add a memory (a proposal you approve as you add it)', (
     expect(within(dialog).getByTestId('memory-add-tier')).toBeDisabled();
     await act(async () => { answer!(); await Promise.resolve(); });
     expect(await within(dialog).findByTestId('memory-add-refused')).toHaveTextContent('northwind-old is no longer registered');
-    await waitFor(() => expect(within(dialog).getByTestId('memory-add-repo-failed')).toBeInTheDocument());
+    await waitFor(() => expect(within(dialog).getByTestId('memory-add-repo-failed')).toHaveTextContent('Couldn’t read your repositories.'));
     expect(within(dialog).queryByRole('option', { name: 'northwind-old' })).toBeNull();
     expect(within(dialog).getAllByRole('option', { name: 'northwind-api' })).toHaveLength(1);
     expect(within(dialog).getByTestId('memory-add-project')).toHaveValue('p-wicked');
