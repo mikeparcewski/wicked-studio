@@ -18,7 +18,7 @@ import {
   proposalRecordLine,
   proposalRefusal,
   proposalStarting,
-  PROPOSAL_STARTING_MS,
+  proposalStartingMs,
   proposalResultWords,
   proposalTimeWords,
   keptByAccepted,
@@ -192,7 +192,9 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
   // dated decision of the last few minutes: an old or undated card read back from history plays nothing). Only where
   // crew draws cut cards: a card kept in history from a newer crew is shown, never acted on.
   const chatCut = useCapabilities((s) => s.chatCut);
-  const cutRefused = p.kind === 'cut' && !chatCut ? 'Can’t change the video from this chat here: this studio’s crew doesn’t make video changes. Change it by hand in its editor.' : null;
+  // (R2 F5) Said only once studio has read what its service can do: while that read is on its way, nothing is refused.
+  const capsLoaded = useCapabilities((s) => s.loaded);
+  const cutRefused = p.kind === 'cut' && capsLoaded && !chatCut ? 'This studio can’t change videos from a chat yet. Change it by hand in its editor.' : null;
   const landedVersion = chatCut && view.state === 'decided' && view.decision === 'go' && p.kind === 'cut' ? view.result?.version : undefined;
   const landedRef = p.target?.ref;
   const landedBase = p.target?.base;
@@ -220,6 +222,7 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
     setGoing(decision === 'go');
     // A new answer starts clean: the last one's refusal no longer says anything about this one.
     setRefusedAt(null);
+    setCutPending(false);
     setError(null);
     setNote(null);
     const keep = (v: ChatProposalView, acceptingAt: number | null = null): void => {
@@ -240,6 +243,11 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
     } catch (err: unknown) {
       const refusal = proposalRefusal(err);
       if (refusal.view !== null) keep(refusal.view, refusal.acceptingAt);
+      // (R2 F2) A cut the video tool is still making: the card's line says so; it is no refusal.
+      if (refusal.code === 'cut_pending') {
+        setCutPending(true);
+        return null;
+      }
       // The card keeps every refusal; where it shows depends on what is on screen when it renders (the form while it is
       // open, else under the card), never on the response alone: a live record may already have closed the form.
       setError({ words: refusal.words, settles: refusal.view !== null && terminal(refusal.view.state) });
@@ -293,17 +301,18 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
   // A Go whose launch crew refused after recording it is not starting, whatever its age: the card offers Go again at
   // once. Only the accepting record crew named (its `at`, crew#1695): any other one (another tab's Go) keeps its window.
   const [refusedAt, setRefusedAt] = useState<number | null>(null);
+  const [cutPending, setCutPending] = useState(false);
   const refused = refusedAt !== null && view.state === 'accepting' && view.acceptingAt === refusedAt;
   // This tab's Go on its way is starting whatever came before it (from the card or the helpers-only form alike).
   const starting = going || (!refused && proposalStarting(view, Date.now(), false));
   useEffect(() => {
     if (view.state !== 'accepting' || busy || view.acceptingAt === undefined) return;
     // Never skipped: a window that closed between the render and this effect still gets its render (delay 0).
-    const left = Math.max(0, view.acceptingAt + PROPOSAL_STARTING_MS - Date.now());
+    const left = Math.max(0, view.acceptingAt + proposalStartingMs(view.proposal.kind) - Date.now());
     const t = setTimeout(() => setTick((n) => n + 1), left + 50);
     return () => clearTimeout(t);
-  }, [view.state, view.acceptingAt, busy]);
-  const line = proposalRecordLine(view, starting);
+  }, [view.state, view.acceptingAt, view.proposal.kind, busy]);
+  const line = proposalRecordLine(view, starting, cutPending && view.state === 'accepting');
   const result = proposalResultWords(view);
   return (
     <section
@@ -414,7 +423,9 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
         />
       )}
       {open && note !== null && <p data-testid="artifact-proposal-note" role="status" className="wk-proposal-note">{note}</p>}
-      {error !== null && !answering && (!terminal(view.state) || (error.settles && view.state !== 'superseded')) && <p data-testid="artifact-proposal-error" role="alert" className="wk-proposal-error">{error.words}</p>}
+      {error !== null && !answering && (!terminal(view.state) || (error.settles && view.state !== 'superseded'))
+        // (R2 F1) Crew's refusal that blocked the card is already its blocked paragraph: said once.
+        && !(open && p.blocked !== null && error.words === p.blocked) && <p data-testid="artifact-proposal-error" role="alert" className="wk-proposal-error">{error.words}</p>}
     </section>
   );
 }
@@ -469,10 +480,13 @@ function ProposalLines({ p, id, theme }: { p: ArtifactProposal; id?: string; the
       {p.helpers !== null && <Row k="Helpers" testId="artifact-proposal-helpers">{p.helpers.label}</Row>}
       {time !== null && <Row k="Time, cost" testId="artifact-proposal-time">{time}</Row>}
       {has(p.stops) && <Row k="Stops" testId="artifact-proposal-stops">{p.stops}</Row>}
-      {/* An onboard card names its project from the very facts Go uses (one destination, said once). */}
-      <Row k={p.kind === 'onboard' ? 'Project' : 'Filed in'} testId="artifact-proposal-filed">
-        {p.kind === 'onboard' && p.onboard !== undefined ? onboardProjectWords(p.onboard) : p.filedIn.label}
-      </Row>
+      {/* An onboard card names its project from the very facts Go uses (one destination, said once). A cut changes the
+          video in view, which is where it is: no project row (R2). */}
+      {p.kind !== 'cut' && (
+        <Row k={p.kind === 'onboard' ? 'Project' : 'Filed in'} testId="artifact-proposal-filed">
+          {p.kind === 'onboard' && p.onboard !== undefined ? onboardProjectWords(p.onboard) : p.filedIn.label}
+        </Row>
+      )}
       {has(p.reason) && <Row k="Why" testId="artifact-proposal-reason">{p.reason}</Row>}
     </dl>
   );

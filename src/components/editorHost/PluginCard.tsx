@@ -58,9 +58,9 @@ export function clickedIn(frame: HTMLIFrameElement | null | undefined): boolean 
   return active && frame != null && document.activeElement === frame;
 }
 
-/** studio#1140: what the chat beside a video can't do, and where the video does change. */
 /** crew#1814: where the chat can change the cut, it says what to ask for (each change is a card the person approves). */
 const VIDEO_CHAT_NOTE_CHANGE = "Ask here to drop, move, rename or trim a chapter, or to change what a chapter's caption says. You see each change as a card and approve it before the video changes.";
+/** studio#1140: what the chat beside a video can't do, and where the video does change (an older crew). */
 const VIDEO_CHAT_NOTE_CUT = "This chat can't change the video. Change it here by hand in Options: Chapters (rename, move, trim), Captions and Theme. Caption words can't be edited yet; for new words, make a new demo video.";
 /** The write line for a version a chat's cut card made (crew#1814): "Changed the video from the chat — version N. Undo". */
 const chatWrite = (version: number, base: number): Parameters<NonNullable<HostUi['written']>>[0] =>
@@ -219,8 +219,6 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const inViewRef = binding.source === 'interactive-doc' || (binding.source === 'demo' && cutInView)
     ? artifactRefOf(binding.projectId, binding.docId)
     : null;
-  const inViewRefRef = useRef(inViewRef);
-  inViewRefRef.current = inViewRef;
   const inViewRefNow = useRef(inViewRef);
   inViewRefNow.current = inViewRef;
   const lensRef = useRef<number | null>(null);
@@ -412,7 +410,7 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       for (const p of pendingAdopt.current.splice(0)) if (p.group === group) host.adopt(p.version);
       host.mount();
       // crew#1814: a chat's version that landed before this host existed is offered again now.
-      if (inViewRefRef.current !== null) retryCutLanded(inViewRefRef.current);
+      if (inViewRefNow.current !== null) retryCutLanded(inViewRefNow.current);
     };
     void start();
     const leave = joinGroup(group, 'card', (e) => {
@@ -781,8 +779,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
               {line.status !== undefined && line.status !== '' && <span data-testid="page-line-status"> · {line.status}</span>}
             </>
           )}
-          {line.kind === 'undone' && undoneLine(line.version)}
-          {line.kind === 'not-undone' && notUndoneLine(line.head)}
+          {line.kind === 'undone' && undoneLine(line.version, binding.source === 'demo' ? 'video' : 'page')}
+          {line.kind === 'not-undone' && notUndoneLine(line.head, binding.source === 'demo' ? 'video' : 'page')}
           {(line.kind === 'working' || line.kind === 'failed' || line.kind === 'status') && line.text}
           {line.kind === 'drafted' && <>Suggested by {line.editor}: {line.text}</>}
           {line.kind === 'export' && <>{line.out.text}{line.out.ok && <> <a data-testid="artifact-export-download" href={line.out.href} download={line.out.file} className="wk-since-toggle">Download</a></>}</>}
