@@ -3,7 +3,7 @@ import { api } from '../../api/client.js';
 import { postCapture, toCaptureFile } from '../../api/capture.js';
 import { addMemory, editMemory, isMemoryEditUnsupported, isMemoryUnsupported, listRetiredMemories, unretireMemory, type MemoryItem, type RetiredMemoryItem } from '../../api/memory.js';
 import { ApiError } from '../../api/errors.js';
-import { approveProposal, listProposals, memoryPayload, proposalKind, rejectProposal, type Proposal } from '../../api/proposals.js';
+import { approveProposal, FILE_PROPOSAL_TIERS, listProposals, memoryPayload, proposalKind, rejectProposal, type Proposal } from '../../api/proposals.js';
 import type { Ask, AskAnswer } from '../../api/ask.js';
 import { AskCard, AskRecord } from '../ask/AskCard.js';
 
@@ -327,11 +327,18 @@ export function MemoryRetired({ soft, revision = 0, onClose, onBrought, onErase 
     }
   };
   const bring = async (p: Proposal): Promise<void> => {
-    const content = memoryPayload(p).content;
+    const { content, tier } = memoryPayload(p);
     if (busy !== null || content === null) return;
     setBusy(p.id);
     try {
-      await addMemory({ content, ...(p.facets.project !== undefined ? { project: p.facets.project } : {}) });
+      // (studio#1433) It comes back as it was filed: its kind and its repository too, not as a fact on every repository.
+      const kind = FILE_PROPOSAL_TIERS.find((t) => t === tier);
+      await addMemory({
+        content,
+        ...(p.facets.project !== undefined ? { project: p.facets.project } : {}),
+        ...(p.facets.repo !== undefined ? { repo: p.facets.repo } : {}),
+        ...(kind !== undefined ? { tier: kind } : {}),
+      });
       setBack((b) => [...b, p.id]);
       onBrought();
     } catch (e) {
