@@ -341,6 +341,7 @@ export function namedInStuck(cli: string, items: readonly SystemAttention[]): bo
  * A focus the person moved is never taken back: it is spent only while focus sits on the page body.
  */
 let focusIntent: { places: readonly string[]; ready: boolean; drop: () => void } | null = null;
+const focusLost = (): boolean => document.activeElement === null || document.activeElement === document.body;
 
 /** At the press: hold a place for the control's user, or nothing when the control never held focus (a pointer). */
 function holdFocus(control: Element, places: readonly string[]): { landed: () => void; drop: () => void } {
@@ -352,26 +353,23 @@ function holdFocus(control: Element, places: readonly string[]): { landed: () =>
     document.removeEventListener('keydown', drop, true);
     if (focusIntent?.drop === drop) focusIntent = null;
   };
-  // Listened for after this press has finished dispatching, so only a later one drops it.
-  window.setTimeout(() => {
-    if (focusIntent?.drop !== drop) return;
-    document.addEventListener('pointerdown', drop, true);
-    document.addEventListener('keydown', drop, true);
-  }, 0);
+  // From onClick: this press's own pointerdown and keydown have already passed, so only a later one drops it.
+  document.addEventListener('pointerdown', drop, true);
+  document.addEventListener('keydown', drop, true);
   const intent = { places, ready: false, drop };
   focusIntent = intent;
   return { landed: () => { intent.ready = true; }, drop };
 }
 
-/** Spend the intent once a snapshot has committed (an answer a later read superseded never commits). */
+/** Spend the intent on the first snapshot committed after the change landed (an answer a later read superseded never
+ *  commits); it moves focus only if focus went with the control. Leaving the page drops it. */
 function useSpendFocus(snapshot: SystemSnapshot): void {
+  useEffect(() => () => { focusIntent?.drop(); }, []);
   useEffect(() => {
     const intent = focusIntent;
     if (intent === null || !intent.ready) return;
-    const el = document.activeElement;
-    // The control is still on the page (this commit is not crew's answer yet): keep waiting.
-    if (el !== null && el !== document.body) return;
     intent.drop();
+    if (!focusLost()) return;
     for (const sel of [...intent.places, '#desk-inbox-title']) {
       const to = document.querySelector<HTMLElement>(sel);
       if (to !== null) { to.focus(); return; }
@@ -391,7 +389,8 @@ function RankedSnooze({ snooze: sn, now }: { snooze: { key: string; rank: number
   const back = useRef(false);
   useEffect(() => {
     if (state.kind === 'choose') firstChoice.current?.focus();
-    else if (state.kind === 'failed' || (state.kind === 'idle' && back.current)) { back.current = false; opener.current?.focus(); }
+    // Back to Snooze after Cancel or a refusal, only when focus went with the choices (never from where the person moved).
+    else if (state.kind === 'failed' || (state.kind === 'idle' && back.current)) { back.current = false; if (focusLost()) opener.current?.focus(); }
   }, [state.kind]);
   if (state.kind === 'idle' || state.kind === 'failed') {
     return (
