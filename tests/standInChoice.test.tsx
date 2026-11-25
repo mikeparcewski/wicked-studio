@@ -15,7 +15,7 @@ import { ApiError } from '../src/api/errors.js';
 import type { RepoEntry, RosterSeat, WorkflowDef } from '../src/api/types.js';
 import { choiceTokens, contractChoices, type GateAction } from '../src/board/gateContract.js';
 import { sessionGateChoices } from '../src/board/gateRowModel.js';
-import { helperNamer, saveStandInsEveryJob, SETTINGS_NOT_SAVED, standInChoiceOf, standInChoiceWords, standInRelaunchBody, type StandInChoiceRefusal } from '../src/board/standIn.js';
+import { helperNamer, saveStandInsEveryJob, SETTINGS_NOT_SAVED, standInChoiceOf, standInChoiceWords, standInRelaunchBody, unpickedHelpers, type StandInChoiceRefusal } from '../src/board/standIn.js';
 import { ChatInput } from '../src/components/ChatInput.js';
 import { LaunchWizard } from '../src/components/launch/LaunchWizard.js';
 import { Composer } from '../src/components/session/Composer.js';
@@ -437,6 +437,77 @@ describe('the /runs/new launch form asks too', () => {
     await waitFor(() => expect(onLaunched).toHaveBeenCalledWith('r-new'));
     const [first, second] = launch.mock.calls.map((c) => withoutId(c[0]));
     expect(second).toEqual({ ...first, problem: 'fix the writer instead', standIns: true });
+  });
+});
+
+// ── studio#1436: helpers signed in but not picked ────────────────────────────────────────────────────────────────
+
+describe('studio#1436: other helpers are signed in, only not picked for this job', () => {
+  // The launch's own preflight counts the PICKED helpers: `signedIn` is a subset of the roster's signed-in helpers.
+  const THREE = [seat('claude', 'Claude Code'), seat('codex', 'Codex'), seat('pi', 'Pi CLI')];
+  const OUT = { ...seat('agy', 'Antigravity'), signed_in: false, auth: 'signed_out' } as RosterSeat;
+
+  it('names who is picked and who else is signed in, and offers "Pick another helper" instead of signing in', () => {
+    const r = standInChoiceOf(refusalError())!;
+    const others = unpickedHelpers(r, [...THREE, OUT]);
+    expect(others).toEqual(['codex', 'pi']);
+    const w = standInChoiceWords(r, helperNamer(THREE), others);
+    expect(w.title).toBe('Only one helper is picked for this job');
+    expect(w.why).toMatch(/^Only Claude Code is picked for this job\. Codex and Pi CLI are signed in: pick one of them to have it checked by a different helper\./);
+    expect(w.why).not.toMatch(/only helper signed in/);
+    expect(w.choices.map((c) => c.id)).toEqual(['job', 'always', 'pick', 'cancel']);
+    expect(w.choices.find((c) => c.id === 'pick')).toEqual({ id: 'pick', label: 'Pick another helper', next: 'Nothing starts. Turn on another helper for this job, then start it again.' });
+  });
+
+  it('with nobody else signed in, the card is as before', () => {
+    const r = standInChoiceOf(refusalError())!;
+    expect(unpickedHelpers(r, [seat('claude', 'Claude Code'), OUT])).toEqual([]);
+    const w = standInChoiceWords(r, name, []);
+    expect(w.why).toMatch(/^Claude Code is the only helper signed in\./);
+    expect(w.choices.map((c) => c.id)).toEqual(['job', 'always', 'sign_in', 'cancel']);
+  });
+
+  it('a benched or reviewer-only helper is not offered as one to pick', () => {
+    const body = structuredClone(CHOICE.body) as { preflight: { benched: Array<{ seat: string; reason: string }> } };
+    body.preflight.benched = [{ seat: 'codex', reason: 'rate_limited' }];
+    const r = standInChoiceOf(refusalError(body as Record<string, unknown>))!;
+    const judgeOnly = { ...seat('judge-claude', 'Claude Code (judge)'), category: 'judge' } as RosterSeat;
+    expect(unpickedHelpers(r, [...THREE, judgeOnly])).toEqual(['pi']);
+  });
+
+  describe('on the /runs/new form', () => {
+    beforeEach(() => {
+      vi.restoreAllMocks();
+      takeRetryPrefill();
+      vi.spyOn(client.api, 'listRepos').mockResolvedValue({ repos: [] });
+      vi.spyOn(client.api, 'listWorkflows').mockResolvedValue({ workflows: [] });
+      vi.spyOn(client.api, 'listProjects').mockResolvedValue({ projects: [] });
+      vi.spyOn(client.api, 'getHealth').mockResolvedValue({ status: 'ok', version: 'test', capabilities: {} } as never);
+      vi.spyOn(client.api, 'getRoster').mockResolvedValue({ roster: THREE });
+      localStorage.clear();
+    });
+    afterEach(() => cleanup());
+
+    it('"Pick another helper" closes the card, starts nothing and opens the helper options', async () => {
+      const launch = vi.spyOn(client.api, 'launchRun').mockRejectedValueOnce(refusalError());
+      render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+      fireEvent.change(screen.getByTestId('launch-problem'), { target: { value: 'fix the reader' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Open launch options' }));
+      for (const k of ['codex', 'pi']) {
+        const box = await screen.findByTestId(`launch-seat-${k}`) as HTMLInputElement;
+        if (box.checked) fireEvent.click(box);
+      }
+      fireEvent.click(screen.getByRole('button', { name: 'Open launch options' }));
+      await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
+      fireEvent.click(screen.getByTestId('launch-submit'));
+      await screen.findByTestId('launch-standin');
+      expect(screen.getByTestId('launch-standin-why')).toHaveTextContent('Only Claude Code is picked for this job. Codex and Pi CLI are signed in');
+      expect(screen.queryByTestId('launch-standin-sign_in')).toBeNull();
+      fireEvent.click(screen.getByTestId('launch-standin-pick'));
+      expect(screen.queryByTestId('launch-standin')).toBeNull();
+      expect(await screen.findByTestId('launch-seat-codex')).toBeInTheDocument();
+      expect(launch).toHaveBeenCalledTimes(1);
+    });
   });
 });
 
