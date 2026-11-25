@@ -18,7 +18,7 @@ import { isHeldRun } from './heldRuns.js';
  *    sum is the graph's node total, `File` its files, `domain` the requirements graph's domains);
  *  - its "when" is the newest onboarding run (crew keeps no other index clock for a repo graph), and the engine's
  *    checkout findings outrank both (F-2R2-003);
- *  - requirements are `GET /repos/:id/requirements?limit=1` (`coverage`: the real share against the minimum;
+ *  - requirements are `GET /repos/:id/requirements?limit=1` (`coverage`: the real share, and an older engine's minimum;
  *    `graphBuild`: the requirements graph's generation and whether it is behind); a `notGenerated` 404 = none yet;
  *  - runs are the run list's `domain-extraction` runs and every other run on the repo (onboarding is the code
  *    graph's own mark).
@@ -71,8 +71,8 @@ export interface KnowMark {
   /** The full sentence (title and the accessible name's tail). */
   title: string;
   tone: MarkTone;
-  /** Requirements only: the real share against the minimum, drawn as a small meter. */
-  meter?: { pct: number; min: number };
+  /** Requirements only: the real share drawn as a small meter, with an older engine's minimum ticked when it sent one. */
+  meter?: { pct: number; min?: number };
   /** A second, quieter word ("behind"). */
   flag?: string;
   target: MarkTarget;
@@ -156,15 +156,15 @@ function reqsMark(reqs: ReqsRead): KnowMark {
   const pct = c.realPct === 0 && c.real > 0 ? '<1%' : `${c.realPct}%`;
   const weighted = c.weightedPct === 0 && c.real > 0 ? '<1%' : `${c.weightedPct}%`;
   const share = c.weightedPct !== undefined ? `${weighted} confidence-weighted, ${pct} stated` : `${pct} real`;
-  const met = c.realPct >= c.minPct;
+  // J6 S5: a domain model has no minimum; an older engine's is still said and ticked when it sends one.
+  const met = c.minPct === undefined || c.realPct >= c.minPct;
   return {
     ...base,
-    // The meter is the stated share against the minimum (the gate), so the value names both numbers.
     value: c.weightedPct !== undefined ? `${weighted} weighted · ${pct} stated` : `${pct} real`,
-    title: `Requirements: ${share} (${c.real.toLocaleString('en-US')} of ${c.behaviorBearing.toLocaleString('en-US')}), minimum ${c.minPct}%`
+    title: `Requirements: ${share} (${c.real.toLocaleString('en-US')} of ${c.behaviorBearing.toLocaleString('en-US')})${c.minPct !== undefined ? `, minimum ${c.minPct}%` : ''}`
       + `${c.placeholders > 0 ? `, ${plural(c.placeholders, 'placeholder')}` : ''}${reqs.state === 'none' ? '; not built into a graph yet' : ''}`,
     tone: met ? 'ok' : 'warn',
-    meter: { pct: Math.max(0, Math.min(100, c.realPct)), min: Math.max(0, Math.min(100, c.minPct)) },
+    meter: { pct: Math.max(0, Math.min(100, c.realPct)), ...(c.minPct !== undefined ? { min: Math.max(0, Math.min(100, c.minPct)) } : {}) },
   };
 }
 
@@ -177,7 +177,7 @@ function reqGraphMark(reqs: ReqsRead, kinds: KindsRead): KnowMark {
   if (reqs.state === 'loading') return reading;
   const build = reqs.state === 'ok' ? reqs.build : null;
   if (build !== null) {
-    if (build.generation === 0) return { ...base, value: 'not built', title: 'Requirements graph: not built yet. A domain extraction job builds it once the real share reaches the minimum', tone: 'none' };
+    if (build.generation === 0) return { ...base, value: 'not built', title: 'Requirements graph: not built yet. Map the domain builds it', tone: 'none' };
     return {
       ...base,
       value: `build ${build.generation}${dom}`,

@@ -12,6 +12,11 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Removed
+
+- Settings no longer has "Requirements graph minimum coverage": a domain model has no share to reach (J6 S5). The
+  requirements meter, its words and the graph-behind note say a minimum only while an engine from before J6 v3 sends one.
+
 ## [0.16.17] — 2026-11-24
 
 Patch release on the train-13 cut 26eaf7c6, carrying 62 PRs since 0.16.16: #1287, #1286, #1288, #1292, #1293, #1291, #1299, #1303, #1307, #1306, #1297, #1298, #1308, #1300, #1309, #1304, #1302, #1313, #1310, #1315, #1316, #1317, #1318, #1320, #1325, #1328, #1326, #1321, #1323, #1322, #1336, #1333, #1334, #1339, #1338, #1340, #1341, #1343, #1345, #1349, #1350, #1351, #1355, #1356, #1352, #1353, #1358, #1359, #1360, #1361, #1375, #1374, #1373, #1377, #1376, #1381, #1378, #1380, #1379, #1385, #1387, #1389.

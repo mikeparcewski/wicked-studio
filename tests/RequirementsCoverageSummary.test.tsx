@@ -37,6 +37,18 @@ describe('RequirementsCoverageSummary', () => {
     expect(screen.getByTestId('requirements-coverage-breakdown').textContent).toBe('86 real · 10 placeholders (unconfirmed) · 4 unmapped · 5 not product code');
   });
 
+  it('J6 S5: with no minimum on the label, no tick and no "minimum" words', () => {
+    const noMin: Partial<typeof coverage> = { ...coverage };
+    delete noMin.minPct;
+    render(<RequirementsCoverageSummary coverage={noMin as typeof coverage} bar />);
+    const root = screen.getByTestId('requirements-coverage');
+    expect(root).not.toHaveAttribute('data-min-pct');
+    expect(screen.getByTestId('requirements-coverage-headline').textContent).toBe('86% real requirements');
+    expect(screen.getByRole('img')).toHaveAccessibleName('86% real requirements');
+    expect(root.querySelector('.wk-reqcov-min')).toBeNull();
+    expect(root.querySelector('.wk-reqcov-fill')).toHaveStyle({ width: '86%' });
+  });
+
   it('treats zero weighted coverage as present and preserves the under-1% wording', () => {
     render(<RequirementsCoverageSummary coverage={{ ...coverage, realPct: 0, weightedPct: 0 }} />);
     expect(screen.getByTestId('requirements-coverage')).toHaveAttribute('data-weighted-pct', '0');

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RepoEntry } from '../src/api/types.js';
 import { ApiError } from '../src/api/errors.js';
 import { compactCount, knowledgeMarks, knowledgeSentence, kindsRead, type RepoKnowledgeRead } from '../src/board/repoKnowledge.js';
+import { KnowMarks } from '../src/components/RepoKnowledge.js';
 import { makeView } from './factories.js';
 
 /**
@@ -92,6 +93,19 @@ describe('what we know (pure)', () => {
     const unbuilt = byId(knowledgeMarks(repo('crew'), [], known({ reqs: { state: 'none', share } }), NOW)).reqs!;
     expect(unbuilt).toMatchObject({ value: '62% weighted · 54% stated', tone: 'warn', meter: { pct: 54, min: 80 } });
     expect(unbuilt.title).toContain('; not built into a graph yet');
+  });
+
+  it('J6 S5: with no minimum on the label, no tick, no "minimum" words, and a share is not a warning', () => {
+    const coverage: Partial<typeof COV> = { ...COV, realPct: 54, real: 2340 };
+    delete coverage.minPct;
+    const mark = byId(knowledgeMarks(repo('crew'), [], known({ reqs: { state: 'ok', coverage: coverage as typeof COV, build: null } }), NOW)).reqs!;
+    expect(mark).toMatchObject({ value: '54% real', tone: 'ok', meter: { pct: 54 } });
+    expect(mark.meter).not.toHaveProperty('min');
+    expect(mark.title).toBe('Requirements: 54% real (2,340 of 4,333), 836 placeholders');
+    render(<KnowMarks marks={[mark]} onOpen={() => undefined} />);
+    const meter = screen.getByTestId('repo-know-meter');
+    expect(meter).not.toHaveAttribute('data-min');
+    expect(meter.querySelector('.wk-know-meter-min')).toBeNull();
   });
 
   it('shows weighted shares rounded to zero without hiding stated requirements', () => {

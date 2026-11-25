@@ -22366,24 +22366,6 @@
       ]
     },
     {
-      "testId": "settings-min-coverage",
-      "files": [
-        "src/components/SystemSettings.tsx"
-      ]
-    },
-    {
-      "testId": "settings-min-coverage-invalid",
-      "files": [
-        "src/components/SystemSettings.tsx"
-      ]
-    },
-    {
-      "testId": "settings-min-coverage-unsupported",
-      "files": [
-        "src/components/SystemSettings.tsx"
-      ]
-    },
-    {
       "testId": "settings-page",
       "files": [
         "src/components/SettingsPage.tsx"
