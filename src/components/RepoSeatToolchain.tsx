@@ -55,7 +55,7 @@ export function RepoSeatToolchain({ repo, onChanged }: { repo: RepoEntry; onChan
                       <div className="wk-rp-layer-fixed">
                         <b>{seatLayerName(row.id)}</b>
                         <p>{row.off_by === 'daemon'
-                          ? 'Off for every repository on this daemon: its seat layers are turned off.'
+                          ? 'Off for every repository on this daemon.'
                           : 'Your own seat image supplies the tools, so this layer is not added.'}</p>
                       </div>
                     )
