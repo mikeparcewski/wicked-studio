@@ -23,6 +23,8 @@ export interface ChatArtifactsCapabilities {
   /** (api-types 0.200.0, crew 0.18.2) A seat may propose adding a git repository (`onboard` cards); studio then declares
    *  `accepts: ['onboard']`. Absent on an older daemon. */
   onboard?: boolean;
+  /** (crew#1814) The chat may change the demo video open in it (`cut` cards); studio then declares `accepts: ['cut']`. */
+  cut?: boolean;
 }
 
 /** `ChatMessageBody.context` (api-types 0.169.0): what studio shows beside the message. */
@@ -92,7 +94,7 @@ export function isAnchorWid(wid: string): boolean {
 
 // ── Chat proposals (api-types 0.170.0, DES-CHAT-ARTIFACTS-001 §4, slice A2) ─────────────────────────────────────────
 
-export type ArtifactProposalKind = 'create' | 'refine' | 'theme' | 'demo' | 'onboard';
+export type ArtifactProposalKind = 'create' | 'refine' | 'theme' | 'demo' | 'onboard' | 'cut';
 
 /** (api-types 0.200.0, crew 0.18.2) An `onboard` card: register a git repository, add it to a project and onboard it on
  *  one Go (or, for an already-registered one, `existing`, only add it to the project). Every field is crew's. */
@@ -162,6 +164,8 @@ export interface ArtifactProposal {
   demo?: { url: string; audience: string | null; show: string | null };
   /** (api-types 0.200.0) onboard: the repository, where it goes and the project it joins. */
   onboard?: ProposalOnboard;
+  /** (crew#1814) cut: the frozen ops Go posts to the video tool, and crew's words for each (one per op, in order). */
+  cut?: ProposalCut;
   /** Go is refused with this reason; `null` = Go is open. */
   blocked: string | null;
 }
@@ -187,7 +191,18 @@ export interface ProposalEdits {
 
 export interface ProposalIdentity { artifactRef: string | null; runId: string }
 
-export interface ProposalResult { runId: string; artifactRef: string | null; adopted: boolean; stub: boolean }
+/** (crew#1814) One change a `cut` card makes to the video, in the video tool's own op shape. */
+export type CutOp =
+  | { op: 'chapter-rename'; chapter: string; title: string }
+  | { op: 'chapter-move'; chapter: string; after: string | null }
+  | { op: 'chapter-trim'; chapter: string; inSec: number; outSec: number }
+  | { op: 'chapter-say'; chapter: string; say: string }
+  | { op: 'chapter-drop'; chapter: string };
+
+export interface ProposalCut { ops: CutOp[]; changes: string[] }
+
+/** (crew#1814) `version`: the video version a `cut` card's Go made. */
+export interface ProposalResult { runId: string; artifactRef: string | null; adopted: boolean; stub: boolean; version?: number }
 
 /** A proposal folded from its records. */
 export interface ChatProposalView {

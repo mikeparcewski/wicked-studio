@@ -1926,6 +1926,18 @@
       ]
     },
     {
+      "testId": "artifact-proposal-cut",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-cut-change",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "artifact-proposal-demo",
       "files": [
         "src/components/chat/ArtifactProposalCard.tsx"

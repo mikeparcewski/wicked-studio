@@ -71,10 +71,11 @@ export interface RegisterRepoOpts {
   autoCapture?: boolean;
 }
 
-function jobAccepts(): { accepts?: Array<'job' | 'onboard'> } {
+function jobAccepts(): { accepts?: Array<'job' | 'onboard' | 'cut'> } {
   const caps = useCapabilities.getState();
   // (crew 0.18.2) `onboard`: studio draws a chat's "add a repository" card; only where crew advertises it.
-  const accepts = [...(caps.chatJobProposals ? ['job' as const] : []), ...(caps.chatOnboard ? ['onboard' as const] : [])];
+  // (crew#1814) `cut`: studio draws a chat's "change the video" card; only where crew advertises it.
+  const accepts = [...(caps.chatJobProposals ? ['job' as const] : []), ...(caps.chatOnboard ? ['onboard' as const] : []), ...(caps.chatCut ? ['cut' as const] : [])];
   return accepts.length > 0 ? { accepts } : {};
 }
 export { sessionGuidance, type GuidanceUpdate } from './guidance.js';
