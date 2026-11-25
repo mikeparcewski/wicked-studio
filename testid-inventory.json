@@ -15636,6 +15636,144 @@
       ]
     },
     {
+      "testId": "product-publish",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-blocked",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-cancel",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-cancelled",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-card",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-card-item",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-compose-again",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-confirm",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-held",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-item",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-link",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-no-target",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-note",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-pick",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-publication",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-refused",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-resolve",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-resolve-absent",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-resolve-exists",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-resolve-note",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-show",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-unreadable",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-verdict",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
       "testId": "progress",
       "files": [
         "src/components/ui/Progress.tsx"
