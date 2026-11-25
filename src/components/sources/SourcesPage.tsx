@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { agentSwitchWrites } from '../../api/sourceAgents.js';
-import { CREW_SOURCE, readSourceDeepLink, sourcesApi, sourcesPath, type McpServer, type SourceCatalogRelation, type SourceCatalogResponse, type SourcePrivilegeReport, type SourceRowWrite } from '../../api/sources.js';
+import { CREW_SOURCE, readSourceDeepLink, sourcesApi, sourcesPath, type McpServer, type RenamedServerFields, type SourceCatalogRelation, type SourceCatalogResponse, type SourcePrivilegeReport, type SourceRowWrite } from '../../api/sources.js';
 import type { McpGhCliState } from '../../api/mcp-wire.js';
 import { PAGE_NAMES } from '../../board/pageNames.js';
 import { useCapabilities } from '../../store/capabilities.js';
@@ -137,17 +137,34 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
   // `?source=<name>` opens that source's sheet: the address owns it, so Back (or a link to a source that
   // isn't there) closes it. A new source's sheet is the page's own, not the address's.
   const deep = readSourceDeepLink(search);
+  /** The source (name and id) a rename crew answered unsure was made on: the address on that name follows only it. */
+  const heldId = useRef<{ name: string; id: string } | null>(null);
+  if (heldId.current !== null && heldId.current.name !== deep) heldId.current = null;
   useEffect(() => {
     if (deep === null) { setSheet((s) => (s !== null && s.mode !== 'new' ? null : s)); setPmSheet((s) => (s !== null && s.mode !== 'new' ? null : s)); return; }
     // One sheet at a time: the address that opens one closes the other kind's.
     if (deep === CREW_SOURCE) { setPmSheet(null); setSheet({ mode: 'crew' }); return; }
+    // (wicked-crew#1906) A sheet this page follows by id (a rename crew answered unsure) stays with that id, before any
+    // lookup by name: another source saved under the name, or one that once had it, is not the one the person had open.
+    const held = heldId.current !== null && heldId.current.name === deep ? heldId.current.id : null;
+    if (held !== null) {
+      const mine = [...sources, ...pmSources].find((x) => x.id === held);
+      if (mine === undefined) {
+        if (!loading) { setSheet((cur) => (cur !== null && cur.mode !== 'new' ? null : cur)); setPmSheet((cur) => (cur !== null && cur.mode !== 'new' ? null : cur)); setError(`The source open here as ${deep} was removed.`); }
+        return;
+      }
+      if (mine.name !== deep) { navigate(sourcesPath(mine.name), { replace: true }); return; }
+    }
     const s = sources.find((x) => x.name === deep);
     if (s !== undefined) { setPmSheet(null); setSheet({ mode: 'saved', server: s }); return; }
     const pm = pmOn ? pmSources.find((x) => x.name === deep && pmSystemOf(x as { pm?: unknown }) !== null) : undefined;
     if (pm !== undefined) { setSheet(null); setPmSheet((cur) => (cur !== null && cur.mode === 'new' ? cur : { mode: 'saved', server: pm })); return; }
     if (pmSources.some((x) => x.name === deep)) { setSheet(null); setPmSheet(null); setError(`${deep} is a project-management tool this studio can’t read: update studio.`); return; }
+    // (wicked-crew#1906) An address from before a rename follows the source to its name now.
+    const renamed = [...sources, ...pmSources].find((x) => ((x as McpServer & RenamedServerFields).formerNames ?? []).includes(deep));
+    if (renamed !== undefined) { navigate(sourcesPath(renamed.name), { replace: true }); return; }
     if (!loading) { setSheet((cur) => (cur !== null && cur.mode !== 'new' ? null : cur)); setPmSheet((cur) => (cur !== null && cur.mode !== 'new' ? null : cur)); setError(`No source named ${deep}.`); }
-  }, [deep, sources, pmSources, pmOn, loading]);
+  }, [deep, sources, pmSources, pmOn, loading, navigate]);
 
   /** (crew#1514) The address's source now, for a rename that settles later: only a sheet still on the old name follows. */
   const deepNow = useRef(deep);
@@ -161,7 +178,12 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
     if (deepNow.current === from) navigate(sourcesPath(renamed.name), { replace: true });
   };
   /** A rename whose outcome crew never said: crew's list says where the source is now, by its id (never a resend). */
+  const sheetNow = useRef(sheet);
+  sheetNow.current = sheet;
   const findRenamed = async (from: string, id: string): Promise<void> => {
+    // Only while the sheet that renamed still owns the address: a late answer from a sheet since closed holds nothing.
+    const open = sheetNow.current;
+    if (deepNow.current === from && open !== null && open.mode === 'saved' && open.server.id === id) heldId.current = { name: from, id };
     try {
       const now = (await sourcesApi.list()).servers.find((s) => s.id === id);
       if (now !== undefined && now.name !== from) followRename(from, now);
