@@ -270,6 +270,8 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   };
   const seatLayersReread = async (): Promise<void> => {
     const forRepo = repoId;
+    // A change made on an earlier visit reads nothing: this visit read crew itself, and its re-reads stay current.
+    if (repoRef.current !== forRepo || visitRef.current.visit !== seatVisit) return;
     const seq = ++reReadSeq.current;
     const { repos } = await api.listRepos();
     const r = repos.find((x) => x.id === forRepo);

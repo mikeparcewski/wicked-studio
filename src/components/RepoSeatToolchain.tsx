@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api/client.js';
 import type { RepoEntry } from '../api/types.js';
-import { SEAT_LAYERS_GONE, SEAT_LAYERS_UNREAD, SEAT_LAYERS_UNSURE, nextSeatLayersOff, seatLayerName, seatLayersOf, seatLayersOffOf, seatLayersRefusal, type SeatLayerRow } from '../api/seatLayers.js';
+import { SEAT_LAYERS_GONE, SEAT_LAYERS_UNREAD, SEAT_LAYERS_UNREPORTED, SEAT_LAYERS_UNSURE, nextSeatLayersOff, seatLayerName, seatLayersOf, seatLayersOffOf, seatLayersRefusal, type SeatLayerRow } from '../api/seatLayers.js';
 import { savingOf, useSeatLayerSaves } from '../store/seatLayerSaves.js';
 import { SectionTitle } from './ui/index.js';
 import { Switch } from './ui/Switch.js';
@@ -43,7 +43,8 @@ export function RepoSeatToolchain({ repo, onChanged, onReread }: {
         return;
       }
       const nowRows = now === undefined ? null : seatLayersOf(now);
-      if (now === undefined || nowRows === null) { setSaid(SEAT_LAYERS_GONE); return; }
+      if (now === undefined) { setSaid(SEAT_LAYERS_GONE); return; }
+      if (nowRows === null) { setSaid(SEAT_LAYERS_UNREPORTED); return; }
       onChanged(await api.setRepoSeatLayers(repo.id, nextSeatLayersOff(seatLayersOffOf(now, nowRows), row.id, turnOn)));
     } catch (e) {
       const refused = seatLayersRefusal(e);

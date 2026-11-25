@@ -72,8 +72,11 @@ export function seatLayersRefusal(e: unknown): string | null {
   return null;
 }
 
-/** What the card says when the outcome is not known; the page reads crew again, and the next change reads crew first. */
-export const SEAT_LAYERS_UNSURE = 'Couldn’t confirm that change. The switches show what this daemon has now.';
+/** What the card says when the outcome is not known: the page reads crew again (which may fail too), and the next
+ *  change reads crew first. */
+export const SEAT_LAYERS_UNSURE = 'Couldn’t confirm that change. The switches show the last state this page read.';
 /** The press could not read crew's row, so nothing was sent. */
 export const SEAT_LAYERS_UNREAD = 'Couldn’t read this repository’s layers just now. Nothing changed.';
 export const SEAT_LAYERS_GONE = 'This repository is no longer registered.';
+/** Crew has the repository but sends no layer rows for it now (an older engine after a restart): nothing is sent. */
+export const SEAT_LAYERS_UNREPORTED = 'This daemon no longer reports toolchain layers for this repository. Nothing changed.';
