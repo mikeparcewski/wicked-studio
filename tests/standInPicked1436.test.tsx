@@ -185,6 +185,8 @@ describe('/runs/new: Pick another helper opens the helper options', () => {
     fireEvent.click(await optionsSeat('codex'));
     await act(async () => { fail(); await new Promise((r) => setTimeout(r, 20)); });
     expect(await screen.findByTestId('launch-standin-error')).toHaveTextContent('Settings could not be saved, so nothing started.');
+    // The card's words answered Claude Code alone; Codex is picked now, so they are not shown (codex delta 2).
+    expect(screen.queryByTestId('launch-standin')).toBeNull();
     expect(launch).toHaveBeenCalledTimes(1);
   });
 
