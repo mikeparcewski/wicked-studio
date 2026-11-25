@@ -96,6 +96,8 @@ describe('corroboration + coverage readers (operator ruling 2026-10-31)', () => 
     const noMin: Partial<typeof LIVE> = { ...LIVE };
     delete noMin.minPct;
     expect(coverageOf({ coverage: { ...LIVE, minPct: 0 } })).toEqual(noMin);
+    expect(coverageOf({ coverage: { ...LIVE, minPct: 101 } })).toEqual(noMin);
+    expect(coverageOf({ coverage: { ...LIVE, minPct: 100 } })).toEqual({ ...LIVE, minPct: 100 });
     expect(coverageOf({ coverage: { ...LIVE, real: '3182' } })).toBeNull();
     expect(coverageOf({ coverage: LIVE })).toEqual(LIVE);
   });

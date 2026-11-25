@@ -177,7 +177,7 @@ function reqGraphMark(reqs: ReqsRead, kinds: KindsRead): KnowMark {
   if (reqs.state === 'loading') return reading;
   const build = reqs.state === 'ok' ? reqs.build : null;
   if (build !== null) {
-    if (build.generation === 0) return { ...base, value: 'not built', title: 'Requirements graph: not built yet. Map the domain builds it', tone: 'none' };
+    if (build.generation === 0) return { ...base, value: 'not built', title: 'Requirements graph: not built yet. Mapping the domain builds it', tone: 'none' };
     return {
       ...base,
       value: `build ${build.generation}${dom}`,

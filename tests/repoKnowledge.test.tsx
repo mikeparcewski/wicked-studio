@@ -137,7 +137,7 @@ describe('what we know (pure)', () => {
     expect(zeroWithPlaceholders.title).toContain('0 of 4,333 behaviours, 12 placeholders');
     // A build of 0 is "not built", whatever the requirements say.
     const zero = byId(knowledgeMarks(repo('crew'), [], known({ reqs: { state: 'ok', coverage: COV, build: { generation: 0, coverage: null, behind: true } } }), NOW));
-    expect(zero.reqgraph).toMatchObject({ value: 'not built', tone: 'none' });
+    expect(zero.reqgraph).toMatchObject({ value: 'not built', tone: 'none', title: 'Requirements graph: not built yet. Mapping the domain builds it' });
   });
 
   it('a failed read is unknown, never none, whatever else answered; the engine’s findings outrank a finished index; an index in flight links its run', () => {
