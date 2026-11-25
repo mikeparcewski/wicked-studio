@@ -2,9 +2,10 @@
  * Snoozing a Needs-you item (crew#1124; DES-desk-v2 §6 item 6). Pure in every input, `now` included.
  *
  * - The snooze key is the item INSTANCE: the row's key and the daemon's identity of this occurrence
- *   (`NeedRow.instance`: `gate:<run>@ord:<n>`), the same live and after a reload. A new decision on the same job is a
- *   new instance, so it is never hidden by an older snooze. A row with no such identity (one whose occurrences only
- *   studio's own clock tells apart: a stalled run or chat, a campaign) can't be snoozed.
+ *   (`NeedRow.instance`: `fail:<run>@ended:<ms>`), the same live and after a reload. A new failure or onboarding is a
+ *   new instance, so it is never hidden by an older snooze. A row with no such identity can't be snoozed: a stalled
+ *   run or chat or a campaign (only studio's clock tells them apart), a gate (a run can ask again at the same ord and
+ *   no gate frame or read names the occurrence) and a steer ask (its id is minted by this browser).
  * - A snooze is in force while its end is still ahead AND the item is no worse than when it was snoozed: the row's
  *   rank now ({@link snoozeRank}) is at most the rank stored with the snooze. One that gets worse comes back at once.
  * - It only defers the item on the Desk's inbox: the item stays in crew's attention read.

@@ -73,7 +73,7 @@ describe('which item a snooze names (codex r1: an identity that survives a reloa
     const chat = rowsOf({ chats: [{ chatId: 'chat-0001', seats: ['claude'], idleSecs: 7200 }] }).find((r) => r.kind === 'stalled-chat')!;
     expect(chat.instance).toBeUndefined();
     expect(snoozable(chat)).toBe(false);
-    // A run waiting on a person whose gate studio hasn't read yet: no ord to name it by.
+    // A run waiting on a person, its gate not read yet: a gate row carries no occurrence either way.
     const [unread] = rowsOf({ runs: [run('run-2', 'awaiting_human')] });
     expect(unread!.instance).toBeUndefined();
     expect(snoozable(unread!)).toBe(false);
