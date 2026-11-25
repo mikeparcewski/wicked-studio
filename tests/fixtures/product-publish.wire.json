@@ -1,5 +1,5 @@
 {
- "provenance": "wicked-crew#372 (api-types 0.228.0): every answer captured from crew's own routes (registerProductPublishRoutes in packages/crew/src/api/product-publish.ts) by a run of crew's tests/product-publish.test.ts setup against the fake github-mcp-server, on the branch of wicked-crew#1900. 'view' is crew's tests/fixtures/product/compose-run-view.json: a real compose launch on the stub-runner CoreAdapter, captured once it completed.",
+ "provenance": "wicked-crew#372 (api-types 0.229.0; captured on the branch of wicked-crew#1900 after its last fold, before its re-stamp from 0.228.0, which changed no answer: product-publish.ts is the same on crew main a0c329bb): every answer captured from crew's own routes (registerProductPublishRoutes in packages/crew/src/api/product-publish.ts) by a run of crew's tests/product-publish.test.ts setup against the fake github-mcp-server, on the branch of wicked-crew#1900. 'view' is crew's tests/fixtures/product/compose-run-view.json: a real compose launch on the stub-runner CoreAdapter, captured once it completed.",
  "view": {
   "session": {
    "archive_note": null,

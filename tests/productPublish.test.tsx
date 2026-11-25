@@ -119,6 +119,13 @@ describe('reading crew’s answers', () => {
     expect(story.body).toContain('Part of {{parent}}');
     expect(bodyShown(story)).toContain('Part of the issue for e1.f1');
     expect(bodyShown(story)).not.toContain('{{parent}}');
+    // studio#1419: crew's footer marker is hidden, as GitHub hides it; the footer's words stay.
+    expect(story.body).toContain('<!-- wicked-publish run=');
+    expect(bodyShown(story)).not.toContain('<!--');
+    expect(bodyShown(story)).toContain('Published by wicked-crew from run');
+    expect(bodyShown({ body: 'keep <!-- wicked-publish run=r key=k --> in the middle', parentKey: null })).toContain('<!-- wicked-publish');
+    expect(bodyShown({ body: 'x\n<!-- wicked-publish run=r key=k -->\n', parentKey: null })).toBe('x');
+    expect(bodyShown({ body: 'x\r\n<!-- wicked-publish run=r key=k -->\r\n', parentKey: null })).toBe('x');
     expect(repoSelector({ repo: 'owner/app', source: 'gh' }, [{ repo: 'owner/app', source: 'gh' }])).toBe('owner/app');
     expect(repoSelector({ repo: 'owner/app', source: 'gh2' }, [{ repo: 'owner/app', source: 'gh' }, { repo: 'owner/app', source: 'gh2' }])).toBe('gh2:owner/app');
   });
@@ -133,6 +140,8 @@ describe('reading crew’s answers', () => {
     expect(publishRefusal(refusal('post-card-changed'))).toMatch(/card changed .* Nothing was sent/);
     expect(publishRefusal(new ApiError(409, 'an earlier publish could not tell…', { code: 'unresolved', error: 'x' }))).toMatch(/Say for each one below whether it exists/);
     expect(publishRefusal(new ApiError(404, 'Not Found'))).toMatch(/update crew/);
+    // A card is refused while any publish is being sent (wicked-crew#1911), so the words name no publication.
+    expect(publishRefusal(new ApiError(409, 'busy', { code: 'in_progress', error: 'x' }))).toBe('A publish is being sent or settled right now. Look again in a moment.');
   });
 
   it('each item state has its words', () => {
