@@ -60,7 +60,7 @@ export class DemoCutAdapter implements HostAdapter {
     if (cut.version < this.newestCut) {
       if (this.cut !== null && this.cut.version === this.newestCut) return this.cut;
       cut = this.shaped(await this.json<DemoCut>('cut'));
-      if (cut.version < this.newestCut) return cut;
+      if (cut.version < this.newestCut) return this.cut !== null && this.cut.version >= this.newestCut ? this.cut : cut;
     }
     this.newestCut = cut.version;
     this.cut = cut; this.versionCuts.set(cut.version, cut); this.setHead(cut.version);

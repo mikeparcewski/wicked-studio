@@ -22,24 +22,28 @@ export const CUT_LANDED_KEEP_MS = 10 * 60_000;
 const handled = new Map<string, number>();
 const pending = new Map<string, CutLanded & { at: number }>();
 const inFlight = new Set<string>();
+/** Videos asked for again (a note, a new editor, a host that started) while a delivery was in flight. */
+const again = new Set<string>();
 const listeners = new Map<string, Set<CutLandedListener>>();
 
 function deliver(ref: string): void {
   const l = pending.get(ref);
   const fns = listeners.get(ref);
-  if (l === undefined || fns === undefined || fns.size === 0 || inFlight.has(ref)) return;
+  if (l === undefined || fns === undefined || fns.size === 0) return;
+  if (inFlight.has(ref)) { again.add(ref); return; }
   if (Date.now() - l.at > CUT_LANDED_KEEP_MS) { pending.delete(ref); return; }
   inFlight.add(ref);
   const landing: CutLanded = { ref: l.ref, version: l.version, base: l.base };
   void Promise.all([...fns].map((fn) => Promise.resolve().then(() => fn(landing)).catch(() => false))).then((answers) => {
     inFlight.delete(ref);
+    const asked = again.delete(ref);
     if (answers.some(Boolean)) {
       if ((handled.get(ref) ?? 0) < l.version) handled.set(ref, l.version);
       if (pending.get(ref)?.version === l.version) pending.delete(ref);
     }
-    // A newer landing that arrived while this one was in flight goes now.
+    // A newer landing, or a new editor / note / host start while this one was in flight, is tried once more now.
     const next = pending.get(ref);
-    if (next !== undefined && next.version !== l.version) deliver(ref);
+    if (next !== undefined && (next.version !== l.version || asked)) deliver(ref);
   });
 }
 
@@ -63,10 +67,16 @@ export function onCutLanded(ref: string, fn: CutLandedListener): () => void {
   };
 }
 
+/** Offer a waiting landing to the editors of `ref` again (an editor's host just started). */
+export function retryCutLanded(ref: string): void {
+  deliver(ref);
+}
+
 /** Tests only. */
 export function resetCutLanded(): void {
   handled.clear();
   pending.clear();
   inFlight.clear();
+  again.clear();
   listeners.clear();
 }

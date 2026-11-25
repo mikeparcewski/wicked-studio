@@ -170,6 +170,17 @@ describe('a cut card in the chat', () => {
     off();
   });
 
+  it.each([[true, [2]], [false, []]] as const)('a fresh decision read back from the chat plays where crew draws cut cards (chatCut %s) (review r1 delta)', async (cut, want) => {
+    useCapabilities.setState({ chatCut: cut });
+    const heard: number[] = [];
+    const off = onCutLanded(CARD.target!.ref, async (l) => { heard.push(l.version); return true; });
+    chatBody = { ...chatBody, messages: [...TURN, ...GO.records.map((r) => ({ ...r, at: Date.now() }))] };
+    page();
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal').textContent).toContain('Changed · version 2'));
+    await vi.waitFor(() => expect(heard).toStrictEqual(want));
+    off();
+  });
+
   it('on a crew without chatArtifacts.cut, a cut card kept in the chat says why it can\'t go (review r1)', async () => {
     useCapabilities.setState({ chatCut: false });
     page();

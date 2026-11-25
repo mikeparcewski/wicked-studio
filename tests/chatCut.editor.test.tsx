@@ -118,12 +118,41 @@ describe('the version a chat made, in the video\'s editor', () => {
     await waitFor(() => expect(screen.getByTestId('page-line').textContent).toContain('Changed the video from the chat — version 2.'));
   });
 
-  it('a card for another video, or on a crew that draws no cut cards, hears nothing', async () => {
-    useCapabilities.setState({ chatCut: false });
-    const { adapter } = await openCard();
-    const v = await landElsewhere(adapter);
-    await act(async () => { noteCutLanded({ ref: REF, version: v, base: 1 }); noteCutLanded({ ref: 'mikes/demo-other', version: 7, base: 6 }); });
-    await act(async () => { await Promise.resolve(); });
+  it('a card for another video hears nothing', async () => {
+    const { adapter, settle } = await openCard();
+    await landElsewhere(adapter);
+    await act(async () => { noteCutLanded({ ref: 'mikes/demo-other', version: 2, base: 1 }); });
+    await settle();
     expect(screen.queryByTestId('page-undo')).toBeNull();
   });
+
+  it('on a crew that draws no cut cards, the editor hears nothing', async () => {
+    useCapabilities.setState({ chatCut: false });
+    const { adapter, settle } = await openCard();
+    const v = await landElsewhere(adapter);
+    await act(async () => { noteCutLanded({ ref: REF, version: v, base: 1 }); });
+    await settle();
+    expect(screen.queryByTestId('page-undo')).toBeNull();
+  });
+
+  it.each([false, true])(
+    'a landing that arrives before the card\'s host exists plays once the host starts, unless a newer version landed first (newer first: %s; review r1 delta)', async (newer) => {
+      const adapter = new FakeSurfaceAdapter(BINDING);
+      const held: Array<(v: null) => void> = [];
+      Object.assign(adapter, { refresh: () => new Promise<null>((r) => { held.push(r); }) });
+      render(<PluginCard binding={BINDING} editor={EDITOR} adapter={adapter} src="about:blank" grants={GRANTS} />);
+      const v = await landElsewhere(adapter);
+      await act(async () => { noteCutLanded({ ref: REF, version: v, base: 1 }); });
+      expect(screen.getByTestId('plugin-card-frame').querySelector('iframe')).toBeNull();
+      if (newer) await landElsewhere(adapter, '#654321');
+      Object.assign(adapter, { refresh: async () => null });
+      await act(async () => { for (const r of held.splice(0)) r(null); });
+      await waitFor(() => expect(screen.getByTestId('plugin-card-frame').querySelector('iframe')).not.toBeNull());
+      if (newer) {
+        await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+        expect(screen.queryByTestId('page-undo')).toBeNull();
+      } else {
+        await waitFor(() => expect(screen.getByTestId('page-line').textContent).toContain('Changed the video from the chat — version 2.'));
+      }
+    });
 });

@@ -24,7 +24,7 @@ import { askAbout } from '../../board/askAbout.js';
 import { artifactRefOf } from '../../api/chatArtifacts-wire.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { noteShown, noteWritten, placementEntry, registerInView } from '../../store/artifactInView.js';
-import { onCutLanded } from '../../store/chatCutLanded.js';
+import { onCutLanded, retryCutLanded } from '../../store/chatCutLanded.js';
 import { FullShell, focusFullOptions } from './FullShell.js';
 import { useRunHost } from './RunHostContext.js';
 
@@ -172,9 +172,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const run = useRunHost();
   const frameBox = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<EditorHost | null>(null);
-  /** Versions an Options write made while this card had no connected host: adopted at its handshake. A chat's version
-   *  (`chat`) is adopted then only if it is still the head, and its line with Undo is drawn then (crew#1814). */
-  const pendingAdopt = useRef<{ group: string; version: number; chat?: { base: number } }[]>([]);
+  /** Versions an Options write made while this card had no connected host: adopted at its handshake. */
+  const pendingAdopt = useRef<{ group: string; version: number }[]>([]);
   const logRef = useRef<HostLogEntry[]>([]);
   const [decl, setDecl] = useState<Surfaces | null>(null);
   const [protocol, setProtocol] = useState(1);
@@ -220,6 +219,8 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const inViewRef = binding.source === 'interactive-doc' || (binding.source === 'demo' && cutInView)
     ? artifactRefOf(binding.projectId, binding.docId)
     : null;
+  const inViewRefRef = useRef(inViewRef);
+  inViewRefRef.current = inViewRef;
   const inViewRefNow = useRef(inViewRef);
   inViewRefNow.current = inViewRef;
   const lensRef = useRef<number | null>(null);
@@ -292,18 +293,16 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       if (!active || !live.current) return false;
       if (adapter.artifact().head !== l.version) return true;
       const host = hostRef.current;
-      if (host?.alive === true && writtenRef.current !== null) {
-        host.adopt(l.version);
-        host.artifactChanged(l.version, 'generated');
-        writtenRef.current(chatWrite(l.version, l.base));
-      } else {
-        // No host yet (grants, start, Reload it): adopted when one exists, if it is still the head then.
-        pendingAdopt.current.push({ group, version: l.version, chat: { base: l.base } });
-      }
+      // No live host yet (grants, start, Reload it): the landing stays in the store, and the host's start asks for it
+      // again (retryCutLanded), re-reading the head then.
+      if (host?.alive !== true || writtenRef.current === null) return false;
+      host.adopt(l.version);
+      host.artifactChanged(l.version, 'generated');
+      writtenRef.current(chatWrite(l.version, l.base));
       return true;
     });
     return () => { active = false; off(); };
-  }, [adapter, inViewRef, binding.source, group, chatCut]);
+  }, [adapter, inViewRef, binding.source, chatCut]);
 
   // One host per mount (EP-D2): the frame is made once; card ↔ full is the same element. "Reload it" remounts.
   useEffect(() => {
@@ -410,12 +409,10 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       hostRef.current = host;
       // Writes from Options that landed while there was no host: this card's, as soon as it has one (only this
       // group's; a queue left by another artifact's group is dropped).
-      for (const p of pendingAdopt.current.splice(0)) {
-        if (p.group !== group) continue;
-        if (p.chat === undefined) host.adopt(p.version);
-        else if (adapter.artifact().head === p.version) { host.adopt(p.version); written(chatWrite(p.version, p.chat.base)); }
-      }
+      for (const p of pendingAdopt.current.splice(0)) if (p.group === group) host.adopt(p.version);
       host.mount();
+      // crew#1814: a chat's version that landed before this host existed is offered again now.
+      if (inViewRefRef.current !== null) retryCutLanded(inViewRefRef.current);
     };
     void start();
     const leave = joinGroup(group, 'card', (e) => {
