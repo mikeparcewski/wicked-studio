@@ -224,6 +224,14 @@ describe('Snooze and Wake through crew\'s re-read (studio#1416 round 1)', () => 
     }));
   });
   afterEach(() => { live.health = () => new Promise(() => undefined); });
+  /** Open "N snoozed", put focus on Wake now and press it, as a keyboard user does. */
+  const wakeFromKeyboard = async (): Promise<void> => {
+    (screen.getByTestId('needs-snoozed') as HTMLDetailsElement).open = true;
+    const wake = screen.getByTestId('needs-snoozed-wake');
+    wake.focus();
+    expect(document.activeElement).toBe(wake);
+    await act(async () => { fireEvent.click(wake); });
+  };
   const resetRefresh = useSystemStore.getState().refresh;
 
   it('Snooze: the item leaves the list, the number drops, "N snoozed" grows, and focus lands on it', async () => {
@@ -242,9 +250,47 @@ describe('Snooze and Wake through crew\'s re-read (studio#1416 round 1)', () => 
     await act(async () => { await useSystemStore.getState().refresh(); });
     render(<Live />);
     expect(screen.getByTestId('needs-sentence')).toHaveAttribute('data-count', '2');
-    await act(async () => { fireEvent.click(screen.getByTestId('needs-snoozed-wake')); });
+    await wakeFromKeyboard();
     await waitFor(() => expect(screen.getByTestId('needs-sentence')).toHaveAttribute('data-count', '3'));
     expect(screen.queryByTestId('needs-snoozed')).toBeNull();
+    await waitFor(() => expect(row('run:290a7fee').contains(document.activeElement)).toBe(true));
+  });
+
+  // codex delta: focus moves only for the person who used the control, and only after crew's answer is on the page.
+  it('a Wake made with the pointer (focus never on it) moves no focus', async () => {
+    await act(async () => { await useSystemStore.getState().refresh(); });
+    render(<Live />);
+    (screen.getByTestId('needs-snoozed') as HTMLDetailsElement).open = true;
+    await act(async () => { fireEvent.click(screen.getByTestId('needs-snoozed-wake')); });
+    await waitFor(() => expect(screen.getByTestId('needs-sentence')).toHaveAttribute('data-count', '3'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('a press elsewhere while the Wake is on its way cancels the move', async () => {
+    await act(async () => { await useSystemStore.getState().refresh(); });
+    render(<Live />);
+    holdNext = true;
+    await wakeFromKeyboard();
+    await waitFor(() => expect(late).toHaveLength(1)); // crew's re-read is on its way
+    fireEvent.pointerDown(document.body);
+    (document.activeElement as HTMLElement | null)?.blur();
+    await act(async () => { late.forEach((f) => f()); });
+    await waitFor(() => expect(screen.getByTestId('needs-sentence')).toHaveAttribute('data-count', '3'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('a second forced read superseding the post-Wake one: focus waits for the answer that lands', async () => {
+    await act(async () => { await useSystemStore.getState().refresh(); });
+    render(<Live />);
+    holdNext = true;
+    await wakeFromKeyboard();
+    await waitFor(() => expect(late).toHaveLength(1));
+    let second: Promise<void> = Promise.resolve();
+    act(() => { second = useSystemStore.getState().refresh({ force: true }); }); // another Re-check, while the first is out
+    await act(async () => { late.forEach((f) => f()); await second; });
+    await waitFor(() => expect(screen.getByTestId('needs-sentence')).toHaveAttribute('data-count', '3'));
     await waitFor(() => expect(row('run:290a7fee').contains(document.activeElement)).toBe(true));
   });
 
