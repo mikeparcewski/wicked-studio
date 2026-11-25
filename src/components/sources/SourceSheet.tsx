@@ -2,8 +2,11 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { AlertTriangle, Braces, Check, Database, Eye, FileUp, Globe, Network, Plug, Table2, Workflow, X, type LucideIcon } from 'lucide-react';
 import { ApiError } from '../../api/errors.js';
 import {
+  appsBoundOf,
   CREW_SOURCE,
   sourcesApi,
+  type RenameAppUse,
+  type RenamedServerFields,
   type CrewSourceCatalog,
   type McpPreviewResponse,
   type McpServer,
@@ -77,12 +80,21 @@ const words = (e: unknown): string => (e instanceof Error ? e.message : String(e
  * writes switch, off by default. Save registers exactly the preview the person saw and keeps the sheet
  * open on the SAVED source, where the switch and the test call are live (both act on a saved source).
  */
-export function SourceSheet({ target, existing, servers, agentsUnverified: agentsUnverifiedSet, onReread, onSaved, onRekeyed, onAllowWrites, onAgents, onDescribed, onClose, focus = null, onFocusUsed, onPickPm }: {
+export function SourceSheet({ target, existing, servers, agentsUnverified: agentsUnverifiedSet, onReread, onSaved, onRekeyed, onRenamed, onRenameUnsure, onAllowWrites, onAgents, onDescribed, onClose, focus = null, onFocusUsed, onPickPm }: {
   target: SheetTarget;
+  /**
+   * (crew#1514) crew renamed the saved source `from`: the page follows it to its new name. Called whenever the rename
+   * lands, even after this sheet closed (the page reconciles its list; it follows only a sheet still on `from`).
+   * Absent = no Rename.
+   */
+  onRenamed?: (from: string, server: McpServer) => void;
+  /** (crew#1514) A rename whose outcome crew never said (no answer, or a server failure): the page reads the list and
+   *  follows the source by its id. */
+  onRenameUnsure?: (from: string, id: string) => void;
   /** (DES-PM-001) On a crew with tracker links: the kinds rail offers Jira and GitHub Issues, whose own sheet opens. */
   onPickPm?: (system: 'jira' | 'github') => void;
   /** Opened from the data panel's menu: "Test connection" tests at once, "Ask a question…" focuses the question. */
-  focus?: 'test' | 'ask' | null;
+  focus?: 'test' | 'ask' | 'rename' | null;
   /** The sheet acted on `focus` (once): the host forgets it, so no later opening inherits it. */
   onFocusUsed?: () => void;
   /** Names already registered (a new source of the same name replaces it; the sheet says so). */
@@ -158,6 +170,9 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
   const [file, setFile] = useState<File | null>(null);
   const [headerChoice, setHeaderChoice] = useState<'detect' | 'yes' | 'no'>('detect');
   const [upload, setUpload] = useState<SourceUploadResponse | null>(null);
+  /** (crew#1514) The apps crew said use this source, for the person to confirm the rename against (`null`: not asked). */
+  const [renameApps, setRenameApps] = useState<{ to: string; apps: RenameAppUse[] } | null>(null);
+  const [renaming, setRenaming] = useState(false);
 
   const key = previewKey(form, hasSecret, secretEdits);
   const keyRef = useRef(key);
@@ -329,8 +344,10 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
   const testBox = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (focus === null || saved === null) return;
-    if (focus === 'ask') {
-      box.current?.querySelector<HTMLInputElement>('[data-testid="source-ask-question"]')?.focus();
+    if (focus === 'ask' || focus === 'rename') {
+      const field = box.current?.querySelector<HTMLInputElement>(focus === 'ask' ? '[data-testid="source-ask-question"]' : '[data-testid="source-name"]');
+      field?.focus();
+      if (focus === 'rename') field?.select();
       if (!focusUsed.current) { focusUsed.current = true; onFocusUsed?.(); }
       return;
     }
@@ -433,12 +450,13 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
   };
 
   const doUpload = async (): Promise<void> => {
-    if (file === null || inFlight.current) return;
+    if (file === null || inFlight.current || renaming) return;
     inFlight.current = true;
     setBusy('upload');
     setError(null);
     try {
-      const r = await sourcesApi.upload(form.name.trim(), file, headerChoice === 'detect' ? null : headerChoice);
+      // A saved upload is uploaded again under its own name, never the Name field's rename draft (crew#1514).
+      const r = await sourcesApi.upload(saved !== null && !isNew ? saved.name : form.name.trim(), file, headerChoice === 'detect' ? null : headerChoice);
       setUpload(r);
       setSaved(r.source);
       onSaved(r.source);
@@ -489,6 +507,44 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
       : ops !== null && ops.reads.length > 0 && !acceptReads ? 'Accept the reads first'
       : !originOk ? 'Confirm where the calls go first' : null);
   const title = isNew ? 'Add a data source' : target.mode === 'crew' ? 'crew (built in)' : saved?.name ?? 'Data source';
+  /** (crew#1514) A saved source's Name is editable when the page can follow a rename. */
+  const canRename = !isNew && saved !== null && kind !== 'crew' && onRenamed !== undefined;
+  const renameTo = form.name.trim();
+  const renameBlocker = !canRename || saved === null || renameTo === saved.name ? null
+    : !/^[a-z0-9][a-z0-9_-]{0,62}$/.test(renameTo) ? 'A name is 1-63 of a-z 0-9 _ -, starting with a letter or digit'
+      : renameTo === CREW_SOURCE ? '"crew" is the built-in source; choose another name'
+        : existing.includes(renameTo) ? `A source named ${renameTo} exists: choose another name` : null;
+  const formerNames = (saved as (McpServer & RenamedServerFields) | null)?.formerNames ?? [];
+  const rename = async (apps?: readonly string[]): Promise<void> => {
+    if (saved === null || onRenamed === undefined || renaming || busy !== null || inFlight.current || renameBlocker !== null || renameTo === saved.name) return;
+    const from = saved.name;
+    const id = saved.id;
+    setRenaming(true);
+    setError(null);
+    try {
+      const r = await sourcesApi.rename(from, renameTo, apps);
+      // The page hears of it even when this sheet has closed: its list must not keep a name crew retired.
+      onRenamed(from, r);
+      if (!alive.current) return;
+      setRenameApps(null);
+      setSaved(r);
+    } catch (e) {
+      // crew answered and refused (a 4xx): nothing changed. No answer, or a server failure: it may have landed.
+      const refused = e instanceof ApiError && e.status >= 400 && e.status < 500;
+      if (!refused) onRenameUnsure?.(from, id);
+      if (!alive.current) return;
+      const using = refused ? appsBoundOf(e) : null;
+      if (using !== null) setRenameApps({ to: renameTo, apps: using });
+      else {
+        setRenameApps(null);
+        setError(refused ? words(e) : `crew did not say whether ${from} was renamed (${words(e)}): the list is read again.`);
+      }
+    } finally {
+      if (alive.current) setRenaming(false);
+    }
+  };
+  /** Rename, or "Rename anyway" with exactly the apps crew listed for this destination (the button and Enter alike). */
+  const confirmRename = (): void => void rename(renameApps !== null && renameApps.to === renameTo ? renameApps.apps.map((a) => a.slug) : undefined);
 
   return (
     <div className="wk-src-scrim" data-testid="source-sheet-scrim">
@@ -552,12 +608,43 @@ export function SourceSheet({ target, existing, servers, agentsUnverified: agent
                   <p className="wk-src-note">crew’s own API is always on. Apps read its allowlisted routes in crew, as the person viewing; it has no writes.</p>
                 </div>
               ) : (
+                <>
                 <label className="wk-src-field">
                   <span className="wk-src-label">Name</span>
-                  <input data-testid="source-name" className="wk-field wk-src-input" spellCheck={false} disabled={!isNew || frozen} value={form.name} placeholder="support-pg"
-                    onChange={(e) => edit({ name: e.target.value })} />
+                  <input data-testid="source-name" className="wk-field wk-src-input" spellCheck={false} disabled={(!isNew && !canRename) || frozen || renaming} value={form.name} placeholder="support-pg"
+                    onChange={(e) => {
+                      if (isNew) { edit({ name: e.target.value }); return; }
+                      // A saved source's name is only renamed: nothing else about the form moves.
+                      setForm((f) => ({ ...f, name: e.target.value }));
+                      setRenameApps(null);
+                      setError(null);
+                    }}
+                    onKeyDown={canRename ? (e) => { if (e.key === 'Enter') { e.preventDefault(); confirmRename(); } } : undefined} />
                   {replaces && <span className="wk-src-note wk-src-tone-warn" data-testid="source-replaces">A source named {form.name.trim()} exists: saving replaces it.</span>}
+                  {!isNew && formerNames.length > 0 && renameTo === saved?.name && <span className="wk-src-note" data-testid="source-former-names">Renamed from {formerNames.join(', ')}. {formerNames.length === 1 ? 'That name stays' : 'Those names stay'} reserved for it.</span>}
                 </label>
+                {canRename && saved !== null && renameTo !== saved.name && (
+                  <div className="wk-src-rename" data-testid="source-rename">
+                    {renameBlocker !== null ? <span className="wk-src-note wk-src-tone-warn" data-testid="source-rename-blocker">{renameBlocker}</span>
+                      : renameApps === null ? (
+                        <span className="wk-src-note">Rename {saved.name} to {renameTo}. Its connection, secret, switches and grants stay; {saved.name} stays reserved for it.</span>
+                      ) : (
+                        <div className="wk-src-rename-confirm" role="alert" data-testid="source-rename-apps">
+                          <p className="wk-src-note wk-src-tone-warn">{renameApps.apps.length === 1 ? '1 app uses' : `${renameApps.apps.length} apps use`} {saved.name}: {renameApps.apps.map((a) => a.name).join(', ')}.</p>
+                          <p className="wk-src-note">After the rename, their queries on it are refused and their actions need a new grant until each app is changed to use {renameTo} and checked again. A published app keeps its own settings.</p>
+                        </div>
+                      )}
+                    <div className="wk-src-rename-actions">
+                      <button type="button" className="wk-btn wk-btn--quiet" data-testid="source-rename-cancel" disabled={renaming}
+                        onClick={() => { setForm((f) => ({ ...f, name: saved.name })); setRenameApps(null); setError(null); }}>Cancel</button>
+                      <button type="button" className="wk-btn wk-btn--primary" data-testid="source-rename-go" disabled={renaming || renameBlocker !== null}
+                        onClick={confirmRename}>
+                        {renaming ? 'Renaming…' : renameApps !== null ? 'Rename anyway' : 'Rename'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                </>
               )}
 
               {isSqlKind(kind) && (

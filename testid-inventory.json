@@ -4336,6 +4336,12 @@
       ]
     },
     {
+      "testId": "data-panel-rename",
+      "files": [
+        "src/components/sources/DataPanel.tsx"
+      ]
+    },
+    {
       "testId": "data-panel-source",
       "files": [
         "src/components/sources/DataPanel.tsx"
@@ -23411,6 +23417,12 @@
       ]
     },
     {
+      "testId": "source-former-names",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
       "testId": "source-header",
       "files": [
         "src/components/sources/SourceSheet.tsx"
@@ -23568,6 +23580,36 @@
     },
     {
       "testId": "source-rekey-status",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-rename",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-rename-apps",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-rename-blocker",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-rename-cancel",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-rename-go",
       "files": [
         "src/components/sources/SourceSheet.tsx"
       ]
