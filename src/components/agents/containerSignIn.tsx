@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../../api/client.js';
 import { ApiError } from '../../api/errors.js';
@@ -106,31 +106,35 @@ export function linkCopyNote(ok: boolean, mac = isMacPlatform()): string {
  * drag carries it to the address bar), its text can be selected, and Copy link puts it on the clipboard.
  */
 export function SignInLink({ url }: { url: string }): React.ReactElement | null {
-  const [note, setNote] = useState<{ ok: boolean } | null>(null);
+  /** The last copy's answer, for the link it copied (a note for another link is never shown). */
+  const [note, setNote] = useState<{ ok: boolean; url: string } | null>(null);
   const anchor = useRef<HTMLAnchorElement | null>(null);
   /** Each copy press, and each new link, is a new request: only the newest one's answer is said (codex r1). */
   const seq = useRef(0);
-  useEffect(() => { seq.current += 1; setNote(null); return () => { seq.current += 1; }; }, [url]);
+  useLayoutEffect(() => { seq.current += 1; return () => { seq.current += 1; }; }, [url]);
   // Only a web address is ever a link here (the terminal's reader finds http(s) only; this holds it at the anchor too).
   if (!/^https?:\/\//iu.test(url)) return null;
   const copy = (): void => {
     const mine = ++seq.current;
+    const asked = url;
     const done = (ok: boolean): void => {
-      if (seq.current !== mine) return;
-      setNote({ ok });
-      // A refused copy focuses and selects the link, so the keyboard's copy takes it (not the terminal's).
+      // The answer is for the link on screen now, or it is dropped: checked on the drawn link itself, so it holds
+      // even before React's effects run after a newer link is drawn (codex delta on studio#1362).
       const el = anchor.current;
+      if (seq.current !== mine || el === null || el.getAttribute('href') !== asked) return;
+      setNote({ ok, url: asked });
+      // A refused copy focuses and selects the link, so the keyboard's copy takes it (not the terminal's).
       const sel = typeof window !== 'undefined' ? window.getSelection() : null;
-      if (!ok && el !== null && sel !== null) {
+      if (!ok && sel !== null) {
         el.focus();
         const r = document.createRange(); r.selectNodeContents(el); sel.removeAllRanges(); sel.addRange(r);
       }
     };
     const clip = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
     if (clip === undefined || typeof clip.writeText !== 'function') done(false);
-    else clip.writeText(url).then(() => done(true), () => done(false));
+    else clip.writeText(asked).then(() => done(true), () => done(false));
   };
-  const shown = note;
+  const shown = note !== null && note.url === url ? note : null;
   return (
     <div className="wk-agents-link" data-testid="agents-login-link">
       <span className="wk-agents-h" id="agents-login-link-label">Sign-in link</span>

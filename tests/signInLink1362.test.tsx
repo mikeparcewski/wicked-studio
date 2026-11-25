@@ -10,7 +10,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Terminal as XTerm } from '@xterm/xterm';
-import { CELL_CHARS_MAX, findUrls, LINK_ROWS_MAX, readRow, urlsIn, type TermRow } from '../src/board/terminalLinks.js';
+import { CELL_CHARS_MAX, findUrls, LINK_ROWS_MAX, linksAt, OVER_CAP, readRow, urlsIn, type TermRow } from '../src/board/terminalLinks.js';
 import { linkCopyNote, SignInLink } from '../src/components/agents/containerSignIn.js';
 
 const LINK = 'https://claude.ai/oauth/authorize?code=true&client_id=00000000-0000-4000-8000-000000000000&response_type=code'
@@ -76,7 +76,40 @@ describe('the addresses on a terminal screen (urlsIn)', () => {
       getCell: (x: number) => (x >= 3 ? undefined : { getChars: () => (x === 1 ? `a${marks}` : 'b'), getWidth: () => 1 }),
     } as unknown as Parameters<typeof readRow>[0];
     const row = readRow(line, 3);
-    expect(row.text.length).toBe(2 + CELL_CHARS_MAX);
+    // Read as one mark, never as a cut part of the cell.
+    expect(row.text).toBe(`b${OVER_CAP}b`);
+    expect(row.text.length).toBeLessThan(3 + CELL_CHARS_MAX);
+  });
+
+  it('an address through a cell read only so far is not offered (never an address the screen did not show)', async () => {
+    const marks = '\u0301'.repeat(CELL_CHARS_MAX + 2);
+    // xterm keeps a character and all its combining marks in one cell.
+    const b = await bufferOf(`Open https://example.com/cafe${marks}/menu\r\nOr https://example.com/plain\r\n`, 80);
+    expect(urlsIn(b.read, b.length, 80)).toEqual(['https://example.com/plain']);
+    // Under the cap the address is read whole, marks and all.
+    const few = '\u0301'.repeat(2);
+    const c = await bufferOf(`Open https://example.com/cafe${few}/menu\r\n`, 80);
+    expect(urlsIn(c.read, c.length, 80)).toEqual([`https://example.com/cafe${few}/menu`]);
+    // Cut across rows by the program's own wrap: the over-cap cell starts the next row.
+    const d = await bufferOf(`https://example.com/abcdefghijklmnopq\r\nx${marks}yz\r\n`, 37);
+    expect(urlsIn(d.read, d.length, 37)).toEqual([]);
+  });
+
+  it('a first buffer row that continues a row no longer held (scrolled off) is a cut run: nothing inside it is offered', async () => {
+    // No scrollback: the address's first rows scroll off the top, and buffer row 0 is a terminal-wrapped continuation.
+    const long = `https://example.com/a?q=${'x'.repeat(60)}&next=https://tail.example/next&end=1`;
+    const term = new XTerm({ cols: 20, rows: 8, allowProposedApi: true, scrollback: 0 });
+    await new Promise<void>((r) => term.write(`${long}\r\nSee https://ok.example/b\r\n`, r));
+    const rows: TermRow[] = [];
+    for (let i = 0; i < term.buffer.active.length; i++) rows.push(readRow(term.buffer.active.getLine(i), 20));
+    term.dispose();
+    expect(rows[0]!.wrapped).toBe(true);
+    const read = (i: number): TermRow => rows[i]!;
+    expect(urlsIn(read, rows.length, 20)).toEqual(['https://ok.example/b']);
+    // Hovering any row: the cut run offers nothing, the address after it still opens.
+    expect(rows.map((r) => r.text).join('')).toContain('https://tail.example/next');
+    const hovered = new Set(rows.flatMap((_, i) => linksAt(read, rows.length, i, 20).map((u) => u.url)));
+    expect([...hovered]).toEqual(['https://ok.example/b']);
   });
 
   it('a long tail of closing brackets is trimmed in one pass', () => {

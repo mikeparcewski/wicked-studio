@@ -23,6 +23,8 @@ export interface TermRow {
 
 /** The most UTF-16 units read from one cell (a character and its combining marks). */
 export const CELL_CHARS_MAX = 8;
+/** What a cell over {@link CELL_CHARS_MAX} reads as: no address character, and an address touching it is dropped. */
+export const OVER_CAP = '\uFFFD';
 
 /** One buffer row as text, with each character's cell column (a wide character takes two cells). */
 export function readRow(line: IBufferLine | undefined, width: number): TermRow {
@@ -35,9 +37,11 @@ export function readRow(line: IBufferLine | undefined, width: number): TermRow {
     if (cell === undefined) break;
     const w = cell.getWidth();
     if (w === 0) continue;
-    // A cell holds one character and its combining marks; a program can stack thousands on one cell. Only the first
-    // few are read (no address needs more), so a row's work stays bounded by its width (codex on studio#1362).
-    const ch = (cell.getChars() || ' ').slice(0, CELL_CHARS_MAX);
+    // A cell holds one character and its combining marks; a program can stack thousands on one cell. A cell over
+    // the cap is read as one {@link OVER_CAP} mark, never as a cut part of itself, so a row's work stays bounded by its
+    // width and an address through that cell is not offered at all (codex on studio#1362).
+    const all = cell.getChars() || ' ';
+    const ch = all.length > CELL_CHARS_MAX ? OVER_CAP : all;
     for (let i = 0; i < ch.length; i++) { cols.push(x); ends.push(x + w - 1); }
     text += ch;
   }
@@ -132,7 +136,9 @@ export function findUrls(rows: readonly TermRow[], width: number): FoundUrl[] {
       const startCol = line.pos[m.index]!.col;
       // Each piece: the line it is on and its text-index span [from, to).
       const pieces: Array<{ line: number; from: number; to: number }> = [{ line: l, from: m.index, to: m.index + m[0].length }];
-      for (;;) {
+      // An address running into a cell read only as {@link OVER_CAP} is not known whole: never offered.
+      let overCap = line.text[m.index + m[0].length] === OVER_CAP;
+      for (; !overCap;) {
         const last = pieces[pieces.length - 1]!;
         const lline = lines[last.line]!;
         // Only a piece that runs to the last cell of the line's last row can go on, onto the next line.
@@ -144,6 +150,7 @@ export function findUrls(rows: readonly TermRow[], width: number): FoundUrl[] {
         const lead = next.text.length - next.text.trimStart().length;
         if ((next.pos[lead]?.col ?? lead) > startCol) break;
         const to = runOfUrlChars(next.text, lead);
+        if (next.text[to] === OVER_CAP) { overCap = true; break; }
         const piece = next.text.slice(lead, to);
         if (to === lead || next.text.slice(to).trim() !== '' || NEW_ADDRESS.test(piece)) break;
         const full = to === next.text.length && isFull(rows[next.pos[to - 1]!.row]!, width);
@@ -161,7 +168,7 @@ export function findUrls(rows: readonly TermRow[], width: number): FoundUrl[] {
       }
       url = url.slice(0, keep);
       const last = pieces[pieces.length - 1];
-      if (last === undefined || !isAddress(url)) continue;
+      if (overCap || last === undefined || !isAddress(url)) continue;
       for (const p of pieces.slice(1)) taken[p.line] = Math.max(taken[p.line]!, p.to);
       out.push({ url, start: line.pos[m.index]!, end: lines[last.line]!.pos[last.to - 1]! });
       if (pieces.length > 1) break; // the rest of this line was the link
@@ -187,13 +194,17 @@ export function linksAt(read: (i: number) => TermRow, length: number, y: number,
   while (joinsBack(start) && y - start < LINK_ROWS_MAX) start--;
   let end = y;
   while (joinsOn(end) && end - y < LINK_ROWS_MAX) end++;
-  const cutBefore = joinsBack(start);
+  // A first buffer row the terminal wrapped onto a row no longer held (scrolled off) is a cut too.
+  const cutBefore = joinsBack(start) || (start === 0 && row(0).wrapped);
+  // Every row from `start` to `y` is one joined run: when its start is cut, any link starting there could be a part of
+  // a longer address (one can hold another `https://` in its query), so none is offered.
+  if (cutBefore) return [];
   const cutAfter = joinsOn(end);
   const rows: TermRow[] = [];
   for (let i = start; i <= end; i++) rows.push(row(i));
   return findUrls(rows, width)
     .map((u) => ({ ...u, start: { row: u.start.row + start, col: u.start.col }, end: { row: u.end.row + start, col: u.end.col } }))
-    .filter((u) => u.start.row <= y && u.end.row >= y && !(cutBefore && u.start.row === start) && !(cutAfter && u.end.row === end));
+    .filter((u) => u.start.row <= y && u.end.row >= y && !(cutAfter && u.end.row === end));
 }
 
 /** The most rows {@link urlsIn} reads back from the end of the buffer (a sign-in link is printed near the bottom). */
@@ -215,7 +226,8 @@ export function urlsIn(read: (i: number) => TermRow, length: number, width: numb
   for (let i = start; i < length; i++) rows.push(read(i));
   // The leading run the read could not reach the start of: its rows, by their index in `rows`.
   let cutRun = -1;
-  if (joinsBack(start)) {
+  // A first buffer row the terminal wrapped onto a row no longer held (scrolled off, or scrollback cleared) is a cut too.
+  if (joinsBack(start) || (start === 0 && rows.length > 0 && rows[0]!.wrapped)) {
     cutRun = 0;
     while (cutRun + 1 < rows.length && (rows[cutRun + 1]!.wrapped || isFull(rows[cutRun]!, width))) cutRun++;
   }
