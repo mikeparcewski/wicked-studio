@@ -8097,6 +8097,12 @@
       ]
     },
     {
+      "testId": "gate-verdict-judge-stand-in",
+      "files": [
+        "src/components/GateVerdict.tsx"
+      ]
+    },
+    {
       "testId": "gate-verdict-layers",
       "files": [
         "src/components/GateVerdict.tsx"
@@ -20227,6 +20233,12 @@
       ]
     },
     {
+      "testId": "run-tab-agent-standin",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
       "testId": "run-tab-agents",
       "files": [
         "src/components/session/RunTab.tsx"
@@ -20336,6 +20348,12 @@
     },
     {
       "testId": "run-tab-glance-progress",
+      "files": [
+        "src/components/session/RunTab.tsx"
+      ]
+    },
+    {
+      "testId": "run-tab-glance-standins",
       "files": [
         "src/components/session/RunTab.tsx"
       ]

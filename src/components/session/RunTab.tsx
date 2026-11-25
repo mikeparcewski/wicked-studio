@@ -9,7 +9,7 @@ import { workflowLabel } from '../../board/workflowNames.js';
 import { chatStatusWord, statusWord } from '../../board/statusWords.js';
 import { useInstallOutcome } from './outcomeReads.js';
 import { seatKeyName } from '../../board/seatNames.js';
-import { seatedStandIns } from '../../board/standIn.js';
+import { seatedStandIns, standInLine } from '../../board/standIn.js';
 import { ORPHANED_LINE, orphanedOf } from '../../board/sessionModel.js';
 import { finishedDeliveryArm, proposalKindOf } from '../../board/proposalCard.js';
 import { useRoster } from '../../hooks/useRoster.js';
@@ -271,14 +271,14 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
       {helpers.length > 0 && (
         <div className="wk-run-glance-item">
           <span className="wk-run-glance-label">Helpers</span>
-          <span data-testid="run-tab-glance-helpers" className="wk-run-glance-value">{helpers.join(' · ')}</span>
+          <span data-testid="run-tab-glance-helpers" className="wk-run-glance-value">{[...new Set(helpers)].join(' · ')}</span>
         </div>
       )}
-      {[...standIns.values()].some((s) => s.label !== null) && (
+      {standIns.size > 0 && (
         <div className="wk-run-glance-item">
           <span className="wk-run-glance-label">Stand-ins</span>
           <span data-testid="run-tab-glance-standins" className="wk-run-glance-value">
-            {[...new Set([...standIns.values()].map((s) => s.label).filter((l): l is string => l !== null))].join(' · ')}
+            {[...new Set([...standIns.values()].map(standInLine))].join(' · ')}
           </span>
         </div>
       )}
@@ -448,6 +448,17 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
                   </li>
                 );
               })}
+            </ul>
+          )}
+          {/* studio#1437: a stand-in no step is assigned to (the judge) is still one of the run's checkers. */}
+          {[...standIns.values()].some((s) => !clis.includes(s.key)) && (
+            <ul className="wk-run-tab-list">
+              {[...standIns.values()].filter((s) => !clis.includes(s.key)).map((s) => (
+                <li key={s.key} data-testid="run-tab-agent" data-cli={s.key} className="wk-run-tab-agent">
+                  <span className="wk-run-tab-name">{s.name}</span>{' '}<span className="wk-run-tab-muted">{s.role === 'judge' ? 'judges' : 'checks'}</span>
+                  {s.label !== null && <span data-testid="run-tab-agent-standin" className="wk-run-tab-muted">{' · '}{s.label}</span>}
+                </li>
+              ))}
             </ul>
           )}
           <p data-testid="run-tab-spend" className="wk-run-tab-line">Spend: {spend ?? 'Not reported'}</p>

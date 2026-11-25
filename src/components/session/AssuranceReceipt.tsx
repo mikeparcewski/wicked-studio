@@ -8,6 +8,7 @@ import { useDisplayText } from '../../hooks/useHomePath.js';
 import { TechDetails } from '../ui/index.js';
 import { FLOOR_OVERRIDDEN_LABEL, isToolCheckOverride, overrideLabel, overrideWhere } from '../../board/floorOverride.js';
 import { stepWord } from '../../board/runConversation.js';
+import { cliLabel, standInBase } from '../../board/seatNames.js';
 
 /** "you" opens a sentence as "You"; a person's own id is said as recorded. */
 const capitalize = (s: string): string => (s === 'you' ? 'You' : s);
@@ -173,12 +174,17 @@ function howWords(r: RuleRow): string {
   // A council row with no ruling it carries is never "by a judge (<the rule judge>)".
   if (r.how === 'council' || r.origin === 'council') return arbiter !== undefined ? `by one arbiter: ${arbiter}` : HOW_WORD['council']!;
   // A skip is the operator's, never a seat's.
-  return `${HOW_WORD[r.how] ?? r.how}${r.judge !== null && r.how !== 'operator' ? ` (${r.judge})` : ''}`;
+  return `${HOW_WORD[r.how] ?? r.how}${r.judge !== null && r.how !== 'operator' ? ` (${seatShown(r.judge)})` : ''}`;
+}
+
+/** A rule's seat key as shown: a stand-in (`claude~2`) is named, never bare (studio#1437); other keys as before. */
+function seatShown(seat: string): string {
+  return standInBase(seat) !== null ? cliLabel(seat) : seat;
 }
 
 /** One side's reading: "Rule judge (claude): broken, “…”". */
 function positionWords(p: RulePosition): string {
-  return `${BY_WORD[p.by] ?? p.by} (${p.seat !== '' ? p.seat : 'unknown seat'}): ${RULE_WORD[p.status] ?? p.status}`;
+  return `${BY_WORD[p.by] ?? p.by} (${p.seat !== '' ? seatShown(p.seat) : 'unknown seat'}): ${RULE_WORD[p.status] ?? p.status}`;
 }
 
 /** One rule's row: its verdict, how it was reached and why; a dispute's two readings and a council's votes under it. */

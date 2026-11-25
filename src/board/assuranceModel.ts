@@ -168,6 +168,32 @@ export interface AssuranceReceipt extends RunAssurance {
   /** (crew api-types 0.190.0, DES-RULE-CHECK-001) Every steering rule in force and its verdict at this
    *  gate (a delivery: the worst row per rule across the run's gates); absent when no rule check ran. */
   rules?: RuleRow[];
+  /** (wicked-core#1930, studio#1437) The roles a stand-in answered at this gate (`roles[]` with `filled: 'stand_in'`):
+   *  the engine leaves `evaluator`/`judge` null and skips the instrument with reason `stand_in`, so these say who
+   *  checked instead. Absent when none. A delivery lists the run's. */
+  standIns?: ReceiptStandIn[];
+}
+
+/** One role a stand-in answered: `evaluator` or `judge` (the role's own word), its seat key and the engine's sentence. */
+export interface ReceiptStandIn { role: string; seat: string; label: string | null }
+
+function standInsOfRoles(v: unknown): ReceiptStandIn[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((r) => {
+    if (!isRecord(r) || r['filled'] !== 'stand_in' || r['state'] !== 'answered' || typeof r['role'] !== 'string') return [];
+    const si = isRecord(r['standIn']) ? r['standIn'] : null;
+    const seat = str(si?.['cli']) ?? str(r['seat']);
+    if (seat === null) return [];
+    const label = typeof si?.['label'] === 'string' && si['label'].trim() !== '' ? si['label'].trim() : null;
+    return [{ role: r['role'], seat, label }];
+  });
+}
+
+/** Every stand-in role the receipts carry, once each (role and seat), in first-seen order. */
+function standInsOf(receipts: readonly AssuranceReceipt[]): ReceiptStandIn[] {
+  const out: ReceiptStandIn[] = [];
+  for (const r of receipts) for (const s of r.standIns ?? []) if (!out.some((o) => o.role === s.role && o.seat === s.seat)) out.push(s);
+  return out;
 }
 
 /** One steering rule's verdict (`AssuranceReceipt.rules[]`). */
@@ -449,8 +475,10 @@ export function receiptOf(raw: unknown): AssuranceReceipt | null {
     : [];
   const judged = operatorJudgesOf(raw['operatorJudges']);
   const rules = rulesOf(raw['rules']);
+  const standIns = standInsOfRoles(raw['roles']);
   return {
     ...run,
+    ...(standIns.length > 0 ? { standIns } : {}),
     ...(fallbacks.length > 0 ? { judgeFallbacks: fallbacks } : {}),
     ...(judged.length > 0 ? { operatorJudges: judged } : {}),
     ...(rules.length > 0 ? { rules } : {}),
@@ -583,7 +611,8 @@ export function deliveryReceiptOf(
     // The lift's receipt is cut BEFORE the deliver step judged the rules deferred to it: each gate's current
     // rows speak for the rules they name (a delivery verdict replaces a deferral, a retry's skip its hold).
     const rules = currentRules(r.rules, gateRuleRows(view, log));
-    return { ...r, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), ...(rules.length > 0 ? { rules } : {}), creator: r.creator ?? who.creator, evaluator: r.evaluator ?? who.evaluator, judge: r.judge ?? who.judge, aggregateKind: deliveryKind(r, gates) };
+    const si = standInsOf([r, ...gates]);
+    return { ...r, ...(si.length > 0 ? { standIns: si } : {}), ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), ...(rules.length > 0 ? { rules } : {}), creator: r.creator ?? who.creator, evaluator: r.evaluator ?? who.evaluator, judge: r.judge ?? who.judge, aggregateKind: deliveryKind(r, gates) };
   }
   if (gates.length === 0) return null;
   const run = sessionAssurance(view, log) ?? { mode: gates[0]!.mode, required: gates[0]!.required };
@@ -606,7 +635,8 @@ export function deliveryReceiptOf(
   const fb = fallbacksOf(gates);
   const oj = judgmentsOf(gates, durableFloorOverrides(view));
   const rules = worstRules(gateRuleRows(view, log));
-  return { ...out, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), ...(rules.length > 0 ? { rules } : {}), aggregateKind: deliveryKind(out, gates) };
+  const si = standInsOf(gates);
+  return { ...out, ...(si.length > 0 ? { standIns: si } : {}), ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), ...(rules.length > 0 ? { rules } : {}), aggregateKind: deliveryKind(out, gates) };
 }
 
 /** Every "judged by operator" record the receipts carry, once each (by who and when), in first-seen
@@ -805,7 +835,8 @@ export function assuranceKind(r: AssuranceReceipt): AssuranceKind {
   // A judge accepts independently only on a KNOWN seat that is not the creator's.
   const judged = r.ran.includes('judge');
   if (judged && r.judge !== null && r.creator !== null && r.judge !== r.creator) return 'independent';
-  if ((judged && r.judge !== null && r.judge === r.creator) || skippedSame) return 'same-seat';
+  // A stand-in that checked (wicked-core#1930) is the same helper checking again: never "only automatic checks".
+  if ((judged && r.judge !== null && r.judge === r.creator) || skippedSame || (r.standIns?.length ?? 0) > 0) return 'same-seat';
   if (r.ran.length > 0) return 'floor-only';
   return 'unchecked';
 }
@@ -820,12 +851,14 @@ export function passedWord(r: AssuranceReceipt | null): string {
   if (r === null) return 'Passed';
   // What ran, not the kind: a skipped distinct evaluator alone reads `same-seat` with nothing run (codex r1 on #1350).
   if (r.ran.length === 0) return 'Nothing verified';
-  const judgeSkips = r.skipped.filter((s) => s.instrument === 'judge');
+  // (studio#1437) A judge a stand-in answered is a judge that ran, said as a stand-in's: never "No judge ran".
+  const standInJudged = (r.standIns ?? []).some((s) => s.role === 'judge');
+  const judgeSkips = r.skipped.filter((s) => s.instrument === 'judge' && !(s.reason === 'stand_in' && standInJudged));
   if (judgeSkips.some((s) => s.reason === 'reduced_assurance')) return 'Judge skipped (reduced assurance)';
   const operatorJudged = (r.operatorJudges ?? []).some((j) => j.floorOverride === undefined);
   // A delivery's receipt is its gates' union: a judge that ran at one gate and not another is "in part".
-  if (judgeSkips.length > 0 || operatorJudged) return r.ran.includes('judge') ? 'Judged in part' : 'No judge ran';
-  return 'Passed';
+  if (judgeSkips.length > 0 || operatorJudged) return r.ran.includes('judge') || standInJudged ? 'Judged in part' : 'No judge ran';
+  return standInJudged ? 'Passed, judged by a stand-in' : 'Passed';
 }
 
 /** The lead word when the decision PASSED (an approval, a delivery) … */
@@ -848,6 +881,8 @@ const CHECKED_LABEL: Record<AssuranceKind, string> = {
 /** How the evaluator stood to the creator: separate seats, the same seat (and why), or no
  *  evaluator on this gate. */
 export function separationWords(r: AssuranceReceipt): string | null {
+  // (studio#1437) A stand-in checked: the same helper again, never "separate seats".
+  if ((r.standIns?.length ?? 0) > 0 && !r.ran.includes('distinct_evaluator')) return 'a stand-in, not a different helper';
   if (r.aggregateKind !== undefined) {
     const k = r.aggregateKind;
     return k === 'independent' ? 'separate seats' : k === 'same-seat' ? (r.mode === 'reduced' ? 'same seat, reduced assurance' : 'same seat') : null;
@@ -908,6 +943,10 @@ export function receiptWords(r: AssuranceReceipt, passed: boolean | null = null)
   const evaluator = seatNames(r.evaluator);
   if (creator !== null) seats.push(`built by ${creator}`);
   if (evaluator !== null) seats.push(`evaluated by ${evaluator}`);
+  // (studio#1437) The roles a stand-in answered, named as stand-ins (the engine leaves evaluator/judge null for them).
+  const standInSeats = (role: string): string[] => [...new Set((r.standIns ?? []).filter((s) => s.role === role).map((s) => (standInBase(s.seat) !== null ? cliLabel(s.seat) : `${cliLabel(s.seat)} (stand-in)`)))];
+  if (evaluator === null && standInSeats('evaluator').length > 0) seats.push(`evaluated by ${standInSeats('evaluator').join(', ')}`);
+  if ((r.judge ?? '') === '' && standInSeats('judge').length > 0) seats.push(`judged by ${standInSeats('judge').join(', ')}`);
   // A fallback judge is named by the engine's own line, never as a plain "judged by" (operator ruling 2026-10-14);
   // every other judge keeps its plain words (a delivery can mix the run's own judges and a fallback).
   const fallbacks = r.judgeFallbacks ?? [];

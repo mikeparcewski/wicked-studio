@@ -45,6 +45,8 @@ export function cliFamily(cli: string): { family: string; suffix: string } {
  * bare key: every name says "(stand-in)".
  */
 export function standInBase(key: string): string | null {
+  // A program's path (crew's tool step names a binary where a seat goes) is never a seat, whatever it ends with.
+  if (/[\/\\]/.test(key)) return null;
   const m = /^(.+)~\d+$/.exec(key);
   return m !== null ? m[1]! : null;
 }

@@ -1122,7 +1122,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // a held rule is the gate's own cause, after Send back when another layer (or a broken rule) is.
     if (!rulesHold.behind) ruleChoices.forEach(addArm);
     if (rejudgeOffered) {
-      addArm({ key: 'rejudge', label: REJUDGE_LABEL, decision: { approve: true, action: REJUDGE_ACTION } as unknown as GateAnswer, note: 'none', title: rejudgeTitle(input.rejudge!, (k) => input.roster?.find((r) => r.key === k)?.display_name ?? k) });
+      addArm({ key: 'rejudge', label: REJUDGE_LABEL, decision: { approve: true, action: REJUDGE_ACTION } as unknown as GateAnswer, note: 'none', title: rejudgeTitle(input.rejudge!, (k) => (standInBase(k) !== null ? seatKeyName(k, input.roster) : input.roster?.find((r) => r.key === k)?.display_name ?? k)) });
     }
     if (deadSeat === null && deniedUnit) {
       addArm({ key: 'approve', label: 'Approve', decision: { approve: true }, note: 'none', title: 'Re-run the step from the start under the same policies; the captured output is not accepted.' });
