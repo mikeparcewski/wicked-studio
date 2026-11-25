@@ -419,4 +419,16 @@ describe('Memory: Steering’s ways in (§6.3)', () => {
     await waitFor(() => expect(d.sent('POST /proposals')[0]).toEqual({ content: 'Old idea.' }));
     expect(await screen.findByTestId('memory-retired-back')).toBeTruthy();
   });
+
+  it('studio#1433: bringing back an agent learning keeps its kind and its repository', async () => {
+    // As crew's learnings service files one (wicked-crew learnings/service.ts file(): payload {content, capture, tier,
+    // reach}, facets {repo, project, cli}); a pattern is filed as procedural (tierOf).
+    d.on('GET /proposals', { proposals: [{ id: 'q2', kind_type: 'memory', payload: { content: 'Run the migrations first.', capture: 'pattern', tier: 'procedural', reach: 'project' }, facets: { repo: 'r-api', project: 'p-wicked', cli: 'claude' }, provenance: { run_id: 'run-1' }, state: 'rejected', created_at: 1 }] });
+    d.on('POST /proposals', { id: 'n2' });
+    d.on('POST /proposals/n2/approve', { outcome: 'promoted', active_id: 'm10' });
+    render(<MemoryRetired soft={false} onClose={() => undefined} onBrought={() => undefined} onErase={() => undefined} />);
+    fireEvent.click(await screen.findByTestId('memory-retired-bring'));
+    await waitFor(() => expect(d.sent('POST /proposals')[0]).toEqual({ content: 'Run the migrations first.', project: 'p-wicked', repo: 'r-api', tier: 'procedural' }));
+    expect(await screen.findByTestId('memory-retired-back')).toBeTruthy();
+  });
 });
