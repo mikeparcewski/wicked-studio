@@ -2267,10 +2267,14 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         <QeRefusalWarning kind="launch" refusalKey={qeRefusal.key} detail={qeRefusal.detail} forced={qeRefusal.forced} navigate={navigate} testId="launch-qe-refused" />
       )}
 
-      {standIn !== null && (standIn.sent === helperKeys(selectedClis) || standInBusy !== null || standInError !== null) && (
+      {standIn !== null && (standIn.sent === helperKeys(selectedClis) || standInBusy !== null) && (
         <StandInChoice refusal={standIn.refusal} name={helperNamer(roster)} busy={standInBusy} error={standInError} testId="launch-standin"
           signedInNow={userSeats(roster).filter((s) => seatJoinStanding(s).state === 'ready').map((s) => s.key)}
           onChoose={(id) => { void chooseStandIn(id); }} />
+      )}
+      {/* The helpers changed after the refusal: its words no longer hold, but a choice's failure is still said (codex delta 2). */}
+      {standIn !== null && standIn.sent !== helperKeys(selectedClis) && standInBusy === null && standInError !== null && standInError.trim() !== '' && (
+        <p role="alert" className="wk-standin-choice-text wk-standin-choice-error" data-testid="launch-standin-error">{standInError}</p>
       )}
 
       {/* Error message */}

@@ -1057,7 +1057,7 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
               navigate={(p) => { closeStore(); (navigate ?? goToPath)(p); }} />
           )}
           </>}
-          {standIn !== null && launched === null && step === 'review' && (standInSent === seatKeys || standInBusy !== null || standInError !== null) && (
+          {standIn !== null && launched === null && step === 'review' && (standInSent === seatKeys || standInBusy !== null) && (
             <StandInChoice refusal={standIn} name={helperNamer(roster)} busy={standInBusy} error={standInError} testId="launch-wizard-standin"
               signedInNow={order.includes('options') ? eligible.filter((s) => seatJoinStanding(s).state === 'ready').map((s) => s.key) : undefined}
               onChoose={(id) => { void chooseStandIn(id); }} />
