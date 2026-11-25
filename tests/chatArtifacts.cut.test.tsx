@@ -22,7 +22,8 @@ const { api } = await import('../src/api/client.js');
 const { DemoCutAdapter } = await import('../src/editors/demoCutAdapter.js');
 const { demoCut4 } = await import('../src/editors/fixtures/demoCut4.js');
 const { onCutLanded, noteCutLanded, resetCutLanded } = await import('../src/store/chatCutLanded.js');
-const { foldChatProposals, proposalAsk, changeRoute, proposalRecordLine, proposalResultWords, resetSettledProposals, isArtifactProposal } = await import('../src/board/artifactProposal.js');
+const { foldChatProposals, proposalAsk, changeRoute, proposalRecordLine, proposalResultWords, resetSettledProposals, isArtifactProposal, isProposalRecord, isProposalView } = await import('../src/board/artifactProposal.js');
+const { artifactRefOf } = await import('../src/api/chatArtifacts-wire.js');
 type Proposal = import('../src/api/chatArtifacts-wire.js').ArtifactProposal;
 type Fixture = { records: Array<Record<string, unknown>>; decide: { view?: Record<string, unknown>; code?: string; error?: string } };
 
@@ -108,12 +109,38 @@ describe('the cut card model', () => {
     expect(proposalRecordLine(done!)).toBe('You chose: Change the video');
     expect(proposalResultWords(done!)).toBe('Changed · version 2 · no job was started');
   });
+
+  it('an op missing what its kind needs, a blank change or chapter, or a version that is no version, is never drawn (review r1)', () => {
+    const one = (op: Record<string, unknown>, change = 'x') => isArtifactProposal({ ...CARD, cut: { ops: [op], changes: [change] } });
+    expect(one({ op: 'chapter-drop', chapter: 's2' })).toBe(true);
+    expect(one({ op: 'chapter-drop', chapter: 's2' }, '')).toBe(false);
+    expect(one({ op: 'chapter-drop', chapter: '' })).toBe(false);
+    expect(one({ op: 'chapter-rename', chapter: 's2' })).toBe(false);
+    expect(one({ op: 'chapter-rename', chapter: 's2', title: 'Sign in' })).toBe(true);
+    expect(one({ op: 'chapter-move', chapter: 's2' })).toBe(false);
+    expect(one({ op: 'chapter-move', chapter: 's2', after: null })).toBe(true);
+    expect(one({ op: 'chapter-move', chapter: 's2', after: '' })).toBe(false);
+    expect(one({ op: 'chapter-trim', chapter: 's2', inSec: 0 })).toBe(false);
+    expect(one({ op: 'chapter-trim', chapter: 's2', inSec: 0, outSec: 2.5 })).toBe(true);
+    expect(one({ op: 'chapter-say', chapter: 's2' })).toBe(false);
+    expect(one({ op: 'chapter-say', chapter: 's2', say: '' })).toBe(true);
+    const decided = GO.records[2]!;
+    expect(isProposalRecord(decided)).toBe(true);
+    for (const version of [{ toString: null }, '2', 0, -1, 1.5]) {
+      expect(isProposalRecord({ ...decided, result: { ...(decided['result'] as object), version } })).toBe(false);
+      expect(isProposalView({ ...GO.decide.view, result: { ...(GO.decide.view!['result'] as object), version } })).toBe(false);
+    }
+  });
+
+  it('crew\'s card names the video by the same ref the editor registers for it', () => {
+    expect(artifactRefOf('mikes', 'demo-8e0ffbece431')).toBe(CARD.target!.ref);
+  });
 });
 
 describe('a cut card in the chat', () => {
   it('shows the video, the version it changes and each change in crew\'s words; Go answers it and the new version is told to the editor', async () => {
     const heard: number[] = [];
-    const off = onCutLanded(CARD.target!.ref, (l) => heard.push(l.version));
+    const off = onCutLanded(CARD.target!.ref, async (l) => { heard.push(l.version); return true; });
     page();
     await waitFor(() => expect(screen.getByTestId('artifact-proposal')).toBeTruthy());
     expect(text('artifact-proposal-what')).toBe('Change the video · Demo of http://127.0.0.1:5173/');
@@ -128,6 +155,31 @@ describe('a cut card in the chat', () => {
     off();
   });
 
+  it('a decision read back without its date, or on a crew that draws no cut cards, plays nothing (review r1)', async () => {
+    const heard: number[] = [];
+    const off = onCutLanded(CARD.target!.ref, async (l) => { heard.push(l.version); return true; });
+    const view: Record<string, unknown> = { ...GO.decide.view };
+    delete view['decidedAt'];
+    decideAnswer = () => ok({ view });
+    page();
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /Change the video/ }));
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal').textContent).toContain('Changed · version 2'));
+    await Promise.resolve();
+    expect(heard).toStrictEqual([]);
+    off();
+  });
+
+  it('on a crew without chatArtifacts.cut, a cut card kept in the chat says why it can\'t go (review r1)', async () => {
+    useCapabilities.setState({ chatCut: false });
+    page();
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal')).toBeTruthy());
+    const go = screen.getByTestId('artifact-proposal').querySelector<HTMLButtonElement>('[data-ask-option="go"]');
+    expect(go?.disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: /^Change the video$/ })).toBeNull();
+    expect(screen.getByTestId('artifact-proposal').textContent).toContain('this studio’s crew doesn’t make video changes');
+  });
+
   it('a card crew blocked says why in crew\'s own sentence (no "Nothing was started" tacked on)', async () => {
     chatBody = { ...chatBody, messages: [...TURN, ...MOVED.records.map((r, i) => ({ ...r, at: T0 + 1500 + i }))] };
     page();
@@ -137,17 +189,44 @@ describe('a cut card in the chat', () => {
 });
 
 describe('the video a chat changed', () => {
-  it('each version is told once, and never an older one', () => {
+  it('each version is dealt with once, never an older one, and one no editor took waits for the next', async () => {
     const heard: number[] = [];
-    const off = onCutLanded('mikes/demo', (l) => heard.push(l.version));
+    const off = onCutLanded('mikes/demo', async (l) => { heard.push(l.version); return true; });
     noteCutLanded({ ref: 'mikes/demo', version: 3, base: 2 });
+    await vi.waitFor(() => expect(heard).toStrictEqual([3]));
     noteCutLanded({ ref: 'mikes/demo', version: 3, base: 2 });
     noteCutLanded({ ref: 'mikes/demo', version: 2, base: 1 });
     noteCutLanded({ ref: 'mikes/other', version: 9, base: 8 });
     noteCutLanded({ ref: 'mikes/demo', version: 4, base: 3 });
+    await vi.waitFor(() => expect(heard).toStrictEqual([3, 4]));
     off();
+    // No editor of the video is open: the landing waits for the next one to mount.
     noteCutLanded({ ref: 'mikes/demo', version: 5, base: 4 });
+    await Promise.resolve();
     expect(heard).toStrictEqual([3, 4]);
+    const later: number[] = [];
+    const off2 = onCutLanded('mikes/demo', async (l) => { later.push(l.version); return true; });
+    await vi.waitFor(() => expect(later).toStrictEqual([5]));
+    off2();
+  });
+
+  it('an editor that couldn\'t deal with a landing (its re-read failed) gets it again on the next note (review r1)', async () => {
+    const tries: number[] = [];
+    let fail = true;
+    const off = onCutLanded('mikes/demo', async (l) => {
+      tries.push(l.version);
+      if (fail) throw new Error('offline');
+      return true;
+    });
+    noteCutLanded({ ref: 'mikes/demo', version: 2, base: 1 });
+    await vi.waitFor(() => expect(tries).toStrictEqual([2]));
+    fail = false;
+    noteCutLanded({ ref: 'mikes/demo', version: 2, base: 1 });
+    await vi.waitFor(() => expect(tries).toStrictEqual([2, 2]));
+    noteCutLanded({ ref: 'mikes/demo', version: 2, base: 1 });
+    await Promise.resolve();
+    expect(tries).toStrictEqual([2, 2]);
+    off();
   });
 
   it('the editor never goes back to an older version when a slower read answers after a newer one (S3)', async () => {
@@ -163,6 +242,26 @@ describe('the video a chat changed', () => {
     answerOld(json({ ...demoCut4, rev: 3, version: 7 }));
     await slow;
     expect(a.artifact().head).toBe(8);
+  });
+
+  it('a slow read that answers after an Undo or Restore (which drops the cached cut) reads again, never going back (review r1)', async () => {
+    const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    let answerOld: (r: Response) => void = () => undefined;
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(json({ ...demoCut4, rev: 1, version: 8 }))          // the first read
+      .mockImplementationOnce(() => new Promise<Response>((r) => { answerOld = r; })) // the idle re-read, slow
+      .mockResolvedValueOnce(json({ ...demoCut4, rev: 1, version: 8 }))          // the restore's own read
+      .mockResolvedValueOnce(json({ rev: 2, version: 9 }))                        // POST restore: version 9
+      .mockResolvedValueOnce(json({ ...demoCut4, rev: 2, version: 9 })));        // the read again
+    const a = new DemoCutAdapter('p', 'team demo', 'Team demo');
+    await a.refresh();
+    const slow = a.refresh();
+    expect(await a.restoreVersion(7)).toStrictEqual({ version: 9 });
+    expect(a.artifact().head).toBe(9);
+    answerOld(json({ ...demoCut4, rev: 1, version: 8 }));
+    await slow;
+    expect(a.artifact().head).toBe(9);
+    expect(a.artifact().read).toBe(true);
   });
 });
 

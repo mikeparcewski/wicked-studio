@@ -7,6 +7,7 @@ import type { SessionView } from '../../api/types.js';
 import { getVersions } from '../../api/interactive.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { noteCutLanded } from '../../store/chatCutLanded.js';
+import { useCapabilities } from '../../store/capabilities.js';
 
 import { NewDocument } from '../everything/NewDocument.js';
 import {
@@ -188,13 +189,19 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
   const outcome = useRefineOutcome(p, view.state === 'decided' && view.decision === 'go' && p.kind === 'refine' && !stub ? run : null, keptByAccepted(view));
   const detailsId = useId();
   // crew#1814: the version a cut card's Go made plays in the video's editor at once (told once per version, and only a
-  // decision of the last few minutes: an old card read back from history plays nothing).
-  const landedVersion = view.state === 'decided' && view.decision === 'go' && p.kind === 'cut' ? view.result?.version : undefined;
+  // dated decision of the last few minutes: an old or undated card read back from history plays nothing). Only where
+  // crew draws cut cards: a card kept in history from a newer crew is shown, never acted on.
+  const chatCut = useCapabilities((s) => s.chatCut);
+  const cutRefused = p.kind === 'cut' && !chatCut ? 'Can’t change the video from this chat here: this studio’s crew doesn’t make video changes. Change it by hand in its editor.' : null;
+  const landedVersion = chatCut && view.state === 'decided' && view.decision === 'go' && p.kind === 'cut' ? view.result?.version : undefined;
+  const landedRef = p.target?.ref;
+  const landedBase = p.target?.base;
+  const decidedAt = view.decidedAt;
   useEffect(() => {
-    if (landedVersion === undefined || p.target === undefined) return;
-    if (view.decidedAt !== undefined && Date.now() - view.decidedAt > CUT_LANDED_FRESH_MS) return;
-    noteCutLanded({ ref: p.target.ref, version: landedVersion, base: p.target.base });
-  }, [landedVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (landedVersion === undefined || landedRef === undefined || landedBase === undefined) return;
+    if (decidedAt === undefined || Date.now() - decidedAt > CUT_LANDED_FRESH_MS) return;
+    noteCutLanded({ ref: landedRef, version: landedVersion, base: landedBase });
+  }, [landedVersion, landedRef, landedBase, decidedAt]);
   // A card that settles drops the note it showed while it was open.
   useEffect(() => {
     if (!open) {
@@ -344,7 +351,7 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
           <button type="button" data-testid="artifact-proposal-theme-open" className="wk-btn wk-btn--quiet wk-btn--sm" onClick={() => goTo(SETTINGS_THEME_PATH)}>Open in Theme</button>
         </div>
       ) : open && answering ? null : open ? (
-        <AskCard ask={proposalAsk(view, { stub, themeRefused })} header={false} busy={busy} onAnswer={onAnswer}
+        <AskCard ask={proposalAsk(view, { stub, themeRefused, cutRefused })} header={false} busy={busy} onAnswer={onAnswer}
           confirmLabel={(o) => (o.id === 'change' ? (p.kind === 'theme' ? 'Open in Theme' : 'Change something') : o.label)}
           testIds={{ root: 'artifact-proposal-ask', confirm: 'artifact-proposal-confirm' }} />
       ) : view.state === 'accepting' ? (

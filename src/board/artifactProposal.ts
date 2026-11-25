@@ -92,9 +92,22 @@ export function isArtifactProposal(p: unknown): p is ArtifactProposal {
 
 const filled = (v: unknown): v is string => str(v) && v.trim() !== '';
 const CUT_OPS: ReadonlySet<string> = new Set(['chapter-rename', 'chapter-move', 'chapter-trim', 'chapter-say', 'chapter-drop']);
+/** One op as crew's `CutBlock` schema has it (proposal-cut.ts `CutOpSchema`): every field its kind needs, nothing blank
+ *  where crew requires a value. */
+const isCutOp = (o: unknown): boolean => {
+  if (!isObj(o) || !str(o['op']) || !CUT_OPS.has(o['op']) || !filled(o['chapter'])) return false;
+  const secs = (v: unknown): boolean => typeof v === 'number' && Number.isFinite(v);
+  switch (o['op']) {
+    case 'chapter-rename': return str(o['title']);
+    case 'chapter-move': return o['after'] === null || filled(o['after']);
+    case 'chapter-trim': return secs(o['inSec']) && secs(o['outSec']);
+    case 'chapter-say': return str(o['say']);
+    default: return true;
+  }
+};
 const isCut = (c: unknown): boolean => isObj(c) && Array.isArray(c['ops']) && Array.isArray(c['changes'])
-  && c['ops'].length > 0 && c['ops'].length === c['changes'].length && c['changes'].every(str)
-  && c['ops'].every((o) => isObj(o) && str(o['op']) && CUT_OPS.has(o['op']) && str(o['chapter']));
+  && c['ops'].length > 0 && c['ops'].length === c['changes'].length && c['changes'].every(filled)
+  && c['ops'].every(isCutOp);
 const isOnboard = (o: unknown): boolean => isObj(o) && str(o['url']) && str(o['name']) && strOrNull(o['checkout'])
   && strOrNull(o['projectId']) && strOrNull(o['projectName'])
   && (o['existing'] === null || (isObj(o['existing']) && filled(o['existing']['id']) && filled(o['existing']['name'])))
@@ -115,7 +128,9 @@ const onboardGoable = (o: Record<string, unknown>, filedIn: unknown): boolean =>
 const PROTECTED_KINDS: ReadonlySet<string> = new Set(['text', 'attr', 'added', 'gone', 'order']);
 const isProtectedEdit = (e: unknown): boolean =>
   isObj(e) && str(e['id']) && str(e['label']) && PROTECTED_KINDS.has(String(e['kind'])) && (e['wid'] === null || str(e['wid'])) && typeof e['touched'] === 'boolean';
-const isResult = (r: unknown): boolean => r === null || (isObj(r) && str(r['runId']) && typeof r['stub'] === 'boolean');
+const isResult = (r: unknown): boolean => r === null || (isObj(r) && str(r['runId']) && typeof r['stub'] === 'boolean'
+  // (crew#1814) The version a cut's Go made: a positive whole number, or the result isn't one the card can draw.
+  && (r['version'] === undefined || (Number.isSafeInteger(r['version']) && (r['version'] as number) > 0)));
 
 export function isProposalRecord(r: unknown): r is ChatProposalRecord {
   if (!isObj(r) || !KINDS.has(String(r['kind'])) || typeof r['turnId'] !== 'string') return false;
@@ -307,9 +322,10 @@ export function goWords(p: ArtifactProposal): string {
 
 /** The card's question: one choose ask, Go preselected (never focused), Change something, Not now. A theme whose
  *  contrast fails (or can't be measured) offers neither Preview nor Open in Theme (`themeRefused`, DES §9). */
-export function proposalAsk(e: ProposalEntry, o: { stub: boolean; themeRefused?: string | null }): Ask {
+export function proposalAsk(e: ProposalEntry, o: { stub: boolean; themeRefused?: string | null; cutRefused?: string | null }): Ask {
   const p = e.proposal;
-  const refused = p.kind === 'theme' && o.themeRefused !== undefined && o.themeRefused !== null ? o.themeRefused : null;
+  const refused = p.kind === 'theme' && o.themeRefused !== undefined && o.themeRefused !== null ? o.themeRefused
+    : p.kind === 'cut' && o.cutRefused !== undefined && o.cutRefused !== null ? o.cutRefused : null;
   const go: AskOption = {
     id: 'go',
     label: goWords(p),

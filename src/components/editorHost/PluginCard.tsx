@@ -62,6 +62,9 @@ export function clickedIn(frame: HTMLIFrameElement | null | undefined): boolean 
 /** crew#1814: where the chat can change the cut, it says what to ask for (each change is a card the person approves). */
 const VIDEO_CHAT_NOTE_CHANGE = "Ask here to drop, move, rename or trim a chapter, or to change what a chapter's caption says. You see each change as a card and approve it before the video changes.";
 const VIDEO_CHAT_NOTE_CUT = "This chat can't change the video. Change it here by hand in Options: Chapters (rename, move, trim), Captions and Theme. Caption words can't be edited yet; for new words, make a new demo video.";
+/** The write line for a version a chat's cut card made (crew#1814): "Changed the video from the chat — version N. Undo". */
+const chatWrite = (version: number, base: number): Parameters<NonNullable<HostUi['written']>>[0] =>
+  ({ version, base, summary: 'the video from the chat', words: 'the video from the chat', anchors: [], verb: 'changed' });
 const VIDEO_CHAT_NOTE_RECORDING = "This chat can't change the video. Once the run is done, Edit the cut makes a copy you can change by hand; at the review gate, Record it again records a new take.";
 
 export function PluginCard(props: PluginCardProps): React.ReactElement {
@@ -169,8 +172,9 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   const run = useRunHost();
   const frameBox = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<EditorHost | null>(null);
-  /** Versions an Options write made while this card had no connected host: adopted at its handshake. */
-  const pendingAdopt = useRef<{ group: string; version: number }[]>([]);
+  /** Versions an Options write made while this card had no connected host: adopted at its handshake. A chat's version
+   *  (`chat`) is adopted then only if it is still the head, and its line with Undo is drawn then (crew#1814). */
+  const pendingAdopt = useRef<{ group: string; version: number; chat?: { base: number } }[]>([]);
   const logRef = useRef<HostLogEntry[]>([]);
   const [decl, setDecl] = useState<Surfaces | null>(null);
   const [protocol, setProtocol] = useState(1);
@@ -279,17 +283,27 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
   // crew#1814: a version of this video that a chat's cut card made plays here at once, with Undo beside it. Only when it
   // is the head the video tool now answers (R5): a later hand edit, or another chat's change, is never shown as this.
   useEffect(() => {
-    if (adapter === null || inViewRef === null || binding.source !== 'demo') return undefined;
-    return onCutLanded(inViewRef, (l) => {
-      void Promise.resolve(adapter.refresh?.()).then(() => {
-        if (!live.current || adapter.artifact().head !== l.version) return;
-        if (hostRef.current?.alive === true) hostRef.current.adopt(l.version);
-        else pendingAdopt.current.push({ group, version: l.version });
-        hostRef.current?.artifactChanged(l.version, 'generated');
-        writtenRef.current?.({ version: l.version, base: l.base, summary: 'the video from the chat', words: 'the video from the chat', anchors: [], verb: 'changed' });
-      }).catch(() => undefined);
+    if (adapter === null || inViewRef === null || binding.source !== 'demo' || !chatCut) return undefined;
+    // This subscription's own lifetime: a landing whose re-read finishes after the card moved to another video (or
+    // unmounted) leaves it for that video's editor, never touching this card's host or line.
+    let active = true;
+    const off = onCutLanded(inViewRef, async (l) => {
+      await adapter.refresh?.();
+      if (!active || !live.current) return false;
+      if (adapter.artifact().head !== l.version) return true;
+      const host = hostRef.current;
+      if (host?.alive === true && writtenRef.current !== null) {
+        host.adopt(l.version);
+        host.artifactChanged(l.version, 'generated');
+        writtenRef.current(chatWrite(l.version, l.base));
+      } else {
+        // No host yet (grants, start, Reload it): adopted when one exists, if it is still the head then.
+        pendingAdopt.current.push({ group, version: l.version, chat: { base: l.base } });
+      }
+      return true;
     });
-  }, [adapter, inViewRef, binding.source, group]);
+    return () => { active = false; off(); };
+  }, [adapter, inViewRef, binding.source, group, chatCut]);
 
   // One host per mount (EP-D2): the frame is made once; card ↔ full is the same element. "Reload it" remounts.
   useEffect(() => {
@@ -396,7 +410,11 @@ function LiveCard({ binding, editor, adapter: adapterProp, src: srcProp, grants:
       hostRef.current = host;
       // Writes from Options that landed while there was no host: this card's, as soon as it has one (only this
       // group's; a queue left by another artifact's group is dropped).
-      for (const p of pendingAdopt.current.splice(0)) if (p.group === group) host.adopt(p.version);
+      for (const p of pendingAdopt.current.splice(0)) {
+        if (p.group !== group) continue;
+        if (p.chat === undefined) host.adopt(p.version);
+        else if (adapter.artifact().head === p.version) { host.adopt(p.version); written(chatWrite(p.version, p.chat.base)); }
+      }
       host.mount();
     };
     void start();
