@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EditorView } from '../src/api/editors.js';
-import { PluginCard } from '../src/components/editorHost/PluginCard.js';
+import { PluginCard, undoSubject } from '../src/components/editorHost/PluginCard.js';
 import { FakeSurfaceAdapter } from '../src/editors/adapters/fake.js';
 import { RUN_TAB, useHostChrome, useHostPanel, type ArtifactBinding } from '../src/editors/hostApi.js';
 import { resetArtifactSizes } from '../src/store/artifactSizes.js';
@@ -90,6 +90,7 @@ describe('the version a chat made, in the video\'s editor', () => {
     await act(async () => { fireEvent.click(screen.getByTestId('page-undo')); });
     expect(undo).toHaveBeenCalledExactlyOnceWith(2);
     expect(adapter.artifact().head).toBe(3);
+    expect(screen.getByTestId('page-line').textContent).toContain('Undone — version 3 is the video before that change.');
   });
 
   it('a version that is no longer the head (a hand edit landed after it) is never adopted and gets no Undo', async () => {
@@ -155,4 +156,24 @@ describe('the version a chat made, in the video\'s editor', () => {
         await waitFor(() => expect(screen.getByTestId('page-line').textContent).toContain('Changed the video from the chat — version 2.'));
       }
     });
+
+  it('F3 (round 1): a video says "video" in its Undo lines wherever it is shown (the editor\'s sample too); a page says "page"', () => {
+    const b = { artifactKey: 'k', title: 't', projectId: 'p', composerKey: 'c' };
+    expect(undoSubject({ ...b, kind: 'demo-video', source: 'demo' } as never)).toBe('video');
+    expect(undoSubject({ ...b, kind: 'demo-video', source: 'fake' } as never)).toBe('video');
+    expect(undoSubject({ ...b, kind: 'walkthrough', source: 'fake' } as never)).toBe('video');
+    expect(undoSubject({ ...b, kind: 'page', source: 'interactive-doc' } as never)).toBe('page');
+    expect(undoSubject({ ...b, kind: 'deck', source: 'fake' } as never)).toBe('page');
+  });
+
+  it('F3: an Undo another editor or tab already made says so in a video\'s words', async () => {
+    const { adapter } = await openCard();
+    const v = await landElsewhere(adapter);
+    await act(async () => { noteCutLanded({ ref: REF, version: v, base: 1 }); });
+    await waitFor(() => expect(screen.getByTestId('page-undo')).toBeTruthy());
+    await landElsewhere(adapter, '#654321');
+    await act(async () => { fireEvent.click(screen.getByTestId('page-undo')); });
+    expect(screen.getByTestId('page-line').textContent).toContain('Not undone — the video changed since (now version 3), in another editor or tab.');
+    expect(screen.getByTestId('page-line').textContent).not.toContain('Your change stays');
+  });
 });

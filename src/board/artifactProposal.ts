@@ -337,17 +337,19 @@ export function proposalAsk(e: ProposalEntry, o: { stub: boolean; themeRefused?:
     consequence: o.stub
       ? 'Test configuration: Studio records your click and starts nothing.'
       : p.kind === 'onboard' && p.onboard !== undefined ? onboardConsequence(p.onboard) : GO_CONSEQUENCE[p.kind],
-    ...(p.blocked !== null ? { disabled: `Blocked: ${p.blocked}` } : refused !== null ? { disabled: refused } : { recommended: true }),
+    // (crew#1814 R2 F1) A blocked cut says crew's sentence once, in the card's own paragraph above.
+    ...(p.blocked !== null ? { disabled: p.kind === 'cut' ? 'Not possible now: the reason is above.' : `Blocked: ${p.blocked}` } : refused !== null ? { disabled: refused } : { recommended: true }),
   };
   const change: AskOption = {
     id: 'change', label: CHANGE_WORDS[p.kind], sub: CHANGE_SUB[p.kind], token: 'change', tone: 'neutral',
     consequence: p.kind === 'theme' ? 'The Theme page shows yours and the proposal side by side; nothing is saved until you apply it.' : 'Change what is proposed before anything starts.',
-    ...(refused !== null ? { disabled: refused } : {}),
+    // A cut's Change something is "say it in the chat", which a refused Go leaves open.
+    ...(refused !== null && p.kind !== 'cut' ? { disabled: refused } : {}),
   };
   const options: AskOption[] = [
     go,
     change,
-    { id: 'not_now', label: 'Not now', sub: NOT_NOW_SUB[p.kind], token: 'not_now', tone: 'neutral', consequence: 'Nothing starts. The proposal stays in the chat as declined.' },
+    { id: 'not_now', label: 'Not now', sub: NOT_NOW_SUB[p.kind], token: 'not_now', tone: 'neutral', consequence: p.kind === 'cut' ? 'The video stays as it is. The card stays in the chat as declined.' : 'Nothing starts. The proposal stays in the chat as declined.' },
   ];
   return {
     id: `proposal:${e.pid}`,
@@ -371,18 +373,26 @@ export function shownProposal(e: ProposalEntry): ArtifactProposal {
 /** How long a recorded Go reads as still starting (crew creates the document, snapshots its repositories and launches:
  *  seconds, up to a big clone). After it, an `accepting` proposal reads as interrupted, with Go again. */
 export const PROPOSAL_STARTING_MS = 180_000;
+/** (crew#1814 R2 F2) A cut renders on the video tool for up to crew's launcher timeout (probe and two encodes). */
+export const CUT_STARTING_MS = 900_000;
+/** How long after its Go an accepting proposal of this kind still reads as starting. */
+export const proposalStartingMs = (kind: ArtifactProposalKind): number => (kind === 'cut' ? CUT_STARTING_MS : PROPOSAL_STARTING_MS);
 
 /** Whether an `accepting` proposal is still starting: this tab's own Go is in flight, or Go was recorded moments ago. */
 export function proposalStarting(e: ProposalEntry, now: number, inFlight: boolean): boolean {
-  return e.state === 'accepting' && (inFlight || (e.acceptingAt !== undefined && now - e.acceptingAt < PROPOSAL_STARTING_MS));
+  return e.state === 'accepting' && (inFlight || (e.acceptingAt !== undefined && now - e.acceptingAt < proposalStartingMs(e.proposal.kind)));
 }
 
-export function proposalRecordLine(e: ProposalEntry, starting = false): string | null {
+/** `pending`: crew answered a Go again that the video tool is still making this cut (`cut_pending`). */
+export function proposalRecordLine(e: ProposalEntry, starting = false, pending = false): string | null {
   if (e.state === 'open') return null;
   if (e.state === 'superseded') return 'A newer proposal replaced this one. Nothing was started.';
   if (e.state === 'accepting') {
     // (crew#1814) A cut starts no run: the video tool renders the new version (seconds to a few minutes).
-    if (e.proposal.kind === 'cut') return starting ? 'Making the new version…' : 'Interrupted before the new version was recorded. Go again checks whether it was made.';
+    if (e.proposal.kind === 'cut') {
+      if (starting) return 'Making the new version…';
+      return pending ? 'Still making the new version. Go again shows it here once it’s made.' : 'Interrupted before the new version was recorded. Go again checks whether it was made.';
+    }
     return starting ? 'Starting it…' : 'Interrupted before it was recorded as started.';
   }
   // A theme's Go is recorded when the person APPLIED it (a preview records nothing).
@@ -396,7 +406,7 @@ export function proposalResultWords(e: ProposalEntry): string | null {
   if (e.result.stub) return 'Test configuration: recorded, nothing was made';
   if (e.proposal.kind === 'theme') return 'Saved to your studio settings · no job was started';
   // (crew#1814) The version the change made: the editor plays it.
-  if (e.proposal.kind === 'cut') return e.result.version !== undefined ? `Changed · version ${e.result.version} · no job was started` : 'Changed · no job was started';
+  if (e.proposal.kind === 'cut') return e.result.version !== undefined ? `Changed · version ${e.result.version}` : 'Changed';
   const ob = e.proposal.onboard;
   if (e.proposal.kind === 'onboard' && ob !== undefined) {
     // (crew#1694) A project Go created is named as made, by the name the card showed.
