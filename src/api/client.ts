@@ -293,6 +293,10 @@ export const api = {
    *  makes (api-types 0.212.0). Nothing is launched. Rejects on an older daemon (404): show nothing then. */
   previewLaunchPosture: (body: import('../board/launchPosture.js').LaunchPreviewBody) =>
     apiFetch<{ posture?: import('../board/launchPosture.js').LaunchPreviewPosture }>('/runs/preview', { method: 'POST', body: JSON.stringify(body) }),
+  /** (J6 S1) The scope card of a domain model launch: `POST /runs/preview` with the scope and the repository (crew
+   *  api-types 0.230.0). Nothing is launched and no model is called. */
+  previewDomainScope: (body: { workflow: string; repoRef: string; domainScope: import('./domainModel-wire.js').DomainScope }, opts: { signal?: AbortSignal } = {}) =>
+    apiFetch<import('./domainModel-wire.js').DomainPreviewResponse>('/runs/preview', { method: 'POST', body: JSON.stringify(body), ...(opts.signal !== undefined ? { signal: opts.signal } : {}) }),
 
   /**
    * What a workflow launch of `problem` WOULD append as linked issues (crew#825, crew ≥ 0.8.8): the
@@ -731,13 +735,12 @@ export const api = {
     }
     return body as import('./types.js').RequirementsPage;
   },
-  /** Set (1..100) or clear (`null`: the Settings minimum applies) a repository's own requirements minimum (crew
-   *  api-types 0.197.0 `PUT /repos/:id/requirements/minimum`). */
-  setRequirementsMinimum: (repoId: string, minPct: number | null) =>
-    apiFetch<{ minimum: unknown }>(`/repos/${encodeURIComponent(repoId)}/requirements/minimum`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ minPct }),
+  /** (J6 S1) A person's Confirm or Reject on the domain model (crew api-types 0.230.0
+   *  `POST /repos/:id/requirements/rulings`); the key and target hash come from the model the person read. */
+  domainRuling: (repoId: string, body: import('./domainModel-wire.js').DomainRulingBody) =>
+    apiFetch<import('./domainModel-wire.js').DomainRulingResponse>(`/repos/${encodeURIComponent(repoId)}/requirements/rulings`, {
+      method: 'POST',
+      body: JSON.stringify(body),
     }),
   getRequirement: (repoId: string, key: string) =>
     apiFetch<{ requirement: import('./types.js').RequirementDetail }>(`/repos/${encodeURIComponent(repoId)}/requirements/${encodeURIComponent(key)}`),
