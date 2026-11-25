@@ -128,6 +128,12 @@ export interface NeedRow {
   tone: NarrationTone;
   /** The honest clock, or null when no wire carries one ("age unknown"). */
   at: number | null;
+  /** Which occurrence of the subject this is, from the daemon's own identity (a run's terminal clock, a proposal's
+   *  id, a repo's `registered_at`, a failed onboarding run's id and end): the same live and after a reload. Absent when
+   *  the wire names no occurrence; such a row can't be snoozed (crew#1124). A gate has none yet: a run can ask again at
+   *  the same `ord`, and neither the live frame nor the gate read carries crew's `interactionId`. A steer ask's id is
+   *  minted by this browser and not kept across a reload. */
+  instance?: string;
   /** Where the row's body links (the subject's own surface). */
   subjectPath: string;
   action: NeedAction;
@@ -341,6 +347,12 @@ export function endedAtMs(v: SessionView): number | null {
 }
 
 /** The engine's terminal clock (`finished_at`, already unix MILLIS), or null. */
+/** A run row's occurrence: the daemon's terminal clock (`ended_at`, else the engine's `finished_at`), when it has one. */
+function terminalInstance(v: SessionView): { instance?: string } {
+  const t = endedAtMs(v) ?? finishedAtMs(v);
+  return t !== null ? { instance: `ended:${t}` } : {};
+}
+
 export function finishedAtMs(v: SessionView): number | null {
   const t = v.session.finished_at;
   return typeof t === 'number' && t > 0 ? t : null;
@@ -375,6 +387,7 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
     const onboard = repoOnboard(mine, repo.id);
     if (onboard.state === 'failed' && onboard.run !== null) {
       const runId = onboard.run.session.id;
+      const onboardEnd = endedAtMs(onboard.run) ?? finishedAtMs(onboard.run);
       suppressed.add(runId);
       rows.push({
         key: `repo:${repo.id}`,
@@ -385,6 +398,8 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         text: 'Graph build failed — the fleet is blind on this repo',
         tone: 'fail',
         at: failedAt[runId] ?? attachedAt[runId] ?? null,
+        // The failed onboarding run and its end: a later onboarding of the same repo is a new occurrence.
+        ...(onboardEnd !== null ? { instance: `run:${runId}@ended:${onboardEnd}` } : {}),
         subjectPath: `/repo-detail/${encodeURIComponent(repo.id)}`,
         action: {
           kind: 'reindex-prefill',
@@ -406,6 +421,7 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         tone: 'gate',
         // The wire's `registered_at` is epoch SECONDS; every `at` here is ms (D6: "20702d").
         at: typeof repo.registered_at === 'number' ? repo.registered_at * 1000 : null,
+        ...(typeof repo.registered_at === 'number' ? { instance: `registered:${repo.registered_at}` } : {}),
         subjectPath: `/repo-detail/${encodeURIComponent(repo.id)}`,
         action: {
           kind: 'open',
@@ -470,6 +486,7 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         // terminal clock (`finished_at`, millis — present when the daemon booted after the run
         // ended and so has no `run.ended` entry), then the durable-log tail, then the attach clock.
         at: endedAtMs(v) ?? finishedAtMs(v) ?? failedAt[s.id] ?? attachedAt[s.id] ?? null,
+        ...terminalInstance(v),
         subjectPath: runOpenPath(s.id),
         action: { kind: 'retry-prefill', prefill: retryPrefillOf(v), label: 'Retry ›' },
       });
@@ -559,6 +576,7 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         tone: line.tone,
         // S16a-1a (studio#587): the daemon's own terminal clocks first, as the failed row reads them.
         at: endedAtMs(v) ?? finishedAtMs(v) ?? attachedAt[s.id] ?? null,
+        ...terminalInstance(v),
         subjectPath: `${sessionPath(`run:${s.id}`)}${DELIVER_HASH}`,
         // Open-in-place, never a POST from the queue (the fold's standing rule): the run's thread
         // carries the stranded card's one-click Deliver; `#deliver` focuses it on arrival.
@@ -697,6 +715,7 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
       text: decision !== null ? decisionRowText(statement, decision.edits?.steering_type ?? decision.derived.steering_type) : proposalConsequenceLine(p),
       tone: 'gate',
       at: typeof p.created_at === 'number' ? p.created_at * 1000 : null,
+      instance: `proposal:${p.id}`,
       // A memory proposal is reviewed on the Memory page, a data shape in Understand's Knowledge view, a rule on Steer's Proposals view.
       subjectPath: reviewPathOf(kind),
       action: { kind: 'open', path: reviewPathOf(kind), label: 'Review ›' },

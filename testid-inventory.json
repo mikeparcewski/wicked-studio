@@ -213,6 +213,30 @@
       ]
     },
     {
+      "testId": "agents-login-link",
+      "files": [
+        "src/components/agents/containerSignIn.tsx"
+      ]
+    },
+    {
+      "testId": "agents-login-link-copy",
+      "files": [
+        "src/components/agents/containerSignIn.tsx"
+      ]
+    },
+    {
+      "testId": "agents-login-link-note",
+      "files": [
+        "src/components/agents/containerSignIn.tsx"
+      ]
+    },
+    {
+      "testId": "agents-login-link-url",
+      "files": [
+        "src/components/agents/containerSignIn.tsx"
+      ]
+    },
+    {
       "testId": "agents-login-scrim",
       "files": [
         "src/components/agents/containerSignIn.tsx"
@@ -1897,6 +1921,18 @@
     },
     {
       "testId": "artifact-proposal-change-helpers",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-cut",
+      "files": [
+        "src/components/chat/ArtifactProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-proposal-cut-change",
       "files": [
         "src/components/chat/ArtifactProposalCard.tsx"
       ]
@@ -3896,6 +3932,18 @@
       ]
     },
     {
+      "testId": "composer-job-rest",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-job-rest-toggle",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
       "testId": "composer-menu",
       "files": [
         "src/components/session/SlashMenu.tsx"
@@ -4060,6 +4108,18 @@
       ]
     },
     {
+      "testId": "composer-start-rest",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
+      "testId": "composer-start-rest-toggle",
+      "files": [
+        "src/components/session/InlineStart.tsx"
+      ]
+    },
+    {
       "testId": "composer-start-retry",
       "files": [
         "src/components/session/InlineStart.tsx"
@@ -4204,6 +4264,12 @@
       ]
     },
     {
+      "testId": "coverage-not-indexed",
+      "files": [
+        "src/components/CoverageView.tsx"
+      ]
+    },
+    {
       "testId": "coverage-reading",
       "files": [
         "src/components/CoverageView.tsx"
@@ -4271,6 +4337,12 @@
     },
     {
       "testId": "data-panel-open-source",
+      "files": [
+        "src/components/sources/DataPanel.tsx"
+      ]
+    },
+    {
+      "testId": "data-panel-rename",
       "files": [
         "src/components/sources/DataPanel.tsx"
       ]
@@ -5487,6 +5559,48 @@
       ]
     },
     {
+      "testId": "desk-inbox-snooze",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-snooze-cancel",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-snooze-failed",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-snooze-row",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-snoozed",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-snoozed-item",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-snoozed-until",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
       "testId": "desk-inbox-subtitle",
       "files": [
         "src/components/desk/DeskInbox.tsx"
@@ -5496,6 +5610,12 @@
       "testId": "desk-inbox-view",
       "files": [
         "src/components/desk/DeskV2.tsx"
+      ]
+    },
+    {
+      "testId": "desk-inbox-wake",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
       ]
     },
     {
@@ -9639,6 +9759,12 @@
       ]
     },
     {
+      "testId": "language-basis",
+      "files": [
+        "src/components/LanguageBar.tsx"
+      ]
+    },
+    {
       "testId": "language-label",
       "files": [
         "src/components/LanguageBar.tsx"
@@ -10365,6 +10491,18 @@
       ]
     },
     {
+      "testId": "launch-wizard-rest",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-rest-toggle",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
       "testId": "launch-wizard-review",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
@@ -10384,6 +10522,12 @@
     },
     {
       "testId": "launch-wizard-review-qe-off",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-review-rest",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]
@@ -15597,6 +15741,162 @@
       "testId": "preview-steps",
       "files": [
         "src/components/LaunchPreview.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-blocked",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-cancel",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-cancelled",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-card",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-card-item",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-card-what",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-compose-again",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-confirm",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-held",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-item",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-link",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-no-target",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-note",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-pick",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-publication",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-refresh",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-refresh-note",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-refused",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-resolve",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-resolve-absent",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-resolve-exists",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-resolve-note",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-show",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-unreadable",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-verdict",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
       ]
     },
     {
@@ -23363,6 +23663,12 @@
       ]
     },
     {
+      "testId": "source-former-names",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
       "testId": "source-header",
       "files": [
         "src/components/sources/SourceSheet.tsx"
@@ -23520,6 +23826,36 @@
     },
     {
       "testId": "source-rekey-status",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-rename",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-rename-apps",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-rename-blocker",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-rename-cancel",
+      "files": [
+        "src/components/sources/SourceSheet.tsx"
+      ]
+    },
+    {
+      "testId": "source-rename-go",
       "files": [
         "src/components/sources/SourceSheet.tsx"
       ]
@@ -28275,6 +28611,12 @@
     },
     {
       "pattern": "desk-inbox-folder-*",
+      "files": [
+        "src/components/desk/DeskInbox.tsx"
+      ]
+    },
+    {
+      "pattern": "desk-inbox-snooze-*",
       "files": [
         "src/components/desk/DeskInbox.tsx"
       ]

@@ -15,6 +15,7 @@
  */
 
 import { apiFetch } from './client.js';
+import { ApiError } from './errors.js';
 import type {
   McpPreviewResponse,
   SourceCheckResponse,
@@ -105,7 +106,40 @@ export const CREW_SOURCE = 'crew';
 const post = (body: unknown): RequestInit => ({ method: 'POST', body: JSON.stringify(body) });
 const at = (name: string, rest: string): string => `/sources/${encodeURIComponent(name)}/${rest}`;
 
+/**
+ * (crew#1514, api-types 0.225.0) Renaming a source. Local until studio's api-types pin carries them: crew answers the
+ * renamed `McpServer`, which also carries `formerNames` and `keychainAccount`.
+ */
+export interface RenameMcpServerBody {
+  to: string;
+  /** The slugs of the apps crew's `apps_bound` refusal listed: the person saw them and renames anyway. */
+  apps?: string[];
+}
+/** One app crew's `apps_bound` refusal names: it uses the source being renamed. */
+export interface RenameAppUse {
+  slug: string;
+  name: string;
+}
+/** A saved source as crew answers it after crew#1514 (both fields absent on a source never renamed, or an older crew). */
+export type RenamedServerFields = { formerNames?: string[]; keychainAccount?: string };
+
+/** The apps crew's 409 `apps_bound` names, or `null` for any other error. */
+export function appsBoundOf(e: unknown): RenameAppUse[] | null {
+  if (!(e instanceof ApiError) || e.status !== 409 || typeof e.body !== 'object' || e.body === null) return null;
+  const b = e.body as { code?: unknown; apps?: unknown };
+  if (b.code !== 'apps_bound' || !Array.isArray(b.apps)) return null;
+  const apps = b.apps.filter((a): a is RenameAppUse => typeof a === 'object' && a !== null && typeof (a as RenameAppUse).slug === 'string' && typeof (a as RenameAppUse).name === 'string');
+  // A list studio can't read whole is not one the person could confirm: crew's words show instead.
+  return apps.length === b.apps.length && apps.length > 0 ? apps : null;
+}
+
 export const sourcesApi = {
+  /**
+   * (crew#1514) Rename a saved source: it keeps its id, secret, switches, grants and links; its old name is retired while
+   * it exists. A human operator's only. `apps`: exactly the apps an earlier `apps_bound` refusal listed.
+   */
+  rename: (name: string, to: string, apps?: readonly string[]) =>
+    apiFetch<McpServer>(`/mcp/servers/${encodeURIComponent(name)}/rename`, post({ to, ...(apps !== undefined ? { apps: [...apps] } : {}) } satisfies RenameMcpServerBody)),
   /** Every registered server; the data panel keeps the data sources (and the API kinds an app may read). */
   list: () => apiFetch<McpServersResponse>('/mcp/servers'),
   /**

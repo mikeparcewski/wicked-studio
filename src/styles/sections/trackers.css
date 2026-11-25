@@ -129,3 +129,23 @@
   .wk-trk-iss em { display: none; }
   .wk-pm-sheet .wk-src-pair { grid-template-columns: 1fr; }
 }
+
+/* ── Product publish (a finished Compose run's plan, as GitHub issues: wicked-crew#372) ── */
+.wk-pub { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-card); min-width: 0; }
+.wk-pub-title { margin: 0; font-size: var(--text-sm); font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-pub-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.wk-pub-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: var(--space-1) 0; border-top: 1px solid var(--border-subtle); }
+.wk-pub-item[data-depth="1"] { padding-left: var(--space-3); }
+.wk-pub-item[data-depth="2"] { padding-left: calc(var(--space-3) * 2); }
+.wk-pub-item-head { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; min-width: 0; color: var(--ink-high); overflow-wrap: anywhere; }
+.wk-pub-kind { flex: none; font-size: var(--text-xs); color: var(--ink-muted); text-transform: lowercase; }
+.wk-pub-item details > summary { cursor: pointer; font-size: var(--text-caption); color: var(--ink-muted); }
+.wk-pub-body { margin: var(--space-1) 0 0; padding: var(--space-2) var(--space-3); border-left: 3px solid var(--border-strong); background: var(--surface-raised); border-radius: var(--radius-sm); font: inherit; font-size: var(--text-caption); color: var(--ink-body); white-space: pre-wrap; overflow-wrap: anywhere; }
+.wk-pub-state { font-size: var(--text-caption); color: var(--ink-muted); overflow-wrap: anywhere; }
+.wk-pub-state[data-tone="ok"] { color: var(--status-ok); }
+.wk-pub-state[data-tone="warn"] { color: var(--status-warn); }
+.wk-pub-state[data-tone="fail"] { color: var(--status-fail); }
+.wk-pub-resolve { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.wk-pub-resolve input { width: 7rem; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-base); color: var(--ink-high); font: inherit; }
+.wk-pub-pick { max-width: 100%; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-base); color: var(--ink-high); font: inherit; }
+.wk-pub :is(button, select, input, summary, a):focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }

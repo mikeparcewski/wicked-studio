@@ -77,6 +77,9 @@ export interface JobPost {
   option: string | null;
   depth: 'quick' | 'standard' | 'deep' | null;
   words: string;
+  /** The person's own words, when `words` carries more (studio#1399's REST line): the repository they name is read from
+   *  these, never from text studio added. Absent = `words`. */
+  repoWords?: string;
   source: 'pick' | 'command';
   /** The chat this composer stands in, live on the daemon; null = none yet (a seeded chat is opened). */
   chatId: string | null;
@@ -175,11 +178,12 @@ export async function postJob(p: JobPost): Promise<{ chatId: string; proposal: C
       // whose answer was lost is recovered, never doubled.
       // Kept for these words only: an edited request reads its own words again (codex r8).
       const kept = prepicked.get(p.pickKey);
-      let named = kept !== undefined && kept.words === p.words ? kept.named : undefined;
+      const own = p.repoWords ?? p.words;
+      let named = kept !== undefined && kept.words === own ? kept.named : undefined;
       if (named === undefined) {
-        named = await repoNamedInWords(p.words);
+        named = await repoNamedInWords(own);
         if (!wanted()) return null;
-        prepicked.set(p.pickKey, { words: p.words, named });
+        prepicked.set(p.pickKey, { words: own, named });
       }
       if (named !== null) {
         repoRef = named.repo.id;

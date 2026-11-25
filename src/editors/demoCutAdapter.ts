@@ -50,8 +50,19 @@ export class DemoCutAdapter implements HostAdapter {
     // Preserve E1's resolvedTheme alongside the stored style: skin colours are resolved by crew per render.
     return timedCut({ ...raw, type: 'demo-cut', title: this.title, style: effectiveVideoStyle(this.title, raw.style) });
   }
+  /** The newest cut version this adapter has read or made (kept across a restore, which drops the cached cut). */
+  private newestCut = 0;
   private async load(): Promise<DemoCut> {
-    const cut = this.shaped(await this.json<DemoCut>('cut'));
+    let cut = this.shaped(await this.json<DemoCut>('cut'));
+    // Versions only grow (every change, Undo and Restore included, is a new one): a read that answers after a newer one
+    // (the idle re-read racing a chat's change or a restore, crew#1814 S3) never takes the editor back. It reads again
+    // once (the late answer went out before the newer version); an answer still older is used but never installed.
+    if (cut.version < this.newestCut) {
+      if (this.cut !== null && this.cut.version === this.newestCut) return this.cut;
+      cut = this.shaped(await this.json<DemoCut>('cut'));
+      if (cut.version < this.newestCut) return this.cut !== null && this.cut.version >= this.newestCut ? this.cut : cut;
+    }
+    this.newestCut = cut.version;
     this.cut = cut; this.versionCuts.set(cut.version, cut); this.setHead(cut.version);
     return cut;
   }
@@ -103,6 +114,7 @@ export class DemoCutAdapter implements HostAdapter {
     const chapters = next.chapters.map(({ id, title, take, inSec, outSec }) => ({ id, title, take, inSec, outSec }));
     const result = await this.json<{ rev: number; version: number }>(styleOnly ? 'style' : 'recut', styleOnly ? 'PUT' : 'POST', styleOnly ? { rev: this.cut!.rev, style: next.style } : { rev: this.cut!.rev, chapters, ...(next.style === this.cut!.style ? {} : { style: next.style }) });
     this.cut = timedCut({ ...next, ...result });
+    this.newestCut = Math.max(this.newestCut, result.version);
     this.versionCuts.set(result.version, this.cut);
     this.setHead(result.version);
     return { version: result.version };
@@ -119,7 +131,7 @@ export class DemoCutAdapter implements HostAdapter {
       if (from === cut.version) return { error: 'bad_request', message: 'That is the working version already.' };
       // `expect_head`: the document's head, not only the cut's rev — a page version can land on a cut document.
       const r = await this.json<{ rev: number; version: number }>('restore', 'POST', { rev: cut.rev, from, ...(expectHead !== undefined ? { expect_head: expectHead } : {}) });
-      this.cut = null; this.setHead(r.version);
+      this.cut = null; this.newestCut = Math.max(this.newestCut, r.version); this.setHead(r.version);
       return { version: r.version };
     } catch (e) { return this.failure(e); }
   }

@@ -159,6 +159,7 @@
 .wk-launch-shape { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface-raised); }
 .wk-launch-shape-line { margin: 0; font-size: var(--text-body); color: var(--ink-body); }
 .wk-launch-shape-key { font-weight: var(--weight-strong); color: var(--ink-high); margin-right: var(--space-1); }
+.wk-launch-shape-option { margin-top: var(--space-2); }
 .wk-launch-shape-inputs { margin-top: var(--space-1); font-size: var(--text-body); color: var(--ink-body); }
 .wk-launch-shape-inputs ul { margin: 2px 0 0; padding-left: var(--space-5); display: flex; flex-direction: column; gap: 2px; }
 @media (max-width: 767px) {

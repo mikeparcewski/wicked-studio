@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../../api/client.js';
 import { ApiError } from '../../api/errors.js';
@@ -7,7 +7,7 @@ import { seatLabel } from '../../board/seatNames.js';
 import { getCachedRoster } from '../../store/rosterCache.js';
 import { isShortcutsPaletteOpen } from '../../hooks/useGlobalShortcuts.js';
 import { useLayerStore } from '../../store/layers.js';
-import { selectWords } from '../../board/terminalLinks.js';
+import { isMacPlatform, selectWords } from '../../board/terminalLinks.js';
 import { Terminal } from '../Terminal.js';
 import { AgentLoginProvider, SignInNotCompleted } from './agentLogin.js';
 import { holdInert, useLoginCover } from './inertHold.js';
@@ -93,6 +93,60 @@ interface Session {
 
 const FOCUSABLE = 'button:not([disabled]), a[href], summary, textarea, [tabindex]:not([tabindex="-1"])';
 
+/** What the sign-in link's Copy button says it did (a refused copy leaves the link selected for the keyboard). */
+export function linkCopyNote(ok: boolean, mac = isMacPlatform()): string {
+  return ok
+    ? 'Copied. Paste it into your browser’s address bar.'
+    : `Your browser didn’t allow the copy. The link is selected: press ${mac ? '⌘C' : 'Ctrl+C'} to copy it.`;
+}
+
+/**
+ * (studio#1362) The newest sign-in link the helper printed, outside its terminal: the helper can hold the terminal's
+ * mouse, so there a click or drag may never reach the link. Here it is a real link (a click opens it in a new tab, a
+ * drag carries it to the address bar), its text can be selected, and Copy link puts it on the clipboard.
+ */
+export function SignInLink({ url }: { url: string }): React.ReactElement | null {
+  /** The last copy's answer, for the link it copied (a note for another link is never shown). */
+  const [note, setNote] = useState<{ ok: boolean; url: string } | null>(null);
+  const anchor = useRef<HTMLAnchorElement | null>(null);
+  /** Each copy press, and each new link, is a new request: only the newest one's answer is said (codex r1). */
+  const seq = useRef(0);
+  useLayoutEffect(() => { seq.current += 1; return () => { seq.current += 1; }; }, [url]);
+  // Only a web address is ever a link here (the terminal's reader finds http(s) only; this holds it at the anchor too).
+  if (!/^https?:\/\//iu.test(url)) return null;
+  const copy = (): void => {
+    const mine = ++seq.current;
+    const asked = url;
+    const done = (ok: boolean): void => {
+      // The answer is for the link on screen now, or it is dropped: checked on the drawn link itself, so it holds
+      // even before React's effects run after a newer link is drawn (codex delta on studio#1362).
+      const el = anchor.current;
+      if (seq.current !== mine || el === null || el.getAttribute('href') !== asked) return;
+      setNote({ ok, url: asked });
+      // A refused copy focuses and selects the link, so the keyboard's copy takes it (not the terminal's).
+      const sel = typeof window !== 'undefined' ? window.getSelection() : null;
+      if (!ok && sel !== null) {
+        el.focus();
+        const r = document.createRange(); r.selectNodeContents(el); sel.removeAllRanges(); sel.addRange(r);
+      }
+    };
+    const clip = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
+    if (clip === undefined || typeof clip.writeText !== 'function') done(false);
+    else clip.writeText(asked).then(() => done(true), () => done(false));
+  };
+  const shown = note !== null && note.url === url ? note : null;
+  return (
+    <div className="wk-agents-link" data-testid="agents-login-link">
+      <span className="wk-agents-h" id="agents-login-link-label">Sign-in link</span>
+      <div className="wk-agents-link-row">
+        <a ref={anchor} href={url} target="_blank" rel="noopener noreferrer" data-testid="agents-login-link-url" aria-describedby="agents-login-link-label" className="wk-agents-link-url">{url}</a>
+        <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm wk-agents-link-copy" data-testid="agents-login-link-copy" onClick={copy}>Copy link</button>
+      </div>
+      {shown !== null && <span role="status" data-testid="agents-login-link-note" className={shown.ok ? 'wk-agents-safe' : 'wk-agents-safe wk-agents-link-note--fail'}>{linkCopyNote(shown.ok)}</span>}
+    </div>
+  );
+}
+
 /** The login container's terminal, over the agent's modal (Escape closes it first, like every later layer). */
 function LoginTerminal({ session, open, onOpenError, onClosed, onExit }: {
   session: Session;
@@ -145,6 +199,12 @@ function LoginTerminal({ session, open, onOpenError, onClosed, onExit }: {
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   };
   const { key, name, opened, onHost } = session;
+  // (studio#1362) The newest link the helper printed; kept when its screen moves on (the person may still need it).
+  const [link, setLink] = useState<string | null>(null);
+  const onLinks = useCallback((urls: readonly string[]): void => {
+    const newest = urls[urls.length - 1];
+    if (newest !== undefined) setLink(newest);
+  }, []);
   return createPortal(
     <div className="wk-agents-scrim wk-agents-scrim--login" data-testid="agents-login-scrim">
       <div ref={dialog} tabIndex={-1} onKeyDown={trapTab} role="dialog" aria-modal="true" aria-labelledby={titleId} data-testid="agents-login" data-agent={key} data-state={opened ? 'open' : 'opening'} className="wk-agents-modal wk-agents-modal--login">
@@ -159,8 +219,11 @@ function LoginTerminal({ session, open, onOpenError, onClosed, onExit }: {
               : onHost ? `Opening ${name}’s own sign-in on this computer…` : `Opening ${name}’s sign-in… The first sign-in can take a few minutes while it is prepared.`}
           </p>
           {/* (studio#1362) A helper's sign-in can keep the mouse for itself: say how to open its link and copy from it. */}
-          {opened && <p data-testid="agents-login-copy" className="wk-agents-safe">{`Click a sign-in link in the terminal to open it in a new tab. ${selectWords()}`}</p>}
-          <Terminal cwd="." open={open} onOpenError={onOpenError} onExit={onExit} />
+          {opened && <p data-testid="agents-login-copy" className="wk-agents-safe">{link !== null
+            ? `Open the sign-in link below, or press Copy link and paste it into your browser. ${selectWords()}`
+            : `Click a sign-in link in the terminal to open it in a new tab. ${selectWords()}`}</p>}
+          {opened && link !== null && <SignInLink url={link} />}
+          <Terminal cwd="." open={open} onOpenError={onOpenError} onExit={onExit} onLinks={onLinks} />
           <span className="wk-agents-safe">{onHost ? `Studio opens ${name}’s own sign-in on this computer.` : `Studio opens ${name}’s sign-in; follow its steps there.`} Studio never shows your password or token. For Claude, paste only the code your browser shows into claude’s own prompt: the sign-in reads the token claude prints, and asks you to paste it (unechoed) only if it cannot.</span>
         </div>
       </div>
