@@ -20,9 +20,10 @@ vi.mock('recharts', () => Object.fromEntries(['Area', 'AreaChart', 'Bar', 'BarCh
 const NOW = Date.UTC(2026, 10, 25, 12);
 const HOUR = 3_600_000;
 
+// A failed run's row, as needsYou.ts writes it (key `fail:<run>`, the daemon's terminal clock as its occurrence).
 const row = (i: number, over: Partial<NeedRow> = {}): NeedRow => ({
-  key: `gate:run-${i}`, kind: 'gate', severity: 100, stakes: 1,
-  subject: `Job ${i}`, text: `Approve step ${i}?`, tone: 'gate', at: NOW - i * HOUR, instance: `ord:${i}`,
+  key: `fail:run-${i}`, kind: 'failed-run', severity: 70, stakes: 1,
+  subject: `Job ${i}`, text: 'Run failed', tone: 'fail', at: NOW - i * HOUR, instance: `ended:${NOW - i * HOUR}`,
   subjectPath: `/run/run-${i}`, action: { kind: 'open', path: `/run/run-${i}`, label: 'Open' }, ...over,
 });
 
@@ -36,22 +37,35 @@ const rowsOf = (over: Partial<NeedsYouInputs>): NeedRow[] => needsYouRows({
 });
 
 describe('which item a snooze names (codex r1: an identity that survives a reload)', () => {
-  it('a gate seen live and the same gate read after a reload have one snooze key (its ord, not the clock)', () => {
-    // Live: the socket's awaitingHuman frame, through the gate store's own ingest (it stamps receivedAt with Date.now()).
+  it('a gate is not offered yet: a run can ask again at the same ord, and no gate frame or read names the occurrence (codex delta P1)', () => {
     useGateStore.setState({ gates: {} });
     useGateStore.getState().ingest({ type: 'awaitingHuman', session: 'run-1', ord: 7, prompt: 'Approve the plan?' } as never);
     const live = useGateStore.getState().gates['run-1']!;
-    // Reload: GET /runs/:id/gate's GateInfo, through the one reader of that answer.
     const reread = gateFromInfo({ runId: 'run-1', ord: 7, prompt: 'Approve the plan?', lifecycle: 'open', receivedAt: '2026-11-20T08:00:00.000Z' });
-    expect(live.receivedAt).not.toBe(reread.receivedAt);
-    const [a] = rowsOf({ runs: [run('run-1', 'awaiting_human')], gates: { 'run-1': live } });
-    const [b] = rowsOf({ runs: [run('run-1', 'awaiting_human')], gates: { 'run-1': reread } });
-    expect(snoozable(a!)).toBe(true);
-    expect(snoozeKey(a!)).toBe('gate:run-1@ord:7');
-    expect(snoozeKey(b!)).toBe(snoozeKey(a!));
-    // The run's next gate is a new occurrence.
-    const [c] = rowsOf({ runs: [run('run-1', 'awaiting_human')], gates: { 'run-1': { ...reread, ord: 9 } } });
-    expect(snoozeKey(c!)).not.toBe(snoozeKey(a!));
+    for (const gate of [live, reread]) {
+      const [g] = rowsOf({ runs: [run('run-1', 'awaiting_human')], gates: { 'run-1': gate } });
+      expect(g!.kind).toBe('gate');
+      expect(g!.instance).toBeUndefined();
+      expect(snoozable(g!)).toBe(false);
+    }
+  });
+
+  it('a steer ask is not offered: its id is minted by this browser and gone after a reload (codex delta P2)', () => {
+    const [st] = rowsOf({ runs: [run('run-5', 'running')], steerRequests: [{ id: 'local-uuid-1', runId: 'run-5', message: 'Which database?', ts: NOW - HOUR }] }).filter((r) => r.kind === 'steer-request');
+    expect(st).toBeDefined();
+    expect(st!.instance).toBeUndefined();
+    expect(snoozable(st!)).toBe(false);
+  });
+
+  it('a failed onboarding is named by its run and end, so the next onboarding of the repo is a new occurrence (codex delta P2)', () => {
+    const repo = { id: 'repo-1', name: 'billing', root_path: '/repos/repo-1', default_branch: 'main', registered_at: 1_699_000_000 };
+    const failed = (id: string, endedAt: number): SessionView => run(id, 'failed', { workflow_id: 'onboarding', repo_ref: 'repo-1', ended_at: endedAt });
+    const [first] = rowsOf({ runs: [failed('r-onboard-1', 1_700_000_000)], repos: [repo] });
+    expect(first!.kind).toBe('repo-graph');
+    expect(snoozable(first!)).toBe(true);
+    expect(snoozeKey(first!)).toBe('repo:repo-1@run:r-onboard-1@ended:1700000000000');
+    const [again] = rowsOf({ runs: [failed('r-onboard-2', 1_700_100_000)], repos: [repo] });
+    expect(snoozeKey(again!)).not.toBe(snoozeKey(first!));
   });
 
   it('rows only studio\'s own clock tells apart are not offered: a stalled chat, a gate not read yet, a row with no identity', () => {
@@ -88,8 +102,8 @@ describe('which rows a snooze holds back (pure)', () => {
   it('is for the item instance: a new decision on the same job is not held back by the old snooze', () => {
     const r = row(1);
     const by = { [snoozeKey(r)]: snooze(r, NOW + HOUR) };
-    expect(snoozeOf({ ...r, instance: 'ord:99' }, by, NOW)).toBeNull();
-    expect(splitSnoozed([r, row(2)], by, NOW).awake.map((x) => x.key)).toEqual(['gate:run-2']);
+    expect(snoozeOf({ ...r, instance: 'ended:99' }, by, NOW)).toBeNull();
+    expect(splitSnoozed([r, row(2)], by, NOW).awake.map((x) => x.key)).toEqual(['fail:run-2']);
   });
 
   it('offers ends crew takes: in the future and at most a week ahead', () => {
@@ -180,31 +194,31 @@ describe('snoozing in the Desk inbox (crew#1124)', () => {
     const [a, b] = [row(1), row(2)];
     snoozes = [snooze(a, NOW + 3 * HOUR)];
     render(<DeskInbox rows={[a, b]} {...props} />);
-    await waitFor(() => expect(listed()).toEqual(['gate:run-2']));
+    await waitFor(() => expect(listed()).toEqual(['fail:run-2']));
     expect(screen.getByTestId('desk-inbox-count')).toHaveTextContent('1 waiting · 1 unread · 1 snoozed');
     await act(async () => { fireEvent.click(screen.getByTestId('desk-inbox-folder-snoozed')); });
     const item = screen.getByTestId('desk-inbox-snoozed-item');
-    expect(item).toHaveAttribute('data-key', 'gate:run-1');
+    expect(item).toHaveAttribute('data-key', 'fail:run-1');
     expect(within(item).getByTestId('desk-inbox-snoozed-until').textContent).toMatch(/^Back today \d+:\d\d$/);
     await act(async () => { fireEvent.click(within(item).getByTestId('desk-inbox-wake')); });
     await waitFor(() => expect(calls.some((c) => c.method === 'DELETE')).toBe(true));
     expect(calls.find((c) => c.method === 'DELETE')!.url).toMatch(new RegExp(`/api/v1/desk/snoozes/${encodeURIComponent(snoozeKey(a)).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`));
     await act(async () => { fireEvent.click(screen.getByTestId('desk-inbox-folder-all')); });
     // Back in the list (the queue keeps the order it already showed, so it may come back at the end).
-    await waitFor(() => expect([...listed()].sort()).toEqual(['gate:run-1', 'gate:run-2']));
+    await waitFor(() => expect([...listed()].sort()).toEqual(['fail:run-1', 'fail:run-2']));
   });
 
   it('Snooze in the reading pane sends the item instance, its end and its rank, and the item leaves the list', async () => {
     const [a, b] = [row(1), row(2)];
     render(<DeskInbox rows={[a, b]} {...props} />);
     await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
-    const pane = await openRow('gate:run-1');
+    const pane = await openRow('fail:run-1');
     await act(async () => { fireEvent.click(within(pane).getByTestId('desk-inbox-snooze')); });
     await act(async () => { fireEvent.click(within(pane).getByTestId('desk-inbox-snooze-hour')); });
-    await waitFor(() => expect(listed()).toEqual(['gate:run-2']));
+    await waitFor(() => expect(listed()).toEqual(['fail:run-2']));
     const put = calls.find((c) => c.method === 'PUT')!;
-    expect(put.url).toMatch(/\/api\/v1\/desk\/snoozes\/gate%3Arun-1%40ord%3A1$/);
-    expect(put.body).toEqual({ until: new Date(NOW + HOUR).toISOString(), severity: 100 });
+    expect(put.url).toMatch(new RegExp(`/api/v1/desk/snoozes/fail%3Arun-1%40ended%3A${NOW - HOUR}$`));
+    expect(put.body).toEqual({ until: new Date(NOW + HOUR).toISOString(), severity: 70 });
     expect(screen.getByTestId('desk-inbox-count')).toHaveTextContent('· 1 snoozed');
   });
 
@@ -212,18 +226,18 @@ describe('snoozing in the Desk inbox (crew#1124)', () => {
     putAnswer = () => json({ error: 'Only a human operator can snooze a need.', code: 'human_operator_only' }, 403);
     render(<DeskInbox rows={[row(1)]} {...props} />);
     await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
-    const pane = await openRow('gate:run-1');
+    const pane = await openRow('fail:run-1');
     await act(async () => { fireEvent.click(within(pane).getByTestId('desk-inbox-snooze')); });
     await act(async () => { fireEvent.click(within(pane).getByTestId('desk-inbox-snooze-tomorrow')); });
     await waitFor(() => expect(within(pane).getByTestId('desk-inbox-snooze-failed')).toHaveTextContent('Only a person can snooze'));
-    expect(listed()).toEqual(['gate:run-1']);
+    expect(listed()).toEqual(['fail:run-1']);
   });
 
   it('a daemon without the snooze route (plain 404) offers no snooze and hides nothing', async () => {
     listAnswer = () => json({ error: 'Not Found' }, 404);
     render(<DeskInbox rows={[row(1)]} {...props} />);
     await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
-    const pane = await openRow('gate:run-1');
+    const pane = await openRow('fail:run-1');
     await act(async () => { await Promise.resolve(); });
     expect(within(pane).queryByTestId('desk-inbox-snooze')).toBeNull();
     expect(screen.queryByTestId('desk-inbox-folder-snoozed')).toBeNull();
@@ -233,15 +247,15 @@ describe('snoozing in the Desk inbox (crew#1124)', () => {
     const [a, b] = [row(1), row(2)];
     snoozes = [snooze(a, NOW + 3 * HOUR)];
     const { rerender } = render(<DeskInbox rows={[a, b]} {...props} />);
-    await waitFor(() => expect(listed()).toEqual(['gate:run-2']));
+    await waitFor(() => expect(listed()).toEqual(['fail:run-2']));
     listAnswer = () => json({ error: 'store locked' }, 500);
     await act(async () => { await useDeskSnoozes.getState().load(); });
-    await waitFor(() => expect([...listed()].sort()).toEqual(['gate:run-1', 'gate:run-2']));
+    await waitFor(() => expect([...listed()].sort()).toEqual(['fail:run-1', 'fail:run-2']));
     expect(screen.queryByTestId('desk-inbox-folder-snoozed')).toBeNull();
-    expect(within(await openRow('gate:run-1')).queryByTestId('desk-inbox-snooze')).toBeNull();
+    expect(within(await openRow('fail:run-1')).queryByTestId('desk-inbox-snooze')).toBeNull();
     listAnswer = () => json({ snoozes });
     rerender(<DeskInbox rows={[a, b]} {...props} now={NOW + 60_000} />);
-    await waitFor(() => expect(listed()).toEqual(['gate:run-2']));
+    await waitFor(() => expect(listed()).toEqual(['fail:run-2']));
   });
 
   it('a read that started before a snooze landed does not bring the item back (codex, pi r1)', async () => {
@@ -251,54 +265,60 @@ describe('snoozing in the Desk inbox (crew#1124)', () => {
     const held: Array<() => void> = [];
     listAnswer = () => { const before = [...snoozes]; return new Promise((done) => { held.push(() => done(json({ snoozes: before }))); }); };
     const stale = useDeskSnoozes.getState().load(); // in flight; nothing changes until it answers
-    const pane = await openRow('gate:run-1');
+    const pane = await openRow('fail:run-1');
     await act(async () => { fireEvent.click(within(pane).getByTestId('desk-inbox-snooze')); });
     await act(async () => { fireEvent.click(within(pane).getByTestId('desk-inbox-snooze-hour')); });
-    await waitFor(() => expect(listed()).toEqual(['gate:run-2']));
+    await waitFor(() => expect(listed()).toEqual(['fail:run-2']));
     expect(held.length).toBe(2); // the read in flight, and the one the snooze starts
     await act(async () => { held[0]!(); await stale; });
-    expect(listed()).toEqual(['gate:run-2']);
+    expect(listed()).toEqual(['fail:run-2']);
     await act(async () => { held[1]!(); await new Promise((r) => setTimeout(r, 0)); });
-    expect(listed()).toEqual(['gate:run-2']);
+    expect(listed()).toEqual(['fail:run-2']);
   });
 
   it('a read that started before a wake landed does not hide the item again', async () => {
     const [a, b] = [row(1), row(2)];
     snoozes = [snooze(a, NOW + 3 * HOUR)];
     render(<DeskInbox rows={[a, b]} {...props} />);
-    await waitFor(() => expect(listed()).toEqual(['gate:run-2']));
+    await waitFor(() => expect(listed()).toEqual(['fail:run-2']));
     const held: Array<() => void> = [];
     listAnswer = () => { const before = [...snoozes]; return new Promise((done) => { held.push(() => done(json({ snoozes: before }))); }); };
     const stale = useDeskSnoozes.getState().load();
     await act(async () => { fireEvent.click(screen.getByTestId('desk-inbox-folder-snoozed')); });
     await act(async () => { fireEvent.click(screen.getByTestId('desk-inbox-wake')); });
     await act(async () => { fireEvent.click(screen.getByTestId('desk-inbox-folder-all')); });
-    await waitFor(() => expect([...listed()].sort()).toEqual(['gate:run-1', 'gate:run-2']));
+    await waitFor(() => expect([...listed()].sort()).toEqual(['fail:run-1', 'fail:run-2']));
     expect(held.length).toBe(2); // the read in flight, and the one the wake starts
     await act(async () => { held[0]!(); await stale; });
-    expect([...listed()].sort()).toEqual(['gate:run-1', 'gate:run-2']);
+    expect([...listed()].sort()).toEqual(['fail:run-1', 'fail:run-2']);
     await act(async () => { held[1]!(); await new Promise((r) => setTimeout(r, 0)); });
-    expect([...listed()].sort()).toEqual(['gate:run-1', 'gate:run-2']);
+    expect([...listed()].sort()).toEqual(['fail:run-1', 'fail:run-2']);
   });
 
   it('an end crew refuses (400 desk_snooze_invalid) says what crew takes', async () => {
     putAnswer = () => json({ error: 'until must be in the future', code: 'desk_snooze_invalid' }, 400);
     render(<DeskInbox rows={[row(1)]} {...props} />);
     await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
-    const pane = await openRow('gate:run-1');
+    const pane = await openRow('fail:run-1');
     await act(async () => { fireEvent.click(within(pane).getByTestId('desk-inbox-snooze')); });
     await act(async () => { fireEvent.click(within(pane).getByTestId('desk-inbox-snooze-days')); });
     await waitFor(() => expect(within(pane).getByTestId('desk-inbox-snooze-failed')).toHaveTextContent('a snooze ends in the future, at most a week ahead'));
-    expect(listed()).toEqual(['gate:run-1']);
+    expect(listed()).toEqual(['fail:run-1']);
   });
 
   it('keyboard: the choices take focus when they open, and Cancel hands it back to Snooze (pi r1)', async () => {
     render(<DeskInbox rows={[row(1)]} {...props} />);
     await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
-    const pane = await openRow('gate:run-1');
+    const pane = await openRow('fail:run-1');
     await act(async () => { fireEvent.click(within(pane).getByTestId('desk-inbox-snooze')); });
     expect(document.activeElement).toBe(within(pane).getByTestId('desk-inbox-snooze-hour'));
     await act(async () => { fireEvent.click(within(pane).getByTestId('desk-inbox-snooze-cancel')); });
+    expect(document.activeElement).toBe(within(pane).getByTestId('desk-inbox-snooze'));
+    // A refusal hands focus back to Snooze too (codex delta P3).
+    putAnswer = () => json({ error: 'nope', code: 'desk_snooze_unsaved' }, 500);
+    await act(async () => { fireEvent.click(within(pane).getByTestId('desk-inbox-snooze')); });
+    await act(async () => { fireEvent.click(within(pane).getByTestId('desk-inbox-snooze-hour')); });
+    await waitFor(() => expect(within(pane).getByTestId('desk-inbox-snooze-failed')).toHaveTextContent('Couldn’t snooze it just now'));
     expect(document.activeElement).toBe(within(pane).getByTestId('desk-inbox-snooze'));
   });
 
@@ -308,16 +328,16 @@ describe('snoozing in the Desk inbox (crew#1124)', () => {
     putAnswer = (url, body) => new Promise((done) => { release = () => done(defaultPut(url, body)); });
     const { rerender } = render(<DeskInbox rows={[a, b]} {...props} />);
     await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
-    const pane = await openRow('gate:run-1');
+    const pane = await openRow('fail:run-1');
     await act(async () => { fireEvent.click(within(pane).getByTestId('desk-inbox-snooze')); });
     await act(async () => { fireEvent.click(within(pane).getByTestId('desk-inbox-snooze-hour')); });
     expect(within(pane).getByTestId('desk-inbox-snooze-hour')).toBeDisabled();
-    const next = { ...a, instance: 'ord:2' };
+    const next = { ...a, instance: `ended:${NOW}` };
     rerender(<DeskInbox rows={[next, b]} {...props} />);
     expect(within(screen.getByTestId('desk-inbox-read')).getByTestId('desk-inbox-snooze')).toBeEnabled();
     await act(async () => { release!(); await Promise.resolve(); });
     await waitFor(() => expect(calls.filter((c) => c.method === 'GET').length).toBeGreaterThanOrEqual(2));
-    expect([...listed()].sort()).toEqual(['gate:run-1', 'gate:run-2']);
+    expect([...listed()].sort()).toEqual(['fail:run-1', 'fail:run-2']);
   });
 
   it('an item that got worse since it was snoozed is back in the list', async () => {
@@ -326,6 +346,6 @@ describe('snoozing in the Desk inbox (crew#1124)', () => {
     const { rerender } = render(<DeskInbox rows={[a]} {...props} />);
     await waitFor(() => expect(listed()).toEqual([]));
     rerender(<DeskInbox rows={[{ ...a, severity: 94 }]} {...props} />);
-    expect(listed()).toEqual(['gate:run-1']);
+    expect(listed()).toEqual(['fail:run-1']);
   });
 });
