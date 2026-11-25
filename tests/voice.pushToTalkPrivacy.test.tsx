@@ -10,6 +10,7 @@ import { hear, openVoice, resetVoice, resetVoiceDeps, setVoiceDeps } from '../sr
 import { resetDashStore } from '../src/voice/dashboardStore.js';
 import { useVoiceStore } from '../src/store/voice.js';
 import { useGateStore } from '../src/store/gates.js';
+import { ApiError } from '../src/api/errors.js';
 
 /** The frame tags each recording handed out holds (jsdom's Blob has no text()). */
 const held = new WeakMap<Blob, string[]>();
@@ -208,6 +209,73 @@ describe('push-to-talk keeps nothing unless Space is held (studio#1400)', () => 
     await settle();
     expect(youLines()).toEqual([]);
     expect(mic.kept).toBeNull();
+  });
+
+  it('a partial still on its way when its turn ends normally shows nothing, before or after Space bar is chosen (codex delta)', async () => {
+    await enterFull();
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const partials: Array<(t: string) => void> = [];
+    const finalsWaiting: Array<(t: string) => void> = [];
+    setVoiceDeps({ stt: { transcribe: (wav) => { const tags = tagsOf(wav); sent.push(tags); return new Promise<string>((r) => { (tags.includes('quiet') ? finalsWaiting : partials).push(r); }); } } });
+    const quiet = async (ms: number): Promise<void> => {
+      for (let t = 0; t < ms; t += 100) await act(async () => { clock += 100; mic.frame('quiet', 0.001); vi.advanceTimersByTime(100); });
+    };
+    // Turn A: its first partial is asked for and held; a pause ends A (its final is on its way too). No turn follows.
+    await room(2000, 'a');
+    expect(partials.length).toBe(1);
+    await quiet(1000);
+    // The late partial lands after the turn ended: nothing shows.
+    await act(async () => { partials[0]!('the room is talking'); });
+    await settle();
+    expect(youLines()).toEqual([]);
+    // A's final lands with nothing heard, so the queue is empty for the next turn's partials.
+    await act(async () => { finalsWaiting[0]!(''); });
+    await settle();
+    // Turn C: same, but Space bar is chosen between the end and the late partial.
+    await room(2000, 'c');
+    expect(partials.length).toBe(2);
+    await quiet(1000);
+    await tapMode('Space bar');
+    await act(async () => { partials[1]!('the room is talking'); });
+    await settle();
+    expect(youLines()).toEqual([]);
+  });
+
+  it('a pause recording waiting out a busy speech engine when Space bar is chosen is never sent again; a held turn after still goes (codex delta)', async () => {
+    await enterFull();
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let release!: () => void;
+    const waits: number[] = [];
+    let busyOnce = true;
+    setVoiceDeps({
+      stt: { transcribe: async (wav) => {
+        const tags = tagsOf(wav); sent.push(tags);
+        if (tags.includes('quiet') && busyOnce) { busyOnce = false; throw new ApiError(429, 'voice busy', { code: 'voice_busy' }); }
+        return tags.includes('held') ? 'what is running' : '';
+      } },
+      wait: (ms) => new Promise<void>((r) => { waits.push(ms); release = r; }),
+    });
+    await room(600, 'a');
+    for (let t = 0; t < 1000; t += 100) await act(async () => { clock += 100; mic.frame('quiet', 0.001); });
+    await settle();
+    // A's final was answered busy and waits to be asked again.
+    expect(waits.length).toBe(1);
+    const aSends = (): number => sent.filter((t) => t.includes('a') && t.includes('quiet')).length;
+    expect(aSends()).toBe(1);
+    await tapMode('Space bar');
+    await act(async () => { release(); });
+    await settle();
+    expect(aSends()).toBe(1);
+    expect(youLines()).toEqual([]);
+    expect(useVoiceStore.getState().transcribing).toBe(false);
+    // A held turn after the choice is written down and acted on.
+    const full = screen.getByTestId('voice-full');
+    await act(async () => { fireEvent.keyDown(full, { key: ' ' }); });
+    await room(1000, 'held');
+    await act(async () => { fireEvent.keyUp(full, { key: ' ' }); });
+    await settle();
+    expect(sent.filter((t) => t.includes('held')).length).toBe(1);
+    expect(youLines()).toMatchObject([{ text: 'what is running' }]);
   });
 
   it('streaming: a turn open when a reply starts being read aloud is dropped, so it never carries the read-aloud (pi r1)', async () => {
