@@ -9705,6 +9705,12 @@
       ]
     },
     {
+      "testId": "language-basis",
+      "files": [
+        "src/components/LanguageBar.tsx"
+      ]
+    },
+    {
       "testId": "language-label",
       "files": [
         "src/components/LanguageBar.tsx"
