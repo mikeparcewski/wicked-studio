@@ -1,5 +1,5 @@
 {
- "provenance": "wicked-crew#372 (api-types 0.229.0; captured on the branch of wicked-crew#1900 after its last fold, before its re-stamp from 0.228.0, which changed no answer: product-publish.ts is the same on crew main a0c329bb): every answer captured from crew's own routes (registerProductPublishRoutes in packages/crew/src/api/product-publish.ts) by a run of crew's tests/product-publish.test.ts setup against the fake github-mcp-server, on the branch of wicked-crew#1900. 'view' is crew's tests/fixtures/product/compose-run-view.json: a real compose launch on the stub-runner CoreAdapter, captured once it completed.",
+ "provenance": "wicked-crew#372 (api-types 0.229.0; captured on the branch of wicked-crew#1900 after its last fold, before its re-stamp from 0.228.0, which changed no answer: product-publish.ts is the same on crew main a0c329bb): every answer captured from crew's own routes (registerProductPublishRoutes in packages/crew/src/api/product-publish.ts) by a run of crew's tests/product-publish.test.ts setup against the fake github-mcp-server, on the branch of wicked-crew#1900. 'view' is crew's tests/fixtures/product/compose-run-view.json: a real compose launch on the stub-runner CoreAdapter, captured once it completed. 'get-during-send' (wicked-crew#1919): the GET answered while owner/app is being sent, held between e1.f1's created line and its read-back, captured from crew's tests/product-publish.test.ts overlap test ('while any publication is being sent, a GET reads nothing...') on the branch of wicked-crew#1919; owner/lib is the test world's second publication.",
  "view": {
   "session": {
    "archive_note": null,
@@ -1306,6 +1306,116 @@
      ]
     },
     "publishHash": "9da3155fd8e7933e4213ac086500fe8d475afc5ad42533ef1eeaad34c10ad892"
+   }
+  },
+  "get-during-send": {
+   "status": 200,
+   "body": {
+    "runId": "run-compose-1",
+    "publishable": {
+     "ok": true,
+     "items": 4
+    },
+    "targets": [
+     {
+      "repo": "owner/app",
+      "source": "gh"
+     },
+     {
+      "repo": "owner/lib",
+      "source": "gh"
+     }
+    ],
+    "publications": [
+     {
+      "repo": "owner/lib",
+      "source": "gh",
+      "publishHash": "08f071f5025ef5b7220f4b7870c59d08d6d03d9d7535844eb109f089e69a6572",
+      "items": [
+       {
+        "key": "e1",
+        "kind": "epic",
+        "title": "Accounts & access",
+        "state": "created",
+        "number": 100,
+        "url": "https://github.com/owner/lib/issues/100",
+        "readBack": "unreadable"
+       },
+       {
+        "key": "e1.f1",
+        "kind": "feature",
+        "title": "Sign in and out",
+        "state": "created",
+        "number": 101,
+        "url": "https://github.com/owner/lib/issues/101",
+        "readBack": "unreadable"
+       },
+       {
+        "key": "e1.f1.s1",
+        "kind": "story",
+        "title": "Email sign in (< 3 tries)",
+        "state": "created",
+        "number": 102,
+        "url": "https://github.com/owner/lib/issues/102",
+        "readBack": "unreadable"
+       },
+       {
+        "key": "e1.f1.s2",
+        "kind": "story",
+        "title": "Sign out from any page",
+        "state": "created",
+        "number": 103,
+        "url": "https://github.com/owner/lib/issues/103",
+        "readBack": "unreadable"
+       }
+      ],
+      "published": false
+     },
+     {
+      "repo": "owner/app",
+      "source": "gh",
+      "publishHash": "5f08e7616b91887fa00c2b32cc4ef7b8f35798854261d5430600a6846a5f5116",
+      "items": [
+       {
+        "key": "e1",
+        "kind": "epic",
+        "title": "Accounts & access",
+        "state": "created",
+        "number": 104,
+        "url": "https://github.com/owner/app/issues/104",
+        "readBack": "ok"
+       },
+       {
+        "key": "e1.f1",
+        "kind": "feature",
+        "title": "Sign in and out",
+        "state": "created",
+        "number": 105,
+        "url": "https://github.com/owner/app/issues/105",
+        "readBack": null
+       },
+       {
+        "key": "e1.f1.s1",
+        "kind": "story",
+        "title": "Email sign in (< 3 tries)",
+        "state": "missing",
+        "number": null,
+        "url": null,
+        "readBack": null
+       },
+       {
+        "key": "e1.f1.s2",
+        "kind": "story",
+        "title": "Sign out from any page",
+        "state": "missing",
+        "number": null,
+        "url": null,
+        "readBack": null
+       }
+      ],
+      "published": false
+     }
+    ]
    }
   }
  }

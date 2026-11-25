@@ -44,7 +44,7 @@ const refusal = (name: string): ApiError => { const a = A(name); return new ApiE
 
 describe('reading crew’s answers', () => {
   it('reads every answer the route gives, whole', () => {
-    for (const n of ['get-before', 'get-not-a-compose', 'get-unverified', 'get-after', 'get-unsure']) expect(publicationsOf(A(n).body, RUN), n).not.toBeNull();
+    for (const n of ['get-before', 'get-not-a-compose', 'get-unverified', 'get-after', 'get-unsure', 'get-during-send']) expect(publicationsOf(A(n).body, RUN), n).not.toBeNull();
     for (const n of ['post-card', 'post-done', 'post-unsure', 'post-unresolved', 'post-resolve-absent']) expect(publishResponseOf(A(n).body, RUN, PID), n).not.toBeNull();
     const after = publicationsOf(A('get-after').body, RUN)!;
     expect(after.publications[0]!.published).toBe(true);
@@ -86,6 +86,19 @@ describe('reading crew’s answers', () => {
     expect(publicationOf(numberless)).toBeNull();
     expect(publicationOf(pubOf('post-done'))).not.toBeNull();
     expect(publicationOf(partial())).not.toBeNull();
+    // A created issue may be not checked yet (readBack null), but it always has its number and page.
+    const pageless = A('get-during-send').body as { publications: Pub[] };
+    pageless.publications[1]!.items[1]!['url'] = null;
+    expect(publicationsOf(pageless, RUN)).toBeNull();
+  });
+
+  it('a created issue crew has not read back yet is not checked yet, never deleted (wicked-crew#1919)', () => {
+    const during = publicationsOf(A('get-during-send').body, RUN)!.publications.find((p) => p.repo === 'owner/app')!;
+    expect(during.published).toBe(false);
+    const unchecked = during.items[1]!;
+    expect([unchecked.state, unchecked.readBack, unchecked.number]).toEqual(['created', null, 105]);
+    expect(itemStateWords(unchecked)).toEqual({ words: 'Created; not checked on GitHub yet', tone: 'muted' });
+    expect(itemStateWords({ ...unchecked, readBack: 'unreadable' }).words).toMatch(/may have been deleted/);
   });
 
   it('duplicates, an out-of-range number, or a publication that isn’t the card’s are unreadable', () => {
@@ -319,6 +332,22 @@ describe('the Publish block', () => {
       await act(async () => { newer.res(A('get-after').body); });
       await act(async () => { older.res(getWith([sending])); });
       expect(screen.getByTestId('product-publish-verdict')).toHaveTextContent('Published: all 4');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('while a created issue is not checked yet it looks again by itself, until crew has checked it', async () => {
+    vi.useFakeTimers();
+    try {
+      read.mockResolvedValueOnce(A('get-during-send').body).mockResolvedValueOnce(A('get-after').body);
+      await mount();
+      expect(screen.getAllByText('Created; not checked on GitHub yet').length).toBeGreaterThan(0);
+      await act(async () => { vi.advanceTimersByTime(3000); });
+      expect(read).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId('product-publish-verdict')).toHaveTextContent('Published: all 4');
+      await act(async () => { vi.advanceTimersByTime(9000); });
+      expect(read).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
     }
