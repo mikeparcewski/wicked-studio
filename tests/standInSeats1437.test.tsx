@@ -18,13 +18,15 @@ import { setCachedRoster } from '../src/store/rosterCache.js';
 import * as sheets from '../src/store/sheets.js';
 import { resetRunPanel } from '../src/store/runPanel.js';
 import { RUN_PANEL_KEY } from '../src/board/runPanelModel.js';
-import { seatedStandIns, helperNamer } from '../src/board/standIn.js';
+import { seatedStandIns, helperNamer, standInLine } from '../src/board/standIn.js';
 import { cliLabel, seatKeyName, seatLabel } from '../src/board/seatNames.js';
 import { seatResponder } from '../src/board/responder.js';
 import { seatName } from '../src/board/gateHeadline.js';
 import { handoffRow } from '../src/board/powerMode.js';
 import { sandboxOwner } from '../src/components/denialCopy.js';
-import { assuranceKind, passedWord, receiptOf, receiptWords, skipReasonWord } from '../src/board/assuranceModel.js';
+import { assuranceKind, deliveryReceiptOf, passedWord, receiptOf, receiptWords, skipReasonWord, type AssuranceReceipt } from '../src/board/assuranceModel.js';
+import { GateVerdict } from '../src/components/GateVerdict.js';
+import { authorWord, seenByWords } from '../src/plugins/wicked-phase-report/workingDoc.js';
 import { gateVerdict } from '../src/components/gateVerdictModel.js';
 import { toRow } from '../src/editors/runEvents.js';
 import { standInBase } from '../src/board/seatNames.js';
@@ -104,12 +106,57 @@ describe('studio#1437: a seated stand-in is named as one (run b0ade71f)', () => 
     expect(view.judgeCli).toBe('claude~2');
     expect(view.judgeDistinct).toBeNull();
     expect(view.judgeStandIn).toBe(JUDGE);
+    const { container } = render(<GateVerdict view={view} phase="review" />);
+    const text = container.textContent ?? '';
+    expect(text).toContain('judge: Claude Code (stand-in)');
+    expect(text).toContain(`${JUDGE}: a stand-in, not a different helper`);
+    expect(text).not.toMatch(/same seat|single default runner|claude~/);
+  });
+
+  it('a delivery that mixes a stand-in gate with an ordinary one names both, and keeps a real missing judge', () => {
+    const mixed: AssuranceReceipt = {
+      mode: 'full', required: ['distinct_evaluator', 'judge'], ran: ['distinct_evaluator', 'judge'], skipped: [], creator: 'claude', evaluator: 'codex', judge: 'pi', tree: null, attempt: 0,
+      standIns: [{ role: 'evaluator', seat: 'claude~1', label: REVIEW }, { role: 'judge', seat: 'claude~2', label: JUDGE }],
+    };
+    const who = receiptWords(mixed, true).who ?? '';
+    expect(who).toContain('evaluated by codex, Claude Code (stand-in)');
+    expect(who).toContain('judged by pi, Claude Code (stand-in)');
+    // A stand-in-judged gate and a gate whose judge erred: "in part" whichever comes first.
+    const standInGate = (u: unknown) => u;
+    const judged = { ord: 1, assurance: { mode: 'full', required: ['judge'], ran: ['pinned_validator'], skipped: [{ instrument: 'judge', reason: 'stand_in', detail: JUDGE }], creator: 'claude', evaluator: null, judge: null, tree: null, attempt: 0, roles: [{ role: 'judge', seat: 'claude~2', filled: 'stand_in', state: 'answered', standIn: { cli: 'claude~2', label: JUDGE } }] } };
+    const erred = { ord: 2, assurance: { mode: 'full', required: ['judge'], ran: ['pinned_validator'], skipped: [{ instrument: 'judge', reason: 'error', detail: 'the judge timed out' }], creator: 'claude', evaluator: null, judge: null, tree: null, attempt: 0 } };
+    for (const units of [[judged, { ...erred, ord: 2 }], [{ ...erred, ord: 1 }, { ...judged, ord: 2 }]]) {
+      const view = { session: { id: 'r', status: 'executing' }, units: units.map(standInGate) } as unknown as SessionView;
+      const r = deliveryReceiptOf(view, [], null)!;
+      expect(passedWord(r)).toBe('Judged in part');
+    }
+  });
+
+  it('an answered stand-in is something that checked, even with nothing else run', () => {
+    const r: AssuranceReceipt = { mode: 'full', required: ['judge'], ran: [], skipped: [{ instrument: 'judge', reason: 'stand_in', detail: null }], creator: 'claude', evaluator: null, judge: null, tree: null, attempt: 0, standIns: [{ role: 'judge', seat: 'claude~2', label: JUDGE }] };
+    expect(passedWord(r)).toBe('Passed, judged by a stand-in');
+    expect(passedWord({ ...r, standIns: undefined, skipped: [] })).toBe('Nothing verified');
+  });
+
+  it('an unlabelled stand-in still shows, by its name and role', () => {
+    const seats = seatedStandIns({ session: { assurance: { standIns: [{ key: 'claude~2', display: 'Claude Code', role: 'judge' }] } }, units: [] }, ROSTER);
+    expect(standInLine(seats.get('claude~2')!)).toBe('Claude Code (stand-in) stood in for the judge');
+  });
+
+  it('the phase report\'s own words name a stand-in author and recipient', () => {
+    expect(authorWord({ kind: 'agent', id: 'agent:claude~1' })).toBe('Claude Code (stand-in) (agent)');
+    const words = seenByWords({ engine: true, version: 1, sections: ['goal'], cut: [], at: 1, error: null, seenBy: [{ recipient: 'unit', cli: 'claude~1', ord: 3 }] }, () => 'Review');
+    expect(words).toContain('Review (Claude Code (stand-in))');
+    expect(words).not.toMatch(/claude~/);
   });
 
   it('the phase report keeps the stand-in seat and names it', () => {
     const distributed = FIXTURE.events.find((e) => e.type === 'unitDistributed')!;
     const row = toRow(distributed, RUN.session.id, 0, 'x', (cli) => seatKeyName(cli, ROSTER, () => null));
     expect(row?.data).toMatchObject({ seat: 'claude~1', seatName: 'Claude Code (stand-in)' });
+    // A numbered roster instance's stand-in keeps its seat too.
+    const numbered = toRow({ ...distributed, cli: 'codex#2~1' } as CoreEvent, RUN.session.id, 0, 'z', (cli) => seatKeyName(cli, ROSTER, () => null));
+    expect(numbered?.data).toMatchObject({ seat: 'codex#2~1', seatName: 'Codex (2) (stand-in)' });
     const stepped = FIXTURE.events.find((e) => e.type === 'powerHandoffStepped')!;
     expect(toRow(stepped, RUN.session.id, 0, 'y', (cli) => seatKeyName(cli, ROSTER, () => null))?.data).toMatchObject({ seat: 'claude~1', seatName: 'Claude Code (stand-in)' });
   });
@@ -163,6 +210,12 @@ describe('studio#1437: a seated stand-in is named as one (run b0ade71f)', () => 
     const judge = screen.getAllByTestId('run-tab-agent').find((li) => li.dataset['cli'] === 'claude~2')!;
     expect(judge.textContent).toContain('Claude Code (stand-in) judges');
     expect(judge.textContent).toContain(JUDGE);
+    // The rule receipt's reviewer reading (POL-2101 on this run) names the stand-in.
+    const checks = screen.getAllByTestId('run-panel-toggle').find((t) => t.dataset['section'] === 'checks')!;
+    if (checks.getAttribute('aria-expanded') !== 'true') fireEvent.click(checks);
+    const reviewerReading = screen.queryAllByTestId('assurance-rule-reviewer').map((e) => e.textContent ?? '').join(' ');
+    expect(reviewerReading).toContain('Claude Code (stand-in)');
+    expect(reviewerReading).not.toMatch(BARE);
     // One name once on the Helpers line.
     expect(helpers.split('Claude Code (stand-in)').length - 1).toBe(1);
     // Helpers and spend (the spend line's unmetered seats included) never shows the bare key. The operator's own
