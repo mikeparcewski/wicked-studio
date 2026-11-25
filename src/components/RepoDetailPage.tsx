@@ -258,20 +258,22 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
       .catch((e: unknown) => { if (graphCurrent()) setGraphFailed(graphReadError(e)); });
   }, [rawRuns, loading, repoId]);
 
-  // core#1043: the Seat toolchain card builds its next full list from the row shown, so a row crew answered for this
-  // visit lands, and a re-read begun before it (a run finishing) no longer can: it holds the row from before the change.
-  // Bound to the visit they were made for; a later visit of the same repository reads crew afresh.
+  // core#1043: crew's answer to a Seat toolchain change shows on the visit it was made for (a later visit of the same
+  // repository has read crew afresh), and drops a re-read begun before it (a run finishing), which holds the row from
+  // before the change. Its re-read after a change of unknown outcome is one more re-read: only the newest lands.
   const seatVisit = visitRef.current.visit;
-  const landSeatRow = (forRepo: string, forVisit: number, r: RepoEntry | null): void => {
-    if (r === null || r.id !== forRepo || repoRef.current !== forRepo || visitRef.current.visit !== forVisit) return;
+  const seatLayersLand = (r: RepoEntry): void => {
+    const forRepo = repoId;
+    if (r.id !== forRepo || repoRef.current !== forRepo || visitRef.current.visit !== seatVisit) return;
     reReadSeq.current += 1;
     setRepo(r);
   };
-  const seatLayersLand = (r: RepoEntry): void => landSeatRow(repoId, seatVisit, r);
   const seatLayersReread = async (): Promise<void> => {
     const forRepo = repoId;
+    const seq = ++reReadSeq.current;
     const { repos } = await api.listRepos();
-    landSeatRow(forRepo, seatVisit, repos.find((x) => x.id === forRepo) ?? null);
+    const r = repos.find((x) => x.id === forRepo);
+    if (r !== undefined && repoRef.current === forRepo && visitRef.current.visit === seatVisit && reReadSeq.current === seq) setRepo(r);
   };
 
   /** "Try again" on a failed graph read: re-reads the graph alone, for the repo it was pressed on. */

@@ -11,7 +11,7 @@ import { seatLayersOf, seatLayersRefusal } from '../src/api/seatLayers.js';
 afterEach(() => { vi.unstubAllGlobals(); });
 
 function answer(status: number, body: unknown) {
-  const fetch = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }));
+  const fetch = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async () => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }));
   vi.stubGlobal('fetch', fetch);
   return fetch;
 }

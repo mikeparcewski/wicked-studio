@@ -66,11 +66,14 @@ export function seatLayersRefusal(e: unknown): string | null {
   const code = e instanceof ApiError && typeof e.body === 'object' && e.body !== null ? (e.body as { code?: unknown }).code : undefined;
   const status = apiStatus(e);
   if (code === 'human_operator_only' || status === 403) return 'Only a person can change this; an agent cannot.';
-  if (code === 'repo_not_found') return 'This repository is no longer registered.';
+  if (code === 'repo_not_found') return SEAT_LAYERS_GONE;
   if (code === 'unknown_seat_layer') return 'This daemon has no such toolchain layer.';
   if (code === 'repo_seat_layers_unsupported' || status === 501) return 'This daemon can’t turn toolchain layers off yet. Upgrade wicked-crew to use this.';
   return null;
 }
 
-/** What the card says when the outcome is not known; the switches then show crew's row as read again. */
+/** What the card says when the outcome is not known; the page reads crew again, and the next change reads crew first. */
 export const SEAT_LAYERS_UNSURE = 'Couldn’t confirm that change. The switches show what this daemon has now.';
+/** The press could not read crew's row, so nothing was sent. */
+export const SEAT_LAYERS_UNREAD = 'Couldn’t read this repository’s layers just now. Nothing changed.';
+export const SEAT_LAYERS_GONE = 'This repository is no longer registered.';

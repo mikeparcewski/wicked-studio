@@ -15,7 +15,7 @@ interface State {
 export const useSeatLayerSaves = create<State>((set, get) => ({
   saving: {},
   begin: (repoId, layerId) => {
-    if (get().saving[repoId] !== undefined) return false;
+    if (Object.hasOwn(get().saving, repoId)) return false;
     set((s) => ({ saving: { ...s.saving, [repoId]: layerId } }));
     return true;
   },
@@ -25,6 +25,11 @@ export const useSeatLayerSaves = create<State>((set, get) => ({
     return { saving: rest };
   }),
 }));
+
+/** The layer being changed for `repoId`, if one is (own keys only: a repository may be named `constructor`). */
+export function savingOf(saving: Record<string, string>, repoId: string): string | null {
+  return Object.hasOwn(saving, repoId) ? saving[repoId]! : null;
+}
 
 /** Tests only. */
 export function resetSeatLayerSaves(): void {

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { api } from '../api/client.js';
 import type { RepoEntry } from '../api/types.js';
-import { SEAT_LAYERS_UNSURE, nextSeatLayersOff, seatLayerName, seatLayersOf, seatLayersOffOf, seatLayersRefusal, type SeatLayerRow } from '../api/seatLayers.js';
-import { useSeatLayerSaves } from '../store/seatLayerSaves.js';
+import { SEAT_LAYERS_GONE, SEAT_LAYERS_UNREAD, SEAT_LAYERS_UNSURE, nextSeatLayersOff, seatLayerName, seatLayersOf, seatLayersOffOf, seatLayersRefusal, type SeatLayerRow } from '../api/seatLayers.js';
+import { savingOf, useSeatLayerSaves } from '../store/seatLayerSaves.js';
 import { SectionTitle } from './ui/index.js';
 import { Switch } from './ui/Switch.js';
 
@@ -13,9 +13,10 @@ import { Switch } from './ui/Switch.js';
  * the repo's full off list (`PUT /repos/:id/seat-layers`) and hands crew's answer, the repo's row as `GET /repos`
  * shows it, to the page. Nothing renders on a crew that sends no rows.
  *
- * The full list is built from the row shown, so that row must be crew's latest (round 1). One change per repository
- * is in flight at a time, held in a store the card's unmount does not reset; a refusal crew names changed nothing;
- * any other failure may have landed, so the page reads crew again before the switches free.
+ * The PUT replaces the whole list, so a press builds it from crew's row read at that moment (`GET /repos`), never
+ * from the row shown, which may predate a change that landed (a lost reply, a visit begun before a write). One change
+ * per repository is in flight at a time, held in a store the card's unmount does not reset. A refusal crew names
+ * changed nothing; any other failure may have landed, so the page reads crew again to show it.
  */
 export function RepoSeatToolchain({ repo, onChanged, onReread }: {
   repo: RepoEntry;
@@ -24,18 +25,26 @@ export function RepoSeatToolchain({ repo, onChanged, onReread }: {
   /** Read the repo's row from crew again (the outcome of a change is not known). */
   onReread: () => Promise<void>;
 }): React.ReactElement | null {
-  const saving = useSeatLayerSaves((s) => s.saving[repo.id] ?? null);
+  const saving = useSeatLayerSaves((s) => savingOf(s.saving, repo.id));
   const [said, setSaid] = useState<string | null>(null);
   const rows = seatLayersOf(repo);
   if (rows === null) return null;
 
   async function flip(row: SeatLayerRow, turnOn: boolean): Promise<void> {
-    if (rows === null) return;
     const saves = useSeatLayerSaves.getState();
     if (!saves.begin(repo.id, row.id)) return;
     setSaid(null);
     try {
-      onChanged(await api.setRepoSeatLayers(repo.id, nextSeatLayersOff(seatLayersOffOf(repo, rows), row.id, turnOn)));
+      let now: RepoEntry | undefined;
+      try {
+        now = (await api.listRepos()).repos.find((r) => r.id === repo.id);
+      } catch {
+        setSaid(SEAT_LAYERS_UNREAD);
+        return;
+      }
+      const nowRows = now === undefined ? null : seatLayersOf(now);
+      if (now === undefined || nowRows === null) { setSaid(SEAT_LAYERS_GONE); return; }
+      onChanged(await api.setRepoSeatLayers(repo.id, nextSeatLayersOff(seatLayersOffOf(now, nowRows), row.id, turnOn)));
     } catch (e) {
       const refused = seatLayersRefusal(e);
       setSaid(refused ?? SEAT_LAYERS_UNSURE);
