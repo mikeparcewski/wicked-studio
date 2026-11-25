@@ -63,7 +63,10 @@ describe('Learn → Style: Learn my style, refused for want of helpers (crew#193
     await learnMyStyle();
     const card = await screen.findByTestId('style-standin');
     expect(within(card).getByTestId('style-standin-title').textContent).toBe('Only one helper can check this job');
-    expect(within(card).getByTestId('style-standin-why').textContent).toContain('Claude Code is the only helper signed in.');
+    // crew's real body also lists the conditional rows (rules checks, a council, the monitors): no stand-in fills those,
+    // so the card names only the reviewer and the judge every run needs (coord N5).
+    expect(within(card).getByTestId('style-standin-why').textContent).toBe('Claude Code is the only helper signed in. This job needs checks by helpers that did not build the work: a reviewer and a judge.');
+    expect(within(card).getByTestId('style-standin-meaning').textContent).toMatch(/^wicked can fill those roles with stand-ins\. /);
     expect(screen.queryByTestId('style-launch-error')).toBeNull();
     expect(d.sent('POST /runs')).toHaveLength(1);
     expect(settings['studio.learn.style']).toBeUndefined();

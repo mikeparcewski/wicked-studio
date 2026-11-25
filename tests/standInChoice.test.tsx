@@ -93,7 +93,8 @@ describe('the words a first-time user reads', () => {
   it('one CLI: who is signed in, what the job needs, what a stand-in is, and what the record says', () => {
     expect(words.title).toBe('Only one helper can check this job');
     // coord round 2: the QE role by what it does; no model named (studio names none on screen).
-    expect(words.why).toBe('Claude Code is the only helper signed in. This job needs checks by helpers that did not build the work: a reviewer, a judge, a tester who checks the result does what you asked, and a rules checker, plus a council of 3 if a disagreement comes up.');
+    // (wicked-crew#1932, coord N5) No stand-in fills a rules check or a council: the card names only what every run needs.
+    expect(words.why).toBe('Claude Code is the only helper signed in. This job needs checks by helpers that did not build the work: a reviewer, a judge, and a tester who checks the result does what you asked.');
     expect(words.meaning).toBe('wicked can fill those roles with stand-ins. A stand-in is Claude Code again, in a separate, fresh session: it sees the work but none of the builder\'s reasoning.');
     expect(words.record).toMatch(/say a stand-in did the check/);
     expect(words.record).toMatch(/never counted as a check by a different helper/);
