@@ -799,6 +799,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   }, [popoverOpen]);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
+  // studio#1436 (codex r1): the card answers the helpers that were sent. A changed pick is a different request, so the
+  // card goes (its "not picked" words would be stale); Send asks crew again.
+  useEffect(() => { setStandIn(null); setStandInError(null); }, [selectedClis]);
+
   function toggleCli(key: string): void {
     clisTouched.current = true;
     setSelectedClis((prev) => {

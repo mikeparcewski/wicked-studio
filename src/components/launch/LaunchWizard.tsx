@@ -278,6 +278,16 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   const offUnlessPicked = (key: string): boolean => unusable.has(key) || workOnly.has(key);
   const isOff = (key: string): boolean => (offUnlessPicked(key) ? !picked.includes(key) : seatOff(key, dropped, picked));
   const seats = eligible.filter((s) => !isOff(s.key));
+  // studio#1436 (codex r1): the card answers the helpers that were sent. A changed pick is a different request, so the
+  // card goes (its "not picked" words would be stale); Launch asks crew again. Back and Next alone keep it.
+  const seatKeys = seats.map((s) => s.key).join('\n');
+  const seatKeysAtCard = useRef(seatKeys);
+  useEffect(() => {
+    if (seatKeysAtCard.current === seatKeys) return;
+    seatKeysAtCard.current = seatKeys;
+    setStandIn(null);
+    setStandInError(null);
+  }, [seatKeys]);
   const offerReduced = reducedCap && seats.length === 1;
   // The Lead agent (DES-TEAMING-002 §8.1): offered when the daemon takes it and there is a choice to
   // make; a pick whose helper was turned off reads as Random again (never a stale seat sent).

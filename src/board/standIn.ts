@@ -220,7 +220,7 @@ export function standInChoiceWords(r: StandInChoiceRefusal, name: (cli: string) 
   // A helper the preflight benched is out of work for now: not one to pick.
   const launchKeys = new Set([...r.preflight.signedIn, ...r.preflight.benched.map((b) => b.seat)]);
   const signedIn = uniq(r.preflight.signedIn.map(name));
-  const unpicked = uniq((signedInNow ?? []).filter((k) => !launchKeys.has(k)).map(name)).filter((n) => !signedIn.includes(n));
+  const unpicked = uniq((signedInNow ?? []).filter((k) => !launchKeys.has(k)).map(name));
   const picked = unpicked.length > 0;
   const short = r.preflight.roles.filter((x) => x.shortBy > 0);
   const firm = uniq(short.filter((x) => !(x.conditional && x.role === 'council')).map(roleWords));
