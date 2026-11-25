@@ -2809,6 +2809,90 @@
       ]
     },
     {
+      "testId": "blast-empty-note",
+      "files": [
+        "src/components/RepoGraphModal.tsx"
+      ]
+    },
+    {
+      "testId": "blast-rings",
+      "files": [
+        "src/components/graph/BlastRings.tsx"
+      ]
+    },
+    {
+      "testId": "blast-rings-canvas",
+      "files": [
+        "src/components/graph/BlastRings.tsx"
+      ]
+    },
+    {
+      "testId": "blast-rings-footer",
+      "files": [
+        "src/components/graph/BlastRings.tsx"
+      ]
+    },
+    {
+      "testId": "blast-rings-header",
+      "files": [
+        "src/components/graph/BlastRings.tsx"
+      ]
+    },
+    {
+      "testId": "blast-rings-levels",
+      "files": [
+        "src/components/graph/BlastRings.tsx"
+      ]
+    },
+    {
+      "testId": "blast-rings-list",
+      "files": [
+        "src/components/graph/BlastRings.tsx"
+      ]
+    },
+    {
+      "testId": "blast-rings-list-toggle",
+      "files": [
+        "src/components/graph/BlastRings.tsx"
+      ]
+    },
+    {
+      "testId": "blast-rings-notes",
+      "files": [
+        "src/components/graph/BlastRings.tsx"
+      ]
+    },
+    {
+      "testId": "blast-rings-open",
+      "files": [
+        "src/components/graph/BlastRings.tsx"
+      ]
+    },
+    {
+      "testId": "blast-rings-picked",
+      "files": [
+        "src/components/graph/BlastRings.tsx"
+      ]
+    },
+    {
+      "testId": "blast-rings-pointer",
+      "files": [
+        "src/components/RepoGraphModal.tsx"
+      ]
+    },
+    {
+      "testId": "blast-rings-refused",
+      "files": [
+        "src/components/graph/BlastRings.tsx"
+      ]
+    },
+    {
+      "testId": "blast-rings-reset",
+      "files": [
+        "src/components/graph/BlastRings.tsx"
+      ]
+    },
+    {
       "testId": "brand-learn",
       "files": [
         "src/components/BrandLearn.tsx"
@@ -17392,6 +17476,12 @@
       "testId": "repo-graph-empty",
       "files": [
         "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-graph-main",
+      "files": [
+        "src/components/RepoGraphModal.tsx"
       ]
     },
     {
