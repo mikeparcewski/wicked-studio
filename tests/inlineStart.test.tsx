@@ -769,3 +769,40 @@ describe('inline QE choices and project catalog (#990)', () => {
     expect(launches()).toEqual([]);
   });
 });
+
+describe('studio#1399: the MCP server card’s “Also expose as a REST API” on the start row', () => {
+  it('off by default with its one line; ticked, the intent carries the REST ask; another card never shows it', async () => {
+    render(<Harness navigate={() => {}} />);
+    await pick('mcp-server', 'mcp');
+    type('Wrap the weather API');
+    const toggle = await screen.findByTestId('composer-start-rest-toggle');
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(toggle).toHaveTextContent('Also expose as a REST API');
+    expect(screen.getByTestId('composer-start-rest')).toHaveTextContent('Adds HTTP routes and an OpenAPI description, built from the same tools.');
+    fireEvent.click(toggle);
+    expect(screen.getByTestId('composer-start-rest-toggle')).toHaveAttribute('aria-checked', 'true');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    enter();
+    await waitFor(() => expect(launches()).toHaveLength(1));
+    expect(launches()[0]).toMatchObject({
+      workflow: 'mcp-server',
+      problem: 'Wrap the weather API\n\nAlso expose the tools as a REST API (mcp-scaffold --rest): HTTP routes and an OpenAPI description built from the same tools.',
+    });
+  });
+
+  it('unticked, the words go as typed; a bug card has no such option', async () => {
+    render(<Harness navigate={() => {}} />);
+    await pick('mcp-server', 'mcp');
+    type('Wrap the weather API');
+    await screen.findByTestId('composer-start-rest-toggle');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    enter();
+    await waitFor(() => expect(launches()).toHaveLength(1));
+    expect(launches()[0]!['problem']).toBe('Wrap the weather API');
+    cleanup();
+    render(<Harness navigate={() => {}} composerKey="chat-2" />);
+    await pick('bug', 'bug');
+    await screen.findByTestId('composer-start-line');
+    expect(screen.queryByTestId('composer-start-rest-toggle')).toBeNull();
+  });
+});
