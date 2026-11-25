@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -22,7 +22,8 @@ const { api } = await import('../src/api/client.js');
 const { DemoCutAdapter } = await import('../src/editors/demoCutAdapter.js');
 const { demoCut4 } = await import('../src/editors/fixtures/demoCut4.js');
 const { onCutLanded, noteCutLanded, resetCutLanded } = await import('../src/store/chatCutLanded.js');
-const { foldChatProposals, proposalAsk, changeRoute, proposalRecordLine, proposalResultWords, resetSettledProposals, isArtifactProposal, isProposalRecord, isProposalView } = await import('../src/board/artifactProposal.js');
+const { foldChatProposals, proposalAsk, changeRoute, proposalRecordLine, proposalResultWords, proposalStarting, resetSettledProposals, isArtifactProposal, isProposalRecord, isProposalView } = await import('../src/board/artifactProposal.js');
+const { undoneLine, notUndoneLine } = await import('../src/board/artifactMorph.js');
 const { artifactRefOf } = await import('../src/api/chatArtifacts-wire.js');
 type Proposal = import('../src/api/chatArtifacts-wire.js').ArtifactProposal;
 type Fixture = { records: Array<Record<string, unknown>>; decide: { view?: Record<string, unknown>; code?: string; error?: string } };
@@ -107,7 +108,7 @@ describe('the cut card model', () => {
     expect(proposalRecordLine(accepting!, false)).toBe('Interrupted before the new version was recorded. Go again checks whether it was made.');
     const [done] = foldChatProposals(GO.records);
     expect(proposalRecordLine(done!)).toBe('You chose: Change the video');
-    expect(proposalResultWords(done!)).toBe('Changed · version 2 · no job was started');
+    expect(proposalResultWords(done!)).toBe('Changed · version 2');
   });
 
   it('an op missing what its kind needs, a blank change or chapter, or a version that is no version, is never drawn (review r1)', () => {
@@ -188,7 +189,10 @@ describe('a cut card in the chat', () => {
     const go = screen.getByTestId('artifact-proposal').querySelector<HTMLButtonElement>('[data-ask-option="go"]');
     expect(go?.disabled).toBe(true);
     expect(screen.queryByRole('button', { name: /^Change the video$/ })).toBeNull();
-    expect(screen.getByTestId('artifact-proposal').textContent).toContain('this studio’s crew doesn’t make video changes');
+    expect(screen.getByTestId('artifact-proposal').textContent).toContain('This studio can’t change videos from a chat yet. Change it by hand in its editor.');
+    // Only Go is refused: Change something (say it in the chat) and Not now still answer.
+    const change = screen.getByTestId('artifact-proposal').querySelector<HTMLButtonElement>('[data-ask-option="change"]');
+    expect(change?.disabled).toBe(false);
   });
 
   it('a card crew blocked says why in crew\'s own sentence (no "Nothing was started" tacked on)', async () => {
@@ -296,5 +300,59 @@ describe('accepts: ["cut"]', () => {
     useCapabilities.setState({ loaded: false, chatCut: false });
     await useCapabilities.getState().load();
     expect(useCapabilities.getState().chatCut).toBe(true);
+  });
+});
+
+describe('round-2 words (coord R2 on studio#1409)', () => {
+  it('LOOK: a cut card has no "Filed in" row, and its result is just the version it made', async () => {
+    page();
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal')).toBeTruthy());
+    expect(screen.queryByTestId('artifact-proposal-filed')).toBeNull();
+    const [done] = foldChatProposals(GO.records);
+    expect(proposalResultWords(done!)).toBe('Changed · version 2');
+  });
+
+  it('F1: a Go crew refused because the video moved says crew\'s sentence once', async () => {
+    decideAnswer = () => ok(MOVED.decide, 409);
+    page();
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /^Change the video$/ }));
+    const said = MOVED.decide.error!;
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal-blocked')).toBeTruthy());
+    const all = screen.getByTestId('artifact-proposal').textContent ?? '';
+    expect(all.split(said).length - 1).toBe(1);
+  });
+
+  it('F2: an interrupted cut reads "Making the new version…" for as long as a render can take, and a Go again crew answers cut_pending says it is still being made', async () => {
+    const [accepting] = foldChatProposals(GO.records.slice(0, 2));
+    const at = accepting!.acceptingAt!;
+    expect(proposalStarting(accepting!, at + 5 * 60_000, false)).toBe(true);
+    expect(proposalStarting(accepting!, at + 16 * 60_000, false)).toBe(false);
+    expect(proposalRecordLine(accepting!, false, true)).toBe('Still making the new version. Go again shows it here once it’s made.');
+    // A reload long after the Go: the card offers Go again; crew answers that the render is still going.
+    chatBody = { ...chatBody, messages: [...TURN, ...GO.records.slice(0, 2).map((r, i) => ({ ...r, at: T0 + 1500 + i }))] };
+    decideAnswer = () => ok({ code: 'cut_pending', error: 'Still making the new version. It shows here when it is done.', view: { ...GO.decide.view, state: 'accepting', decision: undefined, result: undefined } }, 409);
+    page();
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal-go-again')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('artifact-proposal-go-again'));
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal').textContent).toContain('Still making the new version. Go again shows it here once it’s made.'));
+    expect(screen.getByTestId('artifact-proposal').textContent).not.toContain('Interrupted');
+    expect(screen.queryByTestId('artifact-proposal-error')).toBeNull();
+  });
+
+  it('F3: the Undo lines on a video say "video" and never claim the change stays when it may already be undone', () => {
+    expect(undoneLine(3, 'video')).toBe('Undone — version 3 is the video before that change.');
+    expect(notUndoneLine(4, 'video')).toBe('Not undone — the video changed since (now version 4), in another editor or tab. Versions has every version if you want an earlier one.');
+    expect(undoneLine(3)).toBe('Undone — version 3 is the page before your change.');
+  });
+
+  it('F5: while studio is still reading what crew can do, a cut card\'s Go is not refused', async () => {
+    page();
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal')).toBeTruthy());
+    // The page waits for capabilities; a card drawn elsewhere (a session's chat) may not. Unknown is not "can't".
+    act(() => useCapabilities.setState({ loaded: false, chatCut: false }));
+    expect(screen.queryByText(/can’t change videos/)).toBeNull();
+    const go = screen.getByTestId('artifact-proposal').querySelector<HTMLButtonElement>('[data-ask-option="go"]');
+    expect(go?.disabled).toBe(false);
   });
 });
