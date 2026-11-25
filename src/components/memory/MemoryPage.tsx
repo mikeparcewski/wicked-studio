@@ -464,17 +464,21 @@ function AddMemoryDialog({ background, project, projects, onClose, onDone, onRep
     return () => { live = false; };
   }, [where, membersTry]);
   const own = members !== null && members.project === where && 'ids' in members ? members.ids : null;
+  /** The chosen project's repositories could not be read: nothing is dropped on a guess, and Save waits for a read. */
+  const membersFailed = members !== null && members.project === where && 'failed' in members;
   useEffect(() => {
-    // A repository outside the chosen project (or one that cannot be checked) is dropped: no run would recall it there.
-    if (where === '' || members === null || members.project !== where || repo === '') return;
-    if ('ids' in members && members.ids.has(repo)) return;
+    // A repository the chosen project's read shows is outside it is dropped: no run would recall it there.
+    if (own === null || repo === '' || own.has(repo)) return;
     setDropped((repos ?? []).find((r) => r.id === repo)?.name ?? repo);
     setRepo('');
-  }, [members, where, repo, repos]);
-  const offered = where === '' ? (repos ?? []) : own === null ? [] : (repos ?? []).filter((r) => own.has(r.id));
+  }, [own, repo, repos]);
+  // Unread members offer only the repository already picked (kept, and said to be unchecked), so Any repository stays
+  // a choice and nothing unverified can be newly picked.
+  const offered = where === '' ? (repos ?? []) : own !== null ? (repos ?? []).filter((r) => own.has(r.id)) : (repos ?? []).filter((r) => r.id === repo);
   const projectName = (projects.find((p) => p.id === where)?.name) ?? where;
+  const repoName = (repos ?? []).find((r) => r.id === repo)?.name ?? repo;
   /** Save waits for the chosen project's repositories: a repository is never sent with a project it is not in. */
-  const checking = where !== '' && (members === null || members.project !== where);
+  const checking = where !== '' && (members === null || members.project !== where || (membersFailed && repo !== ''));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<(Failure & { said?: string }) | null>(null);
   /** An older crew refused the kind or the repository (nothing was filed): what to change, said plainly. */
@@ -482,6 +486,8 @@ function AddMemoryDialog({ background, project, projects, onClose, onDone, onRep
   const words = text.trim();
   const save = async (): Promise<void> => {
     if (words === '' || busy || checking) return;
+    // The scope fields are locked while this is sent (below), so `repo` is the one crew answers about.
+    const sent = repo;
     setBusy(true); setError(null); setRefused(null);
     try {
       await addMemory({ content: words, tier, ...(where === '' ? {} : { project: where }), ...(repo === '' ? {} : { repo }) });
@@ -495,7 +501,9 @@ function AddMemoryDialog({ background, project, projects, onClose, onDone, onRep
       } else if (e instanceof ApiError && e.status === 400 && codeOf(e) === 'repo_unknown') {
         // (studio#1433, crew#1913) The repository was removed elsewhere: nothing was filed. The list is read again, so
         // the picker no longer offers it, and the words stay.
-        setRefused({ text: `${(repos ?? []).find((r) => r.id === repo)?.name ?? repo} is no longer registered, so nothing was saved. Pick another repository, or Any repository.`, raw: e.message });
+        setRefused({ text: `${repoName} is no longer registered, so nothing was saved. Pick another repository, or Any repository.`, raw: e.message });
+        // It leaves the picker now, whether or not the list can be read again.
+        setRepos((rs) => (rs === null ? rs : rs.filter((r) => r.id !== sent)));
         invalidateRepoCache();
         setRepo('');
         setReposTry((n) => n + 1);
@@ -518,20 +526,20 @@ function AddMemoryDialog({ background, project, projects, onClose, onDone, onRep
       </label>
       <label className="wk-se-field">
         <span>Save it as</span>
-        <select data-testid="memory-add-tier" className="wk-field" value={tier} onChange={(e) => setTier(e.target.value as FileProposalTier)}>
+        <select data-testid="memory-add-tier" className="wk-field" disabled={busy} value={tier} onChange={(e) => setTier(e.target.value as FileProposalTier)}>
           {FILE_PROPOSAL_TIERS.map((t) => <option key={t} value={t}>{ADD_TIER_WORDS[t]}</option>)}
         </select>
       </label>
       <label className="wk-se-field">
         <span>Recall it on</span>
-        <select data-testid="memory-add-project" className="wk-field" value={where} onChange={(e) => { setWhere(e.target.value); setDropped(null); }}>
+        <select data-testid="memory-add-project" className="wk-field" disabled={busy} value={where} onChange={(e) => { setWhere(e.target.value); setDropped(null); }}>
           <option value="">Every project</option>
           {choices.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </label>
       <label className="wk-se-field">
         <span>Only on this repository</span>
-        <select data-testid="memory-add-repo" className="wk-field" value={repo} onChange={(e) => { setRepo(e.target.value); setDropped(null); }}>
+        <select data-testid="memory-add-repo" className="wk-field" disabled={busy} value={repo} onChange={(e) => { setRepo(e.target.value); setDropped(null); }}>
           <option value="">Any repository</option>
           {offered.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
@@ -540,10 +548,11 @@ function AddMemoryDialog({ background, project, projects, onClose, onDone, onRep
             Couldn’t read your repositories.{' '}
             <button type="button" className="wk-link" data-testid="memory-add-repo-retry" onClick={() => setReposTry((n) => n + 1)}>Try again</button>
           </span>
-        ) : members !== null && members.project === where && 'failed' in members ? (
+        ) : membersFailed ? (
           <span className="wk-field-note" data-testid="memory-add-repo-failed" role="status">
-            Couldn’t read {projectName}’s repositories.{' '}
+            {repo === '' ? `Couldn’t read ${projectName}’s repositories.` : `Couldn’t read ${projectName}’s repositories, so ${repoName} can’t be checked against it.`}{' '}
             <button type="button" className="wk-link" data-testid="memory-add-repo-retry" onClick={() => setMembersTry((n) => n + 1)}>Try again</button>
+            {repo === '' ? null : ', or pick Any repository.'}
           </span>
         ) : dropped !== null ? (
           <span className="wk-field-note" data-testid="memory-add-repo-note" role="status">{dropped} isn’t one of {projectName}’s repositories, so it was dropped.</span>
