@@ -4,7 +4,7 @@
  * (review) and `claude~2` (judge) and studio 0.16.18 still said "claude~1 reviews".
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import fixture from './fixtures/run-b0ade71f-standin.json';
 import type { SessionView } from '../src/api/types.js';
 import { teamPlanApi } from '../src/api/teamPlan.js';
@@ -32,6 +32,13 @@ import { toRow } from '../src/editors/runEvents.js';
 import { standInBase } from '../src/board/seatNames.js';
 import type { CoreEvent } from '../src/api/types.js';
 import type { HandoffStep } from '../src/api/power.js';
+import * as client from '../src/api/client.js';
+import { RunBlock, resetStepOutputs } from '../src/components/session/RunConversation.js';
+import { ObjectSheet } from '../src/components/sheets/ObjectSheet.js';
+import { peekFact } from '../src/components/sheets/AltPeek.js';
+import { objectCommands } from '../src/components/sheets/objectCommands.js';
+import { GateUnderReview } from '../src/components/GateUnderReview.js';
+import { DeliveryAssuranceLines } from '../src/components/session/AssuranceReceipt.js';
 
 vi.mock('../src/api/client.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../src/api/client.js')>();
@@ -225,5 +232,61 @@ describe('studio#1437: a seated stand-in is named as one (run b0ade71f)', () => 
     expect(agents).not.toMatch(BARE);
     expect(screen.getByTestId('run-tab-spend').textContent).toContain('Claude Code (stand-in) not metered');
     expect(result.container.textContent ?? '').toContain('Claude Code (stand-in)');
+  });
+});
+
+// Coord round 2 on studio#1439 (F1, F2, F4, F5, F7): the same run, finished with its stand-in review passed.
+describe('studio#1437 R2: a finished stand-in run names its stand-in reviewer as one (run b0ade71f)', () => {
+  const DONE = { ...RUN, session: { ...RUN.session, status: 'completed' } } as SessionView;
+  const RUN_ID = DONE.session.id;
+  const REVIEWED = DONE.units.find((u) => u.ord === 3)!;
+
+  beforeEach(() => {
+    resetStepOutputs();
+    vi.spyOn(client.api, 'getUnitOutput').mockImplementation((_run: string, key: string) =>
+      Promise.resolve({ output: key === 'review' ? 'VERDICT: PASS\n\nThe add function is right.' : null } as never));
+    vi.spyOn(client.api, 'getWatch').mockResolvedValue({ coverage: [] } as never);
+    vi.spyOn(client.api, 'getRoster').mockResolvedValue({ roster: ROSTER } as never);
+  });
+
+  it('the run\'s final message says the stand-in approved it, never the bare key (F1)', async () => {
+    expect(REVIEWED.assigned_cli).toBe('claude~1');
+    render(<RunBlock view={DONE} badge={0} sessionId={`run:${RUN_ID}`} />);
+    await waitFor(() => expect(screen.getByTestId('chat-final-text').textContent).toMatch(/approved/));
+    const text = screen.getByTestId('chat-final-text').textContent ?? '';
+    expect(text).toContain('Claude Code (stand-in)');
+    expect(text).not.toContain('~');
+  });
+
+  it('the step sheet says who did the review as a stand-in (F2)', async () => {
+    sheets.useSheets.setState({ open: { ref: { kind: 'step', runId: RUN_ID, ord: 3 }, tab: 'happening' } } as never);
+    await act(async () => { render(<ObjectSheet runs={[DONE]} navigate={vi.fn()} needCount={0} />); });
+    const line = screen.getByTestId('sheet-happening').querySelector('.wk-sheet-line')!.textContent ?? '';
+    expect(line).toContain('Claude Code (stand-in)');
+    expect(line).not.toMatch(BARE);
+  });
+
+  it('the gate details, the peek and the command palette name the stand-in (F4, F5)', () => {
+    render(<GateUnderReview runId={RUN_ID} units={DONE.units} reviewed={REVIEWED} next={null} />);
+    const under = screen.getByTestId('gate-under-review').textContent ?? '';
+    expect(under).toContain('on Claude Code (stand-in)');
+    expect(under).not.toMatch(BARE);
+    const ctx = { runs: [DONE], needCount: 0, runChatId: false, standing: () => null };
+    const step = peekFact({ kind: 'step', runId: RUN_ID, ord: 3 }, ctx);
+    expect(step).toBe('Done · Claude Code (stand-in)');
+    const helper = peekFact({ kind: 'helper', runId: RUN_ID, cli: 'claude~1' }, ctx);
+    expect(helper).toMatch(/^Claude Code \(stand-in\) · /);
+    const live = { ...RUN, session: { ...RUN.session, status: 'executing', unit_ix: 2 }, units: RUN.units.map((u) => (u.ord === 3 ? { ...u, status: 'running' } : u)) } as SessionView;
+    const rows = objectCommands({ kind: 'desk' }, { runs: [live], navigate: () => {}, runChatId: false }).rows.map((r) => r.label);
+    const helperRow = rows.find((l) => l.includes('stand-in')) ?? rows.join(' | ');
+    expect(helperRow).toMatch(/^Claude Code \(stand-in\) on /);
+    expect(objectCommands({ kind: 'helper', runId: RUN_ID, cli: 'claude~1' }, { runs: [DONE], navigate: () => {}, runChatId: false }).title)
+      .toMatch(/^Claude Code \(stand-in\) on /);
+  });
+
+  it('a QE acceptance passed by a stand-in names it as one (F7)', () => {
+    const base = { verified: true, via: 'deliver_lift', receipt: null, treeBefore: null, treeAfter: null };
+    render(<DeliveryAssuranceLines recorded={{ ...base, qeAcceptance: { status: 'required', satisfied: true, reason: '', verdictId: null, reviewer: 'claude~3' } }} testIdPrefix="d" />);
+    expect(screen.getByTestId('d-qe').textContent).toBe('QE acceptance: PASS by Claude Code (stand-in)');
   });
 });
