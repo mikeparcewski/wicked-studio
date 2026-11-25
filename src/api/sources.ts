@@ -128,7 +128,9 @@ export function appsBoundOf(e: unknown): RenameAppUse[] | null {
   if (!(e instanceof ApiError) || e.status !== 409 || typeof e.body !== 'object' || e.body === null) return null;
   const b = e.body as { code?: unknown; apps?: unknown };
   if (b.code !== 'apps_bound' || !Array.isArray(b.apps)) return null;
-  return b.apps.filter((a): a is RenameAppUse => typeof a === 'object' && a !== null && typeof (a as RenameAppUse).slug === 'string' && typeof (a as RenameAppUse).name === 'string');
+  const apps = b.apps.filter((a): a is RenameAppUse => typeof a === 'object' && a !== null && typeof (a as RenameAppUse).slug === 'string' && typeof (a as RenameAppUse).name === 'string');
+  // A list studio can't read whole is not one the person could confirm: crew's words show instead.
+  return apps.length === b.apps.length && apps.length > 0 ? apps : null;
 }
 
 export const sourcesApi = {

@@ -149,6 +149,28 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
     if (!loading) { setSheet((cur) => (cur !== null && cur.mode !== 'new' ? null : cur)); setPmSheet((cur) => (cur !== null && cur.mode !== 'new' ? null : cur)); setError(`No source named ${deep}.`); }
   }, [deep, sources, pmSources, pmOn, loading]);
 
+  /** (crew#1514) The address's source now, for a rename that settles later: only a sheet still on the old name follows. */
+  const deepNow = useRef(deep);
+  deepNow.current = deep;
+  const followRename = (from: string, renamed: McpServer): void => {
+    bumpRevoked(from);
+    // Row writes declared on this page named the old source; they are drafts, so they go with its name.
+    setActions((list) => list.filter((a) => a.source !== from));
+    setDialog((d) => (d !== null && d.source === from ? null : d));
+    setSources((list) => list.map((s) => (s.name === from || (renamed.id !== undefined && s.id === renamed.id) ? renamed : s)));
+    if (deepNow.current === from) navigate(sourcesPath(renamed.name), { replace: true });
+  };
+  /** A rename whose outcome crew never said: crew's list says where the source is now, by its id (never a resend). */
+  const findRenamed = async (from: string, id: string): Promise<void> => {
+    try {
+      const now = (await sourcesApi.list()).servers.find((s) => s.id === id);
+      if (now !== undefined && now.name !== from) followRename(from, now);
+    } catch {
+      // the list read below says what it can
+    }
+    void refresh();
+  };
+
   const open = (name: string, focus: 'test' | 'ask' | 'rename' | null = null): void => { openGen.current++; setSheetFocus(focus === null ? null : { name, focus }); navigate(sourcesPath(name)); };
   // A sheet closed by the address (Back) forgets what it was opened for.
   useEffect(() => { if (sheet === null) setSheetFocus(null); }, [sheet]);
@@ -262,11 +284,10 @@ function SourcesPageBody({ navigate, search, grants = NO_APP_GRANTS }: { navigat
           // (crew#1514) The same source under its new name: the list holds it before the address moves, so the sheet
           // re-opens on it (a fresh sheet: everything keyed by the name reads again).
           onRenamed={(from, renamed) => {
-            bumpRevoked(from);
-            setSources((list) => list.map((s) => (s.name === from ? renamed : s)));
-            navigate(sourcesPath(renamed.name), { replace: true });
+            followRename(from, renamed);
             void refresh();
           }}
+          onRenameUnsure={(from, id) => void findRenamed(from, id)}
           onAllowWrites={setWrites}
           servers={sources}
           agentsUnverified={unverified}

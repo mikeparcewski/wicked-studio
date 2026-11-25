@@ -7,6 +7,8 @@ vi.mock('../src/api/client.js', () => ({ apiFetch: (...a: unknown[]) => apiFetch
 import { ApiError } from '../src/api/errors.js';
 import { DataPanel } from '../src/components/sources/DataPanel.js';
 import { SourceSheet } from '../src/components/sources/SourceSheet.js';
+import { SourcesPage } from '../src/components/sources/SourcesPage.js';
+import { useCapabilities } from '../src/store/capabilities.js';
 import { ownsKeychainEntry, secretRefKind } from '../src/components/sources/rekey.js';
 import { CATALOG, pgServer, WRITER } from './sourcesFixtures.js';
 
@@ -20,7 +22,7 @@ import { CATALOG, pgServer, WRITER } from './sourcesFixtures.js';
 
 // crew's renamed record, as its registry view writes it (packages/crew/src/mcp/registry.ts `view`, crew#1514): the same
 // entry under the new name, with `formerNames` and the keychain account it was saved under.
-const RENAMED = { ...pgServer({ name: 'billing-pg' }), id: 'id-support-pg', formerNames: ['support-pg'], keychainAccount: 'support-pg' };
+const RENAMED = { ...pgServer({ name: 'billing-pg', auth: { ref: 'keychain:wicked-mcp/support-pg', env: null, header: null, prefix: null } as never }), id: 'id-support-pg', formerNames: ['support-pg'], keychainAccount: 'support-pg' };
 
 let calls: Array<{ path: string; method: string; body: unknown }> = [];
 let renameAnswer: (body: { to: string; apps?: string[] }) => Promise<unknown>;
@@ -126,8 +128,111 @@ describe('renaming a saved source (crew#1514)', () => {
     expect(screen.getByTestId('source-former-names').textContent).toBe('Renamed from support-pg. That name stays reserved for it.');
   });
 
+  it('Upload again goes to the source it uploaded, never to the Name field\'s rename draft', async () => {
+    const uploaded = { ...pgServer({ name: 'refunds' }), id: 'id-refunds' };
+    apiFetch.mockImplementation((path: string, init?: RequestInit) => {
+      calls.push({ path, method: init?.method ?? 'GET', body: undefined });
+      if (path.startsWith('/apps/uploads')) return Promise.resolve({ source: uploaded, snapshot: { digest: 'd', bytes: 10, kind: 'csv' }, table: 'main.refunds', header: { detected: true, columns: ['id'] }, sample: [], catalog: CATALOG });
+      if (/^\/sources\/[^/]+\/(catalog|agent-queries)$/.test(path)) return new Promise(() => {});
+      if (path === '/projects?status=active') return Promise.resolve({ projects: [] });
+      return Promise.reject(new Error(`unexpected ${path}`));
+    });
+    render(<SourceSheet target={{ mode: 'new' }} existing={['other']} onSaved={vi.fn()} onRenamed={vi.fn()} onAllowWrites={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByTestId('source-kind-upload'));
+    fireEvent.change(screen.getByTestId('source-name'), { target: { value: 'refunds' } });
+    const file = new File(['id\n1\n'], 'refunds.csv', { type: 'text/csv' });
+    fireEvent.change(screen.getByTestId('source-file'), { target: { files: [file] } });
+    fireEvent.click(screen.getByTestId('source-upload'));
+    await screen.findByTestId('source-upload-result');
+    fireEvent.change(screen.getByTestId('source-name'), { target: { value: 'other' } });
+    fireEvent.click(screen.getByTestId('source-upload-again'));
+    await waitFor(() => expect(calls.filter((c) => c.path.startsWith('/apps/uploads'))).toHaveLength(2));
+    expect(calls.filter((c) => c.path.startsWith('/apps/uploads')).map((c) => new URLSearchParams(c.path.split('?')[1]).get('name'))).toEqual(['refunds', 'refunds']);
+  });
+
   it('a sheet with no page to follow the rename keeps the Name read-only', () => {
     render(<SourceSheet target={{ mode: 'saved', server: pgServer() }} existing={['support-pg']} onSaved={vi.fn()} onAllowWrites={vi.fn()} onClose={vi.fn()} />);
     expect((screen.getByTestId('source-name') as HTMLInputElement).disabled).toBe(true);
+  });
+});
+
+describe('the page follows a rename (crew#1514)', () => {
+  const BEFORE = { ...pgServer(), id: 'id-support-pg' };
+  let list: unknown[];
+  let renameReply: () => Promise<unknown>;
+  beforeEach(() => {
+    useCapabilities.setState({ loaded: true, dataSources: true });
+    list = [BEFORE];
+    renameReply = () => Promise.resolve(RENAMED);
+    apiFetch.mockImplementation((path: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      calls.push({ path, method, body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined });
+      if (path === '/mcp/servers' && method === 'GET') return Promise.resolve({ servers: list, discovered: [] });
+      if (path === '/mcp/servers/support-pg/rename') return renameReply();
+      if (/^\/sources\/[^/]+\/catalog$/.test(path)) return Promise.resolve({ name: 'support-pg', kind: 'sql', catalog: CATALOG, privileges: WRITER, descriptorHash: 'd' });
+      if (/^\/sources\/[^/]+\/agent-queries$/.test(path)) return Promise.resolve({ name: 'x', known: true, queries: [] });
+      if (path === '/projects?status=active') return Promise.resolve({ projects: [] });
+      return Promise.reject(new Error(`unexpected ${method} ${path}`));
+    });
+  });
+
+  it('replaces the source in the list and moves the address to the new name', async () => {
+    const navigate = vi.fn();
+    render(<SourcesPage navigate={navigate} search="?source=support-pg" />);
+    fireEvent.change(await screen.findByTestId('source-name'), { target: { value: 'billing-pg' } });
+    list = [RENAMED];
+    fireEvent.click(screen.getByTestId('source-rename-go'));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/sources?source=billing-pg', { replace: true }));
+    expect(await screen.findByRole('button', { name: /Show billing-pg/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Show support-pg/ })).toBeNull();
+  });
+
+  it('a rename that lands after its sheet closed still reaches the list, and moves no address', async () => {
+    let land: (v: unknown) => void = () => {};
+    renameReply = () => new Promise((r) => { land = r; });
+    const navigate = vi.fn();
+    const { rerender } = render(<SourcesPage navigate={navigate} search="?source=support-pg" />);
+    fireEvent.change(await screen.findByTestId('source-name'), { target: { value: 'billing-pg' } });
+    fireEvent.click(screen.getByTestId('source-rename-go'));
+    rerender(<SourcesPage navigate={navigate} search="" />);
+    await waitFor(() => expect(screen.queryByTestId('source-sheet')).toBeNull());
+    list = [RENAMED];
+    land(RENAMED);
+    expect(await screen.findByRole('button', { name: /Show billing-pg/ })).toBeTruthy();
+    expect(navigate).not.toHaveBeenCalledWith('/sources?source=billing-pg', { replace: true });
+  });
+
+  it('no answer: the page finds the source by its id and follows it, never sending the rename again', async () => {
+    renameReply = () => Promise.reject(new TypeError('Failed to fetch'));
+    const navigate = vi.fn();
+    render(<SourcesPage navigate={navigate} search="?source=support-pg" />);
+    fireEvent.change(await screen.findByTestId('source-name'), { target: { value: 'billing-pg' } });
+    list = [RENAMED];
+    fireEvent.click(screen.getByTestId('source-rename-go'));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/sources?source=billing-pg', { replace: true }));
+    expect(calls.filter((c) => c.path.endsWith('/rename'))).toHaveLength(1);
+  });
+
+  it('Enter after apps_bound renames anyway with the listed slugs, as the button does', async () => {
+    renameReply = () => {
+      const n = calls.filter((c) => c.path.endsWith('/rename')).length;
+      return n === 1 ? Promise.reject(new ApiError(409, '1 app uses support-pg', { error: '1 app uses support-pg', code: 'apps_bound', apps: [{ slug: 'board', name: 'Board' }] })) : Promise.resolve(RENAMED);
+    };
+    render(<SourcesPage navigate={vi.fn()} search="?source=support-pg" />);
+    const name = await screen.findByTestId('source-name');
+    fireEvent.change(name, { target: { value: 'billing-pg' } });
+    fireEvent.keyDown(name, { key: 'Enter' });
+    await screen.findByTestId('source-rename-apps');
+    fireEvent.keyDown(name, { key: 'Enter' });
+    await waitFor(() => expect(calls.filter((c) => c.path.endsWith('/rename')).map((c) => c.body)).toEqual([{ to: 'billing-pg' }, { to: 'billing-pg', apps: ['board'] }]));
+  });
+
+  it('an apps_bound list studio cannot read whole is shown as crew said it, never confirmed', async () => {
+    renameReply = () => Promise.reject(new ApiError(409, '2 apps use support-pg', { error: '2 apps use support-pg', code: 'apps_bound', apps: [{ slug: 'board', name: 'Board' }, { slug: 7 }] }));
+    render(<SourcesPage navigate={vi.fn()} search="?source=support-pg" />);
+    fireEvent.change(await screen.findByTestId('source-name'), { target: { value: 'billing-pg' } });
+    fireEvent.click(screen.getByTestId('source-rename-go'));
+    await screen.findByText(/2 apps use support-pg/);
+    expect(screen.queryByTestId('source-rename-apps')).toBeNull();
   });
 });
