@@ -10,7 +10,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Terminal as XTerm } from '@xterm/xterm';
-import { readRow, SCAN_ROWS_MAX, urlsIn, type TermRow } from '../src/board/terminalLinks.js';
+import { CELL_CHARS_MAX, findUrls, LINK_ROWS_MAX, readRow, urlsIn, type TermRow } from '../src/board/terminalLinks.js';
 import { linkCopyNote, SignInLink } from '../src/components/agents/containerSignIn.js';
 
 const LINK = 'https://claude.ai/oauth/authorize?code=true&client_id=00000000-0000-4000-8000-000000000000&response_type=code'
@@ -45,14 +45,46 @@ describe('the addresses on a terminal screen (urlsIn)', () => {
     expect(urlsIn(b.read, b.length, 80)).toEqual(['https://example.com/docs', LINK]);
   });
 
-  it('reads only the last SCAN_ROWS_MAX rows, and never offers a link cut by that start (it could be a longer one’s tail)', async () => {
-    // The link's first row is the last row out of reach: its rest, in reach, is not offered as a link of its own.
-    const filler = Array.from({ length: SCAN_ROWS_MAX }, (_, i) => `line ${i}`).join('\r\n');
-    const rows = inkWrapped(LINK, 80).split('\r\n');
-    const b = await bufferOf(inkWrapped(LINK, 80) + '\r\n' + filler + '\r\n', 80);
-    expect(urlsIn(b.read, b.length, 80)).toEqual([]);
-    // In reach, it is found whole.
-    expect(urlsIn(b.read, b.length, 80, SCAN_ROWS_MAX + rows.length + 2)).toEqual([LINK]);
+  it('a link the read starts inside is read back to its start, whole (never its tail alone)', async () => {
+    const b = await bufferOf('Sign in:\r\n' + inkWrapped(LINK, 40) + '\r\nPaste code here > ', 40);
+    // The read starts on the link's third row: it reaches back to the link's first row.
+    const rowsAfterStart = b.length - 1 - 2;
+    expect(urlsIn(b.read, b.length, 40, rowsAfterStart)).toEqual([LINK]);
+  });
+
+  it('a run cut beyond reach offers nothing from it, not even another address inside its query', async () => {
+    // At 10 columns, a 2,600-character address is 260 rows: more than the read reaches back (LINK_ROWS_MAX).
+    const inner = 'https://tail.example/next';
+    // (2,496: the inner address's `https` is not cut by a row end, where a row starting `tps://` would read as a new
+    // address, findUrls' own rule on main.)
+    const long = `https://example.com/a?${'x'.repeat(2_496)}&next=${inner}&end=1`;
+    const b = await bufferOf(inkWrapped(long, 10) + '\r\ndone\r\n', 10, 30);
+    const reads: number[] = [];
+    const read = (i: number): TermRow => { reads.push(i); return b.read(i); };
+    const maxRows = 20;
+    expect(urlsIn(read, b.length, 10, maxRows)).toEqual([]);
+    // Bounded: never reads further back than the window plus LINK_ROWS_MAX (and the one row before it).
+    expect(Math.min(...reads)).toBeGreaterThanOrEqual(b.length - maxRows - LINK_ROWS_MAX - 1);
+    // Read whole, the one address is found, and the address inside its query is not offered on its own.
+    expect(urlsIn(b.read, b.length, 10, b.length)).toEqual([long]);
+  });
+
+  it('a cell stacked with combining marks is read only so far (bounded work per row)', () => {
+    const marks = '́'.repeat(10_000);
+    const line = {
+      isWrapped: false,
+      getCell: (x: number) => (x >= 3 ? undefined : { getChars: () => (x === 1 ? `a${marks}` : 'b'), getWidth: () => 1 }),
+    } as unknown as Parameters<typeof readRow>[0];
+    const row = readRow(line, 3);
+    expect(row.text.length).toBe(2 + CELL_CHARS_MAX);
+  });
+
+  it('a long tail of closing brackets is trimmed in one pass', () => {
+    const tail = ')'.repeat(50_000);
+    const t0 = performance.now();
+    const found = findUrls([{ text: `https://example.com/a${tail}`, cols: [], wrapped: false, lastCol: 0 }], 80_000);
+    expect(found.map((f) => f.url)).toEqual(['https://example.com/a']);
+    expect(performance.now() - t0).toBeLessThan(2_000);
   });
 });
 
@@ -69,10 +101,15 @@ describe('the sign-in link box (SignInLink)', () => {
     expect(screen.getByTestId('agents-login-link-copy')).toHaveTextContent('Copy link');
   });
 
-  it('Copy link puts the whole address on the clipboard and says so', async () => {
+  it('Copy link puts the whole address on the clipboard and says so; nothing is copied or opened before the press', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
     vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
-    render(<SignInLink url={LINK} />);
+    const { rerender } = render(<SignInLink url="https://example.com/first" />);
+    rerender(<SignInLink url={LINK} />);
+    expect(writeText).not.toHaveBeenCalled();
+    expect(open).not.toHaveBeenCalled();
+    open.mockRestore();
     fireEvent.click(screen.getByTestId('agents-login-link-copy'));
     expect(writeText).toHaveBeenCalledWith(LINK);
     await waitFor(() => expect(screen.getByTestId('agents-login-link-note')).toHaveTextContent('Copied. Paste it into your browser’s address bar.'));
@@ -85,6 +122,8 @@ describe('the sign-in link box (SignInLink)', () => {
     fireEvent.click(screen.getByTestId('agents-login-link-copy'));
     await waitFor(() => expect(screen.getByTestId('agents-login-link-note')).toHaveTextContent('Your browser didn’t allow the copy. The link is selected: press ⌘C to copy it.'));
     expect(window.getSelection()?.toString()).toBe(LINK);
+    // The keyboard's copy goes to the link, not to whatever held focus (the terminal).
+    expect(document.activeElement).toBe(screen.getByTestId('agents-login-link-url'));
   });
 
   it('a browser with no clipboard says so too, in this computer’s keys', async () => {
@@ -103,6 +142,24 @@ describe('the sign-in link box (SignInLink)', () => {
     await act(async () => { rerender(<SignInLink url="https://example.com/device" />); });
     expect(screen.queryByTestId('agents-login-link-note')).toBeNull();
     expect(screen.getByTestId('agents-login-link-url')).toHaveAttribute('href', 'https://example.com/device');
+  });
+
+  it('a copy still out when a newer link arrives says nothing and selects nothing (only the newest request answers)', async () => {
+    let reject: (e: Error) => void = () => undefined;
+    const writeText = vi.fn(() => new Promise<void>((_, r) => { reject = r; }));
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    const { rerender } = render(<SignInLink url={LINK} />);
+    fireEvent.click(screen.getByTestId('agents-login-link-copy'));
+    await act(async () => { rerender(<SignInLink url="https://example.com/device" />); });
+    window.getSelection()?.removeAllRanges();
+    await act(async () => { reject(new Error('NotAllowedError')); await Promise.resolve(); });
+    expect(screen.queryByTestId('agents-login-link-note')).toBeNull();
+    expect(window.getSelection()?.toString()).toBe('');
+  });
+
+  it('only a web address is ever a link here', () => {
+    const { container } = render(<SignInLink url="javascript:alert(1)" />);
+    expect(container.querySelector('a')).toBeNull();
   });
 
   it('the words, per computer', () => {

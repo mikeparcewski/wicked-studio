@@ -21,6 +21,9 @@ export interface TermRow {
   lastCol: number;
 }
 
+/** The most UTF-16 units read from one cell (a character and its combining marks). */
+export const CELL_CHARS_MAX = 8;
+
 /** One buffer row as text, with each character's cell column (a wide character takes two cells). */
 export function readRow(line: IBufferLine | undefined, width: number): TermRow {
   if (line === undefined) return { text: '', cols: [], wrapped: false, lastCol: -1 };
@@ -32,7 +35,9 @@ export function readRow(line: IBufferLine | undefined, width: number): TermRow {
     if (cell === undefined) break;
     const w = cell.getWidth();
     if (w === 0) continue;
-    const ch = cell.getChars() || ' ';
+    // A cell holds one character and its combining marks; a program can stack thousands on one cell. Only the first
+    // few are read (no address needs more), so a row's work stays bounded by its width (codex on studio#1362).
+    const ch = (cell.getChars() || ' ').slice(0, CELL_CHARS_MAX);
     for (let i = 0; i < ch.length; i++) { cols.push(x); ends.push(x + w - 1); }
     text += ch;
   }
@@ -85,8 +90,12 @@ function runOfUrlChars(text: string, from: number): number {
   return m === null ? from : from + m[0].length;
 }
 
-/** Drop what usually closes the sentence around a link ("(see https://x.y/z)." → "https://x.y/z"). */
+/** Drop what usually closes the sentence around a link ("(see https://x.y/z)." → "https://x.y/z"). One pass: the
+ *  bracket counts are taken once and kept as the tail shrinks (a tail of many `)` is linear, not quadratic). */
 function trimTail(url: string): number {
+  const count = new Map<string, number>([['(', 0], [')', 0], ['[', 0], [']', 0]]);
+  const n0 = (c: string): number => count.get(c) ?? 0;
+  for (const c of url) if (count.has(c)) count.set(c, n0(c) + 1);
   let n = url.length;
   for (;;) {
     const c = url[n - 1];
@@ -94,8 +103,7 @@ function trimTail(url: string): number {
     if ('.,;:!?\'"'.includes(c)) { n--; continue; }
     if (c === ')' || c === ']') {
       const open = c === ')' ? '(' : '[';
-      const s = url.slice(0, n);
-      if (s.split(open).length < s.split(c).length) { n--; continue; }
+      if (n0(open) < n0(c)) { count.set(c, n0(c) - 1); n--; continue; }
     }
     return n;
   }
@@ -193,15 +201,25 @@ export const SCAN_ROWS_MAX = 500;
 
 /**
  * Every whole address in the last {@link SCAN_ROWS_MAX} rows of the buffer, oldest first (studio#1362: the sign-in
- * window shows the newest one outside the terminal, as a real link with a copy button). A link cut by the start of the
- * read is not offered: it could be the tail of a longer address.
+ * window shows the newest one outside the terminal, as a real link with a copy button). A run of joined rows the read
+ * starts inside is read back to its start (up to {@link LINK_ROWS_MAX} more rows), so a link there is read whole. A run
+ * still cut after that is not offered at all: anything found in it could be a part of a longer address (an address
+ * can hold another `https://` in its query).
  */
 export function urlsIn(read: (i: number) => TermRow, length: number, width: number, maxRows = SCAN_ROWS_MAX): string[] {
-  const start = Math.max(0, length - maxRows);
+  const joinsBack = (i: number): boolean => i > 0 && (read(i).wrapped || isFull(read(i - 1), width));
+  let start = Math.max(0, length - maxRows);
+  const floor = Math.max(0, start - LINK_ROWS_MAX);
+  while (start > floor && joinsBack(start)) start--;
   const rows: TermRow[] = [];
   for (let i = start; i < length; i++) rows.push(read(i));
-  const cut = start > 0 && rows.length > 0 && (rows[0]!.wrapped || isFull(read(start - 1), width));
-  return findUrls(rows, width).filter((u) => !(cut && u.start.row === 0)).map((u) => u.url);
+  // The leading run the read could not reach the start of: its rows, by their index in `rows`.
+  let cutRun = -1;
+  if (joinsBack(start)) {
+    cutRun = 0;
+    while (cutRun + 1 < rows.length && (rows[cutRun + 1]!.wrapped || isFull(rows[cutRun]!, width))) cutRun++;
+  }
+  return findUrls(rows, width).filter((u) => u.start.row > cutRun).map((u) => u.url);
 }
 
 /** Open a printed address in a new tab, never handing this page to it. Only http(s). */

@@ -194,6 +194,8 @@ describe('container sign-in hooks (crew#1006)', () => {
     // Nothing printed yet: no box.
     expect(within(login).queryByTestId('agents-login-link')).toBeNull();
     fireEvent.change(screen.getByTestId('terminal-stub-links'), { target: { value: `https://example.com/docs ${LINK}` } });
+    // The words point at it now, not at the terminal the helper holds.
+    expect(within(login).getByTestId('agents-login-copy')).toHaveTextContent(/^Open the sign-in link below, or press Copy link and paste it into your browser\. To copy text from the terminal/u);
     // The newest address the helper printed, as a link that opens in a new tab with no opener.
     const a = within(login).getByTestId('agents-login-link-url');
     expect(a).toHaveAttribute('href', LINK);

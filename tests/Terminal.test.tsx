@@ -392,6 +392,31 @@ describe('Terminal (DES-TERMINAL-001 §6 — the web bridge)', () => {
       }
     });
 
+    it('a program that never stops drawing (a spinner) still has its links told, every LINK_SCAN_MS; an unmount mid-wait tells nothing', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        const seen: string[][] = [];
+        const { unmount } = render(<Terminal cwd="." onLinks={(u) => seen.push([...u])} />);
+        await waitFor(() => expect(h.terminals[0]?.onWriteParsed).toHaveBeenCalled());
+        const term = h.terminals[0]!;
+        term.lines = ['Use the url below to sign in:', ...wrapped(LINK, 80)];
+        // A draw every 50 ms for 600 ms: the screen is read on the way, not only once the drawing stops.
+        for (let t = 0; t < 12; t++) {
+          act(() => { for (const cb of term.parsed) cb(); });
+          await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+        }
+        expect(seen.length).toBeGreaterThanOrEqual(3);
+        expect(seen.every((u) => u.join() === LINK)).toBe(true);
+        const before = seen.length;
+        act(() => { for (const cb of term.parsed) cb(); });
+        unmount();
+        await act(async () => { await vi.advanceTimersByTimeAsync(LINK_SCAN_MS * 2); });
+        expect(seen.length).toBe(before);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('a terminal nobody asked for links never reads its screen for them', async () => {
       render(<Terminal cwd="." />);
       await waitFor(() => expect(h.terminals[0]?.registerLinkProvider).toHaveBeenCalled());

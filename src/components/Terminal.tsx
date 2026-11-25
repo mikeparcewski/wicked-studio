@@ -46,6 +46,8 @@ interface Props {
   /**
    * (studio#1362) Told the web addresses on screen, oldest first, a moment after the program draws (at most every
    * {@link LINK_SCAN_MS}): the sign-in window shows the newest outside the terminal, as a link with a copy button.
+   * Read when the terminal opens, like the other open-time props: a terminal opened without it never scans (the newest
+   * callback given is the one called).
    */
   onLinks?: (urls: readonly string[]) => void;
 }

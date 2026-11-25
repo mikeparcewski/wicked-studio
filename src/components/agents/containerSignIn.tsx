@@ -105,26 +105,32 @@ export function linkCopyNote(ok: boolean, mac = isMacPlatform()): string {
  * mouse, so there a click or drag may never reach the link. Here it is a real link (a click opens it in a new tab, a
  * drag carries it to the address bar), its text can be selected, and Copy link puts it on the clipboard.
  */
-export function SignInLink({ url }: { url: string }): React.ReactElement {
-  const [note, setNote] = useState<{ url: string; ok: boolean } | null>(null);
+export function SignInLink({ url }: { url: string }): React.ReactElement | null {
+  const [note, setNote] = useState<{ ok: boolean } | null>(null);
   const anchor = useRef<HTMLAnchorElement | null>(null);
-  const mounted = useRef(true);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  /** Each copy press, and each new link, is a new request: only the newest one's answer is said (codex r1). */
+  const seq = useRef(0);
+  useEffect(() => { seq.current += 1; setNote(null); return () => { seq.current += 1; }; }, [url]);
+  // Only a web address is ever a link here (the terminal's reader finds http(s) only; this holds it at the anchor too).
+  if (!/^https?:\/\//iu.test(url)) return null;
   const copy = (): void => {
+    const mine = ++seq.current;
     const done = (ok: boolean): void => {
-      if (!mounted.current) return;
-      setNote({ url, ok });
-      // A refused copy selects the link, so the keyboard's copy takes it.
+      if (seq.current !== mine) return;
+      setNote({ ok });
+      // A refused copy focuses and selects the link, so the keyboard's copy takes it (not the terminal's).
       const el = anchor.current;
       const sel = typeof window !== 'undefined' ? window.getSelection() : null;
-      if (!ok && el !== null && sel !== null) { const r = document.createRange(); r.selectNodeContents(el); sel.removeAllRanges(); sel.addRange(r); }
+      if (!ok && el !== null && sel !== null) {
+        el.focus();
+        const r = document.createRange(); r.selectNodeContents(el); sel.removeAllRanges(); sel.addRange(r);
+      }
     };
     const clip = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
     if (clip === undefined || typeof clip.writeText !== 'function') done(false);
     else clip.writeText(url).then(() => done(true), () => done(false));
   };
-  // A note is about the link it copied: a newer link starts without one.
-  const shown = note !== null && note.url === url ? note : null;
+  const shown = note;
   return (
     <div className="wk-agents-link" data-testid="agents-login-link">
       <span className="wk-agents-h" id="agents-login-link-label">Sign-in link</span>
@@ -209,7 +215,9 @@ function LoginTerminal({ session, open, onOpenError, onClosed, onExit }: {
               : onHost ? `Opening ${name}’s own sign-in on this computer…` : `Opening ${name}’s sign-in… The first sign-in can take a few minutes while it is prepared.`}
           </p>
           {/* (studio#1362) A helper's sign-in can keep the mouse for itself: say how to open its link and copy from it. */}
-          {opened && <p data-testid="agents-login-copy" className="wk-agents-safe">{`Click a sign-in link in the terminal to open it in a new tab. ${selectWords()}`}</p>}
+          {opened && <p data-testid="agents-login-copy" className="wk-agents-safe">{link !== null
+            ? `Open the sign-in link below, or press Copy link and paste it into your browser. ${selectWords()}`
+            : `Click a sign-in link in the terminal to open it in a new tab. ${selectWords()}`}</p>}
           {opened && link !== null && <SignInLink url={link} />}
           <Terminal cwd="." open={open} onOpenError={onOpenError} onExit={onExit} onLinks={onLinks} />
           <span className="wk-agents-safe">{onHost ? `Studio opens ${name}’s own sign-in on this computer.` : `Studio opens ${name}’s sign-in; follow its steps there.`} Studio never shows your password or token. For Claude, paste only the code your browser shows into claude’s own prompt: the sign-in reads the token claude prints, and asks you to paste it (unechoed) only if it cannot.</span>
