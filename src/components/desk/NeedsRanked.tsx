@@ -73,7 +73,7 @@ export function NeedsRanked({ snapshot, runs, needRows, navigate, now, setup = [
     <div className="wk-home" data-testid="needs-ranked">
       <div className="wk-home-col wk-needs-col">
         <header className="wk-home-hello">
-          <h1 className="wk-home-title" id="desk-inbox-title">Needs you</h1>
+          <h1 className="wk-home-title" id="desk-inbox-title" tabIndex={-1}>Needs you</h1>
           <p className="wk-home-state" data-testid="needs-sentence" data-count={items.length} aria-live="polite">{rankedSentence(items)}</p>
         </header>
 
@@ -332,7 +332,23 @@ export function namedInStuck(cli: string, items: readonly SystemAttention[]): bo
 }
 
 /** After a snooze or a wake, crew's list is read again: the list, its number and every count follow crew. */
-const reread = (): void => { void useSystemStore.getState().refresh({ force: true }); };
+/**
+ * Re-read /system after a snooze or a wake (crew moved the item), then give a keyboard user a place to stand: the
+ * control they used is gone with its row, so focus goes to the first of `places` still on the page. Only when focus
+ * went with it (it sits on the page body), never pulling it from wherever the person has moved since.
+ */
+function rereadThenFocus(...places: string[]): void {
+  void useSystemStore.getState().refresh({ force: true }).then(() => {
+    window.setTimeout(() => {
+      const lost = document.activeElement === null || document.activeElement === document.body;
+      if (!lost) return;
+      for (const sel of [...places, '#desk-inbox-title']) {
+        const el = document.querySelector<HTMLElement>(sel);
+        if (el !== null) { el.focus(); return; }
+      }
+    }, 0);
+  });
+}
 
 /** Snooze on a ranked item (studio#1416): crew's key and rank, the inbox's ends and refusal words. Mounted per key. */
 function RankedSnooze({ snooze: sn, now }: { snooze: { key: string; rank: number }; now: number }): React.ReactElement {
@@ -362,7 +378,7 @@ function RankedSnooze({ snooze: sn, now }: { snooze: { key: string; rank: number
           onClick={() => {
             setState({ kind: 'sending' });
             void snooze(sn.key, c.until, sn.rank).then((why) => {
-              if (why === null) { setState({ kind: 'idle' }); reread(); } else setState({ kind: 'failed', words: why });
+              if (why === null) { setState({ kind: 'idle' }); rereadThenFocus('[data-testid="needs-snoozed-summary"]'); } else setState({ kind: 'failed', words: why });
             });
           }}>
           {c.label}
@@ -385,7 +401,8 @@ function SnoozedItems({ items, now }: { items: readonly SystemSnoozed[]; now: nu
         <span aria-hidden className="wk-ue-fold-chev">›</span>
       </summary>
       <ul className="wk-needs-snoozed-list">
-        {items.map((a) => <SnoozedItem key={a.id} item={a} now={now} />)}
+        {/* Keyed by the occurrence: a new snooze of the same run starts with its own Wake. */}
+        {items.map((a) => <SnoozedItem key={a.wakeKey ?? a.id} item={a} now={now} />)}
       </ul>
     </details>
   );
@@ -394,16 +411,19 @@ function SnoozedItems({ items, now }: { items: readonly SystemSnoozed[]; now: nu
 function SnoozedItem({ item, now }: { item: SystemSnoozed; now: number }): React.ReactElement {
   const wake = useDeskSnoozes((st) => st.wake);
   const [state, setState] = useState<{ kind: 'idle' | 'sending' } | { kind: 'failed'; words: string }>({ kind: 'idle' });
-  const key = item.snooze?.key ?? null;
+  const key = item.wakeKey;
+  const row = `[data-testid="needs-item"][data-id="${CSS.escape(item.id)}"]`;
   return (
     <li className="wk-needs-snoozed-item" data-testid="needs-snoozed-item" data-id={item.id}>
       <span className="wk-needs-snoozed-what">{item.text}</span>
-      <span className="wk-needs-snoozed-until" data-testid="needs-snoozed-until">Back {snoozeEndWords(new Date(item.until).toISOString(), now)}</span>
+      {item.until !== null && <span className="wk-needs-snoozed-until" data-testid="needs-snoozed-until">Back {snoozeEndWords(new Date(item.until).toISOString(), now)}</span>}
       {key !== null && (
         <button type="button" data-testid="needs-snoozed-wake" className="wk-home-btn wk-home-btn--secondary wk-needs-row-btn" disabled={state.kind === 'sending'}
           onClick={() => {
             setState({ kind: 'sending' });
-            void wake(key).then((why) => { if (why === null) { setState({ kind: 'idle' }); reread(); } else setState({ kind: 'failed', words: why }); });
+            void wake(key).then((why) => {
+              if (why === null) { setState({ kind: 'idle' }); rereadThenFocus(`${row} :is(a, button)`, '[data-testid="needs-snoozed-summary"]'); } else setState({ kind: 'failed', words: why });
+            });
           }}>
           Wake now
         </button>

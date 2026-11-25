@@ -118,9 +118,12 @@ export interface SystemAttention {
   snooze?: { key: string; rank: number } | null;
 }
 
-/** (crew api-types 0.231.0) An attention item a snooze holds back, with the snooze's end (unix millis). */
+/** (crew api-types 0.231.0) An attention item a snooze holds back, with the snooze's end (unix millis; crew sends
+ *  ISO-8601), or `null` when the wire's end is no time a browser can show. */
 export interface SystemSnoozed extends SystemAttention {
-  until: number;
+  until: number | null;
+  /** The key Wake now ends (`snooze.key`), kept even when the rank is outside crew's range: waking sends no rank. */
+  wakeKey: string | null;
 }
 
 /** (crew api-types 0.140.0) One run nobody has resolved, with what it cost. */
@@ -324,9 +327,6 @@ function attentionOf(x: unknown, i: number): SystemAttention {
   const a = bag(x);
   const target = bag(a['target']);
   const kind = a['kind'] === 'prevents' || a['kind'] === 'slows' ? a['kind'] : null;
-  const sn = bag(a['snooze']);
-  const key = str(sn['key']);
-  const rank = sn['rank'];
   return {
     id: str(a['id']) ?? `attention-${i}`,
     level: a['severity'] === 'red' ? 'red' : 'yellow',
@@ -339,7 +339,35 @@ function attentionOf(x: unknown, i: number): SystemAttention {
     blockedRunIds: list(a['blockedRunIds']).map(str).filter((id): id is string => id !== null),
     waitedSince: when(a['waitedSince']),
     runId: target['kind'] === 'run' ? str(target['runId']) : null,
-    snooze: key !== null && typeof rank === 'number' && Number.isInteger(rank) ? { key, rank } : null,
+    snooze: snoozeOf(a['snooze']),
+  };
+}
+
+/** Crew's snooze key bound (desk-snoozes.ts `DESK_SNOOZE_KEY_MAX`), and its rank range (`attentionSnooze`). */
+const SNOOZE_KEY_MAX = 200;
+const SNOOZE_RANK_MIN = 100;
+const SNOOZE_RANK_MAX = 299;
+
+/** An item's `snooze` as crew writes it, or null: a key of 1 to 200 characters and a whole rank from 100 to 299.
+ *  Anything else is not offered (studio sends crew's own key and rank, never one it made up). */
+function snoozeOf(x: unknown): { key: string; rank: number } | null {
+  const sn = bag(x);
+  const key = str(sn['key']);
+  const rank = sn['rank'];
+  if (key === null || key.length > SNOOZE_KEY_MAX) return null;
+  if (typeof rank !== 'number' || !Number.isInteger(rank) || rank < SNOOZE_RANK_MIN || rank > SNOOZE_RANK_MAX) return null;
+  return { key, rank };
+}
+
+/** A held item: always kept (crew left it out of `attention`, so dropping it would hide it), with its end when the end
+ *  is a time a Date can hold, and its wake key even when its rank is outside the range (waking sends no rank). */
+function snoozedOf(x: unknown, i: number): SystemSnoozed {
+  const t = when(bag(x)['until']);
+  const key = str(bag(bag(x)['snooze'])['key']);
+  return {
+    ...attentionOf(x, i),
+    until: t !== null && Number.isFinite(new Date(t).getTime()) ? t : null,
+    wakeKey: key !== null && key.length <= SNOOZE_KEY_MAX ? key : null,
   };
 }
 
@@ -353,10 +381,7 @@ export function normalizeSnapshot(input: unknown): SystemSnapshot {
     ranked: Array.isArray(b['unresolved']),
     level: level === 'green' || level === 'yellow' || level === 'red' ? level : null,
     attention: list(b['attention']).map(attentionOf),
-    snoozed: list(b['snoozed']).flatMap((x, i) => {
-      const until = when(bag(x)['until']);
-      return until === null ? [] : [{ ...attentionOf(x, i), until }];
-    }),
+    snoozed: list(b['snoozed']).map(snoozedOf),
     unresolved: list(b['unresolved']).map((x) => {
       const u = bag(x);
       const cost = bag(u['cost']);

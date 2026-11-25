@@ -182,6 +182,11 @@
 /* studio#1416: Snooze on a ranked item, and the items a snooze holds back. */
 .wk-needs-snooze { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; flex-shrink: 0; max-width: 100%; }
 .wk-needs-snooze .wk-home-btn { display: inline-flex; align-items: center; gap: 6px; }
+/* While choosing, the choices take their own line under the words (any width: beside a long title they would push
+   the row past a narrow window), and the row's own move stays on the first line. */
+:is(.wk-needs-row, .wk-needs-card):has(> .wk-needs-snooze[role="group"]) { flex-wrap: wrap; }
+.wk-needs-row > .wk-needs-snooze[role="group"], .wk-needs-card > .wk-needs-snooze[role="group"] { order: 1; flex: 1 1 100%; min-width: 0; }
+.wk-needs-row:has(> .wk-needs-dot) > .wk-needs-snooze[role="group"] { margin-left: 28px; } /* the small dot (10px) and the row gap (18px) */
 .wk-needs-snooze-cancel { font-size: var(--text-body); background: none; border: 0; padding: 0 4px; cursor: pointer; }
 .wk-needs-snooze-failed { flex-basis: 100%; font-size: var(--text-sm); color: var(--ink-muted); }
 .wk-needs-snoozed-list { list-style: none; margin: 0; padding: 0 0 8px; display: flex; flex-direction: column; }
@@ -205,6 +210,8 @@
   .wk-needs-row:has(> .wk-needs-dot) > :is(.wk-needs-row-act, .wk-home-btn) { margin-left: 22px; }
   /* studio#1416: the snooze choices wrap under the text instead of running off a phone. */
   .wk-needs-row:has(> .wk-needs-dot) > .wk-needs-snooze { margin-left: 22px; max-width: calc(100% - 22px); flex-shrink: 1; }
+  .wk-needs-row:has(> .wk-needs-dot) > .wk-needs-snooze[role="group"] { margin-left: 22px; flex-basis: calc(100% - 22px); }
+  .wk-needs-card > .wk-needs-snooze[role="group"] { flex: 0 0 auto; }
   .wk-needs-row--resolve .wk-needs-acts { width: 100%; }
 }
 /* The one fold's summary is the calm fold row (words, then the chevron), not the inline link it was. */
