@@ -15672,6 +15672,12 @@
       ]
     },
     {
+      "testId": "product-publish-card-what",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
       "testId": "product-publish-compose-again",
       "files": [
         "src/components/product/ProductPublish.tsx"
@@ -15721,6 +15727,18 @@
     },
     {
       "testId": "product-publish-publication",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-refresh",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-refresh-note",
       "files": [
         "src/components/product/ProductPublish.tsx"
       ]

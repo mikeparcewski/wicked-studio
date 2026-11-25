@@ -4,6 +4,7 @@ import {
   bodyShown,
   depthOf,
   productPublishApi,
+  publicationOf,
   publicationsOf,
   publishRefusal,
   publishRefusalCode,
@@ -47,6 +48,18 @@ export function itemStateWords(i: PublicationItemState): { words: string; tone: 
 
 const KIND_WORD = { epic: 'Epic', feature: 'Feature', story: 'Story' } as const;
 
+/** How often a panel showing an issue being sent looks again. */
+const SENDING_POLL_MS = 3000;
+/** The largest issue number crew accepts in a resolve. */
+const ISSUE_MAX = 9_999_999_999;
+
+/** The issue number a person typed (`12` or `#12`), or `null` when it is not one crew accepts. Pure. */
+export function issueNumberOf(typed: string): number | null {
+  const m = /^#?([1-9]\d{0,9})$/.exec(typed.trim());
+  const n = m === null ? NaN : Number(m[1]);
+  return Number.isSafeInteger(n) && n <= ISSUE_MAX ? n : null;
+}
+
 /**
  * PUBLISH TO GITHUB on a finished Compose run (wicked-crew#372): the plan's epics, features and stories as GitHub
  * issues in a repository linked to the job's project as a tracker.
@@ -66,112 +79,181 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [resolving, setResolving] = useState<string | null>(null);
   const [resolveNote, setResolveNote] = useState<Record<string, string>>({});
+  /** A refresh that failed AFTER crew's state was shown: the state shown stays (it is crew's last word), this says so. */
+  const [refreshNote, setRefreshNote] = useState<string | null>(null);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   /** Each run's generation: an answer for an earlier run never lands on this one. */
   const gen = useRef(0);
+  /** Each read's (and each write's) turn: only the newest read lands, and a write's answer outranks a read sent before it. */
+  const seq = useRef(0);
+  /** The one call in flight (a card, a confirm or a resolve): a second click in the same frame sends nothing. */
+  const inFlight = useRef<object | null>(null);
   const key = `${projectId}\u0000${runId}`;
+  const here = (mine: number): boolean => mounted.current && gen.current === mine;
 
-  const load = useCallback((mine: number): void => {
+  const load = useCallback((mine: number, keep: boolean): void => {
+    const turn = ++seq.current;
     productPublishApi.read(projectId, runId).then(
       (raw) => {
-        if (!mounted.current || gen.current !== mine) return;
+        if (!mounted.current || gen.current !== mine || seq.current !== turn) return;
         const body = publicationsOf(raw, runId);
+        if (body === null && keep) { setRefreshNote('crew’s latest answer couldn’t be read; this is what it said before.'); return; }
+        setRefreshNote(null);
         setRead(body === null ? { phase: 'failed', words: 'crew’s answer about publishing this plan couldn’t be read.' } : { phase: 'ok', body });
       },
       (e: unknown) => {
-        if (!mounted.current || gen.current !== mine) return;
-        setRead(isRouteAbsent(e) ? { phase: 'absent' } : { phase: 'failed', words: publishRefusal(e) });
+        if (!mounted.current || gen.current !== mine || seq.current !== turn) return;
+        if (isRouteAbsent(e)) { setRead({ phase: 'absent' }); return; }
+        // A failed refresh never erases what crew already said happened.
+        setRead((prev) => (keep && prev.phase === 'ok' ? prev : { phase: 'failed', words: publishRefusal(e) }));
+        if (keep) setRefreshNote(`${publishRefusal(e)} What is shown is crew’s last answer.`);
       },
     );
   }, [projectId, runId]);
 
+  /** A publication crew answered on a write: shown at once (replacing that repository's), ahead of any read in flight. */
+  const merge = (p: PublicationState | null | undefined): void => {
+    if (p === null || p === undefined) return;
+    seq.current++;
+    setRead((prev) => (prev.phase !== 'ok' ? prev : { phase: 'ok', body: { ...prev.body, publications: [...prev.body.publications.filter((x) => x.repo !== p.repo), p] } }));
+  };
+
   useEffect(() => {
     const mine = ++gen.current;
+    inFlight.current = null;
     setRead({ phase: 'loading' });
     setAsk({ phase: 'idle' });
     setPick(0);
     setAnswers({});
+    setResolving(null);
     setResolveNote({});
-    load(mine);
+    setRefreshNote(null);
+    load(mine, false);
     // `key` stands for the project and the run.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
+  // While crew says an issue is being sent (this daemon, maybe another person's click), look again every few seconds.
+  const sendingNow = read.phase === 'ok' && read.body.publications.some((p) => p.items.some((i) => i.state === 'sending'));
+  useEffect(() => {
+    if (!sendingNow) return undefined;
+    const mine = gen.current;
+    const t = setTimeout(() => { if (here(mine)) load(mine, true); }, SENDING_POLL_MS);
+    return () => clearTimeout(t);
+    // Re-armed by each answer while it still says `sending`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [read, sendingNow]);
+
   if (read.phase === 'absent') return null;
-  const head = <h3 id={`product-publish-title-${runId}`} className="wk-pub-title">Publish the plan to GitHub</h3>;
+  const titleId = `product-publish-title-${runId}`;
+  const head = <h3 id={titleId} className="wk-pub-title">Publish the plan to GitHub</h3>;
+  const lookAgain = (
+    <div className="wk-src-row-btns">
+      <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="product-publish-refresh" onClick={() => load(gen.current, read.phase === 'ok')}>Look again</button>
+    </div>
+  );
   if (read.phase === 'loading') {
-    return <section className="wk-pub" aria-labelledby={`product-publish-title-${runId}`} data-testid="product-publish">{head}<p className="wk-src-cap">Asking crew whether this plan can be published…</p></section>;
+    return <section className="wk-pub" aria-labelledby={titleId} data-testid="product-publish">{head}<p className="wk-src-cap">Asking crew whether this plan can be published…</p></section>;
   }
   if (read.phase === 'failed') {
-    return <section className="wk-pub" aria-labelledby={`product-publish-title-${runId}`} data-testid="product-publish">{head}<p className="wk-src-note wk-src-tone-fail" data-testid="product-publish-unreadable">{read.words}</p></section>;
+    return <section className="wk-pub" aria-labelledby={titleId} data-testid="product-publish">{head}<p className="wk-src-note wk-src-tone-fail" data-testid="product-publish-unreadable">{read.words}</p>{lookAgain}</section>;
   }
   const { publishable, targets, publications } = read.body;
-  const open = targets.filter((t) => !publications.some((p) => p.published && p.repo === t.repo && p.source === t.source));
+  // crew keeps ONE publication per run and repository, whichever source sent it: a repository is matched by its name only.
+  const pubOf = (repo: string): PublicationState | undefined => publications.find((p) => p.repo === repo);
+  const open = targets.filter((t) => pubOf(t.repo)?.published !== true);
   const target = open[Math.min(pick, Math.max(0, open.length - 1))];
   // An earlier attempt at this repository that a person must settle first (crew refuses a confirm with `unresolved`),
-  // or one being sent now: no card is offered until it is settled.
-  const held = target === undefined ? undefined : publications.find((p) => p.repo === target.repo && p.source === target.source && p.items.some((i) => i.state === 'unsure' || i.state === 'sending'));
+  // or one being sent now: no card is offered for it until it is settled.
+  const heldOf = (repo: string): PublicationState | undefined => { const p = pubOf(repo); return p !== undefined && p.items.some((i) => i.state === 'unsure' || i.state === 'sending') ? p : undefined; };
+  const held = target === undefined ? undefined : heldOf(target.repo);
 
-  const showCard = async (): Promise<void> => {
-    if (target === undefined || ask.phase === 'asking' || ask.phase === 'sending') return;
-    const mine = gen.current;
-    setAsk({ phase: 'asking' });
+  /** Runs one write at a time: a second click while one is in flight (even in the same frame) sends nothing. */
+  const once = async (run: (mine: number) => Promise<void>): Promise<void> => {
+    if (inFlight.current !== null) return;
+    const token = {};
+    inFlight.current = token;
     try {
-      const answer = publishResponseOf(await productPublishApi.post(projectId, { runId, repo: repoSelector(target, targets) }), runId, projectId);
-      if (!mounted.current || gen.current !== mine) return;
-      setAsk(answer === null || answer.done ? { phase: 'refused', words: UNREADABLE } : { phase: 'card', card: answer.card, hash: answer.publishHash, publication: answer.publication });
-    } catch (e) {
-      if (!mounted.current || gen.current !== mine) return;
-      setAsk({ phase: 'refused', words: publishRefusal(e) });
+      await run(gen.current);
+    } finally {
+      if (inFlight.current === token) inFlight.current = null;
     }
   };
 
-  const confirm = async (): Promise<void> => {
+  const showCard = (): Promise<void> => once(async (mine) => {
+    if (target === undefined) return;
+    setAsk({ phase: 'asking' });
+    seq.current++;
+    try {
+      const answer = publishResponseOf(await productPublishApi.post(projectId, { runId, repo: repoSelector(target, targets) }), runId, projectId);
+      if (!here(mine)) return;
+      if (answer === null || answer.done) { setAsk({ phase: 'refused', words: UNREADABLE }); return; }
+      merge(answer.publication);
+      // A card over an attempt that must be settled first is not offered: the publication above says what to do.
+      const unsettled = answer.publication?.items.some((i) => i.state === 'unsure' || i.state === 'sending') === true;
+      setAsk(unsettled ? { phase: 'idle' } : { phase: 'card', card: answer.card, hash: answer.publishHash, publication: answer.publication });
+    } catch (e) {
+      if (!here(mine)) return;
+      setAsk({ phase: 'refused', words: publishRefusal(e) });
+    }
+  });
+
+  const confirm = (): Promise<void> => once(async (mine) => {
     if (ask.phase !== 'card') return;
-    const mine = gen.current;
     const { card, hash, publication } = ask;
     setAsk({ phase: 'sending', card, hash, publication });
+    seq.current++;
     try {
       // The card's own repository and the card's hash: nothing else rides along.
       const answer = publishResponseOf(await productPublishApi.post(projectId, { runId, repo: repoSelector({ repo: card.repo, source: card.source }, targets), confirm: hash }), runId, projectId);
-      if (!mounted.current || gen.current !== mine) return;
-      setAsk(answer !== null && answer.done ? { phase: 'done', publication: answer.publication } : { phase: 'refused', words: UNREADABLE });
+      if (!here(mine)) return;
+      if (answer !== null && answer.done) {
+        merge(answer.publication);
+        setAsk({ phase: 'done', publication: answer.publication });
+      } else {
+        setAsk({ phase: 'refused', words: UNREADABLE });
+      }
     } catch (e) {
-      if (!mounted.current || gen.current !== mine) return;
+      if (!here(mine)) return;
       const body = e instanceof ApiError && typeof e.body === 'object' && e.body !== null ? (e.body as Record<string, unknown>) : {};
+      // `unresolved` and `publication_differs` carry the publication as crew holds it now: it is shown.
+      if (body['publication'] !== undefined) merge(publicationOf(body['publication']));
       // The card changed since it was shown: crew's fresh card waits for a new click (nothing was sent).
       const fresh = publishRefusalCode(e) === 'card_changed' ? publishResponseOf({ done: false, card: body['card'], publishHash: body['publishHash'], publication: null }, runId, projectId) : null;
-      setAsk(fresh !== null && !fresh.done ? { phase: 'card', card: fresh.card, hash: fresh.publishHash, publication: null, note: publishRefusal(e) } : { phase: 'refused', words: publishRefusal(e) });
+      setAsk(fresh !== null && !fresh.done ? { phase: 'card', card: fresh.card, hash: fresh.publishHash, publication, note: publishRefusal(e) } : { phase: 'refused', words: publishRefusal(e) });
     }
-    if (mounted.current && gen.current === mine) load(mine);
-  };
+    if (here(mine)) load(mine, true);
+  });
 
-  const resolve = async (p: PublicationState, item: PublicationItemState, issue: number | null): Promise<void> => {
-    if (resolving !== null) return;
-    const mine = gen.current;
+  const resolve = (p: PublicationState, item: PublicationItemState, issue: number | null): Promise<void> => once(async (mine) => {
     const slot = `${p.repo}\u0000${item.key}`;
     setResolving(slot);
     setResolveNote((m) => { const rest = { ...m }; delete rest[slot]; return rest; });
+    seq.current++;
     try {
-      const answer = publishResponseOf(await productPublishApi.post(projectId, { runId, repo: repoSelector({ repo: p.repo, source: p.source }, targets.length > 0 ? targets : [{ repo: p.repo, source: p.source }]), resolve: { key: item.key, issue } }), runId, projectId);
-      if (!mounted.current || gen.current !== mine) return;
+      const answer = publishResponseOf(await productPublishApi.post(projectId, { runId, repo: repoSelector({ repo: p.repo, source: p.source }, targets.some((t) => t.repo === p.repo) ? targets : [{ repo: p.repo, source: p.source }]), resolve: { key: item.key, issue } }), runId, projectId);
+      if (!here(mine)) return;
       if (answer === null) setResolveNote((m) => ({ ...m, [slot]: UNREADABLE }));
+      else merge(answer.publication);
     } catch (e) {
-      if (!mounted.current || gen.current !== mine) return;
+      if (!here(mine)) return;
       setResolveNote((m) => ({ ...m, [slot]: publishRefusal(e) }));
     } finally {
-      if (mounted.current && gen.current === mine) setResolving(null);
+      if (here(mine)) setResolving(null);
     }
-    if (mounted.current && gen.current === mine) load(mine);
-  };
+    if (here(mine)) load(mine, true);
+  });
 
   const composeAgain = (): void => openLaunchWizard({ workflowId: DRAFT_EPICS_ID, projectId, composerKey: 'desk' });
-  const busy = ask.phase === 'asking' || ask.phase === 'sending';
+  const busy = ask.phase === 'asking' || ask.phase === 'sending' || resolving !== null;
   const card = ask.phase === 'card' || ask.phase === 'sending' ? ask.card : null;
+  // What a confirm would create now: the card's items not already created (a retry sends only the rest).
+  const already = card === null ? new Map<string, PublicationItemState>() : new Map((pubOf(card.repo)?.items ?? []).filter((i) => i.state === 'created').map((i) => [i.key, i]));
+  const toCreate = card === null ? 0 : card.items.filter((i) => !already.has(i.key)).length;
 
   return (
-    <section className="wk-pub" aria-labelledby={`product-publish-title-${runId}`} data-testid="product-publish">
+    <section className="wk-pub" aria-labelledby={titleId} data-testid="product-publish">
       {head}
       {!publishable.ok && (
         <>
@@ -187,7 +269,7 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
       )}
 
       {publications.map((p) => (
-        <div key={`${p.source}\u0000${p.repo}`} className="wk-pub-publication" data-testid="product-publish-publication" data-published={p.published ? 'true' : 'false'}>
+        <div key={p.repo} className="wk-pub-publication" data-testid="product-publish-publication" data-repo={p.repo} data-published={p.published ? 'true' : 'false'}>
           <p className="wk-run-tab-line">
             <b>{p.repo}</b>{' '}
             <span className={`wk-src-note ${p.published ? 'wk-src-tone-ok' : 'wk-src-tone-warn'}`} data-testid="product-publish-verdict">
@@ -199,7 +281,7 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
               const s = itemStateWords(i);
               const slot = `${p.repo}\u0000${i.key}`;
               const typed = answers[slot] ?? '';
-              const n = /^#?\d{1,9}$/.test(typed.trim()) ? Number(typed.trim().replace('#', '')) : null;
+              const n = issueNumberOf(typed);
               return (
                 <li key={i.key} className="wk-pub-item" data-depth={depthOf(i.kind)} data-testid="product-publish-item" data-state={i.state}>
                   <span className="wk-pub-item-head">
@@ -215,8 +297,8 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
                         <input type="text" inputMode="numeric" aria-label={`The issue number ${i.title} was created as`} placeholder="Issue number" value={typed}
                           onChange={(e) => { const v = e.target.value; setAnswers((m) => ({ ...m, [slot]: v })); }} />
                       </label>
-                      <button type="button" className="wk-btn wk-btn--sm" data-testid="product-publish-resolve-exists" disabled={n === null || resolving !== null} onClick={() => { if (n !== null) void resolve(p, i, n); }}>It exists</button>
-                      <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="product-publish-resolve-absent" disabled={resolving !== null} onClick={() => void resolve(p, i, null)}>It wasn’t created</button>
+                      <button type="button" className="wk-btn wk-btn--sm" data-testid="product-publish-resolve-exists" disabled={n === null || busy} onClick={() => { if (n !== null) void resolve(p, i, n); }}>It exists</button>
+                      <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="product-publish-resolve-absent" disabled={busy} onClick={() => void resolve(p, i, null)}>It wasn’t created</button>
                       {resolveNote[slot] !== undefined && <p className="wk-src-note wk-src-tone-fail" data-testid="product-publish-resolve-note">{resolveNote[slot]}</p>}
                     </div>
                   )}
@@ -227,51 +309,61 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
         </div>
       ))}
 
-      {publishable.ok && open.length === 0 && targets.length === 0 && (
+      {refreshNote !== null && <p className="wk-src-note wk-src-tone-warn" data-testid="product-publish-refresh-note">{refreshNote}</p>}
+
+      {publishable.ok && targets.length === 0 && (
         <p className="wk-src-note" data-testid="product-publish-no-target">To publish its {publishable.items} issues, link a GitHub repository to this project as a tracker.</p>
       )}
 
-      {publishable.ok && held !== undefined && card === null && (
-        <p className="wk-src-note wk-src-tone-warn" data-testid="product-publish-held">
-          {held.items.some((i) => i.state === 'unsure')
-            ? `Before anything more is sent to ${held.repo}, say for each issue marked “not known” whether it exists.`
-            : `Issues are being sent to ${held.repo} now. Look again in a moment.`}
-        </p>
-      )}
-
-      {publishable.ok && target !== undefined && held === undefined && card === null && (
+      {publishable.ok && target !== undefined && card === null && (
         <div className="wk-src-row-btns">
           {open.length > 1 && (
             <select className="wk-pub-pick" aria-label="The repository to publish to" data-testid="product-publish-pick" value={Math.min(pick, open.length - 1)} disabled={busy} onChange={(e) => { setPick(Number(e.target.value)); setAsk({ phase: 'idle' }); }}>
               {open.map((t, k) => <option key={`${t.source}\u0000${t.repo}`} value={k}>{t.repo} ({t.source})</option>)}
             </select>
           )}
-          <button type="button" className="wk-btn wk-btn--primary wk-btn--sm" data-testid="product-publish-show" disabled={busy} onClick={() => void showCard()}>
-            {ask.phase === 'asking' ? 'Asking crew…' : open.length > 1 ? `Show the ${publishable.items} issues` : `Show the ${publishable.items} issues for ${target.repo}`}
-          </button>
+          {held === undefined && (
+            <button type="button" className="wk-btn wk-btn--primary wk-btn--sm" data-testid="product-publish-show" disabled={busy} onClick={() => void showCard()}>
+              {ask.phase === 'asking' ? 'Asking crew…' : open.length > 1 ? `Show the ${publishable.items} issues` : `Show the ${publishable.items} issues for ${target.repo}`}
+            </button>
+          )}
         </div>
       )}
 
+      {publishable.ok && held !== undefined && card === null && (
+        <p className="wk-src-note wk-src-tone-warn" data-testid="product-publish-held">
+          {held.items.some((i) => i.state === 'unsure')
+            ? `Before anything more is sent to ${held.repo}, say for each issue marked “not known” whether it exists.`
+            : `Issues are being sent to ${held.repo} now; this looks again every few seconds.`}
+        </p>
+      )}
+      {(sendingNow || refreshNote !== null) && lookAgain}
+
       {card !== null && (ask.phase === 'card' || ask.phase === 'sending') && (
         <div className="wk-pub-card" data-testid="product-publish-card">
-          <p className="wk-src-note">
-            Nothing is created until you confirm. crew creates these {card.items.length} issues in <b>{card.repo}</b> as <b>{card.identity}</b> on {card.source}, one at a time, then reads each back.
+          <p className="wk-src-note" data-testid="product-publish-card-what">
+            {toCreate === 0
+              ? <>All {card.items.length} issues already exist in <b>{card.repo}</b>: nothing is created; crew reads each back again.</>
+              : <>Nothing is created until you confirm. crew creates {toCreate === card.items.length ? `these ${toCreate} issues` : `the ${toCreate} issues not created yet (${card.items.length - toCreate} already exist and are not sent again)`} in <b>{card.repo}</b> as <b>{card.identity}</b> on {card.source}, one at a time, then reads each back.</>}
           </p>
           {ask.phase === 'card' && ask.note !== undefined && <p className="wk-src-note wk-src-tone-warn" data-testid="product-publish-note">{ask.note}</p>}
           <ul className="wk-pub-list">
-            {card.items.map((i) => (
-              <li key={i.key} className="wk-pub-item" data-depth={depthOf(i.kind)} data-testid="product-publish-card-item">
-                <span className="wk-pub-item-head"><span className="wk-pub-kind">{KIND_WORD[i.kind]}</span><span>{i.title}</span></span>
-                <details>
-                  <summary>Text</summary>
-                  <pre className="wk-pub-body">{bodyShown(i)}</pre>
-                </details>
-              </li>
-            ))}
+            {card.items.map((i) => {
+              const made = already.get(i.key);
+              return (
+                <li key={i.key} className="wk-pub-item" data-depth={depthOf(i.kind)} data-testid="product-publish-card-item" data-exists={made !== undefined ? 'true' : 'false'}>
+                  <span className="wk-pub-item-head"><span className="wk-pub-kind">{KIND_WORD[i.kind]}</span><span>{i.title}</span>{made !== undefined && made.number !== null && <span className="wk-pub-state">{`already #${made.number}`}</span>}</span>
+                  <details>
+                    <summary>Text</summary>
+                    <pre className="wk-pub-body">{bodyShown(i)}</pre>
+                  </details>
+                </li>
+              );
+            })}
           </ul>
           <div className="wk-src-row-btns">
             <button type="button" className="wk-btn wk-btn--primary wk-btn--sm" data-testid="product-publish-confirm" disabled={ask.phase === 'sending'} onClick={() => void confirm()}>
-              {ask.phase === 'sending' ? 'Creating…' : `Create ${card.items.length} issues`}
+              {ask.phase === 'sending' ? (toCreate === 0 ? 'Checking…' : 'Creating…') : toCreate === 0 ? 'Check them again' : `Create ${toCreate} issue${toCreate === 1 ? '' : 's'}`}
             </button>
             <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="product-publish-cancel" disabled={ask.phase === 'sending'} onClick={() => setAsk({ phase: 'idle', note: 'Nothing was sent.' })}>Cancel</button>
           </div>

@@ -103,16 +103,15 @@ export function publishCardOf(v: unknown, runId: string, projectId: string): Pro
   return { runId, projectId, repo: v.repo, source: v.source, identity: v.identity, items };
 }
 
-const GITHUB_ISSUE = /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/\d+$/;
-
 function itemStateOf(v: unknown): PublicationItemState | null {
   if (!isObj(v) || typeof v.key !== 'string' || !KEY.test(v.key) || typeof v.kind !== 'string' || !KINDS.has(v.kind) || typeof v.title !== 'string'
     || typeof v.state !== 'string' || !STATES.has(v.state)) return null;
-  const number = v.number === null ? null : typeof v.number === 'number' && Number.isInteger(v.number) && v.number > 0 ? v.number : undefined;
-  // A link is followed only when it is a GitHub issue's page (crew only records such a url; anything else is not shown).
-  const url = v.url === null ? null : typeof v.url === 'string' && GITHUB_ISSUE.test(v.url) ? v.url : undefined;
+  const number = v.number === null ? null : typeof v.number === 'number' && Number.isSafeInteger(v.number) && v.number > 0 ? v.number : undefined;
+  const url = v.url === null ? null : typeof v.url === 'string' ? v.url : undefined;
   const readBack = v.readBack === null ? null : typeof v.readBack === 'string' && READ_BACK.has(v.readBack) ? (v.readBack as 'ok' | 'differs' | 'unreadable') : undefined;
   if (number === undefined || url === undefined || readBack === undefined) return null;
+  // A created issue has its number, its page and a read-back; anything else has none of them (crew's `stateOf`).
+  if (v.state === 'created' ? number === null || url === null || readBack === null : number !== null || url !== null || readBack !== null) return null;
   if (v.why !== undefined && typeof v.why !== 'string') return null;
   return {
     key: v.key, kind: v.kind as PublishKind, title: v.title, state: v.state as PublicationItemStateWord, number, url, readBack,
@@ -120,11 +119,21 @@ function itemStateOf(v: unknown): PublicationItemState | null {
   };
 }
 
-/** One publication as crew sends it, or `null`. */
+/** `owner/repo` as crew names a repository (lower-cased), or `null`. */
+const REPO = /^[a-z0-9_.-]{1,100}\/[a-z0-9_.-]{1,100}$/;
+
+/**
+ * One publication as crew sends it, or `null`. Its parts must agree: a link is this repository's page for exactly that
+ * issue on github.com (nothing else is followed), and `published` says every item was created and read back `ok`.
+ */
 export function publicationOf(v: unknown): PublicationState | null {
-  if (!isObj(v) || !isText(v.repo) || !isText(v.source) || typeof v.publishHash !== 'string' || !HASH.test(v.publishHash) || typeof v.published !== 'boolean') return null;
+  if (!isObj(v) || typeof v.repo !== 'string' || !REPO.test(v.repo) || !isText(v.source) || typeof v.publishHash !== 'string' || !HASH.test(v.publishHash) || typeof v.published !== 'boolean') return null;
   const items = allOf(v.items, itemStateOf);
-  return items === null ? null : { repo: v.repo, source: v.source, publishHash: v.publishHash, items, published: v.published };
+  if (items === null || items.length === 0) return null;
+  const repo = v.repo;
+  if (items.some((i) => i.url !== null && i.url.toLowerCase() !== `https://github.com/${repo}/issues/${i.number}`)) return null;
+  if (v.published !== items.every((i) => i.state === 'created' && i.readBack === 'ok')) return null;
+  return { repo, source: v.source, publishHash: v.publishHash, items, published: v.published };
 }
 
 /** crew's answer to a POST for exactly this run in this project, or `null`. */
