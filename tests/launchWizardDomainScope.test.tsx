@@ -179,6 +179,29 @@ describe('a domain model launch (J6 S1)', () => {
   });
 });
 
+describe('a domain model launch lists no helpers it does not use (studio#1431, J6 W8)', () => {
+  beforeEach(() => setup([seat('claude'), seat('codex'), seat('agy')]));
+
+  it('the options step says it uses its own two, and the review shows no Helpers row beside Writer and Checker', async () => {
+    render(<LaunchWizard navigate={() => {}} />);
+    act(() => { openLaunchWizard({ workflowId: 'domain-extraction', contextRepo: 'repo-1', composerKey: 'repo:repo-1' }); });
+    await screen.findByTestId('launch-wizard');
+    fireEvent.change(screen.getByTestId('launch-wizard-intent'), { target: { value: INTENT } });
+    next();
+    await waitFor(() => expect((screen.getByTestId('launch-wizard-repo') as HTMLSelectElement).value).toBe('repo-1'));
+    next();
+    expect(screen.getByTestId('launch-wizard-step').dataset.step).toBe('options');
+    expect(screen.queryByTestId('launch-wizard-helpers')).toBeNull();
+    expect(screen.getByTestId('launch-wizard-helpers-own')).toHaveTextContent('A domain model uses its own two helpers, a writer and a checker');
+    next();
+    expect(screen.getByTestId('launch-wizard-step').dataset.step).toBe('review');
+    const review = screen.getByTestId('launch-wizard-review');
+    expect(within(review).queryByText('Helpers')).toBeNull();
+    const card = await screen.findByTestId('domain-scope-card');
+    expect(within(card).getByTestId('domain-scope-seats')).toHaveTextContent('Writer: Claude Code · Checker: Codex');
+  });
+});
+
 describe('a domain model launch with a helper signed out', () => {
   beforeEach(() => setup([seat('claude'), CODEX_SIGNED_OUT]));
 

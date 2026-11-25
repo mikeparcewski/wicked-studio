@@ -10563,6 +10563,12 @@
       ]
     },
     {
+      "testId": "launch-wizard-helpers-own",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
       "testId": "launch-wizard-intent",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
