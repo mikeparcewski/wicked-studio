@@ -24,6 +24,7 @@ const { demoCut4 } = await import('../src/editors/fixtures/demoCut4.js');
 const { onCutLanded, noteCutLanded, resetCutLanded } = await import('../src/store/chatCutLanded.js');
 const { foldChatProposals, proposalAsk, changeRoute, proposalRecordLine, proposalResultWords, proposalStarting, resetSettledProposals, isArtifactProposal, isProposalRecord, isProposalView } = await import('../src/board/artifactProposal.js');
 const { undoneLine, notUndoneLine } = await import('../src/board/artifactMorph.js');
+const { ArtifactProposalCard } = await import('../src/components/chat/ArtifactProposalCard.js');
 const { artifactRefOf } = await import('../src/api/chatArtifacts-wire.js');
 type Proposal = import('../src/api/chatArtifacts-wire.js').ArtifactProposal;
 type Fixture = { records: Array<Record<string, unknown>>; decide: { view?: Record<string, unknown>; code?: string; error?: string } };
@@ -331,13 +332,42 @@ describe('round-2 words (coord R2 on studio#1409)', () => {
     expect(proposalRecordLine(accepting!, false, true)).toBe('Still making the new version. Go again shows it here once it’s made.');
     // A reload long after the Go: the card offers Go again; crew answers that the render is still going.
     chatBody = { ...chatBody, messages: [...TURN, ...GO.records.slice(0, 2).map((r, i) => ({ ...r, at: T0 + 1500 + i }))] };
-    decideAnswer = () => ok({ code: 'cut_pending', error: 'Still making the new version. It shows here when it is done.', view: { ...GO.decide.view, state: 'accepting', decision: undefined, result: undefined } }, 409);
+    // crew chat-proposals.ts (cut_pending on Go again): the words, the accepting record this Go wrote, the view.
+    decideAnswer = () => ok({ code: 'cut_pending', error: 'Still making the new version. It shows here when it is done.', acceptingAt: Date.now(), view: { ...GO.decide.view, state: 'accepting', decision: undefined, result: undefined } }, 409);
     page();
     await waitFor(() => expect(screen.getByTestId('artifact-proposal-go-again')).toBeTruthy());
     fireEvent.click(screen.getByTestId('artifact-proposal-go-again'));
     await waitFor(() => expect(screen.getByTestId('artifact-proposal').textContent).toContain('Still making the new version. Go again shows it here once it’s made.'));
     expect(screen.getByTestId('artifact-proposal').textContent).not.toContain('Interrupted');
     expect(screen.queryByTestId('artifact-proposal-error')).toBeNull();
+  });
+
+  it('F2 (round 1): a Go again crew answers cut_pending right after an interrupted Go says "still making" and keeps Go again, for that record only', async () => {
+    const accepting = { ...GO.decide.view, state: 'accepting', decision: undefined, result: undefined };
+    const first = Date.now();
+    // crew chat-proposals.ts: launch_failed and cut_pending each name the accepting record their Go wrote (`acceptingAt`).
+    const answers = [
+      () => ok({ code: 'launch_failed', error: 'I lost track of the new version while it was being made (socket hang up). Go again checks whether it finished.', acceptingAt: first, view: accepting }, 502),
+      () => ok({ code: 'cut_pending', error: 'Still making the new version. It shows here when it is done.', acceptingAt: first + 1, view: accepting }, 409),
+    ];
+    decideAnswer = () => answers.shift()!();
+    const [open] = foldChatProposals(GO.records.slice(0, 1));
+    const card = (e: typeof open) => <ArtifactProposalCard chatId={CHAT} entry={e!} seatName="Claude Code" stub={false} onChanged={() => {}} />;
+    const { rerender } = render(card(open));
+    fireEvent.click(screen.getByRole('button', { name: /^Change the video$/ }));
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal-go-again')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('artifact-proposal-go-again'));
+    await waitFor(() => expect(text('artifact-proposal-record')).toBe('Still making the new version. Go again shows it here once it’s made.'));
+    expect(screen.getByTestId('artifact-proposal-go-again')).toBeTruthy();
+    expect(screen.queryByTestId('artifact-proposal-error')).toBeNull();
+    // Another tab's newer Go: its own record, which this tab's "still making" says nothing about.
+    const newer = foldChatProposals([GO.records[0]!, { ...GO.records[1]!, at: first + 5000 }])[0];
+    rerender(card(newer));
+    await waitFor(() => expect(text('artifact-proposal-record')).toBe('Making the new version…'));
+    // The video tool made it: the decided record ends the card on the version, nothing of "still making" left.
+    rerender(card(foldChatProposals(GO.records.map((r, i) => (i === 0 ? r : { ...r, at: first + 6000 + i })))[0]));
+    await waitFor(() => expect(screen.getByTestId('artifact-proposal').textContent).toContain('Changed · version 2'));
+    expect(screen.getByTestId('artifact-proposal').textContent).not.toMatch(/making the new version/iu);
   });
 
   it('F3: the Undo lines on a video say "video" and never claim the change stays when it may already be undone', () => {

@@ -222,7 +222,7 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
     setGoing(decision === 'go');
     // A new answer starts clean: the last one's refusal no longer says anything about this one.
     setRefusedAt(null);
-    setCutPending(false);
+    setCutPendingAt(null);
     setError(null);
     setNote(null);
     const keep = (v: ChatProposalView, acceptingAt: number | null = null): void => {
@@ -244,8 +244,9 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
       const refusal = proposalRefusal(err);
       if (refusal.view !== null) keep(refusal.view, refusal.acceptingAt);
       // (R2 F2) A cut the video tool is still making: the card's line says so; it is no refusal.
+      // It names the accepting record it answered for (crew's Go again writes one; Not now answers for the shown one).
       if (refusal.code === 'cut_pending') {
-        setCutPending(true);
+        setCutPendingAt(refusal.acceptingAt ?? (entry.state === 'accepting' ? entry.acceptingAt ?? null : null));
         return null;
       }
       // The card keeps every refusal; where it shows depends on what is on screen when it renders (the form while it is
@@ -301,10 +302,13 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
   // A Go whose launch crew refused after recording it is not starting, whatever its age: the card offers Go again at
   // once. Only the accepting record crew named (its `at`, crew#1695): any other one (another tab's Go) keeps its window.
   const [refusedAt, setRefusedAt] = useState<number | null>(null);
-  const [cutPending, setCutPending] = useState(false);
+  // (R2 F2) The accepting record crew said is still being made (`cut_pending`): only that one, never a newer one.
+  const [cutPendingAt, setCutPendingAt] = useState<number | null>(null);
   const refused = refusedAt !== null && view.state === 'accepting' && view.acceptingAt === refusedAt;
-  // This tab's Go on its way is starting whatever came before it (from the card or the helpers-only form alike).
-  const starting = going || (!refused && proposalStarting(view, Date.now(), false));
+  const cutPending = cutPendingAt !== null && view.state === 'accepting' && view.acceptingAt === cutPendingAt;
+  // This tab's Go on its way is starting whatever came before it (from the card or the helpers-only form alike). A cut
+  // crew said is still being made is not "starting": its line says so, and Go again stays to show it once it's made.
+  const starting = going || (!refused && !cutPending && proposalStarting(view, Date.now(), false));
   useEffect(() => {
     if (view.state !== 'accepting' || busy || view.acceptingAt === undefined) return;
     // Never skipped: a window that closed between the render and this effect still gets its render (delay 0).
@@ -312,7 +316,7 @@ export function ArtifactProposalCard({ chatId, entry, seatName, stub, onChanged,
     const t = setTimeout(() => setTick((n) => n + 1), left + 50);
     return () => clearTimeout(t);
   }, [view.state, view.acceptingAt, view.proposal.kind, busy]);
-  const line = proposalRecordLine(view, starting, cutPending && view.state === 'accepting');
+  const line = proposalRecordLine(view, starting, cutPending);
   const result = proposalResultWords(view);
   return (
     <section
