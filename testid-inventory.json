@@ -213,6 +213,30 @@
       ]
     },
     {
+      "testId": "agents-login-link",
+      "files": [
+        "src/components/agents/containerSignIn.tsx"
+      ]
+    },
+    {
+      "testId": "agents-login-link-copy",
+      "files": [
+        "src/components/agents/containerSignIn.tsx"
+      ]
+    },
+    {
+      "testId": "agents-login-link-note",
+      "files": [
+        "src/components/agents/containerSignIn.tsx"
+      ]
+    },
+    {
+      "testId": "agents-login-link-url",
+      "files": [
+        "src/components/agents/containerSignIn.tsx"
+      ]
+    },
+    {
       "testId": "agents-login-scrim",
       "files": [
         "src/components/agents/containerSignIn.tsx"

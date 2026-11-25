@@ -11,10 +11,13 @@ import type { RosterSeat } from '../src/api/types.js';
  * "exit" on demand (xterm needs a real layout). Nothing here signs anyone in.
  */
 vi.mock('../src/components/Terminal.js', () => ({
-  Terminal: ({ open, onOpenError, onExit }: { open?: (c: number, r: number) => Promise<{ id: string }>; onOpenError?: (e: unknown) => void; onExit?: () => void }) => {
+  Terminal: ({ open, onOpenError, onExit, onLinks }: { open?: (c: number, r: number) => Promise<{ id: string }>; onOpenError?: (e: unknown) => void; onExit?: () => void; onLinks?: (urls: readonly string[]) => void }) => {
     const [id, setId] = useState<string | null>(null);
     useEffect(() => { open?.(100, 30).then((r) => setId(r.id), (e) => onOpenError?.(e)); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-    return <div data-testid="terminal-stub" data-id={id ?? ''}><button type="button" data-testid="terminal-stub-exit" onClick={() => onExit?.()}>exit</button></div>;
+    // (studio#1362) What the real terminal tells its host after the helper draws: the addresses on screen, oldest first.
+    const draw = (urls: string): void => onLinks?.(urls === '' ? [] : urls.split(' '));
+    return <div data-testid="terminal-stub" data-id={id ?? ''}><button type="button" data-testid="terminal-stub-exit" onClick={() => onExit?.()}>exit</button>
+      <input data-testid="terminal-stub-links" onChange={(e) => draw(e.target.value)} /></div>;
   },
 }));
 vi.mock('../src/api/diagnostics.js', () => ({
@@ -179,6 +182,33 @@ describe('container sign-in hooks (crew#1006)', () => {
     const row = screen.getAllByTestId('agents-row').find((r) => r.getAttribute('data-agent') === 'claude')!;
     expect(row).toHaveTextContent('Signed in');
     expect(row).not.toHaveTextContent('Looks signed in');
+  }, 15_000);
+
+  it('the helper’s sign-in link shows above its terminal as a real link with a Copy button (studio#1362)', async () => {
+    const LINK = 'https://claude.ai/oauth/authorize?code=true&client_id=00000000-0000-4000-8000-000000000000&state=abc';
+    renderTab('?fix=claude');
+    const modal = await screen.findByRole('dialog', { name: 'Claude Code' });
+    fireEvent.click(within(modal).getByTestId('agents-signin'));
+    const login = await screen.findByTestId('agents-login');
+    await waitFor(() => expect(login).toHaveAttribute('data-state', 'open'));
+    // Nothing printed yet: no box.
+    expect(within(login).queryByTestId('agents-login-link')).toBeNull();
+    fireEvent.change(screen.getByTestId('terminal-stub-links'), { target: { value: `https://example.com/docs ${LINK}` } });
+    // The words point at it now, not at the terminal the helper holds.
+    expect(within(login).getByTestId('agents-login-copy')).toHaveTextContent(/^Open the sign-in link below, or press Copy link and paste it into your browser\. To copy text from the terminal/u);
+    // The newest address the helper printed, as a link that opens in a new tab with no opener.
+    const a = within(login).getByTestId('agents-login-link-url');
+    expect(a).toHaveAttribute('href', LINK);
+    expect(a).toHaveAttribute('target', '_blank');
+    expect(a).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(within(login).getByTestId('agents-login-link-copy')).toHaveTextContent('Copy link');
+    // It sits above the terminal.
+    expect(within(login).getByTestId('agents-login-link').compareDocumentPosition(screen.getByTestId('terminal-stub')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The helper's screen moves on (the link scrolled away or was cleared): the link stays for the person.
+    fireEvent.change(screen.getByTestId('terminal-stub-links'), { target: { value: '' } });
+    expect(within(login).getByTestId('agents-login-link-url')).toHaveAttribute('href', LINK);
+    finishSignIn('claude');
+    await waitFor(() => expect(screen.queryByTestId('agents-login')).toBeNull());
   }, 15_000);
 
   it('while crew checks the sign-in (the window closed, no outcome yet) the modal says so with a spinner, until the answer', async () => {
