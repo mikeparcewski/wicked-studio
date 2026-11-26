@@ -1786,3 +1786,34 @@ describe('studio#1239: a Start refused for want of an independent reviewer offer
     expect(screen.queryByTestId('job-passage-reduced')).toBeNull();
   });
 });
+
+describe('studio#1474: a Start crew refused after its accepting record', () => {
+  it('offers Start again under crew’s words, never "Starting the job…" on a run that never launched', async () => {
+    const RUN = '419fbf5e-0000-4000-8000-000000000001';
+    const words = 'its steps run as host tools, with no agent session to lead; press Start with Review plan on';
+    // crew's records for a launch refusal (wicked-crew packages/crew/src/api/chat-proposals.ts: the accepting write,
+    // then `reopenLaunch`, which writes the proposal again under its pid) and its 409 (`acceptingAt`, `view`).
+    const accepting = { at: T0 + 3, turnId: 't1', kind: 'proposal_accepting', pid: `${CHAT}:t1`, actor: 'operator', edits: null, resolution: jobProposal(), identity: { runId: RUN, artifactRef: null } };
+    const reopen = { at: T0 + 4, turnId: 't1', kind: 'proposal', proposal: jobProposal() };
+    const base = (globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>);
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (init?.method === 'POST' && path === `/chats/${CHAT}/proposals/${CHAT}%3At1`) {
+        posts.push({ path, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+        messages = [...messages, accepting, reopen];
+        return Promise.resolve(ok({ code: 'power_unavailable', error: words, acceptingAt: T0 + 3, view: { proposal: jobProposal(), state: 'open' } }, 409));
+      }
+      if (path === `/runs/${RUN}`) return Promise.resolve(new Response('{}', { status: 404 }));
+      return base(url, init);
+    }));
+    page();
+    await screen.findByTestId('job-passage');
+    fireEvent.click(reply('start'));
+    expect((await screen.findByTestId('job-passage-error')).textContent).toContain('press Start with Review plan on');
+    await waitFor(() => expect(reply('start').disabled).toBe(false));
+    expect(reply('start').textContent).toBe('Start v1 →');
+    expect(screen.queryByTestId('job-passage-run-unread')).toBeNull();
+    expect(screen.queryByText('Starting the job…')).toBeNull();
+    expect(posts.filter((p) => p.path === `/chats/${CHAT}/proposals/${CHAT}%3At1`)).toHaveLength(1);
+  });
+});

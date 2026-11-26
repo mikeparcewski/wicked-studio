@@ -169,7 +169,7 @@ export function foldJobLineages(records: readonly unknown[]): JobLineage[] {
         continue;
       }
       if (known !== undefined) {
-        if (known.state === 'decided' || known.state === 'superseded' || known.state === 'accepting') continue;
+        if (known.state === 'decided' || known.state === 'superseded') continue;
         const l = lineages.get(known.lineage);
         if (l === undefined) continue;
         // A re-resolution of an older proposal while a newer one exists never takes the chat back.
@@ -181,6 +181,17 @@ export function foldJobLineages(records: readonly unknown[]): JobLineage[] {
         const v = l.versions.find((x) => x.pid === pid);
         if (v !== undefined) v.proposal = p;
         l.at = Math.max(l.at, at);
+        // studio#1474: crew reopens a Start its launch refused by writing the proposal again (`reopenLaunch`); its fold
+        // reads that as open, the accepting record and its minted run id gone. So does this one: Start is offered again.
+        if (known.state === 'accepting') {
+          known.state = 'open';
+          if (l.head.pid === pid) {
+            l.state = 'open';
+            l.acceptingAt = null;
+            l.accepted = null;
+            l.runId = null;
+          }
+        }
         continue;
       }
       // The lineage's root: crew's `lineage`, else the parent's lineage through `revises`, else this pid (a root).
