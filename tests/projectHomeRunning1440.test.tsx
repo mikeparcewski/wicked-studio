@@ -7,7 +7,9 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Project, SessionView } from '../src/api/types.js';
 import { normalizeSnapshot } from '../src/api/system.js';
-import { chainFromUnits, stepNow } from '../src/board/chainModel.js';
+import type { RunTeamResponse, TeamRow } from '../src/api/teamPlan.js';
+import { chainFromUnits, chainOf, stepNow } from '../src/board/chainModel.js';
+import { EMPTY_FOLD, hydrateFold } from '../src/store/teamPlan.js';
 import { progressRows } from '../src/board/deskHome.js';
 import { homeProgress } from '../src/board/projectHome.js';
 import { ProjectHome } from '../src/components/desk/ProjectHome.js';
@@ -36,6 +38,31 @@ describe('In progress says the step the session says', () => {
 
   it('the Desk\'s row says Step 9 of 10', () => {
     expect(progressRows([working()], { max: 5, agentName: () => '' }).rows[0]!.line).toMatch(/^Step 9 of 10/);
+  });
+});
+
+describe('a team run: its steps are its plan\'s phases, as its session draws them (codex r1 + delta)', () => {
+  const TID = 'run-team';
+  /** research → build (two units) → test; the cursor on the second build unit. */
+  const teamRun = (): SessionView => makeView({ id: TID, status: 'executing', unit_ix: 2, problem: 'add a limiter' } as never,
+    [['research', 'done'], ['build', 'done'], ['build', 'pending'], ['test', 'pending']].map(([phase, status], i) => makeUnit({
+      id: `${TID}:u${i}`, session_id: TID, ord: i, stage: phase === 'research' ? 'recon' : phase!, status: status!,
+      description: `${phase} — add a limiter`, team_run: true,
+    } as never)));
+  const row = (event_id: number, event_type: string, payload: Record<string, unknown>): TeamRow =>
+    ({ event_id, event_type, payload: { run_id: TID, ord: null, attempt: null, by: 'engine', at: 1, re: null, ...payload } }) as TeamRow;
+  const fold = hydrateFold(EMPTY_FOLD, { runId: TID, teamed: true, transport: 'bus', reason: null, planRev: 1, ended: false, units: [],
+    rows: [row(1, 'wicked.team.plan.accepted', { plan_rev: 1, steps: [{ catalog: 'understand', id: 'research' }, { catalog: 'build', id: 'build' }, { catalog: 'test', id: 'test' }] })] } as RunTeamResponse);
+
+  it('the session draws step 2 of 3', () => {
+    const chain = chainOf(teamRun(), fold);
+    expect(chain.source).toBe('team');
+    expect([chain.steps.indexOf(stepNow(chain)!) + 1, chain.steps.length]).toEqual([2, 3]);
+  });
+
+  it('the Desk and project rows say step 2 of 3, not one step per unit', () => {
+    expect(progressRows([teamRun()], { max: 5, agentName: () => '' }).rows[0]!.line).toMatch(/^Step 2 of 3/);
+    expect(homeProgress([teamRun()], 5).rows[0]!.line).toMatch(/step 2 of 3$/);
   });
 });
 
