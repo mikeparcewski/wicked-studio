@@ -17,6 +17,7 @@ const { useSessionDrafts } = await import('../src/store/sessionDrafts.js');
 const { setCachedRoster } = await import('../src/store/rosterCache.js');
 const { jobTitle } = await import('../src/board/deskWords.js');
 const { RunTab } = await import('../src/components/session/RunTab.js');
+const { composerScopeNote, MESSAGE_STEP_LABEL } = await import('../src/board/sessionModel.js');
 const { makeUnit, makeView } = await import('./factories.js');
 
 const T0 = Date.now() - 600_000;
@@ -86,5 +87,25 @@ describe('Details opens on the job, not the ask', () => {
     const progress = await screen.findByTestId('run-tab-glance-progress');
     expect(progress.textContent).toMatch(/2 of 3/);
     expect(progress.textContent).not.toMatch(/1 of 1/);
+  });
+});
+
+describe('the job page\'s box says where a message for the job goes', () => {
+  it('in a live chat that holds a live job, the note says Send asks beside it and names the step\'s message', () => {
+    const note = composerScopeNote([JOB, ASK], true);
+    expect(note).not.toBeNull();
+    expect(note!).toContain(MESSAGE_STEP_LABEL);
+  });
+
+  it('the page shows that note under its box', async () => {
+    render(<SessionPage sessionId={CHAT} runs={[JOB, ASK]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    const note = await screen.findByTestId('session-composer-scope');
+    expect(note.textContent).toContain(MESSAGE_STEP_LABEL);
+  });
+
+  it('a chat of asks only, or a job that ended, gets no note', () => {
+    expect(composerScopeNote([ASK], true)).toBeNull();
+    const done = { ...JOB, session: { ...JOB.session, status: 'completed' } };
+    expect(composerScopeNote([done, ASK], true)).toBeNull();
   });
 });
