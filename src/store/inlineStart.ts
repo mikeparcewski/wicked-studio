@@ -272,6 +272,10 @@ export function placeToken(): string {
 /** Words a start could not post, shown on the composer it was moved to (`startInChat`'s fallback). */
 export const useStartNotes = create<{ notes: Record<string, string> }>(() => ({ notes: {} }));
 
+/** (studio#1472) The question a job waiting on a composer asks first (`StartInChat.askWords`), by composer key: the job
+ *  line and the box say it, so the person's first words are the job's, not a question to crew. */
+export const useJobAsks = create<{ asks: Record<string, string> }>(() => ({ asks: {} }));
+
 /** Add a line to a composer's note (two things can go wrong on one start: both are said; codex r3). */
 export function addStartNote(composerKey: string, note: string): void {
   const prev = useStartNotes.getState().notes[composerKey];
@@ -361,8 +365,8 @@ export async function startInChat(s: StartInChat, stillOpen: () => boolean = () 
   // the scope, so the job waits on the composer until they say it.
   if (s.askWords !== undefined && words.trim() === '') {
     const chatId = openChatFlow({ projectId });
+    useJobAsks.setState((st) => ({ asks: { ...st.asks, [chatId]: s.askWords! } }));
     addAboutChip(chatId, chip);
-    setStartNote(chatId, `${s.askWords} Say it here, then press Enter.`);
     return true;
   }
   try {

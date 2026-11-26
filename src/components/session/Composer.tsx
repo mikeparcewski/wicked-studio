@@ -12,7 +12,7 @@ import { allCommandRows, catalogRows, commandList, exactRow, notOfferedLine, par
 import { contentWords } from '../../board/commandSearch.js';
 import { commandsOn, LOOKS_DEBOUNCE_MS, looksLike, useCatalogV2 } from '../../store/catalogV2.js';
 import { entryOffered, entryWords, jobCatalogView, startsInline, type CatalogEntry } from '../../board/workflowCatalog.js';
-import { jobChipFor, postJob, setStartNote, useStartNotes, workflowChipFor } from '../../store/inlineStart.js';
+import { jobChipFor, postJob, setStartNote, useJobAsks, useStartNotes, workflowChipFor } from '../../store/inlineStart.js';
 import { InlineStart, type InlineStartHandle } from './InlineStart.js';
 import { ChatHelpers } from './ChatHelpers.js';
 import { catalogProjectOf, useWorkflowCatalog } from '../../store/workflowCatalog.js';
@@ -246,6 +246,8 @@ export function Composer({
   const jobChip = wfChip !== null && wfChip.job === true ? wfChip : null;
   const cmdsOn = useCapabilities((s) => commandsOn(s));
   const startNote = useStartNotes((s) => s.notes[composerKey] ?? null);
+  // studio#1472: a job that asks for the person's words first says its question on the job line and in the box.
+  const jobAsk = useJobAsks((s) => (jobChip !== null ? s.asks[composerKey] ?? null : null));
   const askPathOn = useCapabilities((s) => s.askPath);
   const own = useRef<HTMLTextAreaElement | null>(null);
   // A one-row box on a phone shows only the placeholder's first clause, ended by an ellipsis —
@@ -809,7 +811,9 @@ export function Composer({
           {note !== null && (refusal === null || commandLine || jobChip !== null) && <span data-testid="composer-note" role="status" className="wk-composer-note">{note}</span>}
           {jobChip !== null && refusal === null && (
             <span data-testid="composer-job-line" role="status" className="wk-composer-note">
-              {jobBusy ? 'Putting the job in the chat…' : 'Enter puts this job in the chat for you to look over. Nothing runs until you press Start.'}
+              {jobBusy ? 'Putting the job in the chat…' : jobAsk !== null
+                ? `${jobAsk} Say it here: Enter puts this job in the chat with your words. Nothing runs until you press Start.`
+                : 'Enter puts this job in the chat for you to look over. Nothing runs until you press Start.'}
             </span>
           )}
           {jobChip !== null && offerJobRest && (
@@ -917,7 +921,7 @@ export function Composer({
             if (e.key === 'Backspace' && text === '' && backspaceAboutChip(composerKey, text)) { e.preventDefault(); return; }
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
           }}
-          placeholder={jobChip !== null ? 'Add words for the job, or press Enter' : wfChip !== null ? (chipEntry !== null ? entryWords(chipEntry).label : 'Describe the work to start') : phone || !roomy ? shortPlaceholder(placeholder) : placeholder}
+          placeholder={jobChip !== null ? jobAsk ?? 'Add words for the job, or press Enter' : wfChip !== null ? (chipEntry !== null ? entryWords(chipEntry).label : 'Describe the work to start') : phone || !roomy ? shortPlaceholder(placeholder) : placeholder}
           className="wk-desk-input"
         />
         <VoiceMicButton size="xs" testId={variant === 'desk' ? 'desk-composer-voice' : 'session-composer-voice'} focus={variant === 'session' ? runs[runs.length - 1]?.session.id ?? null : null} />

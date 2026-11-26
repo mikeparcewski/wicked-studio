@@ -8,7 +8,7 @@ import { resetCatalogV2 } from '../src/store/catalogV2.js';
 import { resetChatFlow } from '../src/store/chatFlow.js';
 import { useComposerChips } from '../src/store/composerChips.js';
 import { resetComposerSeats } from '../src/store/composerSeats.js';
-import { startInChat, useStartNotes } from '../src/store/inlineStart.js';
+import { startInChat, useJobAsks, useStartNotes } from '../src/store/inlineStart.js';
 import { useChatFlow } from '../src/store/chatFlow.js';
 import { openLaunchWizard } from '../src/store/launchWizard.js';
 import { clearCachedRoster, setCachedRoster } from '../src/store/rosterCache.js';
@@ -47,6 +47,7 @@ beforeEach(() => {
   proposalSeats = ['claude'];
   revisionStatus = 200;
   useStartNotes.setState({ notes: {} });
+  useJobAsks.setState({ asks: {} });
   seats = ['codex', 'claude'];
   useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set(), replySeq: {} });
   reseatStatus = 200;
@@ -86,7 +87,13 @@ it('Generate it posts nothing: the job waits on a new chat\'s composer under the
   expect(calls.filter((c) => c.method === 'POST')).toEqual([]);
   const chatId = freshId();
   expect(useComposerChips.getState().byComposer[chatId]?.map((c) => c.label)).toEqual(['Analyze a codebase · Domain']);
-  expect(useStartNotes.getState().notes[chatId]).toBe(`${ASK} Say it here, then press Enter.`);
+  expect(useJobAsks.getState().asks[chatId]).toBe(ASK);
+  // The composer asks it, as a question, not as a refusal: no alert note.
+  render(<Composer composerKey={chatId} text="" setText={() => {}} onSend={() => {}} placeholder="p" ariaLabel="a" variant="session" />);
+  expect(screen.getByTestId('composer-job-line')).toHaveTextContent(`${ASK} Say it here: Enter puts this job in the chat with your words.`);
+  expect(screen.getByPlaceholderText(ASK)).toBeInTheDocument();
+  expect(screen.queryByTestId('composer-start-note')).toBeNull();
+  expect(useStartNotes.getState().notes[chatId]).toBeUndefined();
 });
 
 it('the person\'s first Enter there posts the job with their words as its intent, for the repository', async () => {
@@ -104,7 +111,7 @@ it('the person\'s first Enter there posts the job with their words as its intent
 
 it('the Requirements opener asks first (openLaunchWizard carries the question through)', async () => {
   openLaunchWizard({ workflowId: 'domain-extraction', intent: '', contextRepo: 'r1', composerKey: 'repo:r1', askWords: ASK });
-  await waitFor(() => expect(Object.values(useStartNotes.getState().notes)).toContain(`${ASK} Say it here, then press Enter.`));
+  await waitFor(() => expect(Object.values(useJobAsks.getState().asks)).toContain(ASK));
   expect(calls.filter((c) => c.method === 'POST')).toEqual([]);
 });
 
