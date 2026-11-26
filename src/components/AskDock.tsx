@@ -1162,7 +1162,14 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
               locked={locked}
               candidates={candidates}
               onSearchOpen={() => { void useDocsCache.getState().loadIndex(); }}
-              onClick={(key) => setChipEdits(clickChip(chips, key))}
+              onClick={(key) => {
+                // studio#1443 (round 2): a job of this chat that was added here and is now let go is kept as off, not
+                // removed, so the job page's next send does not choose it again.
+                const c = chips.find((x) => x.key === key);
+                const ownJob = c !== undefined && c.kind === 'run' && c.added === true && c.on && chatIdRef.current !== null
+                  && runs.some((v) => v.session.id === c.ref && (v.session as { chat_id?: string | null }).chat_id === chatIdRef.current);
+                setChipEdits(ownJob ? chips.map((x) => (x.key === key ? { ...x, on: false, added: false } : x)) : clickChip(chips, key));
+              }}
               onAdd={(c) => setChipEdits(addChip(chips, { key: c.key, kind: c.kind, label: c.label, ref: c.ref, ...(c.projectId !== undefined ? { projectId: c.projectId } : {}) }))}
             />
             </>
