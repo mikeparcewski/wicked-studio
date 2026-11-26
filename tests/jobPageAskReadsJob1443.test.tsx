@@ -179,6 +179,8 @@ describe('round 1 (codex)', () => {
     pageSend([legacy, ASK]);
     await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
     expect(sentText()).not.toMatch(/delivery: none/);
+    // Round 2 (codex P3): the recorded PR is said, positively.
+    expect(sentText()).toMatch(/delivery: a PR is recorded, https:\/\/github\.com\/acme\/tiny-math\/pull\/7/);
   });
 
   it('P2: the newest three jobs ride, across sends too (an older automatic choice is let go)', async () => {
@@ -204,6 +206,20 @@ describe('round 1 (codex)', () => {
     const units = JOB.units.map((u) => (u.ord === 3 ? { ...u, assigned_cli: 'claude~1' } : u));
     pageSend([makeView({ ...JOB.session } as never, units), ASK]);
     await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
-    expect(sentText()).toMatch(/step 3 \(review\): Claude Code \(stand-in\)[^\n]*claude~1/);
+    expect(sentText()).toMatch(/step 3 \(review\): Claude Code \(stand-in\)[^\n]*claude~1[^\n]*the same helper checking again, not a different one/);
+  });
+
+  it('round 2 (codex P1): a job chip the person added in the dock and then removed is not chosen again by the page\'s next send', async () => {
+    const chip = { key: 'run:r-job', kind: 'run' as const, label: 'polish the math helpers', ref: 'r-job', on: true, added: true };
+    rememberChatChoices(CHAT, { chips: [chip] });
+    sessionStorage.setItem('wicked.ask.session', JSON.stringify({ chatId: CHAT, title: 'q', seeded: true, chips: [chip] }));
+    render(<AskDock runs={[JOB, ASK]} pathname="/" onClose={() => undefined} />);
+    fireEvent.click((await screen.findAllByTestId('chat-scope-chip')).find((c) => c.getAttribute('data-key') === 'run:r-job')!);
+    await waitFor(() => expect(chatChoices(CHAT)!.chips!.find((c) => c.key === 'run:r-job')?.on ?? false).toBe(false));
+    cleanup();
+    pageSend();
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    expect(sentText()).not.toMatch(/step 1 \(build\)/);
+    expect(chatChoices(CHAT)!.chips!.find((c) => c.key === 'run:r-job')).toMatchObject({ on: false });
   });
 });
