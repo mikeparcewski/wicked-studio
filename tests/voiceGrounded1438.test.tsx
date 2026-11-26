@@ -153,6 +153,29 @@ describe('round 1 (codex): never an all-clear or a "now" it has not read', () =>
   });
 });
 
+describe('round 1 delta (codex): the number the person sees, and only reads that answered', () => {
+  it('P1: a held count with rows that moved on says the held number, never "nothing", and names nobody yet', async () => {
+    useSystemStore.setState({ mode: 'fallback', healthAt: Date.now(), healthError: null, snapshot: null } as never);
+    useNeedsCount.setState({ phase: 'complete', count: 3, rows: [] } as never);
+    await askByVoice();
+    await waitFor(() => expect(asked).toHaveLength(1));
+    const pack = asked[0]![1] as string;
+    expect(pack).toMatch(/needs you: 3\b/);
+    expect(pack).not.toMatch(/needs you: nothing/);
+  });
+
+  it('P2: a system read whose latest poll failed is not described as now', async () => {
+    crewSays(normalizeSnapshot({ ...cert.body, runs: [WORKING] }), 4);
+    useDashStore.setState({ readError: 'crew did not answer' });
+    useSystemStore.setState({ snapshotError: 'crew did not answer' } as never);
+    await askByVoice();
+    await waitFor(() => expect(asked).toHaveLength(1));
+    const pack = asked[0]![1] as string;
+    expect(pack).toMatch(/jobs running: not read yet/);
+    expect(pack).not.toContain('Dark mode for settings');
+  });
+});
+
 describe('the voice chat sends it (the default ask)', () => {
   let sent: unknown[][] = [];
   beforeEach(() => {
