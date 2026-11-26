@@ -48,12 +48,12 @@ export function worstFirst(items: readonly SystemAttention[]): SystemAttention[]
   return [...items.filter((a) => a.level === 'red'), ...items.filter((a) => a.level !== 'red')];
 }
 
-/**
- * The studio-side items no crew can know: the live socket. Said in both modes.
- */
 /** The id of studio's own "live updates paused" item: said on the Nerve Center, never counted as a thing that needs you. */
 export const SOCKET_ID = 'studio-socket';
 
+/**
+ * The studio-side items no crew can know: the live socket. Said in both modes.
+ */
 function socketItems(ws: 'connecting' | 'connected' | 'disconnected'): SystemAttention[] {
   return ws === 'disconnected'
     ? [item(SOCKET_ID, 'yellow', 'infra', 'live updates paused', 'Studio lost its live connection to crew, so pages stop updating on their own.', 'It reconnects by itself. Reload the page if it does not.')]
@@ -227,7 +227,8 @@ export function systemSummary(a: SystemAttention): string {
  *  - yellow when the system slows work, a job waits on you, or work is left unresolved (never green
  *    over stale jobs, operator rule);
  *  - green only when attention and unresolved are both empty.
- * The words are a summary ("disk low", "2 need you", "3 need a look (disk low, 2 jobs)", "3 to tidy up", "all clear"), never an item's title.
+ * The words are a summary ("disk low", "2 need you", "3 need a look (disk low, 2 jobs)", "3 to tidy up", "all clear"), never an item's title;
+ * studio's paused socket is its own last part, outside the count ("1 needs you · live updates paused", studio#1469).
  */
 function systemVerdict(attention: SystemAttention[], unresolved: number): NerveState {
   // studio#1469: studio's paused socket is said as its own part, never in the count crew's items make (the badge's).

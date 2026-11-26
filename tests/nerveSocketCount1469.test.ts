@@ -50,6 +50,16 @@ describe('studio#1469: the paused socket is said, never counted', () => {
     expect(badge(s)).toBe(0);
   });
 
+  it('work left to tidy up is still said beside the paused socket (the socket used to take its place)', () => {
+    const s = system({ snapshot: snap({ ranked: true, attention: [], unresolved: [{ runId: 'r9' }, { runId: 'r8' }] } as never) });
+    expect(nerveState(s, 'disconnected', 0, NOW).words).toBe('2 to tidy up · live updates paused');
+  });
+
+  it('an item that stops work keeps the tile red, with the paused socket said after it', () => {
+    const gw = { id: 'gw', level: 'red' as const, panel: 'infra' as const, text: 'gateway down', reason: null, remedy: null, action: null, kind: 'prevents' as const };
+    expect(nerveState(ranked([gw, job('run:a')]), 'disconnected', 0, NOW)).toMatchObject({ tone: 'red', words: '2 need a look (a service is down, 1 job) · live updates paused' });
+  });
+
   it('connected: as before', () => {
     expect(nerveState(ranked([load, job('run:a')]), 'connected', 0, NOW).words).toBe('2 need a look (machine busy, 1 job)');
   });
