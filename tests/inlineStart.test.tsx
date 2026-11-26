@@ -77,6 +77,8 @@ let posts: Array<{ path: string; body: Record<string, unknown> }> = [];
 let runsAnswer: Record<string, unknown> = { runId: 'run-new' };
 /** (studio#1444) Answers for `POST /runs` before `runsAnswer`, in order: crew's 409 stand-in choice, as its route writes it. */
 let runsFirst: Array<{ status: number; body: Record<string, unknown> }> = [];
+/** What `GET /roster` answers (studio#1459 F1 swaps in the picked-one roster). */
+let rosterWire: RosterSeat[] = SEATS;
 function stubWire(): void {
   posts = [];
   read = [];
@@ -99,7 +101,7 @@ function stubWire(): void {
     if (path === '/health') return healthFails ? json({ error: 'down' }, 503) : json({ capabilities: { powerMode: healthPower, chatIdOnLaunch: true, qeAcceptanceOverride: qeOverride, qeAcceptance: qeSetting } });
     if (path === '/workflows/catalog') return json(CATALOG);
     return json(path === '/workflows' ? { workflows: ['bug', 'feature', 'domain-extraction', 'review-recent-work'].map(def) }
-      : path === '/roster' ? { roster: SEATS } : path === '/repos' ? { repos }
+      : path === '/roster' ? { roster: rosterWire } : path === '/repos' ? { repos }
         : path === '/presets' ? { presets } : path === '/projects' ? { projects: [PROJECT] } : path === '/settings' ? { settings: powerModeDefault === undefined ? {} : { powerModeDefault } } : {});
   }));
 }
@@ -154,6 +156,7 @@ beforeEach(() => {
   resetChatFlow();
   resetComposerSeats();
   clearRepoCache();
+  rosterWire = SEATS;
   setCachedRoster(SEATS);
   setCachedWorkflows(['bug', 'feature', 'domain-extraction', 'review-recent-work'].map(def));
   useComposerChips.setState({ byComposer: {} });
@@ -515,6 +518,52 @@ describe('studio#1444: crew holds a start for want of helpers: the stand-in card
     await waitFor(() => expect(screen.queryByTestId('composer-start-standin')).toBeNull());
     expect(launches()).toHaveLength(1);
     expect(box().value).toBe('the charge never clears');
+  });
+});
+
+describe('studio#1459 F1 (round 2): a helper signed in but left out of this start is not called "not signed in"', () => {
+  // studio#1445's writer's output: crew 0.18.22's preflightRefusal over the engine's preflight for a launch that picked
+  // one helper (`preflight.signedIn` is the launch's own seats, `tr2-claude`).
+  const PICKED_ONE = JSON.parse(readFileSync(resolve(process.cwd(), 'tests/fixtures/stand-in-choice-picked-one.crew.json'), 'utf8')) as { status: number; body: Record<string, unknown> };
+  const seatOf = (key: string, display: string): RosterSeat =>
+    ({ key, display_name: display, binary: key, enabled_for_council: true, health: { status: 'active', since: 'x' }, signed_in: true, auth: 'signed_in' }) as RosterSeat;
+  const ROSTER = [seatOf('tr2-claude', 'Claude Code'), seatOf('codex', 'Codex')];
+  const seatChip = (key: string): HTMLElement => document.querySelector<HTMLElement>(`[data-testid="composer-seat"][data-key="${key}"]`)!;
+
+  async function refusedWithCodexOff(): Promise<void> {
+    rosterWire = ROSTER;
+    setCachedRoster(ROSTER);
+    runsFirst = [PICKED_ONE];
+    render(<Harness navigate={vi.fn()} />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    await waitFor(() => expect(seatChip('codex')).not.toBeNull());
+    fireEvent.click(seatChip('codex'));
+    await waitFor(() => expect(seatChip('codex')).toHaveAttribute('aria-pressed', 'false'));
+    enter();
+    await screen.findByTestId('composer-start-standin');
+    expect((JSON.parse(String(launches()[0]!['clisJson'])) as Array<{ key: string }>).map((x) => x.key)).toEqual(['tr2-claude']);
+  }
+
+  it('the card says Claude Code is the one picked, names Codex as signed in but not picked, and offers to pick it', async () => {
+    await refusedWithCodexOff();
+    const card = screen.getByTestId('composer-start-standin');
+    expect(card).toHaveTextContent('Only one helper is picked for this job');
+    expect(card).toHaveTextContent('Only Claude Code is picked for this job.');
+    expect(card).toHaveTextContent(/Codex (is|are) signed in but not picked/);
+    expect(card).not.toHaveTextContent('tr2-claude');
+    expect(card).not.toHaveTextContent(/only helper signed in/);
+    expect(screen.queryByTestId('composer-start-standin-sign_in')).toBeNull();
+    expect(screen.getByTestId('composer-start-standin-pick')).toBeInTheDocument();
+  });
+
+  it('"Pick another helper" closes the card and puts focus on the helpers row, at the helper left out', async () => {
+    await refusedWithCodexOff();
+    fireEvent.click(screen.getByTestId('composer-start-standin-pick'));
+    await waitFor(() => expect(screen.queryByTestId('composer-start-standin')).toBeNull());
+    expect(document.activeElement).toBe(seatChip('codex'));
+    expect(launches()).toHaveLength(1);
   });
 });
 
