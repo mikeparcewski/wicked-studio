@@ -257,7 +257,10 @@ export const useGateStore = create<GateStore>((set) => {
 
   setGate: (gate) => {
     bump(gate.runId);
-    put({ ...gate, seenAt: Date.now() });
+    // studio#1430: a gate set here carries no sighting (`seenAt`), so no crew hold can hide it until a read or frame stamps one.
+    const unseen = { ...gate };
+    delete unseen.seenAt;
+    put(unseen);
   },
 
   clearGate: (runId) => {

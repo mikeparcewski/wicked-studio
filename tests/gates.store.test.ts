@@ -199,8 +199,11 @@ describe('studio#1430 seenAt: when this page saw the gate occurrence', () => {
     expect(seen('seen-gap')).toBe(20_000);
   });
 
-  it('setGate stamps it at the write, whatever the gate carried', () => {
+  it('setGate drops a sighting the gate carried, so no crew hold can hide it; the next read stamps one', () => {
     useGateStore.getState().setGate(gate({ runId: 'seen-set', seenAt: 1 }));
-    expect(seen('seen-set')).toBe(10_000);
+    expect(seen('seen-set')).toBeUndefined();
+    vi.setSystemTime(12_000);
+    read('seen-set', gate({ runId: 'seen-set', receivedAt: 0 }));
+    expect(seen('seen-set')).toBe(12_000);
   });
 });
