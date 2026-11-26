@@ -25,7 +25,9 @@ const { setCachedRoster } = await import('../src/store/rosterCache.js');
 const { api } = await import('../src/api/client.js');
 const { ApiError } = await import('../src/api/errors.js');
 const { makeUnit, makeView } = await import('./factories.js');
-const { state: powerState } = await import('./powerFixtures.js');
+const { state: powerState, at: powerAt } = await import('./powerFixtures.js');
+const { useRunEventStore } = await import('../src/store/events.js');
+const { usePowerLocal } = await import('../src/hooks/usePower.js');
 
 const CHAT = 'chat-polish';
 const T0 = Date.now() - 600_000;
@@ -51,6 +53,8 @@ beforeEach(() => {
   useGateStore.setState({ gates: {}, approaching: {} });
   useSessionDrafts.setState({ drafts: {}, scroll: {} } as never);
   useSheets.setState({ open: null } as never);
+  useRunEventStore.setState({ byRun: {} } as never);
+  usePowerLocal.setState({ byRun: {}, answeredByRun: {} });
   setCachedRoster([{ key: 'claude', display_name: 'Claude', binary: 'claude', enabled_for_council: true } as never]);
   vi.stubGlobal('fetch', vi.fn((url: string) => {
     const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
@@ -85,6 +89,30 @@ describe('"Message the job" only where the step can hear it', () => {
   });
 });
 
+describe('round 1 (codex P2, P3): the power state as the page holds it now', () => {
+  it('power switched off (the orchestrator\'s ord kept on the record): no link', async () => {
+    const off = makeView({ ...POWER.session, power: powerState({ on: false, orchestrator: { cli: 'codex', ord: 2, turns: 3, inTurn: false, sessionRestarts: 0 } }) } as never, units('r-job'));
+    render(<SessionPage sessionId={CHAT} runs={[off, ASK]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await screen.findByTestId('session-composer-scope');
+    expect(screen.queryByTestId('session-composer-message-job')).toBeNull();
+  });
+
+  it('a live powerToggled frame (off) since the run list was read: no link', async () => {
+    useRunEventStore.setState({ byRun: { 'r-job': [{ type: 'powerToggled', session: 'r-job', ts: powerAt(30), toggle: { at: powerAt(30), on: false, by: 'you', reason: null, stayPhased: [] } }] } } as never);
+    render(<SessionPage sessionId={CHAT} runs={[POWER, ASK]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await screen.findByTestId('session-composer-scope');
+    expect(screen.queryByTestId('session-composer-message-job')).toBeNull();
+  });
+
+  it('this page\'s own power-off answer (before the run list catches up): no link', async () => {
+    const base = powerState({ orchestrator: { cli: 'codex', ord: 2, turns: 3, inTurn: true, sessionRestarts: 0 } });
+    usePowerLocal.setState({ byRun: { 'r-job': { ...base, on: false, toggles: [{ at: powerAt(30), on: false, by: 'you', reason: null, stayPhased: [] }], history: [...base.history, { ...base.history.at(-1)!, seq: 9, at: powerAt(30) }] } as never }, answeredByRun: {} });
+    render(<SessionPage sessionId={CHAT} runs={[POWER, ASK]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await screen.findByTestId('session-composer-scope');
+    expect(screen.queryByTestId('session-composer-message-job')).toBeNull();
+  });
+});
+
 describe('a refused message says the engine\'s reason in the open', () => {
   /** core#1967's sentence (src/actor.rs, the owner check's refusal), as crew's route sends it: 409 `{ error }`. */
   const SENTENCE = 'step 2 (codex) is already working on this attempt and reads no new message until it is dispatched again, so this one would not reach it; it was not sent. Steer the step at its gate instead (a note, or request changes)';
@@ -99,5 +127,20 @@ describe('a refused message says the engine\'s reason in the open', () => {
     const alert = await screen.findByTestId('sheet-message-error');
     await waitFor(() => expect(alert.textContent).toContain('reads no new message until it is dispatched again'));
     expect(alert.textContent).toContain('Steer the step at its gate instead');
+    // Round 1 (codex P3): the whole line, in studio's own framing of a refusal (the translated sentence, never bare wire).
+    expect(alert.textContent).toBe(`The message could not be sent: ${new ApiError(409, SENTENCE, { error: SENTENCE }).message}`);
+  });
+
+  it.each([
+    ['a server fault (500)', () => new ApiError(500, 'internal error', { error: 'internal error' })],
+    ['a refusal with no words (409, empty)', () => new ApiError(409, '  ', {})],
+    ['a network failure', () => new TypeError('Failed to fetch')],
+  ])('round 1 (codex P3, pi P3): %s keeps the plain line, its words behind the details', async (_name, err) => {
+    inject.mockRejectedValue(err());
+    useSheets.setState({ open: { ref: { kind: 'step', runId: 'r-job', ord: 2 }, tab: null, compose: 1 } } as never);
+    render(<ObjectSheet runs={[PHASED]} navigate={() => {}} needCount={0} />);
+    fireEvent.change(await screen.findByTestId('sheet-message-input'), { target: { value: 'check the README too' } });
+    fireEvent.click(screen.getByTestId('sheet-message-send'));
+    expect((await screen.findByTestId('sheet-message-error')).textContent).toBe('The message could not be sent.');
   });
 });
