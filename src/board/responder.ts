@@ -1,5 +1,5 @@
 import type { SessionView as RunView } from '../api/types.js';
-import { seatLabel, type SeatNameInput } from './seatNames.js';
+import { seatKeyName, type SeatNameInput } from './seatNames.js';
 
 /**
  * H3 (DES-EDITOR-PLUGIN-CONTRACT §2 goal 2): the run page is the chat, and every turn in it says WHO
@@ -42,8 +42,8 @@ export function isCommandPath(cli: unknown): boolean {
  *  crew's own step ({@link isCommandPath}). */
 export function seatResponder(cli: string, roster: Roster): Responder {
   if (isCommandPath(cli)) return CREW;
-  const seat = (roster ?? []).find((s) => s.key === cli);
-  return { role: 'seat', name: seat !== undefined ? seatLabel(seat) : cli, cli };
+  // A stand-in key (`claude~1`) is named through its base seat: "Claude Code (stand-in)" (studio#1437).
+  return { role: 'seat', name: seatKeyName(cli, roster), cli };
 }
 
 /** A chat turn: `you`, or the seat key that replied. A reply with no seat named is crew's. */

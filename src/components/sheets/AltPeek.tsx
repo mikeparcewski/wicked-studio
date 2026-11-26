@@ -12,6 +12,7 @@ import { humanTitle } from '../runIdentity.js';
 import { deskLiveCounts } from '../../board/statusWords.js';
 import { isAskTurnRun } from '../../board/askTurn.js';
 import { isHeldRun } from '../../board/heldRuns.js';
+import { seatKeyName } from '../../board/seatNames.js';
 
 const RUN_WORD: Record<string, string> = {
   executing: 'being worked on', distributing: 'being handed out', planning: 'being planned', awaiting_human: 'waiting on you',
@@ -46,12 +47,12 @@ export function peekFact(ref: ObjectRef, ctx: { runs: readonly SessionView[]; ne
   const held = isHeldRun(v.session);
   if (ref.kind === 'helper') {
     const working = !held && v.units.some((u) => u.ord === executingOrd(v.session, v.units) && u.assigned_cli === ref.cli);
-    return `${ref.cli} · ${working ? 'working now' : 'not working right now'}${ctx.standing(ref.cli) !== null ? ` · ${ctx.standing(ref.cli)}` : ''}`;
+    return `${seatKeyName(ref.cli, null)} · ${working ? 'working now' : 'not working right now'}${ctx.standing(ref.cli) !== null ? ` · ${ctx.standing(ref.cli)}` : ''}`;
   }
   const u = v.units.find((x) => x.ord === ref.ord);
   if (u === undefined) return 'Not started';
   const live = executingOrd(v.session, v.units) === u.ord;
-  return `${live ? (held ? 'Held, see Needs you' : 'Working') : u.status === 'done' ? 'Done' : u.status === 'rejected' ? 'Stopped' : 'Not started'}${u.assigned_cli ? ` · ${u.assigned_cli}` : ''}`;
+  return `${live ? (held ? 'Held, see Needs you' : 'Working') : u.status === 'done' ? 'Done' : u.status === 'rejected' ? 'Stopped' : 'Not started'}${u.assigned_cli ? ` · ${seatKeyName(u.assigned_cli, null)}` : ''}`;
 }
 
 /**

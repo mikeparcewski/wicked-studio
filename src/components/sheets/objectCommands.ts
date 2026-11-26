@@ -8,6 +8,7 @@ import { STEP_WORD, unitPhaseId } from '../../board/chainModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { closeSheet, openSheet, stopRun } from '../../store/sheets.js';
 import { humanTitle } from '../runIdentity.js';
+import { seatKeyName } from '../../board/seatNames.js';
 import { archiveBlocked, askRunAction, retryBlocked, startRetry } from '../session/RunActions.js';
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
@@ -44,7 +45,7 @@ export function objectCommands(ref: ObjectRef, ctx: { runs: readonly SessionView
     const live = v !== undefined && !TERMINAL.has(v.session.status);
     const unit = ref.kind === 'step' ? v?.units.find((u) => u.ord === ref.ord) : undefined;
     const phase = unit !== undefined ? unitPhaseId(unit) : null;
-    const name = ref.kind === 'helper' ? ref.cli
+    const name = ref.kind === 'helper' ? seatKeyName(ref.cli, null)
       : unit !== undefined ? (phase !== null ? STEP_WORD[phase.toLowerCase()] : undefined) ?? `step ${ref.ord + 1}` : 'this step';
     const rows = actions.map((a): ObjectCommand => {
       if (a.tab !== undefined) return tabRow(a.id, a.label, a.tab);
@@ -97,7 +98,7 @@ export function objectCommands(ref: ObjectRef, ctx: { runs: readonly SessionView
     const u = v.units.find((x) => x.ord === ord);
     if (u?.assigned_cli) {
       const r: ObjectRef = { kind: 'helper', runId: v.session.id, cli: u.assigned_cli };
-      rows.push({ id: `helper-${v.session.id}-${u.assigned_cli}`, label: `${u.assigned_cli} on “${humanTitle(v.session.problem || v.session.id)}”`, run: () => openSheet(r), disabled: null });
+      rows.push({ id: `helper-${v.session.id}-${u.assigned_cli}`, label: `${seatKeyName(u.assigned_cli, null)} on “${humanTitle(v.session.problem || v.session.id)}”`, run: () => openSheet(r), disabled: null });
     }
   }
   return { title: 'the Desk', rows: [look, ...rows] };

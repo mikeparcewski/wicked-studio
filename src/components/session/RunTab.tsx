@@ -8,7 +8,8 @@ import { deriveRunCost } from '../runIdentity.js';
 import { workflowLabel } from '../../board/workflowNames.js';
 import { chatStatusWord, statusWord } from '../../board/statusWords.js';
 import { useInstallOutcome } from './outcomeReads.js';
-import { seatLabel } from '../../board/seatNames.js';
+import { seatKeyName } from '../../board/seatNames.js';
+import { seatedStandIns, standInLine } from '../../board/standIn.js';
 import { ORPHANED_LINE, orphanedOf } from '../../board/sessionModel.js';
 import { finishedDeliveryArm, proposalKindOf } from '../../board/proposalCard.js';
 import { useRoster } from '../../hooks/useRoster.js';
@@ -206,6 +207,8 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   };
   const current = currentStep(view, chain);
   const clis = assignedClis(view);
+  // studio#1437: the run's seated stand-ins, each with the engine's own sentence ("Claude Code stood in for the review, …").
+  const standIns = seatedStandIns(view, roster);
   const session = view.session;
   const spend = spendWords(view);
   const isSystem = useIsSystemWorkflow();
@@ -245,8 +248,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   // (crew#1042) A held run has no helper "building" or "reviewing": nothing is working on it.
   const runningOrd = held ? null : executingOrd(view.session, view.units);
   const helpers = clis.filter(isHelperSeat).map((cli) => {
-    const seat = roster?.find((entry) => entry.key === cli);
-    const name = seat === undefined ? cli : seatLabel(seat);
+    const name = seatKeyName(cli, roster);
     const running = runningOrd !== null && view.units.some((u) => u.ord === runningOrd && u.assigned_cli === cli);
     const reviews = view.units.some((unit) => unit.assigned_cli === cli && isReviewUnit(unit));
     const making = view.units.filter((unit) => unit.assigned_cli === cli && (unit.role === 'creator' || (unit.role == null && !isReviewUnit(unit))));
@@ -267,7 +269,15 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
       {helpers.length > 0 && (
         <div className="wk-run-glance-item">
           <span className="wk-run-glance-label">Helpers</span>
-          <span data-testid="run-tab-glance-helpers" className="wk-run-glance-value">{helpers.join(' · ')}</span>
+          <span data-testid="run-tab-glance-helpers" className="wk-run-glance-value">{[...new Set(helpers)].join(' · ')}</span>
+        </div>
+      )}
+      {standIns.size > 0 && (
+        <div className="wk-run-glance-item">
+          <span className="wk-run-glance-label">Stand-ins</span>
+          <span data-testid="run-tab-glance-standins" className="wk-run-glance-value">
+            {[...new Set([...standIns.values()].map(standInLine))].join(' · ')}
+          </span>
         </div>
       )}
       <nav aria-label="About this job" className="wk-run-glance-links">
@@ -426,16 +436,27 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
           {clis.length === 0 ? <p className="wk-run-tab-muted">No helper has been assigned yet.</p> : (
             <ul className="wk-run-tab-list">
               {clis.map((cli) => {
-                const seat = roster?.find((entry) => entry.key === cli);
                 const reviews = view.units.some((unit) => unit.assigned_cli === cli && isReviewUnit(unit));
                 return (
                   <li key={cli} data-testid="run-tab-agent" data-cli={cli} className="wk-run-tab-agent">
                     <button type="button" className="wk-run-tab-name" onClick={() => openSheet({ kind: 'helper', runId: id, cli })}>
-                      {seat === undefined ? cli : seatLabel(seat)}
+                      {seatKeyName(cli, roster)}
                     </button>{' '}<span className="wk-run-tab-muted">{reviews ? 'reviews' : 'builds'}</span>
+                    {standIns.get(cli)?.label != null && <span data-testid="run-tab-agent-standin" className="wk-run-tab-muted wk-run-tab-standin">{standIns.get(cli)!.label}</span>}
                   </li>
                 );
               })}
+            </ul>
+          )}
+          {/* studio#1437: a stand-in no step is assigned to (the judge) is still one of the run's checkers. */}
+          {[...standIns.values()].some((s) => !clis.includes(s.key)) && (
+            <ul className="wk-run-tab-list">
+              {[...standIns.values()].filter((s) => !clis.includes(s.key)).map((s) => (
+                <li key={s.key} data-testid="run-tab-agent" data-cli={s.key} className="wk-run-tab-agent">
+                  <span className="wk-run-tab-name">{s.name}</span>{' '}<span className="wk-run-tab-muted">{s.role === 'judge' ? 'judges' : 'checks'}</span>
+                  {s.label !== null && <span data-testid="run-tab-agent-standin" className="wk-run-tab-muted wk-run-tab-standin">{s.label}</span>}
+                </li>
+              ))}
             </ul>
           )}
           <p data-testid="run-tab-spend" className="wk-run-tab-line">Spend: {spend ?? 'Not reported'}</p>

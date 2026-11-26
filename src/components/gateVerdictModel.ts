@@ -2,6 +2,7 @@ import type { CoreEvent, RepoCheckRun, RosterSeat, UnitDenial, WorkUnit, Worktre
 import { gateUngated, gateUngatedReason, judgeSkippedOf, judgeVerdictOf, type EscalationAction } from '../api/wave6-wire.js';
 import { parseDenial } from './denialCopy.js';
 import { targetedOfferIn } from '../board/floorOverride.js';
+import { cliLabel, standInBase } from '../board/seatNames.js';
 
 /**
  * gateVerdict — the evaluator's record for the gate the operator is answering, read off the run's
@@ -193,6 +194,10 @@ export interface GateVerdictView {
   /** (wicked-core judge fallback) The engine's disclosure line when `judgeCli` was seated as a FALLBACK for a
    *  benched or unavailable preferred judge (`assurance.judgeFallbacks[0].label`, shown as-is); absent otherwise. */
   judgeFallback?: string | null;
+  /** (wicked-core#1930, studio#1437) The engine's sentence when a STAND-IN answered the judge role
+   *  (`assurance.roles[]` `{role:'judge', filled:'stand_in'}`): `judgeCli` is then the stand-in's seat (`claude~2`),
+   *  not the legacy frame's base seat, and the card says it is a stand-in. Absent otherwise. */
+  judgeStandIn?: string | null;
   /**
    * The engine SAYS the unit went ungated (api-types 0.36.0 `gateEvaluated.ungated` — wave 6,
    * F-7R2-005): no eligible judge seat could be convened, so evaluator ≠ creator was not held and
@@ -433,8 +438,7 @@ export function gateVerdict(events: readonly CoreEvent[], gateOrd?: number): Gat
     floor: floorFrame === null ? null : floorOf(floorFrame),
     mutation: mutationFrame === null ? null : mutationOf(mutationFrame),
     restore: restoreFrame === null ? null : restoreOf(restoreFrame),
-    judgeCli: str(ev.judgeCli),
-    judgeDistinct: typeof ev.judgeDistinct === 'boolean' ? ev.judgeDistinct : null,
+    ...judgeSeatOf(ev as Record<string, unknown>),
     judgeReported: 'judgeCli' in (ev as Record<string, unknown>),
     judgeFallback: fallbackLabelOf((ev as Record<string, unknown>)['assurance']),
     ungated,
@@ -1102,7 +1106,7 @@ export function reassignCandidates(
     if (cli === failedCli || seen.has(cli)) continue;
     seen.add(cli);
     const seat = roster?.find((s) => s.key === cli);
-    const label = seat?.display_name ?? cli;
+    const label = standInBase(cli) !== null ? cliLabel(cli) : seat?.display_name ?? cli;
     if (refused.includes(cli)) {
       out.push({ cli, label, state: 'refused', note: REFUSED_SEAT_NOTE });
       continue;
@@ -1244,6 +1248,28 @@ export function shortId(id: string, n = 10): string {
   return id.length > n ? id.slice(0, n) : id;
 }
 
+/**
+ * Who rendered the judge verdict. A stand-in that answered the judge role (wicked-core#1930: the receipt's canonical
+ * `roles[]`) wins over the legacy `judgeCli`/`judgeDistinct`, which name the base seat and "not distinct" for it
+ * (studio#1437: run b0ade71f read "judge: claude", a fallback to the single default runner).
+ */
+function judgeSeatOf(ev: Record<string, unknown>): { judgeCli: string | null; judgeDistinct: boolean | null; judgeStandIn?: string } {
+  const a = ev['assurance'];
+  const roles = typeof a === 'object' && a !== null ? (a as { roles?: unknown }).roles : undefined;
+  const stood = Array.isArray(roles)
+    ? roles.find((r): r is Record<string, unknown> => typeof r === 'object' && r !== null && (r as Record<string, unknown>)['role'] === 'judge' && (r as Record<string, unknown>)['filled'] === 'stand_in' && (r as Record<string, unknown>)['state'] === 'answered')
+    : undefined;
+  if (stood !== undefined) {
+    const si = typeof stood['standIn'] === 'object' && stood['standIn'] !== null ? (stood['standIn'] as Record<string, unknown>) : {};
+    const seat = str(si['cli']) ?? str(stood['seat']);
+    if (seat !== null) {
+      const label = str(si['label']);
+      return { judgeCli: seat, judgeDistinct: null, judgeStandIn: label ?? `${cliLabel(seat)} stood in for the judge` };
+    }
+  }
+  return { judgeCli: str(ev['judgeCli']), judgeDistinct: typeof ev['judgeDistinct'] === 'boolean' ? ev['judgeDistinct'] : null };
+}
+
 /** The first fallback-judge disclosure a receipt carries (`judgeFallbacks[].label`), or `null`. */
 export function fallbackLabelOf(assurance: unknown): string | null {
   if (typeof assurance !== 'object' || assurance === null) return null;
@@ -1268,6 +1294,6 @@ export function layerLine(view: GateVerdictView): string | null {
   if (view.judgeSkipped !== null && view.judgeSkipped !== undefined) return null;
   const judge = (view.agentVerdict ?? '').trim().toLowerCase();
   if (judge !== 'pass') return null;
-  const who = view.judgeCli !== null ? ` (${view.judgeCli}${view.judgeFallback ? ', fallback' : ''})` : '';
+  const who = view.judgeCli !== null ? ` (${standInBase(view.judgeCli) !== null ? cliLabel(view.judgeCli) : view.judgeCli}${view.judgeFallback ? ', fallback' : ''})` : '';
   return `judge${who}: pass · evaluator’s own verdict: FAIL — the evaluator is what denied it`;
 }

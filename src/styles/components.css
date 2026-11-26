@@ -2063,6 +2063,9 @@ html :is(input, textarea)::placeholder { color: var(--ink-placeholder); opacity:
 p.wk-run-tab-muted { margin: var(--space-1) 0; }
 .wk-run-tab-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
 .wk-run-tab-phase, .wk-run-tab-agent { display: flex; align-items: baseline; gap: var(--space-2); }
+/* studio#1437: a stand-in's sentence goes on its own line under the name, never squeezing it. */
+.wk-run-tab-agent { flex-wrap: wrap; }
+.wk-run-tab-standin { flex-basis: 100%; }
 .wk-run-tab-phase[data-current="true"] { color: var(--ink-high); font-weight: var(--weight-semi); }
 .wk-run-tab-pill { display: inline-block; padding: 2px var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-full); color: var(--ink-muted); font-size: var(--text-xs); font-weight: var(--weight-medium); }
 .wk-run-tab-pick, .wk-run-tab-button { padding: var(--space-1) var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-card); color: var(--ink-body); font: inherit; }

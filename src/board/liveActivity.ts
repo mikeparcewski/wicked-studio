@@ -1,5 +1,6 @@
 import type { CoreEvent } from '../api/types.js';
 import { arrivedAt } from '../store/events.js';
+import { cliLabel, standInBase } from './seatNames.js';
 
 /**
  * LIVE ACTIVITY (operator 2026-10-30: "while a step runs, show what it's doing, like Claude Code or Codex do"): what the
@@ -68,7 +69,7 @@ export function workingWords(seat: string, quietSince: number | null, now: numbe
 }
 
 /** A seat key in words when no roster is in hand: "codex" is "Codex". */
-const seatWord = (cli: string): string => { const b = cli.split('#')[0] ?? cli; return b.charAt(0).toUpperCase() + b.slice(1); };
+const seatWord = (cli: string): string => { if (standInBase(cli) !== null) return cliLabel(cli); const b = cli.split('#')[0] ?? cli; return b.charAt(0).toUpperCase() + b.slice(1); };
 
 /** A tool's kind from its name ("Read", "Bash", "apply_patch"), or `other`. */
 export function toolKind(tool: string | null): ActivityKind {

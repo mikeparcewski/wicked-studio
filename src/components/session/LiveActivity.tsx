@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { displayText } from '../../board/homePath.js';
 import { BookOpen, CircleCheck, CircleX, GitCommitHorizontal, Loader, Pencil, Search, Sparkles, Terminal, Users } from 'lucide-react';
 import { activityRows, activitySummary, currentTurn, narration, rowsBySeat, turnEndedAt, visibleRows, workingWords, type ActivityKind, type LiveRow, type TurnRef } from '../../board/liveActivity.js';
-import { seatLabel } from '../../board/seatNames.js';
+import { seatKeyName, seatLabel, standInBase } from '../../board/seatNames.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { api } from '../../api/client.js';
 import { useRunEventStore } from '../../store/events.js';
@@ -77,6 +77,7 @@ export function LiveActivity({ runId, ord, kind = 'step', seat = null, label }: 
   // that made it, by its name; a step one seat works in reads as one list.
   const groups = rowsBySeat(shown, seatKey);
   const nameOf = (cli: string): string => {
+    if (standInBase(cli) !== null) return seatKeyName(cli, roster);
     const r = roster ?? [];
     const seat = r.find((s) => s.key === cli) ?? r.find((s) => s.key === cli.split('#')[0]);
     return seatLabel(seat ?? { key: cli.split('#')[0] ?? cli });
