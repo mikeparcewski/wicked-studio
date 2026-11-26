@@ -202,6 +202,9 @@ export function formatMetric(v: number): string {
   return v.toFixed(a < 10 ? 2 : 1);
 }
 
+/** How many running jobs the voice dashboard's jobs tile names; the rest it counts ("and N more"). */
+export const JOBS_SHOWN = 4;
+
 /**
  * A job the Running jobs widget lists and the narration counts — ONE predicate for both (artifact-runs-fix: the
  * widget listed 13 chats parked at their turn while the narration said "no jobs running"). Running = working, quiet

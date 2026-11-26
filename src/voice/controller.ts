@@ -44,7 +44,7 @@ import { INITIAL_VOICE, lineId, useVoiceStore, type ListenMode, type VoiceAskCon
 import { isLeave, parseConfirm, parseEntry, parseGateAnswer, parseMode } from './intent.js';
 import { BrowserMic, BrowserSpeaker, crewStt, type MicSource, type Speaker, type SttEngine } from './io.js';
 import { Vad } from './vad.js';
-import { isRunningJob, loadWord } from './widgets.js';
+import { dashboardWidgets, isRunningJob, loadWord } from './widgets.js';
 import { voiceGround } from './ground.js';
 import { needsSource } from '../board/attention.js';
 import { STALE_MS } from '../board/nerveCenter.js';
@@ -866,7 +866,11 @@ function groundNow(): string {
   const now = Date.now();
   const { phase, count, rows } = useNeedsCount.getState();
   const needs = needsSource(useSystemStore.getState(), useConnectionStore.getState().status, rows, now);
-  return voiceGround({ snapshot: freshSnapshot(now), needs, needsPhase: phase, count, now });
+  // The tiles on the person's screen now: the full voice screen renders the saved layout once it is loaded
+  // (VoiceFullScreen); anywhere else no tile shows (codex delta on studio#1450).
+  const d = useDashStore.getState();
+  const tiles = useVoiceStore.getState().phase === 'full' && d.loaded ? dashboardWidgets(d.layout, d.widgets).map((w) => w.id) : [];
+  return voiceGround({ snapshot: freshSnapshot(now), needs, needsPhase: phase, count, now, tiles });
 }
 
 async function askChat(question: string): Promise<void> {

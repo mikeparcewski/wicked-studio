@@ -4,9 +4,10 @@
  * view. A voice question now carries what voice mode itself shows: the running jobs, what needs the person (crew's
  * ranked list, else the app's needs rows) and the machine, read when the question is asked.
  */
-import { act, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../src/api/client.js';
+import { Widget } from '../src/components/voice/VoiceDashboard.js';
 import { normalizeSnapshot, type SystemSnapshot } from '../src/api/system.js';
 import { PACK_JOIN, PACK_OPENING } from '../src/board/askPack.js';
 import { needsYouRows, type NeedsYouInputs } from '../src/board/needsYou.js';
@@ -20,6 +21,7 @@ import { useSystemStore } from '../src/store/systemSnapshot.js';
 import { useVoiceStore } from '../src/store/voice.js';
 import { hear, resetVoice, resetVoiceDeps, setVoiceDeps } from '../src/voice/controller.js';
 import { resetDashStore, useDashStore } from '../src/voice/dashboardStore.js';
+import { dashboardWidgets, JOBS_SHOWN } from '../src/voice/widgets.js';
 import cert from './fixtures/system-t14-cert.crew.json';
 import { makeUnit, makeView } from './factories.js';
 
@@ -36,7 +38,7 @@ let asked: Array<[string, unknown]> = [];
 function crewSays(snap: SystemSnapshot, count: number): void {
   const now = Date.now();
   useSystemStore.setState({ mode: 'system', healthAt: now, healthError: null, snapshot: snap, snapshotAt: now, snapshotError: null } as never);
-  useDashStore.setState({ system: snap, readAt: now, readError: null });
+  useDashStore.setState({ system: snap, readAt: now, readError: null, loaded: true, layout: null });
   useConnectionStore.setState({ status: 'connected' } as never);
   useNeedsCount.setState({ phase: 'complete', count });
 }
@@ -59,7 +61,7 @@ beforeEach(() => {
     endChat: () => undefined,
   });
 });
-afterEach(() => { resetVoice(); resetVoiceDeps(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); resetVoice(); resetVoiceDeps(); vi.restoreAllMocks(); });
 
 describe('a voice question carries what voice mode shows', () => {
   it('names every item on crew\'s ranked list, as the cert\'s /system answered it', async () => {
@@ -83,6 +85,50 @@ describe('a voice question carries what voice mode shows', () => {
     const pack = asked[0]![1] as string;
     expect(pack).toMatch(/jobs running: 1/);
     expect(pack).toContain('Dark mode for settings · on build');
+  });
+
+  it('codex-check: with 5 jobs running the pack names what the jobs tile shows and marks the one it does not', async () => {
+    const titles = ['Dark mode for settings', 'Billing export', 'Rate limiting', 'Audit log', 'Search reindex'];
+    const runs = titles.map((title, i) => ({ ...WORKING, runId: `r-${i}`, title }));
+    crewSays(normalizeSnapshot({ ...cert.body, runs }), 4);
+    render(<Widget w={dashboardWidgets(null, []).find((w) => w.id === 'builtin.jobs')!} />);
+    const tile = screen.getByTestId('voice-widget-builtin.jobs').textContent ?? '';
+    const shown = titles.filter((t) => tile.includes(t));
+    expect(shown).toEqual(titles.slice(0, JOBS_SHOWN));
+    expect(tile).toContain(`and ${titles.length - JOBS_SHOWN} more`);
+    await askByVoice();
+    await waitFor(() => expect(asked).toHaveLength(1));
+    const pack = asked[0]![1] as string;
+    expect(pack).toMatch(/jobs running: 5/);
+    expect(pack).not.toContain('what studio shows the person');
+    expect(pack).toContain('what studio reads around this question');
+    for (const t of shown) {
+      const line = pack.split('\n').find((l) => l.includes(t))!;
+      expect(line).not.toContain('(not on screen)');
+    }
+    const hidden = titles.filter((t) => !tile.includes(t));
+    expect(hidden).toEqual(['Search reindex']);
+    for (const t of hidden) expect(pack.split('\n').find((l) => l.includes(t))).toMatch(/\(not on screen\)$/);
+  });
+
+  it('codex delta: a long title past the tile keeps its mark, and with the jobs tile removed no job reads as shown', async () => {
+    const long = 'L'.repeat(400);
+    const titles = ['Dark mode for settings', 'Billing export', 'Rate limiting', 'Audit log', long];
+    crewSays(normalizeSnapshot({ ...cert.body, runs: titles.map((title, i) => ({ ...WORKING, runId: `r-${i}`, title })) }), 4);
+    await askByVoice();
+    await waitFor(() => expect(asked).toHaveLength(1));
+    const fifth = (asked[0]![1] as string).split('\n').find((l) => l.includes('LLLL'))!;
+    expect(fifth).toMatch(/…\s\(not on screen\)$/);
+    expect(fifth.length).toBeLessThanOrEqual(300 + 4);
+
+    asked = [];
+    resetVoice();
+    useDashStore.setState({ layout: dashboardWidgets(null, []).map((w) => w.id).filter((id) => id !== 'builtin.jobs') });
+    await askByVoice();
+    await waitFor(() => expect(asked).toHaveLength(1));
+    const pack = asked[0]![1] as string;
+    expect(pack).toContain('The voice screen shows no running jobs and shows the needs count.');
+    for (const t of titles.slice(0, 4)) expect(pack.split('\n').find((l) => l.includes(t))).toMatch(/\(not on screen\)$/);
   });
 
   it('is read when the question is asked, not when voice mode opened', async () => {

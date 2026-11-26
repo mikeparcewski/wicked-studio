@@ -1,6 +1,6 @@
 /**
- * What a voice question carries (studio#1438): the lines voice mode itself shows around the person — the running jobs,
- * what needs them, the machine — read when the question is asked. Without them the system chat had no live view, and
+ * What a voice question carries (studio#1438): what studio reads around the person in voice mode — the running jobs,
+ * what needs them, the machine — read when the question is asked, with what the screen does not show marked as such. Without them the system chat had no live view, and
  * "what needs me right now?" got "I can't tell you" while the answer was on screen. It rides the question the way Ask's
  * context pack does (`context.page` on a crew that takes it, else joined after the words), so it opens the same way.
  */
@@ -8,17 +8,26 @@ import type { SystemSnapshot } from '../api/system.js';
 import { PACK_OPENING } from '../board/askPack.js';
 import type { NeedsSource } from '../board/attention.js';
 import type { NeedRow } from '../board/needsYou.js';
-import { isRunningJob, loadWord, stepWords } from './widgets.js';
+import { isRunningJob, JOBS_SHOWN, loadWord, stepWords } from './widgets.js';
 
 /** At most this many jobs and this many needs are named; the rest are counted. */
 const NAMED_MAX = 20;
 const LINE_MAX = 300;
 
-const clip = (s: string): string => (s.length <= LINE_MAX ? s : `${s.slice(0, LINE_MAX - 1)}…`);
+const clip = (s: string, max = LINE_MAX): string => (s.length <= max ? s : `${s.slice(0, max - 1)}…`);
+/** Marks a line studio reads but the screen does not show; never clipped away (it is added after the clip). */
+const OFF_SCREEN = ' (not on screen)';
 
 function named(items: readonly string[]): string[] {
   const shown = items.slice(0, NAMED_MAX).map((t) => `  - ${clip(t)}`);
   return items.length > NAMED_MAX ? [...shown, `  - and ${items.length - NAMED_MAX} more`] : shown;
+}
+
+/** What the voice screen shows of these lines, from the tiles on it. */
+function screenWords(jobsTile: boolean, needsTile: boolean): string {
+  const jobs = jobsTile ? `names the first ${JOBS_SHOWN} running jobs` : 'shows no running jobs';
+  const needs = needsTile ? 'shows the needs count' : 'shows no needs count';
+  return `The voice screen ${jobs} and ${needs}.`;
 }
 
 /** A needs row and a folded group's members, one line each, in the Desk's words (a gate's plain question). */
@@ -33,10 +42,18 @@ function rowWords(rows: readonly NeedRow[]): string[] {
  * read says so, and while the list has moved on from a held number the number is said without names (never a list the
  * number does not count).
  */
-export function voiceGround(a: { snapshot: SystemSnapshot | null; needs: NeedsSource; needsPhase: 'loading' | 'complete' | 'partial'; count: number | null; now: number }): string {
-  const jobs = a.snapshot === null ? null : a.snapshot.runs.filter(isRunningJob).map((r) => {
+export function voiceGround(a: { snapshot: SystemSnapshot | null; needs: NeedsSource; needsPhase: 'loading' | 'complete' | 'partial'; count: number | null; now: number; tiles: readonly string[] }): string {
+  // `tiles`: the dashboard tiles on the person's screen now. The jobs tile names the first JOBS_SHOWN; a job past
+  // them, or every job when that tile is not on screen, is read for the answer but marked, so the pack never says the
+  // person can see it (codex-check and delta on studio#1450). The mark is added after the clip, so a long title
+  // never loses it.
+  const jobsTile = a.tiles.includes('builtin.jobs');
+  const needsTile = a.tiles.includes('builtin.gates');
+  const onScreen = jobsTile ? JOBS_SHOWN : 0;
+  const jobs = a.snapshot === null ? null : a.snapshot.runs.filter(isRunningJob).map((r, i) => {
     const step = stepWords(r.phase);
-    return `${r.title}${step !== null ? ` · on ${step}` : ''}${r.liveness !== 'working' ? ` (${r.liveness})` : ''}`;
+    const line = `${r.title}${step !== null ? ` · on ${step}` : ''}${r.liveness !== 'working' ? ` (${r.liveness})` : ''}`;
+    return i >= onScreen ? `${clip(line, LINE_MAX - OFF_SCREEN.length)}${OFF_SCREEN}` : line;
   });
   const needs = a.needs.phase === 'loading' || a.needsPhase === 'loading' ? null
     : a.needs.from === 'crew' ? a.needs.items.map((i) => (i.reason !== null && i.reason !== '' ? `${i.text}: ${i.reason}` : i.text))
@@ -49,7 +66,7 @@ export function voiceGround(a: { snapshot: SystemSnapshot | null; needs: NeedsSo
   const load = a.snapshot?.infra.find((i) => i.key === 'load');
   return [
     `${PACK_OPENING}${new Date(a.now).toISOString()}]`,
-    'where: voice mode. These lines are what studio shows the person around this question right now.',
+    `where: voice mode. These lines are what studio reads around this question right now. ${screenWords(jobsTile, needsTile)} A line marked (not on screen) is read, not shown.`,
     jobs === null ? 'jobs running: not read yet' : jobs.length === 0 ? 'jobs running: none' : `jobs running: ${jobs.length}`,
     ...named(jobs ?? []),
     needsLine,
