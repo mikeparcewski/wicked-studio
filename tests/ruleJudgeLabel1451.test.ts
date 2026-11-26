@@ -30,6 +30,10 @@ describe('studio#1451: a stand-in rule judge\'s label is not read as more judges
     expect(words(text)).toBe('Checking the steering rules · 0 min · judges Codex and Claude Code (stand-in)');
   });
 
+  it('a label followed by more text (a line a seat echoed) still gives the keys alone', () => {
+    expect(floorLineOf(`\nrule check: 3 steering rule(s) in force; judges: claude~1 (${LABEL_ONE})."\n`)?.judges).toEqual(['claude~1']);
+  });
+
   it('with no stand-in the note reads as before', () => {
     expect(floorLineOf(note('codex, pi'))?.judges).toEqual(['codex', 'pi']);
     expect(floorLineOf(note('none'))?.judges).toEqual([]);

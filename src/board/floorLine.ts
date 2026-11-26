@@ -58,10 +58,11 @@ export function floorLineOf(text: unknown): FloorLine | null {
 /** (studio#1451) The judges note's seat keys. When a stand-in sits, the engine follows the keys with the stand-in's
  *  label in parentheses ("claude~1 (Claude Code stood in for the rule check, using …: only Claude Code was signed in)",
  *  `cli_runner.rs` with `standin::label`). The label has commas and parentheses of its own, and a seat key never has
- *  " (", so the list ends at the first " (". The stand-in is named from its key ("Claude Code (stand-in)"). */
+ *  " (", so the list ends at the first " (", whatever follows the label. The engine appends one label (the run's one
+ *  rule-judge stand-in). `floorWords` names the stand-in from its key ("Claude Code (stand-in)"). */
 function judgeKeys(list: string): string[] {
   const paren = list.indexOf(' (');
-  const keys = paren >= 0 && list.trimEnd().endsWith(')') ? list.slice(0, paren) : list;
+  const keys = paren >= 0 ? list.slice(0, paren) : list;
   return keys.split(',').map((s) => s.trim()).filter((s) => s !== '' && s !== 'none');
 }
 
