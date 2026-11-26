@@ -82,8 +82,9 @@ describe('the ranked wire', () => {
 describe('Nerve Center tile against a ranked crew', () => {
   it('one derivation: a summary, never a title; red only when the system prevents work, amber when it slows or a job waits', () => {
     const st = nerveState(signals(ranked()), 'connected', 99, NOW);
-    // The load slows work (amber); four jobs wait on you (amber). Nothing in the system prevents work.
-    expect(st).toMatchObject({ tone: 'yellow', words: 'machine busy · 4 need you' });
+    // The load slows work (amber); four jobs wait on you (amber). Nothing in the system prevents work. The total is the
+    // badge's (every attention item), then the split (studio#1429).
+    expect(st).toMatchObject({ tone: 'yellow', words: '5 need a look (machine busy, 4 jobs)' });
     expect(st.attention.map((a) => a.id).slice(0, 2)).toEqual(['infra:load', 'base:wicked-core:test']);
     const down = { ...ranked(), attention: [{ ...ranked().attention[0]!, id: 'infra:gateway', text: 'gateway down', kind: 'prevents' as const, level: 'red' as const }] };
     expect(nerveState(signals(down), 'connected', 0, NOW)).toMatchObject({ tone: 'red', words: 'a service is down' });

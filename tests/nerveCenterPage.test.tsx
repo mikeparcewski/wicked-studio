@@ -189,11 +189,11 @@ describe('against a crew with the system snapshot', () => {
     const tile = screen.getByTestId('desk-rail-nerve');
     expect(tile).toHaveAttribute('data-tone', 'red');
     // A summary, never an item's title: the system's worst (and how many more), then the jobs waiting on you.
-    expect(screen.getByTestId('nerve-center-words')).toHaveTextContent('a service is down and 1 more · 1 needs you');
-    expect(tile).toHaveAccessibleName('Nerve Center: a service is down and 1 more · 1 needs you — work is blocked');
+    expect(screen.getByTestId('nerve-center-words')).toHaveTextContent('3 need a look (a service is down and 1 more, 1 job)');
+    expect(tile).toHaveAccessibleName('Nerve Center: 3 need a look (a service is down and 1 more, 1 job) — work is blocked');
     expect(screen.queryByTestId('nc-upgrade-note')).toBeNull();
     // The header's sentence is the same verdict, in full.
-    expect(screen.getByTestId('nc-headline')).toHaveTextContent('Work is stopped: a service is down and 1 more · 1 needs you.');
+    expect(screen.getByTestId('nc-headline')).toHaveTextContent('Work is stopped: 3 need a look (a service is down and 1 more, 1 job).');
     // One tab, one panel: the other tabs' panels are not on screen until opened.
     expect(screen.queryByTestId('nc-panel-clis')).toBeNull();
     for (const [tab, id] of [['clis', 'nc-panel-clis'], ['runs', 'nc-panel-runs'], ['runs', 'nc-feed'], ['infra', 'nc-panel-infra'], ['governance', 'nc-panel-governance'], ['attention', 'nc-attention']] as const) {

@@ -174,6 +174,12 @@ export function NerveCenterPage({ navigate = defaultNavigate, needCount = 0, fee
     body = (
       <>
         <AttentionList infra={snapshot?.infra ?? []} items={state.attention} read={state.read} answeredAt={answeredAt} onAct={act} onOpen={openTab} />
+        {/* studio#1430 F2: what crew holds back for a snooze is out of the count; the way back to it is said. */}
+        {system && snapshot.ranked === true && (snapshot.snoozed ?? []).length > 0 && (
+          <p className="wk-nc-note" data-testid="nc-snoozed" data-count={(snapshot.snoozed ?? []).length}>
+            {(snapshot.snoozed ?? []).length} snoozed, not counted until {(snapshot.snoozed ?? []).length === 1 ? 'it comes' : 'they come'} back · <a href="/needs" onClick={(e) => { e.preventDefault(); navigate('/needs'); }} className="wk-link" data-testid="nc-snoozed-open">See them in Needs you</a>
+          </p>
+        )}
         {/* A ranked crew (api-types 0.140.0): the work nobody resolved, with its spend, below what is stuck. */}
         {system && snapshot.ranked === true && <div className="wk-nc-panel" data-testid="nc-to-resolve"><ToResolve snapshot={snapshot} runs={[]} navigate={navigate} /></div>}
       </>

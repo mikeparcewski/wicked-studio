@@ -81,11 +81,11 @@ describe('red when work is blocked, yellow when it needs a look', () => {
     expect(nerveState(system({ snapshot: snap({ attention: [yellow] }) }), 'connected', 0, NOW)).toMatchObject({ tone: 'yellow', read: 'fresh', words: 'a helper is resting' });
   });
 
-  it('a job waiting on you is amber, never red, and counted ("1 needs you"); a disk item is "disk low"', () => {
+  it('a job waiting on you is amber, never red, and counted ("1 needs you"); with a disk item too, the total and the split (studio#1429)', () => {
     const job = { id: 'run:a', level: 'red' as const, panel: 'runs' as const, text: 'Where is wicked-core riskiest to change', reason: null, remedy: null, action: null, kind: 'prevents' as const };
     expect(nerveState(system({ snapshot: snap({ attention: [job] }) }), 'connected', 0, NOW)).toMatchObject({ tone: 'yellow', words: '1 needs you' });
     const disk = { ...red, id: 'infra:disk', text: 'Free disk: degraded', level: 'yellow' as const };
-    expect(nerveState(system({ snapshot: snap({ attention: [disk, job] }) }), 'connected', 0, NOW)).toMatchObject({ tone: 'yellow', words: 'disk low · 1 needs you' });
+    expect(nerveState(system({ snapshot: snap({ attention: [disk, job] }) }), 'connected', 0, NOW)).toMatchObject({ tone: 'yellow', words: '2 need a look (disk low, 1 job)' });
   });
 
   it('studio#1429: with system items and jobs both waiting, the chip says the badge\'s total, then the split', () => {

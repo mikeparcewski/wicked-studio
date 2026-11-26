@@ -13,6 +13,8 @@
 
 import type { NeedRow } from './needsYou.js';
 import type { DeskSnooze } from '../api/deskSnooze-wire.js';
+import type { SystemSnapshot, SystemSnoozed } from '../api/system.js';
+import { needRunId } from './deskModel.js';
 
 /** crew's limit on a snooze key, and on how far ahead a snooze may end. */
 export const SNOOZE_KEY_MAX = 200;
@@ -42,16 +44,54 @@ export function snoozeOf(row: NeedRow, byKey: Readonly<Record<string, DeskSnooze
   return s;
 }
 
-/** The rows the inbox shows, and the ones snoozed (with their snooze), in the order given. */
-export function splitSnoozed(rows: readonly NeedRow[], byKey: Readonly<Record<string, DeskSnooze>>, now: number): { awake: NeedRow[]; snoozed: Array<{ row: NeedRow; snooze: DeskSnooze }> } {
+/** (studio#1430) The runs a ranked crew holds back for a person's snooze (`/system.snoozed[]`), each with its held item.
+ *  Empty against an older crew, whose `attention` holds nothing back. */
+export function crewHeldRuns(snapshot: SystemSnapshot | null): ReadonlyMap<string, SystemSnoozed> {
+  const out = new Map<string, SystemSnoozed>();
+  if (snapshot === null || snapshot.ranked !== true) return out;
+  for (const h of snapshot.snoozed ?? []) if (h.runId != null && !out.has(h.runId)) out.set(h.runId, h);
+  return out;
+}
+
+/** A row's run crew holds back, or null. */
+export function crewHeldOf(row: NeedRow, held: ReadonlyMap<string, SystemSnoozed>): SystemSnoozed | null {
+  const id = needRunId(row);
+  return id === null ? null : held.get(id) ?? null;
+}
+
+/** The rows whose run no ranked crew holds back (studio#1430): what a project's count counts. */
+export function withoutCrewHeld(rows: readonly NeedRow[], snapshot: SystemSnapshot | null): NeedRow[] {
+  const held = crewHeldRuns(snapshot);
+  return held.size === 0 ? [...rows] : rows.filter((r) => crewHeldOf(r, held) === null);
+}
+
+/** One snoozed row: when it comes back (ISO; null when not said) and the key Wake now ends (null: no wake offered). */
+export interface SnoozedRow { row: NeedRow; until: string | null; wakeKey: string | null; crew: boolean }
+
+/** The rows the inbox shows, and the ones snoozed, in the order given: studio's own snoozes, and (studio#1430) every
+ *  row of a run a ranked crew holds back, so the inbox counts what /needs counts. */
+export function splitSnoozed(rows: readonly NeedRow[], byKey: Readonly<Record<string, DeskSnooze>>, now: number, held: ReadonlyMap<string, SystemSnoozed> = new Map()): { awake: NeedRow[]; snoozed: SnoozedRow[] } {
   const awake: NeedRow[] = [];
-  const snoozed: Array<{ row: NeedRow; snooze: DeskSnooze }> = [];
+  const snoozed: SnoozedRow[] = [];
   for (const row of rows) {
+    const h = crewHeldOf(row, held);
+    if (h !== null) { snoozed.push({ row, until: h.until === null ? null : new Date(h.until).toISOString(), wakeKey: h.wakeKey, crew: true }); continue; }
     const s = snoozeOf(row, byKey, now);
     if (s === null) awake.push(row);
-    else snoozed.push({ row, snooze: s });
+    else snoozed.push({ row, until: s.until, wakeKey: s.key, crew: false });
   }
   return { awake, snoozed };
+}
+
+/** (studio#1430 F4) How the inbox snoozes a row: with crew's own key and rank when crew has an item for its run (so
+ *  crew holds it back from /needs and every count too), else studio's own key for a row it may snooze; null: none. */
+export function snoozeTargetOf(row: NeedRow, snapshot: SystemSnapshot | null): { key: string; rank: number; crew: boolean } | null {
+  const id = needRunId(row);
+  if (row.members === undefined && id !== null && snapshot !== null && snapshot.ranked === true) {
+    const item = snapshot.attention.find((a) => a.runId === id && a.snooze != null);
+    if (item?.snooze != null) return { key: item.snooze.key, rank: item.snooze.rank, crew: true };
+  }
+  return snoozable(row) ? { key: snoozeKey(row), rank: snoozeRank(row), crew: false } : null;
 }
 
 export interface SnoozeChoice {
