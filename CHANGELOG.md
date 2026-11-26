@@ -14,6 +14,7 @@ npm publish dates. Every version listed here exists on
 
 ### Fixed
 
+- A question asked in voice mode carries what voice mode shows around it: the running jobs, every item that needs the person (crew's ranked list, else studio's needs rows) and the machine load, read when it is asked (studio#1438, train-14 cert row 39). "What needs me right now?" was sent as bare words, and the helper answered that the chat had no live view while the answer was on screen. The lines ride as `context.page` on a crew that takes a message context, else after the words, as Ask's context pack does.
 - A seated stand-in is named as one wherever studio names a seat (studio#1437, the live proof wicked-core#1930 F8 asks for). On a run whose reviewer or judge is a stand-in (`claude~1`, `claude~2`), the Helpers line, the thread, the hand-off row, Helpers and spend, the spend line, team rows, live activity, gate cards, the receipt's who line, the run's final message ("Reviewed and approved by …"), the step sheet, gate details, the ⌥ peek, the ⌘K palette and a QE acceptance's reviewer now say "Claude Code (stand-in)", never the bare key. The run panel shows the engine's own sentences ("Claude Code stood in for the review, …", and the judge's). The hand-off row says "a stand-in review, not a different helper" instead of "reviewing on its own seat", and a receipt's `stand_in` skip reads "a stand-in checked instead". Tested on the recorded wire of run b0ade71f.
 
 ## [0.16.18] — 2026-11-25
