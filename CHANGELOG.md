@@ -12,6 +12,29 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-11-26
+
+Release on the train-16 cut a61c7864, carrying 10 PRs since 0.16.19: #1453, #1455, #1456, #1457, #1460, #1459, #1462, #1434, #1464, #1463. The entries were written from each PR's changelog entry (the PR title or body where it had none).
+
+### Removed
+
+- Settings no longer has "Requirements graph minimum coverage": a domain model has no share to reach (J6 S5). The requirements meter, its words and the graph-behind note say a minimum only while an engine from before J6 v3 sends one. A domain model launch no longer lists the helpers picked for other jobs ("Helpers: claude, agy, pi") beside the writer and checker it really uses: its options step says it uses its own two, and its review has no Helpers row (studio#1431, J6 W8) (#1434)
+
+### Fixed
+
+- A job's page keeps showing the job when a question is asked on it (studio#1442, train-14 proof). The question starts an ask turn in the job's chat, and the page then showed the ask instead: the header read "<the question> · Answered" and Details read "Step 1 of 1" while the job still ran its review rounds. A session that holds a job is now about its jobs (`headlinePool`): the header title, its state badge and Details follow the job, and the ask is answered beside it in the thread. While a job is live, the note under the box says Send asks a separate question (in a live chat too) and, when the job has a working step, carries "Message the job", which opens that step to message it. An ask at a real gate (not an answered turn) still makes the header say Waiting (#1456)
+- A question typed on a job's own page can read that job. Before, its context said "can see: nothing beyond this message", so "who reviewed this" or "why did review fail" got "that record isn't reachable". The page's send now chooses the job(s) its chat holds (never an ask turn) and carries each job's record as studio holds it: its state; each step's description, helper (a stand-in named as the same helper checking again) and state, with crew's reason when it has one; and its delivery in studio's own words. A job turned off for the chat in the dock stays off. At most the chat's newest three jobs ride, and a later question tells the record again only when something in it changed. The page's "where" line names the job, not the last question asked on it (studio#1443) (#1457)
+- "Message the job" on a job's page shows only when the working step can read a message: a power build reads one at its next turn. A step already working on this attempt reads none until it is dispatched again, and the engine refuses a message for it (wicked-core#1967). When a step's message box is refused, it now says the engine's reason and its way on in the open ("steer the step at its gate"), not only "The message could not be sent" (studio#1458) (#1460)
+- The chat's inline Start, Desk's Start analysis and a repository's Capture learnings show the stand-in card when crew holds a job for want of helpers that did not build the work, as New job does. They no longer show a line of text. The card offers stand-ins for this job or every job, signing in another helper, or Cancel. On the inline Start, where a job runs only the helpers picked in its row, the card says which helper was picked, names the signed-in helpers left out, and offers "Pick another helper", which puts focus on the helpers row. A job started from the card opens as the launcher's own start would (studio#1444) (#1459)
+- After the stand-in card's "Pick another helper", focus stays on the helper left out. A focus on the text box that was still waiting for its frame no longer takes focus back (part of studio#1444) (#1464)
+- When a stand-in judges the steering rules, the run page names one judge, "Claude Code (stand-in)". It no longer lists parts of the stand-in's label, which has commas of its own, as more judges (studio#1451) (#1455). This entry was written under 0.16.19 by mistake after that release; it shipped in this one.
+
+### Changed
+
+- The self-test pins wicked-ci 3ca93005 (wicked-ci#91): the advisory S04 no longer fails a valid stand-in choice whose only unfillable rows are conditional (#1462)
+- Tests: the two main flakes (chatArtifacts.a3 timing, graphCodeRings 50k bound) own their clock and measure growth (#1453)
+- CI: a push to main's run is never cancelled; only a PR's newer push cancels its older run (#1463)
+
 ## [0.16.19] — 2026-11-26
 
 Patch release on the train-15 cut 9a90caaa, carrying 12 PRs since 0.16.18: #1425, #1426, #1423, #1432, #1405, #1435, #1424, #1439, #1446, #1448, #1449, #1445.
@@ -24,7 +47,6 @@ Patch release on the train-15 cut 9a90caaa, carrying 12 PRs since 0.16.18: #1425
 
 ### Fixed
 
-- When a stand-in judges the steering rules, the run page names one judge, "Claude Code (stand-in)". It no longer lists parts of the stand-in's label, which has commas of its own, as more judges (studio#1451).
 - The stand-in card on a launch no longer says a picked helper is "the only helper signed in" when other helpers are signed in but were not picked for the job. It says which helpers were picked, names the signed-in ones left out, and offers "Pick another helper", which opens the form's helper options (/runs/new) or the wizard's Options step, in place of "Sign in another helper" (studio#1436).
 - A project's page no longer says "Nothing is running" while its own In progress list shows a Working job: the sentence counts the list's jobs, so a job a need only slows (a helper signed out) is counted. In progress rows on the project page and the Desk say the step the job's session says (the running step, else the first one not finished), not the count of finished steps plus one (studio#1440).
 - A seated stand-in is named as one wherever studio names a seat (studio#1437, the live proof wicked-core#1930 F8 asks for). On a run whose reviewer or judge is a stand-in (`claude~1`, `claude~2`), the Helpers line, the thread, the hand-off row, Helpers and spend, the spend line, team rows, live activity, gate cards, the receipt's who line, the run's final message ("Reviewed and approved by …"), the step sheet, gate details, the ⌥ peek, the ⌘K palette and a QE acceptance's reviewer now say "Claude Code (stand-in)", never the bare key. The run panel shows the engine's own sentences ("Claude Code stood in for the review, …", and the judge's). The hand-off row says "a stand-in review, not a different helper" instead of "reviewing on its own seat", and a receipt's `stand_in` skip reads "a stand-in checked instead". Tested on the recorded wire of run b0ade71f.
