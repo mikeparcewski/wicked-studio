@@ -19,6 +19,7 @@ const { jobTitle } = await import('../src/board/deskWords.js');
 const { RunTab } = await import('../src/components/session/RunTab.js');
 const { composerScopeNote, MESSAGE_STEP_LABEL, SEPARATE_ASK_NOTE } = await import('../src/board/sessionModel.js');
 const { useSheets } = await import('../src/store/sheets.js');
+const { markHeld } = await import('../src/board/heldRuns.js');
 const { makeUnit, makeView } = await import('./factories.js');
 
 const T0 = Date.now() - 600_000;
@@ -137,5 +138,31 @@ describe('round 1 (codex P1, pi P2): an ask at a real gate still waits on the pe
   it('round 1 (codex P3): a chat of answered asks only still says Answered', async () => {
     render(<SessionPage sessionId={CHAT} runs={[ASK]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
     await waitFor(() => expect(screen.getByTestId('session-status').textContent).toBe('Answered'));
+  });
+});
+
+describe('round 1 delta (codex)', () => {
+  it('P1: an ask held for the person (an open question marks it held while executing) still says Waiting beside a working job', async () => {
+    const live = { ...ASK, session: { ...ASK.session, status: 'executing' as const, ask_turn: undefined } } as unknown as typeof ASK;
+    const [heldAsk] = markHeld([live], new Set(['r-ask']));
+    render(<SessionPage sessionId={CHAT} runs={[JOB, heldAsk!]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await waitFor(() => expect(screen.getByTestId('session-status').textContent).toMatch(/Waiting/));
+  });
+
+  it('P2: a working step run by crew\'s own machinery (a script, a program path) offers no "Message the job"', async () => {
+    const scripted = makeView({ ...JOB.session } as never, JOB.units.map((u) => (u.ord === 2 ? { ...u, assigned_cli: '/opt/homebrew/bin/node', tool_cmd: ['node', 'check.js'] } : u)));
+    render(<SessionPage sessionId={CHAT} runs={[scripted, ASK]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await screen.findByTestId('session-composer-scope');
+    expect(screen.queryByTestId('session-composer-message-job')).toBeNull();
+  });
+
+  it('P3: while an ask is answering, the link is still there and opens the job\'s step (it reads the runs, not the thread\'s rows)', async () => {
+    useSheets.setState({ open: null } as never);
+    const answering = { ...ASK, session: { ...ASK.session, status: 'executing' as const, ask_turn: undefined } } as unknown as typeof ASK;
+    useAskThreadStore.setState({ turns: { [CHAT]: [{ who: 'you', text: QUESTION, turnId: 't2', at: Date.now() }, { who: 'claude', text: '', pending: true, turnId: 't2', at: Date.now() }] } } as never);
+    render(<SessionPage sessionId={CHAT} runs={[JOB, answering]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    const link = await screen.findByTestId('session-composer-message-job');
+    fireEvent.click(link);
+    expect(useSheets.getState().open).toMatchObject({ ref: { kind: 'step', runId: 'r-job', ord: 2 }, compose: expect.any(Number) });
   });
 });
