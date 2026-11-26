@@ -100,6 +100,8 @@ export function sourceTypes(patterns: readonly string[]): string[] {
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const word = (v: unknown, max = 40): string | null => (typeof v === 'string' && /^[A-Za-z0-9_.:-]{1,80}$/u.test(v) ? v.slice(0, max) : null);
+/** A seat key: a `word`, or a stand-in's (`claude~1`: the base seat, the engine's reserved `~`, a number; studio#1437). */
+const seatWord = (v: unknown): string | null => (typeof v === 'string' && /^[A-Za-z0-9_.:#-]{1,70}~\d{1,6}$/u.test(v) ? v : word(v));
 
 /** `fix — Fix wicked-crew issue …` → `fix`: only the step id at the head, never the intent text after it. */
 export function stepIdOf(description: unknown): string | null {
@@ -164,7 +166,7 @@ export function toRow(e: CoreEvent, runId: string, at: number, id: string, names
     case 'unitPlanned':
       return { ...base, topic: 'wicked.run.unit.planned', data: { step: stepIdOf(ev['description']), role: word(ev['role']), stage: word(ev['stage']), gate: word(ev['gate']), executor: word(ev['executorType']) } };
     case 'unitDistributed': {
-      const seat = word(ev['cli']);
+      const seat = seatWord(ev['cli']);
       return { ...base, topic: 'wicked.run.unit.assigned', data: { seat, seatName: seat !== null ? (names?.(seat) ?? null) : null } };
     }
     case 'unitExecuting': return { ...base, topic: 'wicked.run.unit.started', data: {} };
@@ -210,12 +212,12 @@ export function toRow(e: CoreEvent, runId: string, at: number, id: string, names
     }
     case 'powerTurnStarted':
     case 'powerTurnCompleted': {
-      const seat = word(ev['cli']);
+      const seat = seatWord(ev['cli']);
       return { ...base, topic: e.type === 'powerTurnStarted' ? 'wicked.run.turn.started' : 'wicked.run.turn.completed', data: { turn: num(ev['turn']), attempt: num(ev['attempt']), seat, seatName: seat !== null ? (names?.(seat) ?? null) : null, outcome: word(ev['outcome']) } };
     }
     case 'powerHandoffStepped': {
       const st = objOf(ev['step']);
-      const seat = word(st['seat']);
+      const seat = seatWord(st['seat']);
       return { ...base, topic: 'wicked.run.handoff.stepped', at: num(st['at']) ?? base.at, ord: num(st['ord']), data: { round: num(ev['round']), step: word(st['step']), status: word(st['status']), seat, seatName: seat !== null ? (names?.(seat) ?? null) : null } };
     }
     case 'powerToggled': {

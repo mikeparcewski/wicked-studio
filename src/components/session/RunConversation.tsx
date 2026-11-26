@@ -11,7 +11,7 @@ import { finishedDeliveryArm, proposalKindOf, statusSentence } from '../../board
 import type { Responder } from '../../board/responder.js';
 import { builderResponder, gateResponder, isReviewUnit, seatResponder } from '../../board/responder.js';
 import { approvingReviewers, conciseOutput, evaluatorFace, decisionMessages, finalWords, planSteps, stepMessages, testCountOf, type DecisionMessage, type StepMessage } from '../../board/runConversation.js';
-import { isCliSeat, seatLabel } from '../../board/seatNames.js';
+import { isCliSeat, seatKeyName, seatLabel, standInBase } from '../../board/seatNames.js';
 import { askedAt, endedAt, stepTimes, type MessageTime } from '../../board/messageTimes.js';
 import { jobTitle } from '../../board/deskWords.js';
 import { ORPHANED_LINE, orphanedOf, runState } from '../../board/sessionModel.js';
@@ -385,7 +385,7 @@ export function RunBlock({ view, badge, sessionId, navigate, solo = null, madeEl
     passed,
     tests: testCountOf(acceptance?.summary?.line, gateVerdict?.reason),
     nothing: noEvidenceSummary?.nothing === true,
-    reviewers: approvingReviewers(view, isReviewUnit, (ord) => reviewVerdicts.get(ord) ?? null),
+    reviewers: approvingReviewers(view, isReviewUnit, (ord) => reviewVerdicts.get(ord) ?? null).map((cli) => seatKeyName(cli, roster)),
     overridden: finalOverridden,
     deliveryVerified,
   }) : null;
@@ -709,8 +709,10 @@ function RunHelpers({ view }: { view: RunView }): React.ReactElement | null {
   const roster = useRoster();
   const assigned = [...new Set(view.units.map((u) => u.assigned_cli).filter((c): c is string => typeof c === 'string' && c !== ''))];
   if (roster === null) return null;
+  // A stand-in (`claude~1`) is never on the roster: it is its base helper checking again, listed by that seat and
+  // named as a stand-in (studio#1437), never dropped.
   const helpers = assigned
-    .map((cli) => ({ cli, seat: roster.find((s) => s.key === cli) }))
+    .map((cli) => ({ cli, seat: roster.find((s) => s.key === (standInBase(cli) ?? cli)) }))
     .filter((h): h is { cli: string; seat: NonNullable<typeof h.seat> } => h.seat !== undefined && isCliSeat(h.seat));
   if (helpers.length === 0) return null;
   return (
@@ -721,7 +723,7 @@ function RunHelpers({ view }: { view: RunView }): React.ReactElement | null {
           {i > 0 && ' · '}
           <button type="button" data-testid="session-run-helper" data-cli={cli} data-object={`helper:${view.session.id}:${cli}`}
             onClick={() => openSheet({ kind: 'helper', runId: view.session.id, cli })} className="wk-link wk-session-helper-link">
-            {seatLabel(seat)}
+            {standInBase(cli) !== null ? seatKeyName(cli, roster) : seatLabel(seat)}
           </button>
         </span>
       ))}

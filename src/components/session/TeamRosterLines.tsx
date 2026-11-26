@@ -1,7 +1,7 @@
 import { useDisplayText } from '../../hooks/useHomePath.js';
 import { useMemo } from 'react';
 import type { RosterSeat } from '../../api/types.js';
-import { seatLabel } from '../../board/seatNames.js';
+import { seatKeyName } from '../../board/seatNames.js';
 import { teamRosterOf, type TeamRoster } from '../../board/teamRoster.js';
 import { useTeamFold } from '../../hooks/useTeamFold.js';
 
@@ -30,10 +30,7 @@ export function watchLine(monitors: number, watched: number): string {
 
 export function TeamRosterView({ team, roster }: { team: TeamRoster; roster: readonly RosterSeat[] | null | undefined }): React.ReactElement | null {
   const showText = useDisplayText();
-  const name = (key: string): string => {
-    const seat = roster?.find((s) => s.key === key);
-    return seat === undefined ? key : seatLabel(seat);
-  };
+  const name = (key: string): string => seatKeyName(key, roster);
   if (team.lead === null && team.watch === null && team.members.length === 0) return null;
   const work = team.steps.filter((s) => s.kind === 'work');
   const checks = team.steps.filter((s) => s.kind === 'check');
