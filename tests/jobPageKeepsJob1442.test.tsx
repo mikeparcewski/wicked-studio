@@ -121,7 +121,7 @@ describe('the job page\'s box says where a message for the job goes', () => {
 
 describe('round 1 (codex P1, pi P2): an ask at a real gate still waits on the person', () => {
   /** An ask run at a gate a person must answer (no `ask_turn`): Continue in Build, a creator step. */
-  const GATED = { ...ASK, session: { ...ASK.session, ask_turn: undefined } } as typeof ASK;
+  const GATED = (() => { const session = { ...ASK.session } as Record<string, unknown>; delete session['ask_turn']; return { ...ASK, session } as unknown as typeof ASK; })();
 
   it('the header says Waiting, beside a working job', async () => {
     render(<SessionPage sessionId={CHAT} runs={[JOB, GATED]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);

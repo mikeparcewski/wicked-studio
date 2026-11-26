@@ -11,7 +11,7 @@ import { ApiError, api } from '../../api/client.js';
 import type { ChatPathView, SessionView as RunView } from '../../api/types.js';
 import { needsByRun } from '../../board/deskModel.js';
 import type { NeedRow } from '../../board/needsYou.js';
-import { CLOSED_LINE, MESSAGE_STEP_LABEL, composerScopeNote, conversationOf, headlinePool, parseSessionId, runChatIdOf, sessionPath, runState, sessionTitle, type Conversation, type SessionState } from '../../board/sessionModel.js';
+import { CLOSED_LINE, MESSAGE_JOB_LABEL, MESSAGE_STEP_LABEL, composerScopeNote, conversationOf, headlinePool, parseSessionId, runChatIdOf, sessionPath, runState, sessionTitle, type Conversation, type SessionState } from '../../board/sessionModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { proposalIsStub, useCapabilities } from '../../store/capabilities.js';
 import { useConnectionStore } from '../../store/connection.js';
@@ -104,7 +104,7 @@ import { headlineProgress } from '../../board/repeatProgress.js';
 import { plainGateQuestion } from '../../board/deskWords.js';
 import { needTone } from '../../board/needTone.js';
 import { displayText } from '../../board/homePath.js';
-import { isAskTurnRun } from '../../board/askTurn.js';
+import { isAskPathRun, isAskTurnRun } from '../../board/askTurn.js';
 import { InlineUndo } from '../InlineUndo.js';
 
 /** The project a chat's scope (`GET /chats/:id` `scope.projectId`) files it in, or null. */
@@ -1215,6 +1215,18 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   }, [mine, gates, elicitations, roster, attention, askBlockHidden, askRunId, ref, pauses, jobRunIds]);
   const dockWho = dockItems[0]?.who ?? null;
 
+  // studio#1442 (round 1): the job's working step to message, beside the note: the newest job here with an executing
+  // step that is not held or paused (the thread's working row draws its ⋯ under the same guards, but a passage's
+  // working step and an answering ask do not draw it, so the note carries its own way there).
+  const messageJob = useMemo(() => {
+    for (const v of [...mine].reverse()) {
+      if (isAskPathRun(v.session) || isHeldRun(v.session) || pauses.has(v.session.id)) continue;
+      const ord = executingOrd(v.session, v.units);
+      if (ord !== null) return { runId: v.session.id, ord };
+    }
+    return null;
+  }, [mine, pauses]);
+
   // H3: the composer's props, shared by the thread's composer and the full-screen chat drawer's (one draft).
   const composerProps = {
     suggestions,
@@ -1223,7 +1235,15 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     // chat's page (nothing opened yet) seeds a new chat instead.
     jobChatId: ref.kind === 'chat' && (conversation === 'live' || awaitingOpenRead) ? ref.chatId : null,
     // studio#606 (4): while a run here is live, Send starts a separate Ask — say so before Send.
-    footer: scopeNote !== null ? <p data-testid="session-composer-scope" role="note" className="wk-composer-hint">{scopeNote}</p> : null,
+    footer: scopeNote !== null ? (
+      <p data-testid="session-composer-scope" role="note" className="wk-composer-hint">
+        {scopeNote}
+        {messageJob !== null && (
+          <>{' '}<button type="button" data-testid="session-composer-message-job" className="wk-link"
+            onClick={() => openSheet({ kind: 'step', runId: messageJob.runId, ord: messageJob.ord }, undefined, { compose: true })}>{MESSAGE_JOB_LABEL}</button></>
+        )}
+      </p>
+    ) : null,
     text: draft,
     setText: (t: string) => setDraft(sessionId, t),
     // S16a-4e: on a live chat's own session the composer replies into THAT chat.

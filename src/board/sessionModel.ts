@@ -1,4 +1,4 @@
-import { isAskPathRun } from './askTurn.js';
+import { isAskPathRun, isAskTurnRun } from './askTurn.js';
 import { isHeldRun } from './heldRuns.js';
 import type { SessionView } from '../api/types.js';
 import { jobTitle, plainRunTitle } from './deskWords.js';
@@ -151,7 +151,10 @@ interface TranscriptLike {
  */
 export function headlinePool<T extends Pick<SessionView, 'session'>>(runs: readonly T[]): readonly T[] {
   const jobs = runs.filter((v) => !isAskPathRun(v.session));
-  return jobs.length > 0 ? jobs : runs;
+  if (jobs.length === 0) return runs;
+  // Round 1 (codex P1): an ask at a gate a person must answer (no `ask_turn`: Continue in Build, a creator step) still
+  // waits on them, so it stays in the header's and Details' reading beside the job.
+  return runs.filter((v) => !isAskPathRun(v.session) || (v.session.status === 'awaiting_human' && !isAskTurnRun(v.session)));
 }
 
 const launchedAt = (v: SessionView): number => {
@@ -232,13 +235,14 @@ export const SEPARATE_ASK_NOTE =
  *  (rig 0.15.8: the note named a ⋯ that row did not have). It opens the step's sheet with its message box. */
 export const MESSAGE_STEP_LABEL = 'Message this step';
 
-/** studio#1442: while a job here is live, the note also says where a message for the job goes (the box's words never
- *  reach it: they start an ask beside it, in a live chat as well). */
-export const MESSAGE_JOB_NOTE = `${SEPARATE_ASK_NOTE} To tell the job something, use “${MESSAGE_STEP_LABEL}” on its working step.`;
+/** studio#1442: the button beside the note that opens the job's working step to message it (`openSheet` compose). */
+export const MESSAGE_JOB_LABEL = 'Message the job';
 
+/** studio#1442: while a job here is live the note is said in a live chat too (the box's words start an ask beside the
+ *  job, never reach it); the page puts a way to message the job's working step beside it when it has one. */
 export function composerScopeNote(runs: readonly SessionView[], repliesIntoChat: boolean): string | null {
   const live = runs.filter((v) => !LIVE_RUN_ENDS.has(v.session.status));
-  if (live.some((v) => !isAskPathRun(v.session))) return MESSAGE_JOB_NOTE;
+  if (live.some((v) => !isAskPathRun(v.session))) return SEPARATE_ASK_NOTE;
   if (repliesIntoChat) return null;
   return live.length > 0 ? SEPARATE_ASK_NOTE : null;
 }

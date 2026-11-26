@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { composerScopeNote, MESSAGE_JOB_NOTE, SEPARATE_ASK_NOTE } from '../src/board/sessionModel.js';
+import { composerScopeNote, SEPARATE_ASK_NOTE } from '../src/board/sessionModel.js';
 import type { SessionView } from '../src/api/types.js';
 
 /** studio#606 (4): the session composer says Send starts a separate Ask while a run here is live. */
@@ -15,10 +15,9 @@ describe('composerScopeNote', () => {
     expect(composerScopeNote([run('completed'), ask('awaiting_human')], false)).toBe(SEPARATE_ASK_NOTE);
     expect(SEPARATE_ASK_NOTE).toContain('does not steer this one');
   });
-  it('studio#1442: a live job here also names where a message for it goes, in a live chat too', () => {
-    expect(composerScopeNote([run('executing')], false)).toBe(MESSAGE_JOB_NOTE);
-    expect(composerScopeNote([run('executing')], true)).toBe(MESSAGE_JOB_NOTE);
-    expect(MESSAGE_JOB_NOTE).toContain('does not steer this one');
+  it('studio#1442: a live job here keeps the note in a live chat too (the words start an ask beside it)', () => {
+    expect(composerScopeNote([run('executing')], false)).toBe(SEPARATE_ASK_NOTE);
+    expect(composerScopeNote([run('executing')], true)).toBe(SEPARATE_ASK_NOTE);
   });
   it('nothing live, or a live chat of asks that the text replies into: no note', () => {
     expect(composerScopeNote([], false)).toBeNull();

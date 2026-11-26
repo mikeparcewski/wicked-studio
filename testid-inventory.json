@@ -21077,6 +21077,12 @@
       ]
     },
     {
+      "testId": "session-composer-message-job",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
       "testId": "session-composer-scope",
       "files": [
         "src/components/session/SessionView.tsx"
