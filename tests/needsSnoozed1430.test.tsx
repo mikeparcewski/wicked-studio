@@ -243,6 +243,18 @@ describe('a crew hold is fail-open: it hides only on a fresh, successful read (D
     expect(screen.getByTestId('desk-inbox-count')).not.toHaveTextContent('snoozed');
   });
 
+  it('studio#1470: a key woken here is held again once a read asked after the Wake lists it (someone snoozed it again)', async () => {
+    render(<DeskInbox rows={[...rowsOf(), failed(2)]} {...props} />);
+    await waitFor(() => expect(listed()).not.toContain(heldKey()));
+    await act(async () => { expect(await useDeskSnoozes.getState().wake(HELD.snooze.key)).toBeNull(); });
+    await waitFor(() => expect(listed()).toContain('group:approval'));
+    // Another tab snoozes the same item again; this page's next read, asked after the Wake, lists the hold.
+    const asked = Date.now() + 1;
+    act(() => { useSystemStore.setState({ snapshot: snap(), snapshotAskedAt: asked, snapshotAt: asked + 50, snapshotError: null } as never); });
+    await waitFor(() => expect([...listed()].sort()).toEqual([awakeKey(), 'fail:run-2'].sort()));
+    expect(screen.getByTestId('desk-inbox-count')).toHaveTextContent('· 1 snoozed');
+  });
+
   it('a failed read holds nothing, though its last snapshot lists the hold', async () => {
     failRead();
     render(<DeskInbox rows={[...rowsOf(), failed(2)]} {...props} />);
