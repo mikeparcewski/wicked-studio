@@ -232,7 +232,7 @@ function usePhone(): boolean {
 }
 
 /** Re-read /system after a crew-held snooze or wake: crew moved the item, so /needs, the badge and this inbox follow. (A
- *  woken hold is already over here, whatever the re-read does: the snoozes store's `woken`, studio#1430.) */
+ *  woken hold is already over here, whatever the re-read does: only a read asked after the Wake holds it, studio#1430.) */
 const reread = (): Promise<void> => useSystemStore.getState().refresh({ force: true }).then(() => undefined, () => undefined);
 
 

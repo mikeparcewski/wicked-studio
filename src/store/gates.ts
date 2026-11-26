@@ -54,6 +54,9 @@ export interface OpenGate {
   /** F31: set when the gate came from a `GET /runs/:id/gate` read (a page load, a late join), not a live frame. The
    *  toast strip orders read gates by their runs' age and queues live ones after them in arrival order. */
   fromRead?: true;
+  /** (studio#1430) When this page first saw this gate instance, on this browser's clock: a live frame, or a read of a
+   *  gate the store did not hold. A crew hold on the run is trusted only from a /system read asked after it. */
+  seenAt?: number;
 }
 
 /** `recommended` off a gate payload: a non-negative integer, else absent. */
@@ -280,7 +283,7 @@ export const useGateStore = create<GateStore>((set) => {
       const sameShape = prev !== undefined && prev.ord === gate.ord && prev.prompt === gate.prompt && prev.gateKind === gate.gateKind;
       const same = sameShape && (prev.actionsRead !== true || crewAt[runId] === gate.receivedAt);
       crewAt[runId] = gate.receivedAt;
-      const next = same ? { ...gate, receivedAt: prev.receivedAt } : gate;
+      const next = same ? { ...gate, receivedAt: prev.receivedAt, ...(prev.seenAt !== undefined ? { seenAt: prev.seenAt } : {}) } : { ...gate, seenAt: Date.now() };
       put(prev === undefined || prev.fromRead === true ? { ...next, fromRead: true } : next);
       return true;
     }
@@ -344,6 +347,7 @@ export const useGateStore = create<GateStore>((set) => {
                   prompt: event.prompt,
                   lifecycle: 'open',
                   receivedAt: Date.now(),
+                  seenAt: Date.now(),
                   // Omitted rather than set to `undefined`: `exactOptionalPropertyTypes`.
                   ...(choices !== undefined ? { choices } : {}),
                   ...gateKindOf(event),

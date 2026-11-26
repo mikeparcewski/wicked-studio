@@ -14,10 +14,9 @@ type Phase = 'idle' | 'loading' | 'ready' | 'unsupported' | 'failed';
 interface State {
   phase: Phase;
   byKey: Record<string, DeskSnooze>;
-  /** (studio#1430) The keys this page woke. A crew hold in the last /system snapshot with one of these keys is over,
-   *  even when the re-read after the Wake failed and the store still shows the old snapshot. Snoozing the key again
-   *  clears it. */
-  woken: Readonly<Record<string, true>>;
+  /** (studio#1430) When this page last woke each key, on this browser's clock: a crew hold with that key is trusted only
+   *  from a /system read asked after it. */
+  wokeAt: Readonly<Record<string, number>>;
   load: () => Promise<void>;
   /** Snooze one item; resolves with null when done, else the words saying why not. */
   snooze: (key: string, until: string, severity: number) => Promise<string | null>;
@@ -37,7 +36,7 @@ function refusal(e: unknown, doing: 'snooze' | 'wake'): string {
 export const useDeskSnoozes = create<State>((set, get) => ({
   phase: 'idle',
   byKey: {},
-  woken: {},
+  wokeAt: {},
   load: async () => {
     const mine = ++readSeq;
     if (get().phase === 'idle') set({ phase: 'loading' });
@@ -54,7 +53,7 @@ export const useDeskSnoozes = create<State>((set, get) => ({
   snooze: async (key, until, severity) => {
     try {
       const s = await deskSnoozeApi.snooze(key, { until, severity });
-      set((st) => { const woken = { ...st.woken }; delete woken[s.key]; return { byKey: { ...st.byKey, [s.key]: s }, woken }; });
+      set((st) => ({ byKey: { ...st.byKey, [s.key]: s } }));
       void get().load(); // starts a new read, so one already in flight is dropped when it answers
       return null;
     } catch (e) {
@@ -64,7 +63,7 @@ export const useDeskSnoozes = create<State>((set, get) => ({
   wake: async (key) => {
     try {
       await deskSnoozeApi.wake(key);
-      set((st) => { const byKey = { ...st.byKey }; delete byKey[key]; return { byKey, woken: { ...st.woken, [key]: true as const } }; });
+      set((st) => { const byKey = { ...st.byKey }; delete byKey[key]; return { byKey, wokeAt: { ...st.wokeAt, [key]: Date.now() } }; });
       void get().load();
       return null;
     } catch (e) {
@@ -76,5 +75,5 @@ export const useDeskSnoozes = create<State>((set, get) => ({
 /** Test seam. */
 export function resetDeskSnoozes(): void {
   readSeq += 1;
-  useDeskSnoozes.setState({ phase: 'idle', byKey: {}, woken: {} });
+  useDeskSnoozes.setState({ phase: 'idle', byKey: {}, wokeAt: {} });
 }
