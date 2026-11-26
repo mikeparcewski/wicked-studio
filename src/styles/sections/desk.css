@@ -954,6 +954,9 @@
   .wk-inbox-acts { justify-self: start; margin-top: var(--space-1); }
   .wk-inbox-acts .wk-need-acts { justify-content: flex-start; }
   .wk-inbox-acts .wk-need-act, .wk-inbox-chores .wk-need-act { min-height: var(--tap-min); }
+  /* studio#1430 F5: the row's own Snooze, drawn only here, where the reading pane (which carries it) is hidden. */
+  .wk-inbox-row-snooze { display: inline-flex; margin-top: var(--space-1); }
+  .wk-inbox-row-snooze .wk-btn { min-height: var(--tap-min); }
 }
 @media (prefers-reduced-motion: reduce) { .wk-inbox-list div.wk-inbox-row { transition: none; } }
 /* studio 0.16.4: a row's inline Undo (countdown, what happens, Undo, the result) on its own line under the row. */

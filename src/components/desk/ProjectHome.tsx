@@ -119,6 +119,9 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
   // Each gate row says what the dock says (its plain cause); the job's title moves to the line.
   const causes = useRowHeadlines(items ?? NO_ITEMS, runs);
   const tidy = useMemo(() => projectUnresolved(snapshot, ids), [snapshot, ids]);
+  // studio#1430: what a ranked crew holds back for a snooze (`snoozed[]`, out of the list above) is said, so "Nothing here
+  // is waiting" never hides it.
+  const snoozedHere = useMemo(() => (snapshot?.ranked === true ? (snapshot.snoozed ?? []).filter((h) => h.runId != null && ids.has(h.runId)).length : 0), [snapshot, ids]);
   const tidySpend = tidy.some((u) => u.costUsd !== null) ? tidy.reduce((n, u) => n + (u.costUsd ?? 0), 0) : null;
   const folded = useMemo(() => attentionRows(needRows.filter((r) => {
     const id = needRunId(r);
@@ -221,6 +224,11 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
             {tidyWords(tidy.length, tidySpend) !== null && (
               <p className="wk-calm-foot wk-pj-tidy" data-testid="project-tidy" data-count={tidy.length}>
                 {tidyWords(tidy.length, tidySpend)} · <a href={NEEDS_PATH} onClick={go(navigate, NEEDS_PATH)} className="wk-link" data-testid="project-tidy-open">Tidy up</a>
+              </p>
+            )}
+            {snoozedHere > 0 && (
+              <p className="wk-calm-foot" data-testid="project-needs-snoozed" data-count={snoozedHere}>
+                {snoozedHere} snoozed, not counted until {snoozedHere === 1 ? 'it comes' : 'they come'} back · <a href={NEEDS_PATH} onClick={go(navigate, NEEDS_PATH)} className="wk-link" data-testid="project-needs-snoozed-open">See them in Needs you</a>
               </p>
             )}
           </CalmSection>

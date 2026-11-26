@@ -224,7 +224,7 @@ export function systemSummary(a: SystemAttention): string {
  *  - yellow when the system slows work, a job waits on you, or work is left unresolved (never green
  *    over stale jobs, operator rule);
  *  - green only when attention and unresolved are both empty.
- * The words are a summary ("disk low · 1 needs you", "3 to tidy up", "all clear"), never an item's title.
+ * The words are a summary ("disk low", "2 need you", "3 need a look (disk low, 2 jobs)", "3 to tidy up", "all clear"), never an item's title.
  */
 function systemVerdict(attention: SystemAttention[], unresolved: number): NerveState {
   const system = attention.filter((a) => a.panel !== 'runs');
@@ -232,8 +232,11 @@ function systemVerdict(attention: SystemAttention[], unresolved: number): NerveS
   const stops = system.filter(preventsWork);
   const lead = stops[0] ?? system[0];
   const parts: string[] = [];
-  if (lead !== undefined) parts.push(system.length > 1 ? `${systemSummary(lead)} and ${system.length - 1} more` : systemSummary(lead));
-  if (waiting > 0) parts.push(`${waiting} ${waiting === 1 ? 'needs' : 'need'} you`);
+  const said = lead === undefined ? null : system.length > 1 ? `${systemSummary(lead)} and ${system.length - 1} more` : systemSummary(lead);
+  // studio#1429: with system items and jobs both waiting, the total is the badge's (every attention item), then the split.
+  if (said !== null && waiting > 0) parts.push(`${attention.length} need a look (${said}, ${waiting} ${waiting === 1 ? 'job' : 'jobs'})`);
+  else if (said !== null) parts.push(said);
+  else if (waiting > 0) parts.push(`${waiting} ${waiting === 1 ? 'needs' : 'need'} you`);
   if (parts.length === 0 && unresolved > 0) parts.push(`${unresolved} to tidy up`);
   const tone: NerveTone = stops.length > 0 ? 'red' : parts.length > 0 ? 'yellow' : 'green';
   return { tone, read: 'fresh', words: parts.length === 0 ? ALL_CLEAR : parts.join(' · '), attention };

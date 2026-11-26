@@ -93,6 +93,8 @@ export interface InboxRowLook {
   selectedKey: string | null;
   onSelect: (row: NeedRow) => void;
   ageWords: (at: number | null) => string;
+  /** (studio#1430 F5) A row's own extra move after its moves (the inbox's Snooze, shown where the reading pane is hidden). */
+  extra?: (row: NeedRow) => React.ReactNode;
 }
 
 export function NeedsYouQueue({ queue, runs, navigate, now, inbox, partial = false, emptyCopy }: {
@@ -316,6 +318,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, inbox, partial = fal
           ) : (
             <span className="wk-need-acts">{act(row)}</span>
           )}
+          {look.extra?.(row)}
         </span>
         {rowUndo(undo)}
       </div>
