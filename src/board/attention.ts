@@ -4,7 +4,7 @@ import type { NeedRow } from './needsYou.js';
 import { needCount, needSection } from './needsQueue.js';
 import { createdAtMs } from './windowStats.js';
 import type { SystemAttention } from '../api/system.js';
-import { nerveState } from './nerveCenter.js';
+import { nerveState, SOCKET_ID } from './nerveCenter.js';
 
 export type NeedsSource =
   | { phase: 'loading' }
@@ -20,7 +20,8 @@ export function needsSource(
 ): NeedsSource {
   if (signals.mode === 'system') {
     const state = nerveState(signals, ws, 0, now);
-    return state.read === 'fresh' ? { phase: 'ready', from: 'crew', items: state.attention } : { phase: 'loading' };
+    // studio#1469: studio's own paused socket is not a thing that needs you; the chip says it beside the count.
+    return state.read === 'fresh' ? { phase: 'ready', from: 'crew', items: state.attention.filter((a) => a.id !== SOCKET_ID) } : { phase: 'loading' };
   }
   if (signals.mode === 'unknown' && signals.healthError === null) return { phase: 'loading' };
   return { phase: 'ready', from: 'fold', rows: attentionRows(needRows) };
