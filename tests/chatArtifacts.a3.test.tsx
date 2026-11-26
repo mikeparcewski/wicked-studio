@@ -22,7 +22,8 @@ const { useSheets } = await import('../src/store/sheets.js');
 const { useProjectsStore } = await import('../src/store/projects.js');
 const { makeUnit, makeView } = await import('./factories.js');
 const { clearCachedRoster, setCachedRoster } = await import('../src/store/rosterCache.js');
-const { formSources, isArtifactProposal, proposalFormEdits, proposalFormOf, repoKeysOf, resetSettledProposals, PROPOSAL_STARTING_MS } = await import('../src/board/artifactProposal.js');
+const { foldChatProposals, formSources, isArtifactProposal, proposalFormEdits, proposalFormOf, repoKeysOf, resetSettledProposals, PROPOSAL_STARTING_MS } = await import('../src/board/artifactProposal.js');
+const { ArtifactProposalCard } = await import('../src/components/chat/ArtifactProposalCard.js');
 type Proposal = import('../src/api/chatArtifacts-wire.js').ArtifactProposal;
 
 const T0 = 1_700_000_000_000;
@@ -58,6 +59,8 @@ const TURN = [
 ];
 
 let chatBody: Record<string, unknown> = {};
+/** (main flake, run 45725466480) How long the chat read takes: a loaded CI runner delays the first render. */
+let chatDelayMs = 0;
 const posts: Array<{ path: string; body: unknown }> = [];
 let decideAnswer: () => Response | Promise<Response> = () => new Response('{}', { status: 500 });
 const ok = (body: unknown): Response => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -72,7 +75,10 @@ function setup(p: Proposal = proposal()): void {
 }
 
 beforeEach(() => {
+  // A test that owns the clock restores it in its own `finally`; this keeps a missed restore from reaching the next test.
+  vi.useRealTimers();
   posts.length = 0;
+  chatDelayMs = 0;
   resetSettledProposals();
   setup();
   useCapabilities.setState({ loaded: true, runChatId: true, askPath: true, chatProposals: true, chatArtifactsStub: false, chatArtifactsStubOps: null, chatList: true });
@@ -95,7 +101,10 @@ beforeEach(() => {
       return Promise.resolve(path.includes('/proposals/') ? decideAnswer() : ok({}));
     }
     if (path.includes('/considered')) return Promise.resolve(new Response('{}', { status: 404 }));
-    if (path.startsWith('/chats/')) return Promise.resolve(ok(chatBody));
+    if (path.startsWith('/chats/')) {
+      const body = ok(chatBody);
+      return chatDelayMs > 0 ? new Promise<Response>((r) => setTimeout(() => r(body), chatDelayMs)) : Promise.resolve(body);
+    }
     if (path.endsWith('/team')) return Promise.resolve(new Response('{}', { status: 404 }));
     if (path.endsWith('/events')) return Promise.resolve(ok({ events: [] }));
     return Promise.resolve(ok({}));
@@ -317,19 +326,63 @@ describe('Change something on a create card (A3)', () => {
     expect(screen.getAllByText('could not start it: the engine is restarting. Go again resumes the same job.')).toHaveLength(1);
   });
 
-  it('"Starting it…" ends on the same card when its window closes: Go again appears without a remount', async () => {
-    const now = Date.now();
-    chatBody = { ...chatBody, messages: [
-      ...TURN,
-      { at: now - 2000, turnId: 't1', kind: 'proposal', proposal: proposal() },
-      { at: now - (PROPOSAL_STARTING_MS - 300), turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } },
-    ] };
-    page();
-    await waitFor(() => expect(text('artifact-proposal-record')).toBe('Starting it…'));
-    expect(screen.queryByTestId('artifact-proposal-go-again')).toBeNull();
-    // The window closes ~300 ms later on this same mounted card.
-    await screen.findByTestId('artifact-proposal-go-again', undefined, { timeout: 2000 });
-    expect(text('artifact-proposal-record')).toBe('Interrupted before it was recorded as started.');
+  it.each([
+    ['', 0],
+    // (main flake, run 45725466480 attempt 1) The same card when the runner is loaded: the first render lands
+    // later than the test's own clock assumed.
+    [' (a loaded runner: the chat read takes 400 ms)', 400],
+  ])('"Starting it…" ends on the same card when its window closes: Go again appears without a remount%s', async (_, delay) => {
+    // The test owns the clock: the window closes when the test moves time past it, never on the runner's own timing.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      chatDelayMs = delay;
+      const now = Date.now();
+      const LEFT = 60_000;
+      chatBody = { ...chatBody, messages: [
+        ...TURN,
+        { at: now - 2000, turnId: 't1', kind: 'proposal', proposal: proposal() },
+        { at: now - (PROPOSAL_STARTING_MS - LEFT), turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } },
+      ] };
+      page();
+      await waitFor(() => expect(text('artifact-proposal-record')).toBe('Starting it…'));
+      expect(screen.queryByTestId('artifact-proposal-go-again')).toBeNull();
+      const card = screen.getByTestId('artifact-proposal');
+      // The window closes on this same mounted card: the same element, now with Go again in it.
+      await act(async () => { await vi.advanceTimersByTimeAsync(LEFT + 100); });
+      await waitFor(() => expect(within(card).queryByTestId('artifact-proposal-go-again')).not.toBeNull());
+      expect(screen.getByTestId('artifact-proposal')).toBe(card);
+      expect(card.isConnected).toBe(true);
+      expect(text('artifact-proposal-record')).toBe('Interrupted before it was recorded as started.');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('the card ends its own "Starting it…": its timer renders Go again when the window closes, with nothing else rendering it', async () => {
+    // The card alone (no page, no polls): only the card's own expiry timer can render the change. The clock moves only
+    // when the test moves it (no real time leaks in), so the boundary a second before the window closes is exact.
+    vi.useFakeTimers();
+    try {
+      const now = Date.now();
+      const LEFT = 60_000;
+      const [entry] = foldChatProposals([
+        ...TURN,
+        { at: now - 2000, turnId: 't1', kind: 'proposal', proposal: proposal() },
+        { at: now - (PROPOSAL_STARTING_MS - LEFT), turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } },
+      ]);
+      render(<ArtifactProposalCard chatId="chat-ask" entry={entry!} seatName="Claude Code" stub={false} onChanged={() => {}} />);
+      expect(text('artifact-proposal-record')).toBe('Starting it…');
+      const card = screen.getByTestId('artifact-proposal');
+      expect(within(card).queryByTestId('artifact-proposal-go-again')).toBeNull();
+      await act(async () => { await vi.advanceTimersByTimeAsync(LEFT - 1000); });
+      expect(text('artifact-proposal-record')).toBe('Starting it…');
+      await act(async () => { await vi.advanceTimersByTimeAsync(1100); });
+      expect(within(card).queryByTestId('artifact-proposal-go-again')).not.toBeNull();
+      expect(screen.getByTestId('artifact-proposal')).toBe(card);
+      expect(text('artifact-proposal-record')).toBe('Interrupted before it was recorded as started.');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('a live accepting record closes the form before the answer fails with no view: the refusal shows once, under the card', async () => {

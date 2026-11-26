@@ -12,12 +12,32 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.16.19] — 2026-11-26
+
+Patch release on the train-15 cut 9a90caaa, carrying 12 PRs since 0.16.18: #1425, #1426, #1423, #1432, #1405, #1435, #1424, #1439, #1446, #1448, #1449, #1445.
+
+### Added
+
+- The J6 domain model in studio: scope card, model view, follow-ups (S1) (#1424)
+- Add a memory picks the kind and one repository (studio#1095) (#1405)
+- Snooze on the ranked Needs-you page, and N snoozed (#1416) (#1423)
+
 ### Fixed
 
 - A job's page keeps showing the job when a question is asked on it (studio#1442, train-14 proof). The question starts an ask turn in the job's chat, and the page then showed the ask instead: the header read "<the question> · Answered" and Details read "Step 1 of 1" while the job still ran its review rounds. A session that holds a job is now about its jobs (`headlinePool`): the header title, its state badge and Details follow the job, and the ask is answered beside it in the thread. While a job is live, the note under the box says Send asks a separate question (in a live chat too) and, when the job has a working step, carries "Message the job", which opens that step to message it. An ask at a real gate (not an answered turn) still makes the header say Waiting.
+- When a stand-in judges the steering rules, the run page names one judge, "Claude Code (stand-in)". It no longer lists parts of the stand-in's label, which has commas of its own, as more judges (studio#1451).
 - The stand-in card on a launch no longer says a picked helper is "the only helper signed in" when other helpers are signed in but were not picked for the job. It says which helpers were picked, names the signed-in ones left out, and offers "Pick another helper", which opens the form's helper options (/runs/new) or the wizard's Options step, in place of "Sign in another helper" (studio#1436).
 - A project's page no longer says "Nothing is running" while its own In progress list shows a Working job: the sentence counts the list's jobs, so a job a need only slows (a helper signed out) is counted. In progress rows on the project page and the Desk say the step the job's session says (the running step, else the first one not finished), not the count of finished steps plus one (studio#1440).
 - A seated stand-in is named as one wherever studio names a seat (studio#1437, the live proof wicked-core#1930 F8 asks for). On a run whose reviewer or judge is a stand-in (`claude~1`, `claude~2`), the Helpers line, the thread, the hand-off row, Helpers and spend, the spend line, team rows, live activity, gate cards, the receipt's who line, the run's final message ("Reviewed and approved by …"), the step sheet, gate details, the ⌥ peek, the ⌘K palette and a QE acceptance's reviewer now say "Claude Code (stand-in)", never the bare key. The run panel shows the engine's own sentences ("Claude Code stood in for the review, …", and the judge's). The hand-off row says "a stand-in review, not a different helper" instead of "reviewing on its own seat", and a receipt's `stand_in` skip reads "a stand-in checked instead". Tested on the recorded wire of run b0ade71f.
+- A long rule check says it is checking the steering rules, never that the finished reviewer is silent (studio#1441) (#1448)
+- Learn my style, held for the stand-in choice, shows the card; the card promises stand-ins only for roles one fills (wicked-crew#1932) (#1446)
+- Add a memory offers a project's own repositories; repo_unknown and the 503 say nothing was saved; Bring back keeps kind and repo (studio#1433) (#1435)
+- The data-source rename follow-ups from wicked-crew#1906: refusals, old addresses, another tab first (#1426)
+- An unfinished record shows no check; a disabled option says no consequence (#1417) (#1425)
+
+### Changed
+
+- CI re-pins the selftest to wicked-ci main after wicked-ci #86 and #88 (the stand-in seam) (#1432)
 
 ## [0.16.18] — 2026-11-25
 
