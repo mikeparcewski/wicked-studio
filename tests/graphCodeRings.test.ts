@@ -4,7 +4,7 @@
  *
  * @vitest-environment node
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { bfsLevels, buildCodeRings, type CodeBlastInput, type CollapseState, type CodeRawEdge, type CodeRow } from '../src/graph/codeRings.js';
 
@@ -484,8 +484,22 @@ describe('R4: hiddenLinks over the drawn model', () => {
   });
 });
 
+/** (main flake, run 45725466480 attempt 1: 1541 ms against the 1 s bound) A runner that stalls once for `ms` (a GC
+ *  pause, or a worker preempted on a loaded CI runner): the clock jumps by `ms` once, after its first reading. */
+function stallOnce(ms: number): () => void {
+  const real = performance.now.bind(performance);
+  let reads = 0;
+  const spy = vi.spyOn(performance, 'now').mockImplementation(() => real() + (reads++ > 0 ? ms : 0));
+  return () => spy.mockRestore();
+}
+
 describe('R5: owner lookup is O(1)', () => {
-  it('model() over 50k rows + 50k edges with one closed group finishes under 1s and agrees with brute force', () => {
+  it.each([
+    ['', 0],
+    [' (on a runner that stalls once for 1.1 s)', 1100],
+  ])('model() over 50k rows + 50k edges with one closed group finishes under 1s and agrees with brute force%s', (_, stall) => {
+    const restore = stallOnce(stall);
+    try {
     const N = 50000;
     const rowsBig: CodeRow[] = Array.from({ length: N }, (_, i) => ({ symbolId: `s${i}`, name: `s${i}`, file: 'big.ts', depth: 1 }));
     const edgesBig: CodeRawEdge[] = Array.from({ length: N }, (_, i) => ({ src: `s${i}`, tgt: i === 0 ? 'Q' : `s${i - 1}` }));
@@ -500,6 +514,9 @@ describe('R5: owner lookup is O(1)', () => {
     const expectedGroup = `g:1:${encodeURIComponent('big.ts')}`;
     const owner = cr.view(st).ownerOf;
     for (const i of [0, 1, 1234, 25000, N - 1]) expect(owner(`n:s${i}`)).toBe(expectedGroup);
+    } finally {
+      restore();
+    }
   });
 });
 

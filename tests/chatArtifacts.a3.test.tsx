@@ -58,6 +58,8 @@ const TURN = [
 ];
 
 let chatBody: Record<string, unknown> = {};
+/** (main flake, run 45725466480) How long the chat read takes: a loaded CI runner delays the first render. */
+let chatDelayMs = 0;
 const posts: Array<{ path: string; body: unknown }> = [];
 let decideAnswer: () => Response | Promise<Response> = () => new Response('{}', { status: 500 });
 const ok = (body: unknown): Response => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -73,6 +75,7 @@ function setup(p: Proposal = proposal()): void {
 
 beforeEach(() => {
   posts.length = 0;
+  chatDelayMs = 0;
   resetSettledProposals();
   setup();
   useCapabilities.setState({ loaded: true, runChatId: true, askPath: true, chatProposals: true, chatArtifactsStub: false, chatArtifactsStubOps: null, chatList: true });
@@ -95,7 +98,10 @@ beforeEach(() => {
       return Promise.resolve(path.includes('/proposals/') ? decideAnswer() : ok({}));
     }
     if (path.includes('/considered')) return Promise.resolve(new Response('{}', { status: 404 }));
-    if (path.startsWith('/chats/')) return Promise.resolve(ok(chatBody));
+    if (path.startsWith('/chats/')) {
+      const body = ok(chatBody);
+      return chatDelayMs > 0 ? new Promise<Response>((r) => setTimeout(() => r(body), chatDelayMs)) : Promise.resolve(body);
+    }
     if (path.endsWith('/team')) return Promise.resolve(new Response('{}', { status: 404 }));
     if (path.endsWith('/events')) return Promise.resolve(ok({ events: [] }));
     return Promise.resolve(ok({}));
@@ -317,7 +323,13 @@ describe('Change something on a create card (A3)', () => {
     expect(screen.getAllByText('could not start it: the engine is restarting. Go again resumes the same job.')).toHaveLength(1);
   });
 
-  it('"Starting it…" ends on the same card when its window closes: Go again appears without a remount', async () => {
+  it.each([
+    ['', 0],
+    // (main flake, run 45725466480 attempt 1) The same card when the runner is loaded: the first render lands
+    // later than the test's own clock assumed.
+    [' (a loaded runner: the chat read takes 400 ms)', 400],
+  ])('"Starting it…" ends on the same card when its window closes: Go again appears without a remount%s', async (_, delay) => {
+    chatDelayMs = delay;
     const now = Date.now();
     chatBody = { ...chatBody, messages: [
       ...TURN,
