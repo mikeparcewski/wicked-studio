@@ -78,7 +78,7 @@ import { isToolUnitGate } from '../../board/gateRowModel.js';
 import { TurnWho } from './TurnWho.js';
 import { PowerSwitchButton, RigorChipButton } from './PowerMode.js';
 import { LiveActivity } from './LiveActivity.js';
-import { usePower } from '../../hooks/usePower.js';
+import { usePower, usePowerLocal } from '../../hooks/usePower.js';
 import { powerOf } from '../../api/power.js';
 import { mergePower, pauseCause } from '../../board/powerMode.js';
 import { TrackerSet } from '../trackers/TrackerSet.js';
@@ -631,6 +631,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // opens for it — the dock holds its decision, the header says Waiting, and no "working" line runs under it.
   const powerCap = useCapabilities((s) => s.powerMode);
   const eventsByRun = useRunEventStore((s) => s.byRun);
+  const powerLocal = usePowerLocal((s) => s.byRun);
   // domain-graph-3: a job that keeps going (page after page) says where it got to in its headline — the step's own
   // line, "Mapping wicked-crew · 3% → 12% → 19% · target 80% · page 4 · about 2 h left" — not only in its details.
   // Only a run still going says it, the newest first (a finished one's badge says it ended).
@@ -1229,12 +1230,14 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       const unit = v.units.find((u) => u.ord === ord);
       // studio#1458: a step dispatched on this attempt reads no new message until it is dispatched again; only a power
       // build reads one between its turns (wicked-core#1967: the engine refuses any other, crew answers 409).
-      const p = powerOf(v.session);
+      // Round 1 (codex P2): the power state as this page holds it now (a live toggle frame, this page's own answer), as
+      // the power controls read it (usePower), not only the run list's last read.
+      const p = mergePower(powerOf(v.session), eventsByRun[v.session.id], powerLocal[v.session.id] ?? null);
       const hears = p !== null && p.on && p.orchestrator.ord === ord;
       if (hears && unit !== undefined && isHelperSeat(unit.assigned_cli) && !isToolUnitGate(v.units, ord)) return { runId: v.session.id, ord };
     }
     return null;
-  }, [mine, pauses]);
+  }, [mine, pauses, eventsByRun, powerLocal]);
 
   // H3: the composer's props, shared by the thread's composer and the full-screen chat drawer's (one draft).
   const composerProps = {
