@@ -61,6 +61,7 @@ import { fetchReposCached } from '../../store/repoCache.js';
 import { RequirementsModal } from '../RequirementsModal.js';
 import { DomainScopeCard, domainScopeSeat } from '../launch/DomainScopeCard.js';
 import { useDomainScope } from '../../hooks/useDomainScope.js';
+import { domainScopeHeld } from '../../board/domainModel.js';
 
 /**
  * WICKED'S PASSAGE (DES-CATALOG-002 rev 7 §2.8.1, the v4 "Ink" direction, mockup new-job-v5): the job, inline in the
@@ -265,6 +266,9 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   // The words crew's Start sends (crew routes.ts, the job launcher: brief first, then words), never another version.
   const domainWords = (v.proposal.brief ?? v.proposal.words ?? '').trim();
   const chatScope = useDomainScope({ enabled: domainJob && preStart && v.phase !== 'interrupted', repoRef: v.proposal.repoRefs?.[0] ?? null, intent: domainWords, phrases: null });
+  // studio#1473: Start maps the scope, so it is held (with the wizard's words) until one resolves.
+  const scopeHeld = domainJob ? domainScopeHeld(chatScope.status) : null;
+  const shownReplies = scopeHeld === null ? v.replies : v.replies.map((r) => (r.id === 'start' ? { ...r, enabled: false, held: scopeHeld } : r));
 
   // ── the routes ────────────────────────────────────────────────────────────────────────────────────────────────────
   const decide = (decision: 'go' | 'not_now', reduced = false): void => {
@@ -474,7 +478,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   // The targets the replies have NOW, for a binding's Send (a binding never answers another version).
   const currentTarget = useRef(new Map<string, string>());
   // Only replies that can be pressed now: a binding to a held reply (an answer queued) sends nothing.
-  currentTarget.current = new Map(v.replies.filter((r) => r.enabled).map((r) => [r.id, r.target]));
+  currentTarget.current = new Map(shownReplies.filter((r) => r.enabled).map((r) => [r.id, r.target]));
   const bindChange = (r: JobReply, rev: number): void => {
     bind(r, `Answering: what should change in plan v${rev}`, `Tell ${leadName} what to change in plan v${rev}…`, (t) => sendBack(t, rev, r));
   };
@@ -483,6 +487,7 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   };
 
   const act = (r: JobReply): void => {
+    if (r.id === 'start' && scopeHeld !== null) return;
     if (r.id === 'start' || r.id === 'go_again') decide('go');
     else if (r.id === 'not_now') decide('not_now');
     else if (r.id.startsWith('suggestion:')) {
@@ -609,8 +614,8 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   // studio#1335: crew sends every repository in scope as a choice; the card shows the named ones and enough to fill the
   // chips' count, then "N more" (JobRepoChoices' rule). The others stay replies (a typed answer can still bind one).
   const shownChoices = v.phase === 'asking' && allChoicesFor !== pt ? askingChoicesShown(head.proposal) : null;
-  const replies = shownChoices === null ? v.replies : v.replies.filter((r) => !r.id.startsWith('choice:') || shownChoices.has(Number(r.id.slice('choice:'.length))));
-  const moreChoices = v.replies.length - replies.length;
+  const replies = shownChoices === null ? shownReplies : shownReplies.filter((r) => !r.id.startsWith('choice:') || shownChoices.has(Number(r.id.slice('choice:'.length))));
+  const moreChoices = shownReplies.length - replies.length;
   // "N more" follows the last choice shown; pressing it moves focus to the first choice it reveals (it unmounts itself).
   const lastShownChoice = moreChoices > 0 ? replies.filter((r) => r.id.startsWith('choice:')).at(-1)?.id ?? null : null;
   const progress = v.progress;
