@@ -500,10 +500,11 @@ describe('R5: owner lookup is O(1)', () => {
     rows: Array.from({ length: n }, (_, i): CodeRow => ({ symbolId: `s${i}`, name: `s${i}`, file: 'big.ts', depth: 1 })),
     edges: Array.from({ length: n }, (_, i): CodeRawEdge => ({ src: `s${i}`, tgt: i === 0 ? 'Q' : `s${i - 1}` })),
   });
-  /** model()'s fastest time over 50k rows and over 10k, sampled in turn, five times each. Interference only ever adds
-   *  time: a stall lands in one sample, which the fastest of five drops, and a uniformly slow runner scales both sizes,
-   *  which the ratio cancels. A linear lookup reads 5-7 here, and a scanning one about 23-25 (its 10k sample alone takes
-   *  ~0.5 s, so no plausible interference on the small size hides it). */
+  /** model()'s fastest time over 50k rows and over 10k, sampled in turn, five times each. Sampling reduces noise; it does
+   *  not cancel every kind of load. A stall that lands in one sample is dropped by the fastest of five, and a uniformly
+   *  slow runner scales both sizes, which the ratio cancels. Interference that hits every 50k sample and no 10k sample
+   *  can still raise the ratio, so the bound (15) sits well above the linear lookup's 5-7 and well below a scanning
+   *  one's 23-25. The scan's 10k sample alone takes ~0.5 s, so no plausible interference on the small size hides it. */
   function growth(): { big: number; small: number } {
     let big = Infinity;
     let small = Infinity;
@@ -527,7 +528,7 @@ describe('R5: owner lookup is O(1)', () => {
     try {
       // 5x the rows: about 5x the time when the owner lookup is O(1), about 25x when it scans.
       const { big, small } = growth();
-      expect(big / Math.max(small, 1)).toBeLessThan(12);
+      expect(big / Math.max(small, 1)).toBeLessThan(15);
       const N = 50_000;
       const cr = chain(N);
       const st = cr.defaultState(); // one level, one closed group

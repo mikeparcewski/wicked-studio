@@ -359,8 +359,9 @@ describe('Change something on a create card (A3)', () => {
   });
 
   it('the card ends its own "Starting it…": its timer renders Go again when the window closes, with nothing else rendering it', async () => {
-    // The card alone (no page, no polls): only the card's own expiry timer can render the change.
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    // The card alone (no page, no polls): only the card's own expiry timer can render the change. The clock moves only
+    // when the test moves it (no real time leaks in), so the boundary a second before the window closes is exact.
+    vi.useFakeTimers();
     try {
       const now = Date.now();
       const LEFT = 60_000;
