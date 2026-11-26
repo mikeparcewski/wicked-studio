@@ -38,8 +38,10 @@ import { useSystemStore } from '../../store/systemSnapshot.js';
  *
  * SNOOZE (crew#1124, DES §6 item 6): a single item can be snoozed for an hour, until tomorrow 9:00 or for three days.
  * It leaves the folders and the count until then, or sooner when it gets worse (`board/deskSnooze.ts`), and waits in
- * a Snoozed folder with its end time and Wake now. It stays in crew's attention read; only this inbox defers it. A
- * daemon without the snooze route offers none.
+ * a Snoozed folder with its end time and Wake now. With studio's own key it stays in crew's attention read and only
+ * this inbox defers it; on a ranked crew a row whose run crew lists a snooze for is snoozed with crew's key, and a run
+ * crew holds back is in Snoozed here too (studio#1430, `board/deskSnooze.ts`). A daemon without the snooze route
+ * offers none.
  *
  * Unread is this browser's own memory of which rows you opened (`localStorage`), said as such.
  */
@@ -90,12 +92,14 @@ export function DeskInbox({ rows: allRows, runs, navigate, now, settled, agentNa
   useEffect(() => { if (retrySnoozesAt !== null) void loadSnoozes(); }, [retrySnoozesAt, loadSnoozes]);
   // studio#1430: a run a ranked crew holds back for a snooze is snoozed here too, so the inbox counts what /needs counts.
   const snapshot = useSystemStore((st) => (st.mode === 'system' ? st.snapshot : null));
-  const held = useMemo(() => crewHeldRuns(snapshot), [snapshot]);
+  const held = useMemo(() => crewHeldRuns(snapshot, now), [snapshot, now]);
   const phone = usePhone();
   const { awake: rows, snoozed } = useMemo(() => splitSnoozed(allRows, snoozes.byKey, now, held), [allRows, snoozes.byKey, now, held]);
   const canSnooze = snoozes.phase === 'ready';
   const tabPrefix = useId();
   const tabId = (f: Folder): string => `${tabPrefix}-tab-${f}`;
+  // A snoozed item leaves the list with the control that had focus: focus goes to the All tab, unless it moved on.
+  const afterSnooze = (): void => { window.setTimeout(() => { if (focusLost(null)) document.getElementById(tabId('all'))?.focus(); }, 0); };
   const panelId = (f: Folder): string => `${tabPrefix}-panel-${f}`;
   const [selected, setSelected] = useState<string | null>(null);
   const [seen, setSeen] = useState<Set<string>>(readSeen);
@@ -142,10 +146,10 @@ export function DeskInbox({ rows: allRows, runs, navigate, now, settled, agentNa
     selectedKey: current?.key ?? null,
     onSelect: open,
     ageWords: (t) => (t === null ? '' : relTime(t, now)),
-    // studio#1430 F5: on a phone the reading pane is hidden, so the row carries its own Snooze.
+    // studio#1430 F5: on a phone the reading pane is hidden, so the row carries its own Snooze (and the pane none).
     extra: (row) => {
       const target = canSnooze && phone ? snoozeTargetOf(row, snapshot) : null;
-      return target === null ? null : <span className="wk-inbox-row-snooze" data-testid="desk-inbox-row-snooze"><SnoozeAct key={target.key} target={target} now={now} /></span>;
+      return target === null ? null : <span className="wk-inbox-row-snooze" data-testid="desk-inbox-row-snooze"><SnoozeAct key={target.key} target={target} now={now} onSnoozed={afterSnooze} /></span>;
     },
   };
 
@@ -192,7 +196,7 @@ export function DeskInbox({ rows: allRows, runs, navigate, now, settled, agentNa
           {queue.rows.length > 0 && (
             <div className="wk-inbox-pane" data-testid="desk-inbox-pane" aria-live="polite">
               {current === null ? <p className="wk-viz-state">Pick an item to read it here.</p> : (
-                <ReadingPane row={current} view={runOf(current)} queueAct={queue.act} navigate={navigate} now={now} agentName={agentName} canSnooze={canSnooze} snapshot={snapshot} />
+                <ReadingPane row={current} view={runOf(current)} queueAct={queue.act} navigate={navigate} now={now} agentName={agentName} canSnooze={canSnooze && !phone} snapshot={snapshot} onSnoozed={afterSnooze} />
               )}
             </div>
           )}
@@ -227,7 +231,20 @@ function usePhone(): boolean {
 }
 
 /** Re-read /system after a crew-held snooze or wake: crew moved the item, so /needs, the badge and this inbox follow. */
-const reread = (): void => { void useSystemStore.getState().refresh({ force: true }); };
+const reread = (): Promise<void> => useSystemStore.getState().refresh({ force: true }).then(() => undefined, () => undefined);
+
+/** After crew woke a held item: drop it from the last snapshot read at once, then read /system again, so a re-read that
+ *  fails leaves the woken run awake, never held by the stale snapshot. */
+const forgetHeld = (wakeKey: string): void => {
+  useSystemStore.setState((st) => (st.snapshot === null ? {} : { snapshot: { ...st.snapshot, snoozed: (st.snapshot.snoozed ?? []).filter((h) => h.wakeKey !== wakeKey) } }));
+  void reread();
+};
+
+/** Focus that nobody holds (the control that had it left the page), so a settled snooze may place it. */
+const focusLost = (box: HTMLElement | null): boolean => {
+  const a = document.activeElement;
+  return a === null || a === document.body || (box !== null && box.contains(a));
+};
 
 function SnoozedItem({ item: { row, until, wakeKey, crew }, now, navigate }: { item: SnoozedRow; now: number; navigate: Navigate }): React.ReactElement {
   const wake = useDeskSnoozes((st) => st.wake);
@@ -241,7 +258,7 @@ function SnoozedItem({ item: { row, until, wakeKey, crew }, now, navigate }: { i
       {until !== null && <span className="wk-viz-meta" data-testid="desk-inbox-snoozed-until">Back {snoozeEndWords(until, now)}</span>}
       {wakeKey !== null && (
         <button type="button" data-testid="desk-inbox-wake" className="wk-btn wk-btn--quiet wk-btn--sm" disabled={state.kind === 'sending'}
-          onClick={() => { setState({ kind: 'sending' }); void wake(wakeKey).then((why) => { setState(why === null ? { kind: 'idle' } : { kind: 'failed', words: why }); if (why === null && crew) reread(); }); }}>
+          onClick={() => { setState({ kind: 'sending' }); void wake(wakeKey).then((why) => { setState(why === null ? { kind: 'idle' } : { kind: 'failed', words: why }); if (why === null && crew) forgetHeld(wakeKey); }); }}>
           Wake now
         </button>
       )}
@@ -253,20 +270,25 @@ function SnoozedItem({ item: { row, until, wakeKey, crew }, now, navigate }: { i
 /** Snooze the item in the reading pane: the ends offered, then what happened. */
 /** Snooze in the reading pane (and on a phone's row). Mounted per snooze key, so a new occurrence starts fresh. A run crew
  *  has an item for snoozes with crew's key (studio#1430 F4), so crew holds it back everywhere, then /system is re-read. */
-function SnoozeAct({ target, now }: { target: { key: string; rank: number; crew: boolean }; now: number }): React.ReactElement {
+function SnoozeAct({ target, now, onSnoozed }: { target: { key: string; rank: number; crew: boolean }; now: number; onSnoozed: () => void }): React.ReactElement {
   const snooze = useDeskSnoozes((st) => st.snooze);
   const [state, setState] = useState<{ kind: 'idle' | 'choose' | 'sending' } | { kind: 'failed'; words: string }>({ kind: 'idle' });
+  const box = useRef<HTMLSpanElement>(null);
   const opener = useRef<HTMLButtonElement>(null);
   const firstChoice = useRef<HTMLButtonElement>(null);
   const backToOpener = useRef(false);
-  // Keyboard: the choices take focus when they open; Cancel or a refusal hands it back to Snooze.
+  // Keyboard: the choices take focus when they open; Cancel or a refusal hands it back to Snooze, unless the person
+  // has moved on meanwhile (a refusal can land after they did).
   useEffect(() => {
     if (state.kind === 'choose') firstChoice.current?.focus();
-    else if (state.kind === 'failed' || (state.kind === 'idle' && backToOpener.current)) { backToOpener.current = false; opener.current?.focus(); }
+    else if (state.kind === 'failed' || (state.kind === 'idle' && backToOpener.current)) {
+      backToOpener.current = false;
+      if (focusLost(box.current)) opener.current?.focus();
+    }
   }, [state.kind]);
   if (state.kind === 'idle' || state.kind === 'failed') {
     return (
-      <span className="wk-inbox-snooze">
+      <span ref={box} className="wk-inbox-snooze">
         <button ref={opener} type="button" data-testid="desk-inbox-snooze" className="wk-btn wk-btn--quiet wk-btn--sm" onClick={() => setState({ kind: 'choose' })}>
           <AlarmClock size={13} aria-hidden />Snooze
         </button>
@@ -275,13 +297,18 @@ function SnoozeAct({ target, now }: { target: { key: string; rank: number; crew:
     );
   }
   return (
-    <span className="wk-inbox-snooze" role="group" aria-label="Snooze until">
+    <span ref={box} className="wk-inbox-snooze" role="group" aria-label="Snooze until">
       {snoozeChoices(now).map((c, i) => (
         <button key={c.id} ref={i === 0 ? firstChoice : undefined} type="button" data-testid={`desk-inbox-snooze-${c.id}`} className="wk-btn wk-btn--secondary wk-btn--sm" disabled={state.kind === 'sending'}
           onClick={() => {
             setState({ kind: 'sending' });
             // Done: the item leaves the list (and this pane with it); were it still shown, the controls settle back.
-            void snooze(target.key, c.until, target.rank).then((why) => { setState(why === null ? { kind: 'idle' } : { kind: 'failed', words: why }); if (why === null && target.crew) reread(); });
+            void snooze(target.key, c.until, target.rank).then(async (why) => {
+              setState(why === null ? { kind: 'idle' } : { kind: 'failed', words: why });
+              if (why !== null) return;
+              if (target.crew) await reread();
+              onSnoozed();
+            });
           }}>
           {c.label}
         </button>
@@ -312,8 +339,9 @@ function snippetOf(row: NeedRow, v: SessionView | null): string {
   return v !== null ? jobTitle(v.session) : plainRunTitle(row.subject);
 }
 
-function ReadingPane({ row, view, queueAct, navigate, now, agentName, canSnooze, snapshot }: {
+function ReadingPane({ row, view, queueAct, navigate, now, agentName, canSnooze, snapshot, onSnoozed }: {
   snapshot: SystemSnapshot | null;
+  onSnoozed: () => void;
   row: NeedRow;
   view: SessionView | null;
   queueAct: (a: NeedRow['action'], key?: string) => void;
@@ -408,7 +436,7 @@ function ReadingPane({ row, view, queueAct, navigate, now, agentName, canSnooze,
               : <button type="button" className="wk-btn wk-btn--primary wk-btn--sm" onClick={() => queueAct(a, row.key)}>{deskVerb(a.label)}</button>}
           </div>
         )}
-        {canSnooze && ((t) => t !== null && <div className="wk-inbox-read-acts" data-testid="desk-inbox-snooze-row"><SnoozeAct key={t.key} target={t} now={now} /></div>)(snoozeTargetOf(row, snapshot))}
+        {canSnooze && ((t) => t !== null && <div className="wk-inbox-read-acts" data-testid="desk-inbox-snooze-row"><SnoozeAct key={t.key} target={t} now={now} onSnoozed={onSnoozed} /></div>)(snoozeTargetOf(row, snapshot))}
       </div>
     </article>
   );

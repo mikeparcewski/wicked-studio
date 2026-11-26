@@ -121,7 +121,7 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
   const causes = useRowHeadlines(items ?? NO_ITEMS, runs);
   const tidy = useMemo(() => projectUnresolved(snapshot, ids), [snapshot, ids]);
   // studio#1430: what crew holds back for a snooze is said, so "Nothing here is waiting" never hides it.
-  const snoozedHere = useMemo(() => [...crewHeldRuns(snapshot).keys()].filter((id) => ids.has(id)).length, [snapshot, ids]);
+  const snoozedHere = useMemo(() => [...crewHeldRuns(snapshot, now).keys()].filter((id) => ids.has(id)).length, [snapshot, ids, now]);
   const tidySpend = tidy.some((u) => u.costUsd !== null) ? tidy.reduce((n, u) => n + (u.costUsd ?? 0), 0) : null;
   const folded = useMemo(() => attentionRows(needRows.filter((r) => {
     const id = needRunId(r);

@@ -79,6 +79,7 @@ const failed = (i: number): NeedRow => ({
 });
 
 let calls: Array<{ method: string; url: string; body: unknown }>;
+let snoozes: Array<{ key: string; until: string; severity: number | null; at: string; by: string }>;
 const json = (b: unknown, status = 200): Response => new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } });
 const refresh = vi.fn(async () => undefined);
 
@@ -89,14 +90,20 @@ beforeEach(() => {
   useSystemStore.setState({ mode: 'system', snapshot: snap(), refresh } as never);
   useGateStore.setState({ gates: {} });
   calls = [];
+  snoozes = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET';
     const body = init?.body !== undefined ? JSON.parse(String(init.body)) as { until: string; severity?: number } : undefined;
     calls.push({ method, url, body });
     const key = decodeURIComponent(url.split('/desk/snoozes/')[1] ?? '');
-    if (url.endsWith('/desk/snoozes') && method === 'GET') return json({ snoozes: [] });
-    if (method === 'PUT') return json({ key, until: body!.until, severity: body!.severity ?? null, at: iso(NOW), by: 'operator' });
-    if (method === 'DELETE') return json({ key, woken: true });
+    // crew's /desk/snoozes (packages/crew/src/api/desk-snoozes.ts): the PUT stores and answers the snooze, the list reads them.
+    if (url.endsWith('/desk/snoozes') && method === 'GET') return json({ snoozes });
+    if (method === 'PUT') {
+      const s = { key, until: body!.until, severity: body!.severity ?? null, at: iso(NOW), by: 'operator' };
+      snoozes = [...snoozes.filter((x) => x.key !== key), s];
+      return json(s);
+    }
+    if (method === 'DELETE') { snoozes = snoozes.filter((x) => x.key !== key); return json({ key, woken: true }); }
     return json({ error: 'Not Found' }, 404);
   }));
 });
@@ -106,13 +113,17 @@ const props = { runs: RUNS, navigate: vi.fn(), now: NOW, settled: 'complete' as 
 const listed = (): string[] => screen.queryAllByTestId('desk-inbox-row').map((b) => b.getAttribute('data-key') ?? '');
 const heldKey = (): string => rowsOf().find((r) => r.key.endsWith('290a7fee'))!.key;
 const awakeKey = (): string => rowsOf().find((r) => r.key.endsWith('68c26704'))!.key;
+/** A window `phone` ? 390 : 1440 px wide: each width query answers as it would there (the inbox reads 767 and 768). */
 const phoneWidth = (phone: boolean): void => {
-  vi.stubGlobal('matchMedia', (q: string) => ({ matches: phone && q === '(max-width: 767px)', media: q, onchange: null,
+  const width = phone ? 390 : 1440;
+  const fits = (q: string): boolean => [...q.matchAll(/\((max|min)-width:\s*(\d+)px\)/gu)].every(([, side, px]) => (side === 'max' ? width <= Number(px) : width >= Number(px)));
+  vi.stubGlobal('matchMedia', (q: string) => ({ matches: /width/u.test(q) && fits(q), media: q, onchange: null,
     addEventListener: () => undefined, removeEventListener: () => undefined, addListener: () => undefined, removeListener: () => undefined, dispatchEvent: () => false }));
 };
 
 describe('studio#1430 F1: a project inbox treats the run crew holds back as snoozed', () => {
   it('the held run leaves the list and the count, waits in Snoozed with crew\'s end, and Wake sends the held wakeKey', async () => {
+    refresh.mockImplementation(async () => { useSystemStore.setState({ snapshot: snap({ attention: [GATE, HELD], snoozed: [] }) }); });
     render(<DeskInbox rows={[...rowsOf(), failed(2)]} {...props} />);
     await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
     await waitFor(() => expect(listed()).not.toContain(heldKey()));
@@ -126,8 +137,32 @@ describe('studio#1430 F1: a project inbox treats the run crew holds back as snoo
     await act(async () => { fireEvent.click(within(item).getByTestId('desk-inbox-wake')); });
     await waitFor(() => expect(calls.some((c) => c.method === 'DELETE')).toBe(true));
     expect(calls.find((c) => c.method === 'DELETE')!.url.endsWith(`/desk/snoozes/${encodeURIComponent(HELD.snooze.key)}`)).toBe(true);
-    // crew moved the item back: /system is read again, so the inbox, /needs and the badge follow.
-    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    // crew moved the item back: /system is read again (forced: a read already out may predate the wake), so the inbox,
+    // /needs and the badge follow.
+    await waitFor(() => expect(refresh).toHaveBeenCalledWith({ force: true }));
+    await act(async () => { fireEvent.click(screen.getByTestId('desk-inbox-folder-all')); });
+    await waitFor(() => expect(listed()).toEqual(expect.arrayContaining(['group:approval', 'fail:run-2'])));
+    expect(screen.getByTestId('desk-inbox-count')).not.toHaveTextContent('snoozed');
+  });
+
+  it('a woken run stays awake when the re-read fails: the last snapshot no longer holds it (codex r1)', async () => {
+    refresh.mockRejectedValue(new Error('crew did not answer'));
+    render(<DeskInbox rows={[...rowsOf(), failed(2)]} {...props} />);
+    await waitFor(() => expect(listed()).not.toContain(heldKey()));
+    await act(async () => { fireEvent.click(screen.getByTestId('desk-inbox-folder-snoozed')); });
+    await act(async () => { fireEvent.click(within(screen.getByTestId('desk-inbox-snoozed-item')).getByTestId('desk-inbox-wake')); });
+    await waitFor(() => expect(refresh).toHaveBeenCalledWith({ force: true }));
+    expect(useSystemStore.getState().snapshot?.snoozed ?? []).toEqual([]);
+    await act(async () => { fireEvent.click(screen.getByTestId('desk-inbox-folder-all')); });
+    await waitFor(() => expect(listed()).toContain('group:approval'));
+  });
+
+  it('a hold whose end has passed holds nothing, even in the last snapshot read (a failed re-read keeps it)', async () => {
+    useSystemStore.setState({ snapshot: snap({ snoozed: [{ ...HELD, until: iso(NOW - 1) }] }) });
+    render(<DeskInbox rows={[...rowsOf(), failed(2)]} {...props} />);
+    await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
+    await waitFor(() => expect([...listed()].sort()).toEqual(['fail:run-2', 'group:approval']));
+    expect(screen.getByTestId('desk-inbox-count')).not.toHaveTextContent('snoozed');
   });
 
   it('an older crew (no ranked snapshot) holds nothing back', async () => {
@@ -140,7 +175,7 @@ describe('studio#1430 F1: a project inbox treats the run crew holds back as snoo
   });
 
   it('the project\'s count leaves the held run out', () => {
-    vi.useFakeTimers();
+    vi.useFakeTimers({ now: NOW });
     try {
       resetSettledNeedsForTest();
       const t = Date.now();
@@ -170,9 +205,12 @@ describe('studio#1430 F3: the peek never jumps to the run crew holds back', () =
     return <span data-testid="peek-run" data-run={view.target?.runId ?? 'none'} />;
   }
   beforeEach(() => {
+    // The peek reads the clock (a hold ends at its `until`): this file's NOW.
+    vi.useFakeTimers({ now: NOW, toFake: ['Date'] });
     useGateStore.setState({ gates });
     useMembershipStore.setState({ projectIdByRun: {}, attachedAtByRun: {} });
   });
+  afterEach(() => { vi.useRealTimers(); });
 
   it('the awake gate is the top item, though the held one is older', () => {
     render(<Peek rows={rowsOf()} />);
@@ -199,7 +237,7 @@ describe('studio#1430 F4: a gate snoozed in the inbox uses crew\'s key, so crew 
     const put = calls.find((c) => c.method === 'PUT')!;
     expect(put.url.endsWith(`/desk/snoozes/${encodeURIComponent(GATE.snooze.key)}`)).toBe(true);
     expect(put.body).toEqual({ until: iso(NOW + H), severity: 101 });
-    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    await waitFor(() => expect(refresh).toHaveBeenCalledWith({ force: true }));
     await waitFor(() => expect(listed()).toEqual([]));
     expect(screen.getByTestId('desk-inbox-count')).toHaveTextContent('1 snoozed');
   });
@@ -215,6 +253,34 @@ describe('studio#1430 F5: on a phone each row carries its own Snooze', () => {
     await act(async () => { fireEvent.click(within(own).getByTestId('desk-inbox-snooze-hour')); });
     await waitFor(() => expect(calls.some((c) => c.method === 'PUT')).toBe(true));
     expect(calls.find((c) => c.method === 'PUT')!.url.endsWith(`/desk/snoozes/${encodeURIComponent(snoozeKey(failed(1)))}`)).toBe(true);
+    // The row left with the control that had focus: focus goes to the All tab (codex r1).
+    await waitFor(() => expect(listed()).toEqual([]));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('desk-inbox-folder-all')));
+  });
+
+  it('a refusal that lands after the person moved on leaves their focus where it is (codex r1)', async () => {
+    phoneWidth(true);
+    let refuse: (r: Response) => void = () => undefined;
+    const base = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (url, init) => (init?.method === 'PUT' ? new Promise<Response>((r) => { refuse = r; }) : base(url as string, init)));
+    render(<DeskInbox rows={[failed(1), failed(2)]} {...props} runs={[]} />);
+    await waitFor(() => expect(screen.getAllByTestId('desk-inbox-row-snooze')).toHaveLength(2));
+    const own = screen.getAllByTestId('desk-inbox-row-snooze')[0]!;
+    await act(async () => { fireEvent.click(within(own).getByTestId('desk-inbox-snooze')); });
+    await act(async () => { fireEvent.click(within(own).getByTestId('desk-inbox-snooze-hour')); });
+    const elsewhere = screen.getByTestId('desk-inbox-folder-all');
+    act(() => { elsewhere.focus(); });
+    await act(async () => { refuse(json({ code: 'human_operator_only', error: 'Only a person may snooze.' }, 403)); });
+    await waitFor(() => expect(within(own).getByTestId('desk-inbox-snooze-failed')).toBeInTheDocument());
+    expect(document.activeElement).toBe(elsewhere);
+  });
+
+  it('on a phone an opened row has one Snooze: the hidden reading pane draws none (pi r1)', async () => {
+    phoneWidth(true);
+    render(<DeskInbox rows={[failed(1)]} {...props} runs={[]} />);
+    await waitFor(() => expect(screen.getByTestId('desk-inbox-row-snooze')).toBeInTheDocument());
+    await act(async () => { fireEvent.click(screen.getAllByTestId('desk-inbox-row')[0]!); });
+    expect(screen.getAllByTestId('desk-inbox-snooze')).toHaveLength(1);
   });
 
   it('at 1440 the reading pane carries it, so the row does not', async () => {
@@ -222,6 +288,8 @@ describe('studio#1430 F5: on a phone each row carries its own Snooze', () => {
     render(<DeskInbox rows={[failed(1)]} {...props} runs={[]} />);
     await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
     await waitFor(() => expect(listed()).toEqual(['fail:run-1']));
+    await act(async () => { fireEvent.click(screen.getAllByTestId('desk-inbox-row')[0]!); });
+    expect(within(screen.getByTestId('desk-inbox-read')).getByTestId('desk-inbox-snooze')).toBeInTheDocument();
     expect(screen.queryByTestId('desk-inbox-row-snooze')).toBeNull();
   });
 });

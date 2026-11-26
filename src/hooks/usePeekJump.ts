@@ -82,14 +82,15 @@ export function usePeekJump(runs: SessionView[], navigate: Navigate, rows: reado
   const target = useMemo(() => {
     // studio#1430 F3: a run a ranked crew holds back for a snooze is never the peek's "what needs you": not its
     // rows, and not its live gate either (peekTarget's not-yet-queued gate reads the gate store).
-    const held = crewHeldRuns(snapshot);
+    const now = Date.now();
+    const held = crewHeldRuns(snapshot, now);
     // A gate that already has a decision (queued, in flight, answered) is never peeked again.
     const decided = (id: string): boolean => {
       if (held.has(id)) return true;
       const cur = decisions[id];
       return cur !== undefined && (cur.queued || cur.busy || cur.answered !== null);
     };
-    return peekTarget({ rows: withoutCrewHeld(rows, snapshot), gates, runs, projectIdByRun, decided });
+    return peekTarget({ rows: withoutCrewHeld(rows, snapshot, now), gates, runs, projectIdByRun, decided });
   }, [rows, runs, gates, projectIdByRun, decisions, snapshot]);
 
   // The handlers live in a stable entry table; they read the current world through refs.

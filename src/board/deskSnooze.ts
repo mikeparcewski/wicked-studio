@@ -8,7 +8,12 @@
  *   no gate frame or read names the occurrence) and a steer ask (its id is minted by this browser).
  * - A snooze is in force while its end is still ahead AND the item is no worse than when it was snoozed: the row's
  *   rank now ({@link snoozeRank}) is at most the rank stored with the snooze. One that gets worse comes back at once.
- * - It only defers the item on the Desk's inbox: the item stays in crew's attention read.
+ * - Such a studio-key snooze only defers the item on the Desk's inbox: the item stays in crew's attention read.
+ * - (studio#1430) A ranked crew snoozes too: an attention item it marks with `snooze: {key, rank}` (a run's own open
+ *   gate) is snoozed with crew's key, so crew holds it out of `attention[]` (and /needs, the badge and every count) and
+ *   lists it in `snoozed[]`. {@link snoozeTargetOf} picks crew's key wherever crew has one for the row's run, which is
+ *   how a gate, never snoozable with studio's own key, gets a Snooze on a ranked crew. Every surface that reads
+ *   studio's fold treats a run crew holds ({@link crewHeldRuns}) as snoozed; Wake ends it by the held item's key.
  */
 
 import type { NeedRow } from './needsYou.js';
@@ -45,11 +50,15 @@ export function snoozeOf(row: NeedRow, byKey: Readonly<Record<string, DeskSnooze
 }
 
 /** (studio#1430) The runs a ranked crew holds back for a person's snooze (`/system.snoozed[]`), each with its held item.
- *  Empty against an older crew, whose `attention` holds nothing back. */
-export function crewHeldRuns(snapshot: SystemSnapshot | null): ReadonlyMap<string, SystemSnoozed> {
+ *  A hold whose end has passed by `now` is over, even when the snapshot that listed it is the last one read (a failed
+ *  re-read keeps it), so a stale snapshot never hides a run past its end. Empty against an older crew. */
+export function crewHeldRuns(snapshot: SystemSnapshot | null, now: number): ReadonlyMap<string, SystemSnoozed> {
   const out = new Map<string, SystemSnoozed>();
   if (snapshot === null || snapshot.ranked !== true) return out;
-  for (const h of snapshot.snoozed ?? []) if (h.runId != null && !out.has(h.runId)) out.set(h.runId, h);
+  for (const h of snapshot.snoozed ?? []) {
+    if (h.runId == null || out.has(h.runId) || (h.until !== null && h.until <= now)) continue;
+    out.set(h.runId, h);
+  }
   return out;
 }
 
@@ -60,8 +69,8 @@ export function crewHeldOf(row: NeedRow, held: ReadonlyMap<string, SystemSnoozed
 }
 
 /** The rows whose run no ranked crew holds back (studio#1430): what a project's count counts. */
-export function withoutCrewHeld(rows: readonly NeedRow[], snapshot: SystemSnapshot | null): NeedRow[] {
-  const held = crewHeldRuns(snapshot);
+export function withoutCrewHeld(rows: readonly NeedRow[], snapshot: SystemSnapshot | null, now: number): NeedRow[] {
+  const held = crewHeldRuns(snapshot, now);
   return held.size === 0 ? [...rows] : rows.filter((r) => crewHeldOf(r, held) === null);
 }
 
