@@ -16,12 +16,13 @@ const { useGateStore } = await import('../src/store/gates.js');
 const { useSessionDrafts } = await import('../src/store/sessionDrafts.js');
 const { setCachedRoster } = await import('../src/store/rosterCache.js');
 const { jobTitle } = await import('../src/board/deskWords.js');
+const { RunTab } = await import('../src/components/session/RunTab.js');
 const { makeUnit, makeView } = await import('./factories.js');
 
 const T0 = Date.now() - 600_000;
 const CHAT = 'chat-polish';
 /** The job: a polish run launched from New job (no chat message), reviewing. */
-const JOB = makeView({ id: 'r-job', status: 'executing', problem: 'polish the math helpers', workflow_id: 'polish', unit_ix: 2, chat_id: CHAT, created_at: T0 / 1000 } as never, [
+const JOB = makeView({ id: 'r-job', status: 'executing', problem: 'polish the math helpers', workflow_id: 'polish', unit_ix: 1, chat_id: CHAT, created_at: T0 / 1000 } as never, [
   makeUnit({ id: 'r-job:u1', session_id: 'r-job', ord: 1, status: 'done', stage: 'build', assigned_cli: 'claude', description: 'build — polish' }),
   makeUnit({ id: 'r-job:u2', session_id: 'r-job', ord: 2, status: 'distributed', stage: 'review', assigned_cli: 'codex', description: 'review — polish' }),
   makeUnit({ id: 'r-job:u3', session_id: 'r-job', ord: 3, status: 'pending', stage: 'review', assigned_cli: 'pi', description: 'review — polish' }),
@@ -76,5 +77,14 @@ describe('a job\'s page with an ask answered beside it', () => {
   it('a chat that is only asks keeps its own title and "Answered" (unchanged)', async () => {
     render(<SessionPage sessionId={CHAT} runs={[ASK]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
     await waitFor(() => expect(screen.getByTestId('session-title').textContent).toContain('For the reviewer'));
+  });
+});
+
+describe('Details opens on the job, not the ask', () => {
+  it('its progress is the job\'s steps (step 2 of 3), never the ask\'s "1 of 1"', async () => {
+    render(<RunTab runs={[JOB, ASK]} sessionId={CHAT} title="polish the math helpers" navigate={() => {}} />);
+    const progress = await screen.findByTestId('run-tab-glance-progress');
+    expect(progress.textContent).toMatch(/2 of 3/);
+    expect(progress.textContent).not.toMatch(/1 of 1/);
   });
 });
