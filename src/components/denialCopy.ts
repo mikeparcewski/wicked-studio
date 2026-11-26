@@ -12,6 +12,8 @@
  * stamped by the `wicked-governance-phase-scope` evaluator and carry an `engine:` rule id.
  */
 
+import { seatKeyName, standInBase } from '../board/seatNames.js';
+
 /** The structured denial as 0.7.6+ engines spell it (either casing survives the wire). */
 export interface StructuredDenial {
   source?: string;
@@ -101,6 +103,7 @@ function blockedWrites(raw: string): string {
  */
 export function sandboxOwner(cli: string | null | undefined, roster: readonly { key: string; display_name?: string | null }[] | null): string {
   if (cli === null || cli === undefined || cli === '') return 'The helper';
+  if (standInBase(cli) !== null) return seatKeyName(cli, roster);
   const label = roster?.find((r) => r.key === cli)?.display_name;
   const name = label !== null && label !== undefined && label !== '' ? label : (cli.split('#')[0] ?? cli);
   return name.charAt(0).toUpperCase() + name.slice(1);

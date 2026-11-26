@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { plainGateQuestion } from '../../board/deskWords.js';
-import { seatLabel } from '../../board/seatNames.js';
+import { cliLabel, seatKeyName, seatLabel, standInBase } from '../../board/seatNames.js';
 import { api, downloadRunEvidence } from '../../api/client.js';
 import { executingOrd as rawExecutingOrd } from '../../api/run-state.js';
 import { isHeldRun } from '../../board/heldRuns.js';
@@ -189,7 +189,7 @@ function StepSheet({ r, tab, runs, navigate }: { r: Extract<ObjectRef, { kind: '
       {messaging && can === null && <MessageBox runId={r.runId} target={unit?.assigned_cli ?? 'all'} can={can} />}
       {tab === 'happening' && (
         <div data-testid="sheet-happening" className="wk-sheet-section">
-          <p className="wk-sheet-line"><b>{name}</b> is {unit !== null ? (unit.ord === live ? 'working' : UNIT_WORD[unit.status] ?? unit.status) : 'not started'}{unit?.assigned_cli ? ` · ${unit.assigned_cli}` : ''}.</p>
+          <p className="wk-sheet-line"><b>{name}</b> is {unit !== null ? (unit.ord === live ? 'working' : UNIT_WORD[unit.status] ?? unit.status) : 'not started'}{unit?.assigned_cli ? ` · ${seatKeyName(unit.assigned_cli, null)}` : ''}.</p>
           {unit !== null && unit.ord === live && <LiveNarration runId={r.runId} ord={unit.ord} phase={name} />}
           {unit === null && <p className="wk-session-grey">Nothing has run for this step yet.</p>}
           {/* DC-S8 (B10): the rules this step was given — considered · set aside · cited (unchecked). */}
@@ -245,7 +245,8 @@ function SeatFacts({ seat, navigate }: { seat: RosterSeat | undefined; navigate:
 function HelperSheet({ r, tab, runs, navigate }: { r: Extract<ObjectRef, { kind: 'helper' }>; tab: string; runs: SessionView[]; navigate: Navigate }): React.ReactElement {
   const view = runs.find((v) => v.session.id === r.runId) ?? null;
   const roster = useRoster();
-  const seat = roster?.find((s) => s.key === r.cli);
+  // A stand-in (`claude~1`) is its base helper checking again: its sign-in facts are the base seat's (studio#1437).
+  const seat = roster?.find((s) => s.key === (standInBase(r.cli) ?? r.cli));
   const units = (view?.units ?? []).filter((u) => u.assigned_cli === r.cli).sort((a, b) => a.ord - b.ord);
   const live = view !== null ? executingOrd(view.session, view.units) : null;
   const liveUnit = units.find((u) => u.ord === live) ?? null;
@@ -254,7 +255,7 @@ function HelperSheet({ r, tab, runs, navigate }: { r: Extract<ObjectRef, { kind:
   const can = view === null || !MESSAGEABLE.has(view.session.status) ? 'It is not working right now, so it cannot read a message.' : null;
   return (
     <Sheet
-      title={seat?.display_name || r.cli}
+      title={standInBase(r.cli) !== null ? seatKeyName(r.cli, roster) : seat?.display_name || r.cli}
       sub={view !== null ? `on “${sheetTitle(view.session.problem ? sessionTitle([], [view]) : 'This session')}”` : null}
       objectAttr={objectAttr(r)}
       tabs={SHEET_TABS.helper}
@@ -416,7 +417,7 @@ export function StepsList({ view }: { view: SessionView }): React.ReactElement {
         return (
           <li key={u.id} data-testid="sheet-step-row" data-ord={u.ord} data-status={u.status} className="wk-sheet-line" data-object={objectAttr(ref)}>
             <button type="button" data-testid="sheet-step-open" aria-label={`What ${stepName(u)} did`} onClick={() => useSheets.setState({ open: { ref, tab: 'did' } })} className="wk-link">
-              {stepName(u)}{again ? ' (again)' : ''} — {word}{u.assigned_cli && !isCommandPath(u.assigned_cli) ? ` · ${u.assigned_cli}` : ''}
+              {stepName(u)}{again ? ' (again)' : ''} — {word}{u.assigned_cli && !isCommandPath(u.assigned_cli) ? ` · ${standInBase(u.assigned_cli) !== null ? cliLabel(u.assigned_cli) : u.assigned_cli}` : ''}
             </button>
             {u.denial_reason ? <TechDetails data-testid="sheet-step-why" text={u.denial_reason} /> : null}
           </li>

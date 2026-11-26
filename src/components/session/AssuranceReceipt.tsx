@@ -8,6 +8,7 @@ import { useDisplayText } from '../../hooks/useHomePath.js';
 import { TechDetails } from '../ui/index.js';
 import { FLOOR_OVERRIDDEN_LABEL, isToolCheckOverride, overrideLabel, overrideWhere } from '../../board/floorOverride.js';
 import { stepWord } from '../../board/runConversation.js';
+import { seatKeyName } from '../../board/seatNames.js';
 
 /** "you" opens a sentence as "You"; a person's own id is said as recorded. */
 const capitalize = (s: string): string => (s === 'you' ? 'You' : s);
@@ -160,9 +161,9 @@ const NO_RULING_CODE = /\b(?:no_quorum|timeout|seats_benched|cap|error|incomplet
  *  council's. A disputed row says nothing here: its reason says why no ruling stands. */
 function howWords(r: RuleRow): string {
   const ruled = councilRulingOf(r);
-  const arbiter = r.council?.arbiter;
+  const arbiter = r.council?.arbiter !== undefined ? seatShown(r.council.arbiter) : undefined;
   if (ruled !== null) {
-    const who = [ruled.seats.join(', '), ...(ruled.uncounted.length > 0 ? [`${ruled.uncounted.join(', ')} not counted`] : [])].filter((x) => x !== '').join('; ');
+    const who = [ruled.seats.map(seatShown).join(', '), ...(ruled.uncounted.length > 0 ? [`${ruled.uncounted.map(seatShown).join(', ')} not counted`] : [])].filter((x) => x !== '').join('; ');
     const seats = who !== '' ? ` (${who})` : '';
     const lead = arbiter !== undefined
       ? ruled.ruling === 'waived' ? `kept only on your instruction by one arbiter, ${arbiter}: confirm or skip it` : `settled by one arbiter: ${arbiter}`
@@ -173,12 +174,18 @@ function howWords(r: RuleRow): string {
   // A council row with no ruling it carries is never "by a judge (<the rule judge>)".
   if (r.how === 'council' || r.origin === 'council') return arbiter !== undefined ? `by one arbiter: ${arbiter}` : HOW_WORD['council']!;
   // A skip is the operator's, never a seat's.
-  return `${HOW_WORD[r.how] ?? r.how}${r.judge !== null && r.how !== 'operator' ? ` (${r.judge})` : ''}`;
+  return `${HOW_WORD[r.how] ?? r.how}${r.judge !== null && r.how !== 'operator' ? ` (${seatShown(r.judge)})` : ''}`;
+}
+
+/** A rule's seat key as shown: a stand-in (`claude~2`) is named, never bare (studio#1437); other keys as before. */
+/** A recorded seat key as said: a stand-in by its name and "(stand-in)", any other key as recorded. */
+function seatShown(seat: string): string {
+  return seatKeyName(seat, null);
 }
 
 /** One side's reading: "Rule judge (claude): broken, “…”". */
 function positionWords(p: RulePosition): string {
-  return `${BY_WORD[p.by] ?? p.by} (${p.seat !== '' ? p.seat : 'unknown seat'}): ${RULE_WORD[p.status] ?? p.status}`;
+  return `${BY_WORD[p.by] ?? p.by} (${p.seat !== '' ? seatShown(p.seat) : 'unknown seat'}): ${RULE_WORD[p.status] ?? p.status}`;
 }
 
 /** One rule's row: its verdict, how it was reached and why; a dispute's two readings and a council's votes under it. */
@@ -212,7 +219,7 @@ function RuleItem({ r }: { r: RuleRow }): React.ReactElement {
             <li data-testid="assurance-rule-votes">
               {c.arbiter !== undefined ? "Arbiter's vote:" : 'Council votes:'} {c.votes.map((v, i) => (
                 <span key={`v${i}`} data-testid="assurance-rule-vote" data-counted={v.counted ? 'true' : 'false'}>
-                  {i > 0 ? ' · ' : ''}{v.seat}: {v.status !== undefined ? RULE_WORD[v.status] ?? v.status : 'no vote'}
+                  {i > 0 ? ' · ' : ''}{seatShown(v.seat)}: {v.status !== undefined ? RULE_WORD[v.status] ?? v.status : 'no vote'}
                   {!v.counted && (v.status !== undefined ? ` (not counted${v.whyNot !== undefined ? `: ${showText(v.whyNot)}` : ''})` : v.whyNot !== undefined ? ` (${showText(v.whyNot)})` : '')}
                 </span>
               ))}
@@ -416,7 +423,7 @@ export function DeliveryAssuranceLines({ recorded, testIdPrefix }: { recorded: D
           {qe.status === 'waived' || qe.status === 'skipped'
             ? showText(qe.status === 'waived' ? `QE acceptance: waived (${qe.reason.replace(/^waived:\s*/, '')})` : qeSkippedText(qe.reason))
             : qe.satisfied
-              ? `QE acceptance: PASS${qe.reviewer !== null ? ` by ${qe.reviewer}` : ''}${qe.verdictId !== null ? ` (${qe.verdictId})` : ''}`
+              ? `QE acceptance: PASS${qe.reviewer !== null ? ` by ${seatShown(qe.reviewer)}` : ''}${qe.verdictId !== null ? ` (${qe.verdictId})` : ''}`
               : `QE acceptance not met: ${showText(qe.reason)}`}
         </p>
       )}

@@ -8,7 +8,7 @@ import { RunEventFeed, type EventsBatch } from '../../editors/runEvents.js';
 import { readThemeTokens } from '../../editors/theme.js';
 import { subscribeCoreEvents } from '../../hooks/eventTap.js';
 import { useRoster } from '../../hooks/useRoster.js';
-import { seatLabel } from '../../board/seatNames.js';
+import { seatKeyName } from '../../board/seatNames.js';
 import { stepLabelOf } from '../../board/chainModel.js';
 import { pickedUpStep } from '../../plugins/wicked-phase-report/workingDoc.js';
 import { pluginSectionOpen, sectionKey, type PluginSection } from '../../board/runPluginPanels.js';
@@ -88,10 +88,7 @@ export function RunPluginSection({ runId, plugin, section, live }: { runId: stri
   const said = useRunPluginView((s) => s.said);
   const roster = useRoster();
   const names = useRef<(cli: string) => string | null>(() => null);
-  names.current = (cli) => {
-    const seat = roster?.find((r) => r.key === cli);
-    return seat !== undefined ? seatLabel(seat) : null;
-  };
+  names.current = (cli) => seatKeyName(cli, roster, () => null);
   const frameBox = useRef<HTMLDivElement | null>(null);
   const phaseOrds = useRef<number[] | null>(phase?.ords ?? null);
   phaseOrds.current = phase?.ords ?? null;

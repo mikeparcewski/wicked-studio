@@ -50,6 +50,7 @@ import { offersSkipQeHere, skipQeAtDelivery, SKIP_QE_ACTION, SKIP_QE_GATE_TITLE,
 import { FACE_MAX, failingOnFace, failingSplit, standingFloor, type FailingOnFace, type FailingSplit } from './failingChecks.js';
 import { deliverLift } from '../components/deliverLiftModel.js';
 import { choiceTokens, contractChoices, type GateAction, type GateContext, type NotePolicy } from './gateContract.js';
+import { seatKeyName, standInBase } from './seatNames.js';
 
 /**
  * SESSION GATE ROW MODEL (S15e): pure classification and choice set for the session thread's
@@ -601,7 +602,7 @@ function withListed(model: GateRowModel, actions: readonly GateAction[], roster:
   // A listed answer the template has no control for (a consent choice its install frame does not name, a free-text
   // gate's Reject) gets the contract's own control, so the list is drawn whole.
   const drawn = new Set(choiceTokens([...choices, ...overflow]));
-  const label = (cli: string): string => roster?.find((r) => r.key === cli)?.display_name ?? cli;
+  const label = (cli: string): string => (standInBase(cli) !== null ? seatKeyName(cli, roster) : roster?.find((r) => r.key === cli)?.display_name ?? cli);
   const extra = contractChoices(actions.filter((a) => !drawn.has(a.action)), label, ctx);
   const added = [...extra.choices, ...extra.overflow];
   const rec = model.recommended !== null ? model.choices[model.recommended] : undefined;
@@ -635,7 +636,7 @@ const CONTRACT_EXEMPT: ReadonlySet<SessionGateReason> = new Set(['consent', 'fre
  * never ones the list offers; and the "isn't offered" lines are the template's inference, so they go with it.
  */
 function withContract(model: GateRowModel, actions: readonly GateAction[], roster: readonly RosterSeat[] | null, ctx: GateContext = {}): GateRowModel {
-  const label = (cli: string): string => roster?.find((r) => r.key === cli)?.display_name ?? cli;
+  const label = (cli: string): string => (standInBase(cli) !== null ? seatKeyName(cli, roster) : roster?.find((r) => r.key === cli)?.display_name ?? cli);
   const listedChoices = contractChoices(actions, label, ctx);
   // Where a note on an approve LANDS is the template's to know (studio#1170 review r1): a steer before a non-creator
   // step goes to the next creator (`amendScope: 'creator'`, `steerScopeTarget`). The listed steer keeps the template's
@@ -1121,7 +1122,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // a held rule is the gate's own cause, after Send back when another layer (or a broken rule) is.
     if (!rulesHold.behind) ruleChoices.forEach(addArm);
     if (rejudgeOffered) {
-      addArm({ key: 'rejudge', label: REJUDGE_LABEL, decision: { approve: true, action: REJUDGE_ACTION } as unknown as GateAnswer, note: 'none', title: rejudgeTitle(input.rejudge!, (k) => input.roster?.find((r) => r.key === k)?.display_name ?? k) });
+      addArm({ key: 'rejudge', label: REJUDGE_LABEL, decision: { approve: true, action: REJUDGE_ACTION } as unknown as GateAnswer, note: 'none', title: rejudgeTitle(input.rejudge!, (k) => (standInBase(k) !== null ? seatKeyName(k, input.roster) : input.roster?.find((r) => r.key === k)?.display_name ?? k)) });
     }
     if (deadSeat === null && deniedUnit) {
       addArm({ key: 'approve', label: 'Approve', decision: { approve: true }, note: 'none', title: 'Re-run the step from the start under the same policies; the captured output is not accepted.' });
