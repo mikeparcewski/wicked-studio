@@ -131,6 +131,22 @@ describe('a voice question carries what voice mode shows', () => {
     for (const t of titles.slice(0, 4)) expect(pack.split('\n').find((l) => l.includes(t))).toMatch(/\(not on screen\)$/);
   });
 
+  it('codex-check r2: when the tile keeps an earlier read (its poll failed), no job of the fresher read is called shown', async () => {
+    crewSays(normalizeSnapshot({ ...cert.body, runs: [{ ...WORKING, runId: 'r-old', title: 'Previous visible job' }] }), 4);
+    useDashStore.setState({ readError: 'crew did not answer' });
+    useSystemStore.setState({ snapshot: normalizeSnapshot({ ...cert.body, runs: [{ ...WORKING, runId: 'r-new', title: 'Fresh replacement job' }] }) } as never);
+    render(<Widget w={dashboardWidgets(null, []).find((w) => w.id === 'builtin.jobs')!} />);
+    const tile = screen.getByTestId('voice-widget-builtin.jobs').textContent ?? '';
+    expect(tile).toContain('Previous visible job');
+    expect(tile).not.toContain('Fresh replacement job');
+    await askByVoice();
+    await waitFor(() => expect(asked).toHaveLength(1));
+    const pack = asked[0]![1] as string;
+    expect(pack).toContain('shows an earlier read of the running jobs, so none below is on it');
+    expect(pack.split('\n').find((l) => l.includes('Fresh replacement job'))).toMatch(/\(not on screen\)$/);
+    expect(pack).not.toContain('Previous visible job');
+  });
+
   it('is read when the question is asked, not when voice mode opened', async () => {
     crewSays(CERT, 4);
     await askByVoice();

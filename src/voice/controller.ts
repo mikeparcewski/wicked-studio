@@ -870,7 +870,9 @@ function groundNow(): string {
   // (VoiceFullScreen); anywhere else no tile shows (codex delta on studio#1450).
   const d = useDashStore.getState();
   const tiles = useVoiceStore.getState().phase === 'full' && d.loaded ? dashboardWidgets(d.layout, d.widgets).map((w) => w.id) : [];
-  return voiceGround({ snapshot: freshSnapshot(now), needs, needsPhase: phase, count, now, tiles });
+  // The jobs tile renders the dashboard's own read; the pack's may be the app-wide one when that read's poll failed.
+  const snapshot = freshSnapshot(now);
+  return voiceGround({ snapshot, needs, needsPhase: phase, count, now, tiles, sameRead: snapshot !== null && snapshot === d.system });
 }
 
 async function askChat(question: string): Promise<void> {
