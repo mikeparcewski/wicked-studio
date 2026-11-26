@@ -12,6 +12,10 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+
+- A project's page no longer says "Nothing is running" while its own In progress list shows a Working job: the sentence counts the list's jobs, so a job a need only slows (a helper signed out) is counted. In progress rows on the project page and the Desk say the step the job's session says (the running step, else the first one not finished), not the count of finished steps plus one (studio#1440).
+
 ## [0.16.18] — 2026-11-25
 
 Patch release on the train-14 cut c705c91a, carrying 19 PRs since 0.16.17: #1391, #1392, #1393, #1394, #1395, #1398, #1396, #1403, #1404, #1409, #1407, #1412, #1410, #1408, #1413, #1420, #1415, #1421, #1422.

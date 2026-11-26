@@ -343,6 +343,14 @@ export function chainFromUnits(view: SessionView, opts: ChainOptions = {}): Chai
   return { source: 'units', steps, proposed: false, transportLine: null, ...counts(steps) };
 }
 
+/** The step a live run is on: the running one, else (waiting, or between steps) the first step not yet finished: a
+ *  step waiting on you at its gate is not "done", and the next one is not "now". The session's "Step x of y" and the
+ *  Desk's and a project's In progress rows read this one rule (studio#1440). Pure. */
+export function stepNow(chain: ChainModel): ChainStep | undefined {
+  return chain.steps.find((step) => step.state === 'running')
+    ?? chain.steps.find((step) => !['done', 'checked', 'replaced', 'struck'].includes(step.state));
+}
+
 /** Run clarity: the chain step a unit ran as — on a units chain the step is `u<ord>`; on a team chain
  *  it is the step whose id is the unit's phase id (a team step may itself be NAMED `u2`, so the `u<ord>`
  *  key is never read there — codex). `undefined` when the chain has no step for that unit. Pure. */

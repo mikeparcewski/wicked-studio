@@ -1,6 +1,7 @@
 import type { SessionView } from '../api/types.js';
 import { deliveryOf } from '../components/delivery.js';
 import { createdAtMs } from './windowStats.js';
+import { chainFromUnits, stepNow } from './chainModel.js';
 import { statusWord, type StatusWord } from './statusWords.js';
 import { deskVerb, jobTitle, plainRunTitle, repoNameOf } from './deskWords.js';
 import { leadAgentOf, workflowLabel, workflowOf } from './deskInsights.js';
@@ -132,6 +133,8 @@ export interface ProgressRow {
   word: StatusWord;
   tone: 'run' | 'gate';
   done: number;
+  /** The step it is on, 1-based: the session's own "Step x of y" rule (`stepNow` over its units; studio#1440). */
+  at: number;
   total: number;
   line: string;
   /** studio#1368: a working job crew calls quiet or stalled says so ("No output for 21 min", `useRowSilence`), never "Working". */
@@ -153,10 +156,16 @@ export function progressRows(runs: readonly SessionView[], { max, agentName, sil
   const rows = live.slice(0, max).map(({ v, sw }) => {
     const units = v.units ?? [];
     const done = units.filter((u) => u.status === 'done').length;
-    const current = units.find((u) => u.status !== 'done');
+    // The session's own rule (studio#1440): the running unit, else the first one not finished. Counting finished units
+    // said "step 5 of 10" for a run its session put at step 9.
+    const sorted = [...units].sort((a, b) => a.ord - b.ord);
+    const chain = chainFromUnits({ ...v, units });
+    const nowStep = stepNow(chain);
+    const at = nowStep !== undefined ? chain.steps.indexOf(nowStep) + 1 : Math.min(units.length, done + 1);
+    const current = nowStep !== undefined ? sorted[at - 1] : undefined;
     const stage = (current as { stage?: string } | undefined)?.stage;
     const stageWord = stage === undefined ? null : (STAGE_WORDS[stage] ?? workflowLabel(stage));
-    const step = units.length === 0 ? 'Planning' : `Step ${Math.min(units.length, done + 1)} of ${units.length}`;
+    const step = units.length === 0 ? 'Planning' : `Step ${Math.max(1, at)} of ${units.length}`;
     const tone = sw.tone as 'run' | 'gate';
     const doing = tone === 'gate' ? 'waiting for your answer' : stageWord;
     const who = tone === 'run' && current?.assigned_cli != null && current.assigned_cli !== '' ? agentName(current.assigned_cli) : null;
@@ -166,6 +175,7 @@ export function progressRows(runs: readonly SessionView[], { max, agentName, sil
       word: sw.word,
       tone,
       done,
+      at: Math.max(1, at),
       total: units.length,
       line: [step, doing, who].filter((x): x is string => x !== null && x !== '').join(' · '),
       silent: tone === 'run' ? (silentOf?.(v) ?? null) : null,
