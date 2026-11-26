@@ -130,9 +130,13 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
   const waiting = items !== null ? items.length : folded.length;
   // studio#1368: crew's liveness per run, so a silent job never reads "Working".
   const silentOf = useRowSilence(now);
-  const progress = useMemo(() => homeProgress(runs, ROWS_MAX, silentOf), [runs, silentOf]);
-  // studio#1440: the sentence counts the In progress list's own jobs. A job a ranked item only slows (a helper signed
-  // out, `blockedRunIds`) still works and is listed Working, so the sentence never says "Nothing is running" beside it.
+  // studio#1440: a job a need holds is under Needs you, not In progress; a job a ranked item only slows (`slows`: a
+  // helper signed out, its `blockedRunIds`) still works, so it stays listed. The sentence counts the list's own jobs,
+  // so it never says "Nothing is running" beside a Working row, nor counts a job the list leaves out.
+  const held = useMemo(() => new Set(items !== null
+    ? items.filter((a) => a.kind !== 'slows').flatMap((a) => [a.runId, ...(a.blockedRunIds ?? [])]).filter((id): id is string => id != null)
+    : folded.map(needRunId).filter((id): id is string => id !== null)), [items, folded]);
+  const progress = useMemo(() => homeProgress(runs.filter((v) => !held.has(v.session.id)), ROWS_MAX, silentOf), [runs, held, silentOf]);
   const running = progress.total;
   const shownRepos = repos.filter((u) => u.attached || u.jobs > 0);
   const ready = known && !crewPending;
