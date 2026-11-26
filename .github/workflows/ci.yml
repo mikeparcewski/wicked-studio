@@ -19,9 +19,13 @@ on:
 permissions:
   contents: read
 
+# A pull request's newer push cancels its older run. A push to main is not cancelled by a later one: each
+# run gets a group of its own (its run id), so every merge gets a complete run. With one group per branch, a
+# newer run would still cancel a PENDING older one even without cancel-in-progress (GitHub's default
+# `queue: single`).
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # CI runs an explicit build step below; skip the prepare-time dist build so
