@@ -27,6 +27,9 @@ export interface ScopeChip {
   on: boolean;
   /** Added with + Add: clicking it removes it (a default chip toggles instead). */
   added?: boolean;
+  /** studio#1443: chosen by a job page's own send (one of the chat's newest jobs). It toggles like a default chip, so
+   *  a person's "off" is kept; while on, it is let go once the job is no longer among the chat's newest. */
+  auto?: boolean;
 }
 
 /** The chips whose referent decides the read roots (fixed once the chat opens). */

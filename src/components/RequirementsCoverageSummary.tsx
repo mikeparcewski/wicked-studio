@@ -5,7 +5,7 @@ import { coverageHeadline, coverageParts, PLACEHOLDER_NOTE, WEIGHTED_NOTE, type 
 /**
  * A repository's coverage, led by confidence-weighted coverage when available, then a breakdown of the counts.
  * Placeholders are marked unconfirmed and never counted in the share. A bar (when shown) fills the real share only,
- * with the minimum ticked.
+ * with an older engine's minimum ticked when it sends one (J6 S5: a domain model has none).
  * One component for the requirements view, its not-generated state and the domain-graph modal.
  */
 export function RequirementsCoverageSummary({ coverage: c, testId = 'requirements-coverage', inline = false, bar = false, note }: {
@@ -39,9 +39,9 @@ export function RequirementsCoverageSummary({ coverage: c, testId = 'requirement
         <span id={weightedNoteId} data-testid={`${testId}-weighted-note`} className={whyOpen ? 'wk-reqcov-why-note' : 'wk-visually-hidden'}>{WEIGHTED_NOTE}</span>
       )}
       {bar && (
-        <div className="wk-reqcov-bar" role="img" aria-label={`${c.realPct}% real requirements; the minimum is ${c.minPct}%`}>
+        <div className="wk-reqcov-bar" role="img" aria-label={`${c.realPct}% real requirements${c.minPct !== undefined ? `; the minimum is ${c.minPct}%` : ''}`}>
           <span className="wk-reqcov-fill" style={{ width: `${c.realPct}%` }} />
-          <span className="wk-reqcov-min" style={{ left: `${c.minPct}%` }} />
+          {c.minPct !== undefined && <span className="wk-reqcov-min" style={{ left: `${c.minPct}%` }} />}
         </div>
       )}
       <p className="wk-reqcov-parts" data-testid={`${testId}-breakdown`}>

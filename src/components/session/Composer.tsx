@@ -468,6 +468,17 @@ export function Composer({
   const offUnlessPicked = (key: string): boolean => unusable.has(key) || workOnly.has(key);
   const isOffSeat = (key: string): boolean => (offUnlessPicked(key) ? !picked.includes(key) : seatOff(key, dropped, picked));
   const sendSeats = wfChip === null ? chosenSeats(eligibleSeats, dropped, picked) : eligibleSeats.filter((k) => !isOffSeat(k));
+  // (studio#1459 F1) The stand-in card's "Pick another helper": focus the helpers row, at the first helper left out.
+  const seatsRow = useRef<HTMLDivElement | null>(null);
+  // The latest focus asked for wins: a box focus still waiting for its frame (focusEnd) is dropped once a later one
+  // is asked for, so it cannot take focus back from the helpers row after a pick (MAIN-RED on 8ed2e5c2).
+  const focusAsk = useRef(0);
+  const pickHelpers = (): void => {
+    focusAsk.current += 1;
+    const row = seatsRow.current;
+    const chip = row?.querySelector<HTMLButtonElement>('[data-testid="composer-seat"][aria-pressed="false"]') ?? row?.querySelector<HTMLButtonElement>('[data-testid="composer-seat"]') ?? null;
+    chip?.focus();
+  };
   // An `@helper` named to answer (ASK-S1) but turned off in the row would be silently dropped as the
   // chat's primary — refused instead, by name (codex r1 on #631).
   const namedHelper = wfChip === null && opensChat && askPathOn
@@ -498,9 +509,10 @@ export function Composer({
 
   const syncCaret = (el: HTMLTextAreaElement): void => setCaret(el.selectionStart ?? el.value.length);
   const focusEnd = (value: string): void => {
+    const ask = ++focusAsk.current;
     requestAnimationFrame(() => {
       const el = box.current;
-      if (el === null) return;
+      if (el === null || focusAsk.current !== ask) return;
       el.focus();
       el.setSelectionRange(value.length, value.length);
       setCaret(value.length);
@@ -821,7 +833,7 @@ export function Composer({
         <ChatHelpers key={jobChatId} chatId={jobChatId} roster={roster} />
       )}
       {showSeats && (
-        <div data-testid="composer-seats" role="group" aria-label="Helpers this send uses" className="wk-composer-chips">
+        <div ref={seatsRow} data-testid="composer-seats" role="group" aria-label="Helpers this send uses" className="wk-composer-chips">
           <span className="wk-composer-note">Helpers</span>
           {eligibleSeats.map((key) => {
             const on = !isOffSeat(key);
@@ -855,10 +867,13 @@ export function Composer({
           sessionRepo={sessionRepo}
           projectId={project?.projectId ?? contextProjectId}
           seatKeys={sendSeats}
+          signedInNow={eligibleSeats.filter((k) => { const s = (roster ?? []).find((x) => x.key === k); return s !== undefined && seatJoinStanding(s).state === 'ready'; })}
+          onPickHelpers={pickHelpers}
           words={text}
           navigate={navigate ?? goToPath}
           handle={inline}
           onBlocker={setStartBlocker}
+          onStartedLater={(words) => { if (textNow.current === words) { setText(''); setNote(null); } }}
         />
       )}
       {suggestions.length > 0 && text === '' && !menuOpen && wfChip === null && (

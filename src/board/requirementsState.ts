@@ -45,13 +45,13 @@ export interface Corroboration {
  * How much of a repository's behaviour REAL requirements cover (crew api-types 0.164.0 `RequirementsCoverage`;
  * domain-real WIRE 2026-11-01). `real + placeholders + unmapped == behaviorBearing`; `notProduct` (tests, data,
  * manifests, docs) is left out of it. `realPct` counts real requirements only: a placeholder is unconfirmed and is
- * never shown as progress. Optional `weightedPct` discounts those requirements by confidence; the minimum still
- * compares `realPct` to `minPct`.
+ * never shown as progress. Optional `weightedPct` discounts those requirements by confidence. `minPct` (J6 S5,
+ * optional): the minimum an engine before J6 v3 still sends; a domain model has none, so it is said only when sent.
  */
 export interface RequirementsCoverage {
   realPct: number;
   weightedPct?: number;
-  minPct: number;
+  minPct?: number;
   behaviorBearing: number;
   real: number;
   placeholders: number;
@@ -83,7 +83,7 @@ export function corroborationOf(item: unknown): Corroboration | null {
   return out;
 }
 
-const COVERAGE_KEYS = ['realPct', 'minPct', 'behaviorBearing', 'real', 'placeholders', 'unmapped', 'notProduct'] as const;
+const COVERAGE_KEYS = ['realPct', 'behaviorBearing', 'real', 'placeholders', 'unmapped', 'notProduct'] as const;
 
 /**
  * The coverage a requirements read carries (a page's `coverage`, or the `coverage` of crew's notGenerated 404), or
@@ -94,7 +94,9 @@ export function coverageOf(holder: unknown): RequirementsCoverage | null {
   if (c === null || c === undefined || typeof c !== 'object') return null;
   if (!COVERAGE_KEYS.every((k) => isCount(c[k]))) return null;
   const out = Object.fromEntries(COVERAGE_KEYS.map((k) => [k, c[k]])) as unknown as RequirementsCoverage;
-  if (out.realPct > 100 || out.minPct < 1 || out.minPct > 100) return null;
+  if (out.realPct > 100) return null;
+  // J6 S5: kept only while an older engine sends it in range; never a reason to drop the counts.
+  if (isCount(c['minPct']) && c['minPct'] >= 1 && c['minPct'] <= 100) out.minPct = c['minPct'];
   if (isCount(c['weightedPct']) && c['weightedPct'] <= 100) out.weightedPct = c['weightedPct'];
   return out;
 }
@@ -103,12 +105,13 @@ const count = (n: number): string => n.toLocaleString('en-US');
 
 /** Lead with confidence-weighted coverage when supplied; "Under 1%" when some are real but the share rounds to 0. */
 export function coverageHeadline(c: RequirementsCoverage): string {
+  const min = c.minPct !== undefined ? ` · minimum ${c.minPct}%` : '';
   const pct = c.realPct === 0 && c.real > 0 ? 'Under 1%' : `${c.realPct}%`;
   if (c.weightedPct !== undefined) {
     const weighted = c.weightedPct === 0 && c.real > 0 ? 'Under 1%' : `${c.weightedPct}%`;
-    return `${weighted} confidence-weighted · ${pct} stated · minimum ${c.minPct}%`;
+    return `${weighted} confidence-weighted · ${pct} stated${min}`;
   }
-  return `${pct} real requirements · minimum ${c.minPct}%`;
+  return `${pct} real requirements${min}`;
 }
 
 /** One line on how the confidence-weighted share is counted (core#1445): the tooltip, and the line its help button opens. */
@@ -162,9 +165,10 @@ export function graphBuildOf(page: unknown): GraphBuild | null {
 /** One sentence when the list does not hold what the header counts; null otherwise. */
 export function graphBuildNote(live: RequirementsCoverage, b: GraphBuild | null): string | null {
   if (b === null || !b.behind) return null;
-  const next = live.realPct >= live.minPct
+  // J6 S5: no minimum to lower (the route is gone); an older engine's minimum is still said when it is not met.
+  const next = live.minPct === undefined || live.realPct >= live.minPct
     ? 'build the graph to list them'
-    : `the graph is built at ${live.minPct}% real, or when you lower this repository's minimum at the job's ask`;
+    : `the graph is built at ${live.minPct}% real`;
   if (b.coverage === null) {
     return `This list is a graph built before real requirements were counted. The ${count(live.real)} real requirements mapped now are kept, not listed: ${next}.`;
   }

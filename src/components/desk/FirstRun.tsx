@@ -1,17 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Code2, FolderGit2, TerminalSquare, UserRound } from 'lucide-react';
 import { api, apiFetch } from '../../api/client.js';
 import type { Ask, AskAnswer } from '../../api/ask.js';
 import { getSetupKnown, putPersona, type SetupKnown } from '../../api/learn.js';
-import type { RepoEntry } from '../../api/types.js';
+import type { LaunchBodyWithDeliver, RepoEntry } from '../../api/types.js';
 import { recordLine } from '../../board/askModel.js';
 import {
   firstNameOf, firstRunOpen, nextSetupAsk, PERSONA_PRESETS, previewAnswer, repoStyleProblem, SETUP_ASKS, shareWords, siteOfEmail,
   STARTER_RULES, starterAdoption, type SetupAnswer, type SetupAskKey,
 } from '../../board/learnHub.js';
 import type { AgentRow } from '../../board/agentsModel.js';
+import { standInChoiceOf } from '../../board/standIn.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { usePhone } from '../../hooks/usePhone.js';
+import { useStandInChoice } from '../../hooks/useStandInChoice.js';
 import { useFirstRun } from '../../store/firstRun.js';
 import { useProvenanceStore } from '../../store/provenance.js';
 import { AskCard, AskRecord } from '../ask/AskCard.js';
@@ -45,6 +47,32 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
   // Ignored here, the one line with Undo shows until the page is left; ignored before, nothing shows.
   const [justIgnored, setJustIgnored] = useState(false);
 
+  /** The style ask's job, started. */
+  const startStyleJob = async (body: LaunchBodyWithDeliver): Promise<string> => {
+    const { runId } = await api.launchRun(body);
+    useProvenanceStore.getState().markLaunchedHere(runId);
+    return runId;
+  };
+  /** Filed under Learn → Style, so Style follows it. */
+  const fileStyleJob = (runId: string, name: string): Promise<unknown> =>
+    apiFetch('/settings', { method: 'PUT', body: JSON.stringify({ 'studio.learn.style': { jobs: [{ runId, kind: 'repo', sources: [name] }], startedAt: Date.now() } }) });
+  /** The style ask's job that started, so answering again files it rather than starting another. */
+  const styleRun = useRef<{ repoId: string; runId: string } | null>(null);
+  // (wicked-crew#1932) The style ask's job crew answered with the stand-in choice: the card, in the ask's place; the
+  // ask is answered once the job starts. A job that started but was not filed or answered says so; answering again
+  // files it.
+  const styleStandIn = useStandInChoice<{ repoId: string; name: string; answer: SetupAnswer }, string>(startStyleJob, async ([d]) => {
+    if (d === undefined) return;
+    styleRun.current = { repoId: d.meta.repoId, runId: d.result };
+    try {
+      await fileStyleJob(d.result, d.meta.name);
+      setFlash('style');
+      await useFirstRun.getState().answer('style', d.meta.answer);
+    } catch (e) {
+      setFail(`The job started, but it wasn’t filed under Learn → Style (${e instanceof Error ? e.message : String(e)}). Answer again to file it.`);
+    }
+  }, navigate, '/agents?setup=1');
+
   useEffect(() => { if (read === 'idle') void useFirstRun.getState().load(); }, [read]);
   useEffect(() => {
     getSetupKnown().then((x) => setKnown(normalizeKnown(x)), () => setKnown('failed'));
@@ -73,7 +101,7 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
   };
 
   const answer = async (key: SetupAskKey, ask: Ask, a: AskAnswer): Promise<void> => {
-    if (busy) return;
+    if (busy || styleStandIn.busy) return;
     setBusy(true);
     setFail(null);
     const raw = recordLine(ask, a);
@@ -92,15 +120,28 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
         await record(key, { line, done: yes, words: yes && who !== undefined ? `${who.name}: ${who.login ?? 'sign in on Helpers'}; I’ll notice` : `${ready.length} of ${agents.length} ready · later` });
         if (yes && who !== undefined && who.login === null) navigate('/agents?setup=1');
       } else if (key === 'style') {
+        styleStandIn.ask(null, []);
+        const styleAnswer: SetupAnswer = { line, done: a.option !== 'later', words: a.option === 'later' ? 'later · Learn keeps a reminder' : opt?.label ?? '' };
         if (a.option?.startsWith('repo:') === true) {
           const repo = (repos ?? []).find((r) => r.id === a.option!.slice('repo:'.length));
           if (repo !== undefined) {
-            const { runId } = await api.launchRun({ problem: repoStyleProblem(repo.name), repoRef: repo.id, workflow: 'capture-learnings' });
-            useProvenanceStore.getState().markLaunchedHere(runId);
-            await apiFetch('/settings', { method: 'PUT', body: JSON.stringify({ 'studio.learn.style': { jobs: [{ runId, kind: 'repo', sources: [repo.name] }], startedAt: Date.now() } }) });
+            const body: LaunchBodyWithDeliver = { problem: repoStyleProblem(repo.name), repoRef: repo.id, workflow: 'capture-learnings' };
+            let runId = styleRun.current?.repoId === repo.id ? styleRun.current.runId : null;
+            if (runId === null) {
+              try {
+                runId = await startStyleJob(body);
+              } catch (e) {
+                const choice = standInChoiceOf(e);
+                if (choice === null) throw e;
+                styleStandIn.ask(choice, [{ body, meta: { repoId: repo.id, name: repo.name, answer: styleAnswer } }]);
+                return;
+              }
+              styleRun.current = { repoId: repo.id, runId };
+            }
+            await fileStyleJob(runId, repo.name);
           }
         }
-        await record(key, { line, done: a.option !== 'later', words: a.option === 'later' ? 'later · Learn keeps a reminder' : opt?.label ?? '' });
+        await record(key, styleAnswer);
         if (a.option === 'pick') navigate(learnPath('style'));
       } else if (key === 'rules') {
         // A starter the team already has is their copy (maybe edited): first run never rewrites it. One in force is
@@ -184,8 +225,9 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
             return (
               <div key={key} className={phone ? 'wk-fr-live' : undefined} data-testid="first-run-live">
                 <div className={key === 'repos' ? 'wk-ask-rows' : undefined}>
-                  <AskCard key={(live.options ?? []).map((o) => o.id).join('|')} ask={live} tag="Setup" busy={busy} onAnswer={(x) => void answer(key, live, x)} testIds={{ root: `first-run-ask-${key}` }} />
+                  <AskCard key={(live.options ?? []).map((o) => o.id).join('|')} ask={live} tag="Setup" busy={busy || styleStandIn.busy} onAnswer={(x) => void answer(key, live, x)} testIds={{ root: `first-run-ask-${key}` }} />
                 </div>
+                {key === 'style' && styleStandIn.card('first-run-standin')}
               </div>
             );
           })}

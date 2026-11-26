@@ -1,5 +1,5 @@
 import { api } from '../api/client.js';
-import type { SessionView } from '../api/types.js';
+import type { LaunchBodyWithDeliver, SessionView } from '../api/types.js';
 import { useProvenanceStore } from '../store/provenance.js';
 import { setRetryPrefill } from '../store/retryPrefill.js';
 
@@ -33,13 +33,18 @@ export function reindexAsPrefill(onboardRun: SessionView, repoId: string, naviga
  * repository's page as `?project=`), the launch carries that `projectId`; otherwise NO `projectId` is sent and the run
  * stays Unfiled honestly (there is no repo-to-project guess).
  */
-export async function launchCaptureLearnings(repoId: string, repoName: string, ambientProject: string | null): Promise<string> {
-  const { runId } = await api.launchRun({
+export function captureLearningsBody(repoId: string, repoName: string, ambientProject: string | null): LaunchBodyWithDeliver {
+  return {
     problem: `Capture learnings from ${repoName}`,
     repoRef: repoId,
     workflow: 'capture-learnings',
     ...(ambientProject !== null ? { projectId: ambientProject } : {}),
-  });
+  };
+}
+
+/** Start a Capture learnings launch (the body is kept so the stand-in card can start it again, studio#1444): its run id. */
+export async function startCaptureLearnings(body: LaunchBodyWithDeliver): Promise<string> {
+  const { runId } = await api.launchRun(body);
   // Studio witnessed this launch: the run's provenance line reads 'via studio', not the API fallback.
   useProvenanceStore.getState().markLaunchedHere(runId);
   return runId;

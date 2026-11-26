@@ -542,7 +542,7 @@ function NotGenerated({ repoName, workflow, onGenerate, empty = false, share = n
   workflow: string;
   onGenerate: (workflow: string) => void;
   empty?: boolean;
-  /** The real share so far against the minimum (crew's notGenerated answer, api-types 0.164.0). */
+  /** The real share so far (crew's notGenerated answer, api-types 0.164.0), with an older engine's minimum. */
   share?: RequirementsCoverage | null;
   /** domain-graph-3: the domain-extraction job mapping it now and its own progress line (`undefined` while looked
    *  up, `'unknown'` when the daemon could not say). */
@@ -560,7 +560,7 @@ function NotGenerated({ repoName, workflow, onGenerate, empty = false, share = n
           coverage={share}
           testId="requirements-real-share"
           bar
-          note="the graph is built once the minimum is reached; the real requirements found so far are kept"
+          note={share.minPct !== undefined ? 'the graph is built once the minimum is reached; the real requirements found so far are kept' : 'the real requirements found so far are kept'}
         />
       )}
       {mapping === 'unknown' && (

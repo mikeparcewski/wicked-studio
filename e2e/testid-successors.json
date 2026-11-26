@@ -1075,6 +1075,9 @@
     "requirements-minimum-change": "domain-followup-confirm",
     "requirements-minimum-clear": "domain-followup-reject",
     "requirements-minimum-input": "domain-followup-note",
-    "requirements-minimum-save": "domain-followup-reject-send"
+    "requirements-minimum-save": "domain-followup-reject-send",
+    "settings-min-coverage": "view-settings",
+    "settings-min-coverage-invalid": "view-settings",
+    "settings-min-coverage-unsupported": "view-settings"
   }
 }

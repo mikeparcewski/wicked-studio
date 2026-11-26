@@ -8,7 +8,7 @@ import { api, ApiError, apiWire } from '../api/client.js';
 import { qeRefusalOf } from '../board/qeRefusal.js';
 import { QeRefusalWarning } from './QeRefusalWarning.js';
 import { StandInChoice } from './StandInChoice.js';
-import { helperNamer, saveStandInsEveryJob, standInChoiceOf, standInRelaunchBody, type StandInChoiceId, type StandInChoiceRefusal } from '../board/standIn.js';
+import { helperNamer, saveStandInsEveryJob, standInChoiceOf, standInRelaunchBody, type StandInChoiceId, type StandInChoiceLineId, type StandInChoiceRefusal } from '../board/standIn.js';
 import type { BaseSkillPosture, BaseSkillRefusedResponse, DeliverTargetResponse, EntityMode, LaunchBodyWithDeliver, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from './composerDefaults.js';
 import { isShortcutsPaletteOpen } from '../hooks/useGlobalShortcuts.js';
@@ -25,7 +25,7 @@ import { clearRetryPrefill, confirmModeOf, peekRetryPrefill, type RetryPrefill }
 import { clearSteerPrefill, peekSteerPrefill } from '../store/steerPrefill.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { seatStandingWord } from './HealthRailSection.js';
-import { noCarryingSeatReason } from './gateVerdictModel.js';
+import { noCarryingSeatReason, seatJoinStanding } from './gateVerdictModel.js';
 import { assuranceNoticeOf, baseSkillRefusalOf, describeBaseSkill, gatePostureWord, LAUNCH_PROBE_AFTER_SECS, launchNeedsRepo, launchSubmit, newLaunchId, readyLead, withWordsAsDomainScope } from '../board/launchModel.js';
 import { isSystemWorkflowIn, setCachedWorkflows } from '../store/workflowCache.js';
 import { loadPresets, presetSystemFlag, usePlanCatalog } from '../store/planCatalog.js';
@@ -148,6 +148,9 @@ export function teamReceiptLine(text: string): string {
   const clipped = flat.length > 60 ? `${flat.slice(0, 59).trimEnd()}…` : flat;
   return `✓ Sent to the team: "${clipped}" · queued for their next turn · the plan gate stays open`;
 }
+
+/** A helper selection as one comparable string (order-free). */
+const helperKeys = (keys: ReadonlySet<string>): string => [...keys].sort().join('\n');
 
 export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOverride, mode, injectTarget, onClearInjectTarget, navigate, lockedProjectId = null }: Props): React.ReactElement {
   const shownText = useDisplayText();
@@ -590,7 +593,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // A choice sends the job as the form shows it THEN, through `submit` itself (codex r1+delta on #1361): nothing is
   // replayed from the refused attempt, so an edit made after the refusal (or during the settings save) is what is sent.
   // `override`: the refused Send had overridden the no-repo preflight (the choice keeps that answer).
-  const [standIn, setStandIn] = useState<{ refusal: StandInChoiceRefusal; override: boolean } | null>(null);
+  // `sent`: the helper keys the refused Send carried (studio#1436): the card answers those, so it shows only while the
+  // form would send the same helpers again (or a choice is under way or failed, so its outcome stays in view).
+  const [standIn, setStandIn] = useState<{ refusal: StandInChoiceRefusal; override: boolean; sent: string } | null>(null);
   const [standInBusy, setStandInBusy] = useState<StandInChoiceId | null>(null);
   const [standInError, setStandInError] = useState<string | null>(null);
   /** studio#404: the id this launch was sent under (client-minted), while its POST is outstanding. */
@@ -771,6 +776,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   useEffect(() => {
     if (!popoverOpen) return;
     function handleClick(e: MouseEvent): void {
+      // A control that its own click took off the page (the stand-in card's Pick, studio#1436) is not a click outside:
+      // in a browser this listener can see the very click that opened the options.
+      if (!(e.target instanceof Node) || !e.target.isConnected) return;
       if (
         popoverAnchorRef.current &&
         !popoverAnchorRef.current.contains(e.target as Node)
@@ -822,6 +830,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   async function submit(preflightOverride = false, standInChoice?: { refusal: StandInChoiceRefusal; scope: 'job' | 'always' }): Promise<void> {
     // A stand-in choice holds `submitting` through its settings save and hands it on here (codex delta 2 on #1361).
     if (!problem.trim() || selectedClis.size === 0 || (submitting && standInChoice === undefined)) return;
+    const sentKeys = helperKeys(selectedClis);
     // (studio#1150) What the form shows as Send is pressed: crew's answer for these fields, captured now (never re-read
     // after the awaits below, when another answer may have landed).
     const postureKeyAtSend = posturePreview.key;
@@ -980,7 +989,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       const refused = baseSkillRefusalOf(err);
       // Too few helpers to check it: the choice, not an error (nothing was created; DES-STANDIN-001 §4).
       const choice = standInChoiceOf(err);
-      setStandIn(choice !== null ? { refusal: choice, override: preflightOverride } : null);
+      setStandIn(choice !== null ? { refusal: choice, override: preflightOverride, sent: sentKeys } : null);
       setStandInError(null);
       if (choice !== null) return;
       if (refused !== null) setBaseSkillRefusal(refused);
@@ -1005,10 +1014,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
   // DES-STANDIN-001 §2.1 step 3: what each choice does. A launching choice holds `submitting` from the click (Send
   // waits), so the settings save and the Send are one step (codex delta 2 on #1361).
-  async function chooseStandIn(id: StandInChoiceId): Promise<void> {
+  async function chooseStandIn(id: StandInChoiceLineId): Promise<void> {
     if (standIn === null || submitting || choosingRef.current) return;
     if (id === 'cancel') { setStandIn(null); setStandInError(null); return; }
     if (id === 'sign_in') { navigate?.(AGENTS_PATH); return; }
+    // studio#1436: a signed-in helper this job did not pick: the form's helper options open, nothing starts.
+    if (id === 'pick') { setStandIn(null); setStandInError(null); setPopoverOpen(true); return; }
     // The form's own Send blockers, checked BEFORE the settings save, so a choice that cannot launch changes nothing
     // (codex delta 3 on #1361). `submit` checks them again when it runs.
     if (!problem.trim() || selectedClis.size === 0) { setStandInError('Say what the job is and pick a helper first.'); return; }
@@ -2261,9 +2272,14 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         <QeRefusalWarning kind="launch" refusalKey={qeRefusal.key} detail={qeRefusal.detail} forced={qeRefusal.forced} navigate={navigate} testId="launch-qe-refused" />
       )}
 
-      {standIn !== null && (
+      {standIn !== null && (standIn.sent === helperKeys(selectedClis) || standInBusy !== null) && (
         <StandInChoice refusal={standIn.refusal} name={helperNamer(roster)} busy={standInBusy} error={standInError} testId="launch-standin"
+          signedInNow={userSeats(roster).filter((s) => seatJoinStanding(s).state === 'ready').map((s) => s.key)}
           onChoose={(id) => { void chooseStandIn(id); }} />
+      )}
+      {/* The helpers changed after the refusal: its words no longer hold, but a choice's failure is still said (codex delta 2). */}
+      {standIn !== null && standIn.sent !== helperKeys(selectedClis) && standInBusy === null && standInError !== null && standInError.trim() !== '' && (
+        <p role="alert" className="wk-standin-choice-text wk-standin-choice-error" data-testid="launch-standin-error">{standInError}</p>
       )}
 
       {/* Error message */}

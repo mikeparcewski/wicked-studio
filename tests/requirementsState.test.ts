@@ -92,7 +92,12 @@ describe('corroboration + coverage readers (operator ruling 2026-10-31)', () => 
     expect(coverageOf({ coverage: { mappedPct: 82, minPct: 80, behaviorBearing: 10, mapped: 8, resolved: 8, unmapped: 2 } })).toBeNull();
     expect(corroborationCounts({ corroboration: { validated: 0, unconfirmed: 0 } })).toBeNull();
     expect(coverageOf({ coverage: { ...LIVE, realPct: 101 } })).toBeNull();
-    expect(coverageOf({ coverage: { ...LIVE, minPct: 0 } })).toBeNull();
+    // J6 S5: an out-of-range minimum is not a reason to drop the counts; the minimum alone is left off.
+    const noMin: Partial<typeof LIVE> = { ...LIVE };
+    delete noMin.minPct;
+    expect(coverageOf({ coverage: { ...LIVE, minPct: 0 } })).toEqual(noMin);
+    expect(coverageOf({ coverage: { ...LIVE, minPct: 101 } })).toEqual(noMin);
+    expect(coverageOf({ coverage: { ...LIVE, minPct: 100 } })).toEqual({ ...LIVE, minPct: 100 });
     expect(coverageOf({ coverage: { ...LIVE, real: '3182' } })).toBeNull();
     expect(coverageOf({ coverage: LIVE })).toEqual(LIVE);
   });
@@ -123,16 +128,37 @@ describe('the list against the header: an older graph build (crew api-types 0.16
     const { graphBuildNote } = await import('../src/board/requirementsState.js');
     expect(graphBuildNote(live, { generation: 2, coverage: null, behind: true })).toBe(
       'This list is a graph built before real requirements were counted. The 3,585 real requirements mapped now are kept, not listed: '
-      + "the graph is built at 80% real, or when you lower this repository's minimum at the job's ask.");
+      + 'the graph is built at 80% real.');
     expect(graphBuildNote(live, { generation: 3, coverage: { ...live, real: 1383, realPct: 23 }, behind: true })).toBe(
       'This list is the graph as last built (1,383 real). 2,202 real requirements mapped since are kept, not listed: '
-      + "the graph is built at 80% real, or when you lower this repository's minimum at the job's ask.");
+      + 'the graph is built at 80% real.');
     expect(graphBuildNote({ ...live, realPct: 85 }, { generation: 3, coverage: { ...live, realPct: 85 }, behind: true })).toBe(
       'The repository changed since this graph was built: build the graph to list what it holds now.');
     expect(graphBuildNote({ ...live, realPct: 85 }, { generation: 3, coverage: null, behind: true })).toBe(
       'This list is a graph built before real requirements were counted. The 3,585 real requirements mapped now are kept, not listed: build the graph to list them.');
     expect(graphBuildNote(live, { generation: 2, coverage: live, behind: false })).toBeNull();
     expect(graphBuildNote(live, null)).toBeNull();
+  });
+  it('J6 S5: with no minimum (crew after C3) the note never asks for a share or a lower minimum', async () => {
+    const { graphBuildNote } = await import('../src/board/requirementsState.js');
+    const noMin: Partial<typeof live> = { ...live };
+    delete noMin.minPct;
+    const note = graphBuildNote(noMin as Parameters<typeof graphBuildNote>[0], { generation: 2, coverage: null, behind: true });
+    expect(note).toBe('This list is a graph built before real requirements were counted. The 3,585 real requirements mapped now are kept, not listed: build the graph to list them.');
+    expect(note).not.toMatch(/minimum|80%/);
+  });
+});
+
+describe('J6 S5: a coverage label with no minimum (crew after J6 M1 and C3)', () => {
+  const label = { realPct: 61, behaviorBearing: 5786, real: 3585, placeholders: 2174, unmapped: 27, notProduct: 2380 };
+  it('is read with its counts, and said with no minimum', async () => {
+    const { coverageOf, coverageHeadline } = await import('../src/board/requirementsState.js');
+    const c = coverageOf({ coverage: label });
+    expect(c).toEqual(label);
+    expect(coverageHeadline(c!)).toBe('61% real requirements');
+    expect(coverageHeadline({ ...c!, weightedPct: 40 })).toBe('40% confidence-weighted · 61% stated');
+    // An older engine's minimum is still said while it sends one.
+    expect(coverageHeadline(coverageOf({ coverage: { ...label, minPct: 80 } })!)).toBe('61% real requirements · minimum 80%');
   });
 });
 

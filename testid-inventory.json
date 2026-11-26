@@ -10,7 +10,7 @@
     "Forwarded ids count: a literal handed to a component through a testId-like prop or key (`testId`, `testid`, `tid`, `triggerTestId`), a parameter typed as a union of id literals, or a string literal marked `/* testid */` is listed as static/dynamic at the call site — the component renders it — so static + dynamic is the whole denominator of ids a surface can show."
   ],
   "version": 1,
-  "studioVersion": "0.16.18",
+  "studioVersion": "0.16.19",
   "static": [
     {
       "testId": "accent-lgt",
@@ -10359,6 +10359,12 @@
       ]
     },
     {
+      "testId": "launch-standin-error",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
       "testId": "launch-started",
       "files": [
         "src/components/ChatInput.tsx"
@@ -10564,6 +10570,12 @@
     },
     {
       "testId": "launch-wizard-helpers",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-helpers-own",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]
@@ -21071,6 +21083,12 @@
       ]
     },
     {
+      "testId": "session-composer-message-job",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
       "testId": "session-composer-scope",
       "files": [
         "src/components/session/SessionView.tsx"
@@ -22463,24 +22481,6 @@
     },
     {
       "testId": "settings-council-size",
-      "files": [
-        "src/components/SystemSettings.tsx"
-      ]
-    },
-    {
-      "testId": "settings-min-coverage",
-      "files": [
-        "src/components/SystemSettings.tsx"
-      ]
-    },
-    {
-      "testId": "settings-min-coverage-invalid",
-      "files": [
-        "src/components/SystemSettings.tsx"
-      ]
-    },
-    {
-      "testId": "settings-min-coverage-unsupported",
       "files": [
         "src/components/SystemSettings.tsx"
       ]
@@ -25722,6 +25722,12 @@
     },
     {
       "testId": "style-sources",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
+      "testId": "style-standin-held",
       "files": [
         "src/components/learn/StyleTab.tsx"
       ]

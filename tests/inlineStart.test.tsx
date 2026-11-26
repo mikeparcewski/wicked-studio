@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 /**
  * ux-tonight (operator 2026-11-04 on :7721): "clicking on a workflow opens a modal rather than starting an inline chat,
  * needs to be removed and chat done inline"; "are apps showing as coming soon (in chat)"; "don't I see a way to onboard
@@ -26,6 +28,7 @@ import { resetComposerSeats } from '../src/store/composerSeats.js';
 import { openLaunchWizard, resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
 import { resetPlanCatalog } from '../src/store/planCatalog.js';
 import { useProjectsStore } from '../src/store/projects.js';
+import { useProvenanceStore } from '../src/store/provenance.js';
 import { clearRepoCache } from '../src/store/repoCache.js';
 import { clearCachedRoster, setCachedRoster } from '../src/store/rosterCache.js';
 import { useSessionDrafts } from '../src/store/sessionDrafts.js';
@@ -72,6 +75,10 @@ const gets = (): string[] => read;
 let posts: Array<{ path: string; body: Record<string, unknown> }> = [];
 /** `POST /runs` → 201: crew's answer (a full-assurance launch on a one-CLI roster adds `assuranceNotice`). */
 let runsAnswer: Record<string, unknown> = { runId: 'run-new' };
+/** (studio#1444) Answers for `POST /runs` before `runsAnswer`, in order: crew's 409 stand-in choice, as its route writes it. */
+let runsFirst: Array<{ status: number; body: Record<string, unknown> }> = [];
+/** What `GET /roster` answers (studio#1459 F1 swaps in the picked-one roster). */
+let rosterWire: RosterSeat[] = SEATS;
 function stubWire(): void {
   posts = [];
   read = [];
@@ -82,7 +89,7 @@ function stubWire(): void {
     if (init?.method !== undefined && init.method !== 'GET') {
       const body = typeof init.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : {};
       posts.push({ path, body });
-      if (path === '/runs') return json(runsAnswer, 201);
+      if (path === '/runs') { const f = runsFirst.shift(); return f !== undefined ? json(f.body, f.status) : json(runsAnswer, 201); }
       if (path === '/plans/preview') return json(preview);
       if (path === '/apps') return json({ app: { slug: String(body['slug']), name: 'x', projectId: body['projectId'], head: { version: 1 } } }, 201);
       if (/^\/apps\/[^/]+\/turns$/.test(path)) return json({ runId: 'turn-run', turnId: 't1' }, 202);
@@ -94,7 +101,7 @@ function stubWire(): void {
     if (path === '/health') return healthFails ? json({ error: 'down' }, 503) : json({ capabilities: { powerMode: healthPower, chatIdOnLaunch: true, qeAcceptanceOverride: qeOverride, qeAcceptance: qeSetting } });
     if (path === '/workflows/catalog') return json(CATALOG);
     return json(path === '/workflows' ? { workflows: ['bug', 'feature', 'domain-extraction', 'review-recent-work'].map(def) }
-      : path === '/roster' ? { roster: SEATS } : path === '/repos' ? { repos }
+      : path === '/roster' ? { roster: rosterWire } : path === '/repos' ? { repos }
         : path === '/presets' ? { presets } : path === '/projects' ? { projects: [PROJECT] } : path === '/settings' ? { settings: powerModeDefault === undefined ? {} : { powerModeDefault } } : {});
   }));
 }
@@ -127,6 +134,7 @@ const launches = (): Array<Record<string, unknown>> => posts.filter((p) => p.pat
 
 beforeEach(() => {
   runsAnswer = { runId: 'run-new' };
+  runsFirst = [];
   useLaunchNotices.setState({ bySession: {} });
   repos = [repo('svc')];
   presets = [];
@@ -148,6 +156,7 @@ beforeEach(() => {
   resetChatFlow();
   resetComposerSeats();
   clearRepoCache();
+  rosterWire = SEATS;
   setCachedRoster(SEATS);
   setCachedWorkflows(['bug', 'feature', 'domain-extraction', 'review-recent-work'].map(def));
   useComposerChips.setState({ byComposer: {} });
@@ -284,6 +293,295 @@ describe('a / pick starts the work in this chat', () => {
     await waitFor(() => expect(wfChip('chat-1')).toMatchObject({ workflowId: 'bug' }));
     expect(box().value).toBe('the charge never clears');
     expect(useLaunchWizard.getState().open).toBe(false);
+  });
+});
+
+describe('studio#1444: crew holds a start for want of helpers: the stand-in card, not a line of text', () => {
+  // crew's own 409 body for a one-helper launch (its `preflightRefusal` writer, kept unedited by studio#1446).
+  const CHOICE = JSON.parse(readFileSync(resolve(process.cwd(), 'tests/fixtures/stand-in-choice.learn-one-helper.crew.json'), 'utf8')) as { status: number; body: Record<string, unknown> };
+
+  it('Enter shows the card; "this job" starts it again with crew\'s retryWith, opens the chat and clears the words', async () => {
+    runsFirst = [CHOICE];
+    // The retry lands as Enter's would: filed as started here, and crew's assuranceNotice kept with the body as sent.
+    const notice = { code: 'single_cli_roster', message: 'm', seats: ['claude'], retryWith: { retryOf: 'run-new', reducedAssurance: true } };
+    runsAnswer = { runId: 'run-new', assuranceNotice: notice };
+    useProvenanceStore.setState({ launchedHere: {} });
+    const nav = vi.fn();
+    render(<Harness navigate={nav} />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    enter();
+    await screen.findByTestId('composer-start-standin');
+    expect(screen.queryByTestId('composer-start-error')).toBeNull();
+    expect(nav).not.toHaveBeenCalled();
+    expect(box().value).toBe('the charge never clears');
+    fireEvent.click(screen.getByTestId('composer-start-standin-job'));
+    await waitFor(() => expect(launches()).toHaveLength(2));
+    expect(launches()[1]).toEqual({ ...launches()[0], ...(CHOICE.body['retryWith'] as Record<string, unknown>) });
+    await waitFor(() => expect(nav).toHaveBeenCalledWith('/s/chat-1'));
+    expect(wfChip('chat-1')).toBeUndefined();
+    expect(box().value).toBe('');
+    expect(screen.queryByTestId('composer-start-standin')).toBeNull();
+    expect(useProvenanceStore.getState().launchedHere['run-new']).toBe(true);
+    const kept = useLaunchNotices.getState().bySession;
+    expect(kept['chat-1']).toMatchObject({ runId: 'run-new', notice: { code: 'single_cli_roster' } });
+    expect(kept['chat-1']!.body).toEqual(launches()[1]);
+    expect(kept['run:run-new']).toBe(kept['chat-1']);
+  });
+
+  it('r1: another repository after the refusal is another job: the card retires and Enter starts the new one', async () => {
+    repos = [repo('svc'), repo('web')];
+    runsFirst = [CHOICE];
+    function WithRun(): React.ReactElement {
+      const [text, setText] = useState('');
+      const run = { session: { id: 'r-1', status: 'completed', problem: 'p', repo_ref: 'svc' }, units: [] } as never;
+      return <Composer composerKey="chat-1" text={text} setText={setText} onSend={() => {}} placeholder="p" ariaLabel="a" variant="session" navigate={() => {}} runs={[run]} />;
+    }
+    render(<WithRun />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    enter();
+    await screen.findByTestId('composer-start-standin');
+    fireEvent.click(screen.getByTestId('composer-start-repo-change'));
+    await waitFor(() => expect(screen.queryByTestId('composer-start-standin')).toBeNull());
+    fireEvent.click(screen.getAllByTestId('composer-start-repo').find((b) => b.dataset.repo === 'web')!);
+    enter();
+    await waitFor(() => expect(launches()).toHaveLength(2));
+    expect(launches().map((b) => b['repoRef'])).toEqual(['svc', 'web']);
+    expect(launches()[1]!['standIns']).toBeUndefined();
+  });
+
+  it('r1: a refusal that lands after another card replaced this one holds nothing', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const base = globalThis.fetch;
+    let sent = 0;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (!String(url).endsWith('/runs') || init?.method !== 'POST') return base(url, init);
+      sent += 1;
+      return gate.then(() => base(url, init));
+    }));
+    runsFirst = [CHOICE];
+    render(<Harness navigate={vi.fn()} />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    enter();
+    await waitFor(() => expect(sent).toBe(1));
+    // A New job card clicked into this chat while crew has not answered yet: the start row stays, for the new card.
+    act(() => { addAboutChip('chat-1', workflowChipFor({ id: 'feature', title: 'Feature', launchId: 'feature' })); });
+    await waitFor(() => expect(wfChip('chat-1')).toMatchObject({ workflowId: 'feature' }));
+    await act(async () => { release(); await new Promise((r) => setTimeout(r, 100)); });
+    expect(launches()).toHaveLength(1);
+    expect(screen.queryByTestId('composer-start-standin')).toBeNull();
+  });
+
+  it('r2: Review plan turned on after the refusal is another job: the card retires and Enter holds at the plan', async () => {
+    powerModeDefault = true;
+    runsFirst = [CHOICE];
+    render(<Harness navigate={vi.fn()} />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    const toggle = await screen.findByTestId('composer-start-review-plan-toggle');
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    enter();
+    await screen.findByTestId('composer-start-standin');
+    expect(launches()[0]!['power']).toBe(true);
+    fireEvent.click(screen.getByTestId('composer-start-review-plan-toggle'));
+    await waitFor(() => expect(screen.queryByTestId('composer-start-standin')).toBeNull());
+    enter();
+    await waitFor(() => expect(launches()).toHaveLength(2));
+    expect(launches()[1]).toMatchObject({ power: false, humanConfirm: 'before:1' });
+  });
+
+  it('r2: words changed while "this job" starts, and the start fails: the old job is not left on the card', async () => {
+    let fail!: () => void;
+    const gate = new Promise<void>((r) => { fail = r; });
+    const base = globalThis.fetch;
+    let sent = 0;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (!String(url).endsWith('/runs') || init?.method !== 'POST') return base(url, init);
+      sent += 1;
+      if (sent !== 2) return base(url, init);
+      return gate.then(() => new Response(JSON.stringify({ error: 'busy' }), { status: 503, headers: { 'content-type': 'application/json' } }));
+    }));
+    runsFirst = [CHOICE];
+    render(<Harness navigate={vi.fn()} />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    enter();
+    fireEvent.click(await screen.findByTestId('composer-start-standin-job'));
+    await waitFor(() => expect(sent).toBe(2));
+    type('something else entirely');
+    expect(screen.getByTestId('composer-start-standin')).toBeInTheDocument();
+    await act(async () => { fail(); await new Promise((r) => setTimeout(r, 100)); });
+    expect(screen.queryByTestId('composer-start-standin')).toBeNull();
+    expect(box().value).toBe('something else entirely');
+  });
+
+  it('r2: a refusal that lands after the page moved to another chat with the same draft holds nothing there', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const base = globalThis.fetch;
+    let sent = 0;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (!String(url).endsWith('/runs') || init?.method !== 'POST') return base(url, init);
+      sent += 1;
+      return gate.then(() => base(url, init));
+    }));
+    runsFirst = [CHOICE];
+    const view = render(<Harness navigate={vi.fn()} composerKey="chat-1" />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    enter();
+    await waitFor(() => expect(sent).toBe(1));
+    // The session page is reused for chat B, whose composer holds the same workflow and words.
+    act(() => { addAboutChip('chat-2', workflowChipFor({ id: 'bug', title: 'Bug', launchId: 'bug' })); });
+    view.rerender(<Harness navigate={vi.fn()} composerKey="chat-2" />);
+    await act(async () => { release(); await new Promise((r) => setTimeout(r, 100)); });
+    expect(screen.queryByTestId('composer-start-standin')).toBeNull();
+  });
+
+  it('r2: the drawer\'s composer closes while "this job" starts: the job is still filed and its card spent', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const base = globalThis.fetch;
+    let sent = 0;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (!String(url).endsWith('/runs') || init?.method !== 'POST') return base(url, init);
+      sent += 1;
+      return sent === 2 ? gate.then(() => base(url, init)) : base(url, init);
+    }));
+    runsFirst = [CHOICE];
+    useProvenanceStore.setState({ launchedHere: {} });
+    const view = render(<Harness navigate={vi.fn()} />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    enter();
+    fireEvent.click(await screen.findByTestId('composer-start-standin-job'));
+    await waitFor(() => expect(sent).toBe(2));
+    view.unmount();
+    await act(async () => { release(); await new Promise((r) => setTimeout(r, 100)); });
+    expect(useProvenanceStore.getState().launchedHere['run-new']).toBe(true);
+    expect(wfChip('chat-1')).toBeUndefined();
+  });
+
+  it('r1: while a choice starts its job, the chat\'s other composer starts nothing', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const base = globalThis.fetch;
+    let sent = 0;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (!String(url).endsWith('/runs') || init?.method !== 'POST') return base(url, init);
+      sent += 1;
+      // The stand-in retry (the second start) waits; any other answers at once.
+      return sent === 2 ? gate.then(() => base(url, init)) : base(url, init);
+    }));
+    runsFirst = [CHOICE];
+    // Two composers of one chat (its thread and its full-screen drawer): one key, so one workflow card on both.
+    render(<><Harness navigate={vi.fn()} composerKey="chat-1" /><Harness navigate={vi.fn()} composerKey="chat-1" /></>);
+    const [first, second] = screen.getAllByTestId('session-composer-input') as HTMLTextAreaElement[];
+    const typeIn = (b: HTMLTextAreaElement, text: string): void => {
+      fireEvent.change(b, { target: { value: text, selectionStart: text.length } });
+      b.setSelectionRange(text.length, text.length);
+      fireEvent.select(b);
+    };
+    typeIn(first!, '/bug');
+    await waitFor(() => { const r = document.querySelector<HTMLElement>('[data-testid="composer-menu-item"][data-entry="bug"]'); expect(r).not.toBeNull(); fireEvent.mouseDown(r!); });
+    typeIn(first!, 'the charge never clears');
+    typeIn(second!, 'something else');
+    await waitFor(() => expect(screen.getAllByTestId('composer-start-line')[0]).toHaveTextContent('in svc'));
+    expect(screen.getAllByTestId('composer-start')).toHaveLength(2);
+    fireEvent.keyDown(first!, { key: 'Enter' });
+    fireEvent.click(await screen.findByTestId('composer-start-standin-job'));
+    await waitFor(() => expect(sent).toBe(2));
+    fireEvent.keyDown(second!, { key: 'Enter' });
+    await act(async () => { await new Promise((r) => setTimeout(r, 150)); });
+    expect(sent).toBe(2);
+    await act(async () => { release(); await new Promise((r) => setTimeout(r, 50)); });
+  });
+
+  it('Cancel closes the card and starts nothing; the words stay', async () => {
+    runsFirst = [CHOICE];
+    render(<Harness navigate={vi.fn()} />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    enter();
+    fireEvent.click(await screen.findByTestId('composer-start-standin-cancel'));
+    await waitFor(() => expect(screen.queryByTestId('composer-start-standin')).toBeNull());
+    expect(launches()).toHaveLength(1);
+    expect(box().value).toBe('the charge never clears');
+  });
+});
+
+describe('studio#1459 F1 (round 2): a helper signed in but left out of this start is not called "not signed in"', () => {
+  // studio#1445's writer's output: crew 0.18.22's preflightRefusal over the engine's preflight for a launch that picked
+  // one helper (`preflight.signedIn` is the launch's own seats, `tr2-claude`).
+  const PICKED_ONE = JSON.parse(readFileSync(resolve(process.cwd(), 'tests/fixtures/stand-in-choice-picked-one.crew.json'), 'utf8')) as { status: number; body: Record<string, unknown> };
+  const seatOf = (key: string, display: string): RosterSeat =>
+    ({ key, display_name: display, binary: key, enabled_for_council: true, health: { status: 'active', since: 'x' }, signed_in: true, auth: 'signed_in' }) as RosterSeat;
+  const ROSTER = [seatOf('tr2-claude', 'Claude Code'), seatOf('codex', 'Codex')];
+  const seatChip = (key: string): HTMLElement => document.querySelector<HTMLElement>(`[data-testid="composer-seat"][data-key="${key}"]`)!;
+
+  async function refusedWithCodexOff(): Promise<void> {
+    rosterWire = ROSTER;
+    setCachedRoster(ROSTER);
+    runsFirst = [PICKED_ONE];
+    render(<Harness navigate={vi.fn()} />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    await waitFor(() => expect(seatChip('codex')).not.toBeNull());
+    fireEvent.click(seatChip('codex'));
+    await waitFor(() => expect(seatChip('codex')).toHaveAttribute('aria-pressed', 'false'));
+    enter();
+    await screen.findByTestId('composer-start-standin');
+    expect((JSON.parse(String(launches()[0]!['clisJson'])) as Array<{ key: string }>).map((x) => x.key)).toEqual(['tr2-claude']);
+  }
+
+  it('the card says Claude Code is the one picked, names Codex as signed in but not picked, and offers to pick it', async () => {
+    await refusedWithCodexOff();
+    const card = screen.getByTestId('composer-start-standin');
+    expect(card).toHaveTextContent('Only one helper is picked for this job');
+    expect(card).toHaveTextContent('Only Claude Code is picked for this job.');
+    expect(card).toHaveTextContent(/Codex (is|are) signed in but not picked/);
+    expect(card).not.toHaveTextContent('tr2-claude');
+    expect(card).not.toHaveTextContent(/only helper signed in/);
+    expect(screen.queryByTestId('composer-start-standin-sign_in')).toBeNull();
+    expect(screen.getByTestId('composer-start-standin-pick')).toBeInTheDocument();
+  });
+
+  it('"Pick another helper" closes the card and puts focus on the helpers row, at the helper left out', async () => {
+    await refusedWithCodexOff();
+    fireEvent.click(screen.getByTestId('composer-start-standin-pick'));
+    await waitFor(() => expect(screen.queryByTestId('composer-start-standin')).toBeNull());
+    expect(document.activeElement).toBe(seatChip('codex'));
+    expect(launches()).toHaveLength(1);
+  });
+
+  it('MAIN-RED 8ed2e5c2: a box focus still waiting for its frame (the menu pick\'s) does not take focus back after the pick', async () => {
+    // CI ordering made deterministic: the `/bug` pick asks for the box's focus on the next animation frame; on a busy
+    // runner that frame can land after "Pick another helper" has put focus on the helpers row. Hold every frame until
+    // after the pick, then run them.
+    const frames: FrameRequestCallback[] = [];
+    const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => { frames.push(cb); return frames.length; });
+    try {
+      await refusedWithCodexOff();
+      fireEvent.click(screen.getByTestId('composer-start-standin-pick'));
+      await waitFor(() => expect(screen.queryByTestId('composer-start-standin')).toBeNull());
+      expect(frames.length).toBeGreaterThan(0);
+      act(() => { for (const cb of frames.splice(0)) cb(performance.now()); });
+      expect(document.activeElement).toBe(seatChip('codex'));
+    } finally {
+      raf.mockRestore();
+    }
   });
 });
 

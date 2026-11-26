@@ -2,7 +2,7 @@ import { useDisplayText } from '../../hooks/useHomePath.js';
 import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { SessionView } from '../../api/types.js';
 import type { Navigate } from '../../hooks/useRoute.js';
-import type { ChainModel, ChainStep } from '../../board/chainModel.js';
+import { stepNow, type ChainModel, type ChainStep } from '../../board/chainModel.js';
 import { jobTitle } from '../../board/deskWords.js';
 import { deriveRunCost } from '../runIdentity.js';
 import { workflowLabel } from '../../board/workflowNames.js';
@@ -10,7 +10,7 @@ import { chatStatusWord, statusWord } from '../../board/statusWords.js';
 import { useInstallOutcome } from './outcomeReads.js';
 import { seatKeyName } from '../../board/seatNames.js';
 import { seatedStandIns, standInLine } from '../../board/standIn.js';
-import { ORPHANED_LINE, orphanedOf } from '../../board/sessionModel.js';
+import { headlinePool, ORPHANED_LINE, orphanedOf } from '../../board/sessionModel.js';
 import { finishedDeliveryArm, proposalKindOf } from '../../board/proposalCard.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { isCommandPath, isHelperSeat, isReviewUnit } from '../../board/responder.js';
@@ -75,16 +75,17 @@ function nothingToStop(view: SessionView): boolean {
   return isTerminal(view) || (view.session.status === 'awaiting_human' && isAskTurnRun(view.session));
 }
 
+/** The run Details opens on: the newest live one, else the newest, of the runs the page is about (studio#1442: a job's,
+ *  not an ask answered beside it). */
 function primaryRun(runs: SessionView[]): SessionView | undefined {
-  return [...runs].reverse().find((view) => !isTerminal(view)) ?? runs[runs.length - 1];
+  const pool = headlinePool(runs);
+  return [...pool].reverse().find((view) => !isTerminal(view)) ?? pool[pool.length - 1];
 }
 
 /** The step the run is on: the running one, else (a live run waiting or between steps) the first step
  *  not yet finished — a step waiting on you at its gate is not "done", and the next one is not "now". */
 function currentStep(view: SessionView, chain: ChainModel): ChainStep | undefined {
-  if (isTerminal(view)) return undefined;
-  return chain.steps.find((step) => step.state === 'running')
-    ?? chain.steps.find((step) => !['done', 'checked', 'replaced', 'struck'].includes(step.state));
+  return isTerminal(view) ? undefined : stepNow(chain);
 }
 
 function assignedClis(view: SessionView): string[] {
