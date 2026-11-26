@@ -20,6 +20,9 @@ import { fetchReposCached, getCachedRepos } from '../../store/repoCache.js';
 import { catalogProjectOf, readWorkflowCatalog, useWorkflowCatalog } from '../../store/workflowCatalog.js';
 import { useWorkflowDefs } from '../../store/workflowCache.js';
 import { useRoster } from '../../hooks/useRoster.js';
+import { useStandInChoice } from '../../hooks/useStandInChoice.js';
+import { standInChoiceOf } from '../../board/standIn.js';
+import type { LaunchBodyWithDeliver } from '../../api/types.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from '../composerDefaults.js';
 import { launchChatId } from '../launch/launchChatId.js';
 import { QeOffNote } from '../QeOffNote.js';
@@ -59,7 +62,7 @@ const realProject = (p: string | null | undefined): string | null => (p === unde
  * The choices are client state; the only write is the start itself.
  */
 export function InlineStart({
-  composerKey, entry: composerEntry, catalogState, sessionRepo, projectId: projectIn, seatKeys, words, navigate, handle, onBlocker,
+  composerKey, entry: composerEntry, catalogState, sessionRepo, projectId: projectIn, seatKeys, signedInNow, onPickHelpers, words, navigate, handle, onBlocker, onStartedLater,
 }: {
   composerKey: string;
   /** The card on the composer, or null while the catalog is read (or the card is gone). */
@@ -71,11 +74,19 @@ export function InlineStart({
   projectId: string | null;
   /** The helpers the composer's row has on (New job's rule: one that cannot take work joins only when picked). */
   seatKeys: readonly string[];
+  /** (studio#1459 F1) The helpers the composer's row offers that can take work now: crew's preflight counts only the
+   *  picked ones (`seatKeys`), so the stand-in card names the rest as signed in but not picked (studio#1436). */
+  signedInNow?: readonly string[];
+  /** The card's "Pick another helper": the composer puts focus on its helpers row. */
+  onPickHelpers?: () => void;
   words: string;
   navigate: (path: string) => void;
   handle: React.MutableRefObject<InlineStartHandle | null>;
   /** Why Enter cannot start yet (shown by the composer), or null. */
   onBlocker: (blocker: string | null) => void;
+  /** (studio#1444) A start the stand-in card carried out after Enter returned: the words it started with, so the
+   *  composer clears them as it does for a start Enter made. */
+  onStartedLater?: (typed: string) => void;
 }): React.ReactElement {
   const defs = useWorkflowDefs();
   const projects = useProjectsStore((s) => s.projects) ?? [];
@@ -109,11 +120,40 @@ export function InlineStart({
   /** The repository picker is open over a default (the session's, a sole one): codex r1, a default must be changeable. */
   const [choosing, setChoosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // (studio#1444) crew held the start for want of helpers that did not build the work: the stand-in card, as on New
+  // job. A start it carries out lands as Enter's would (the job filed, this card spent, its page opened).
+  type Held = { chatId: string | null; typed: string; spend: () => void };
+  const roster = useRoster();
+  const standIn = useStandInChoice<Held, { launched: Awaited<ReturnType<typeof api.launchRun>>; body: LaunchBodyWithDeliver }>(
+    // One start per chat at a time, as Enter's (the thread's and the drawer's composers share the key).
+    async (body: LaunchBodyWithDeliver) => {
+      if (inFlight.has(composerKey)) throw new Error('Another start from this chat is on its way. Choose again once it lands.');
+      inFlight.add(composerKey);
+      try { return { launched: await api.launchRun(body), body }; } finally { inFlight.delete(composerKey); }
+    },
+    (done) => {
+      for (const { result: { launched, body }, meta } of done) {
+        const { runId } = launched;
+        useProvenanceStore.getState().markLaunchedHere(runId);
+        const notice = assuranceNoticeOf(launched);
+        if (notice !== null) useLaunchNotices.getState().put({ runId, notice, body }, meta.chatId);
+        meta.spend();
+        onStartedLater?.(meta.typed);
+        navigate(meta.chatId !== null ? sessionPath(meta.chatId) : sessionPath(`run:${runId}`));
+      }
+    },
+    navigate,
+    undefined,
+    signedInNow !== undefined && onPickHelpers !== undefined ? { signedInNow, roster, onPick: onPickHelpers } : undefined,
+  );
+  // Effects retire the card through the latest hook (its functions are new each render).
+  const standInNow = useRef(standIn);
+  standInNow.current = standIn;
   const entryId = composerEntry?.id ?? null;
   // Each pick of a card is its own start (a fresh chip key, codex on studio#1399): its choices start fresh too.
   const pickKey = useComposerChips((s) => chipsOf(s, composerKey).find((c) => c.kind === 'workflow')?.key ?? null);
   // Another card, or another chat's composer (the page is reused across chats), starts its own choices and consent.
-  useEffect(() => { setPickedRepo(null); setPickedProject(null); setError(null); setReduced(false); setSkipQe(false); setSkipQeReason(''); setForceQe(false); setChoosing(false); setAllChoices(false); setRestApi(false); }, [entryId, composerKey, pickKey]);
+  useEffect(() => { standInNow.current.ask(null, []); setPickedRepo(null); setPickedProject(null); setError(null); setReduced(false); setSkipQe(false); setSkipQeReason(''); setForceQe(false); setChoosing(false); setAllChoices(false); setRestApi(false); }, [entryId, composerKey, pickKey]);
 
   // The project: the composer's (its chip, its chat), else the one picked here, else a sole project.
   const filed = projects.filter((p) => p.id !== 'default');
@@ -166,7 +206,6 @@ export function InlineStart({
   });
 
   // The helpers: exactly the row's (the composer applies New job's J4 rule to it).
-  const roster = useRoster();
   const seats: RosterSeat[] = seatKeys.flatMap((key) => (roster ?? []).filter((x) => x.key === key));
 
   const offerReduced = reducedCap && entry !== null && entry.launchKind === 'run' && seats.length === 1;
@@ -203,10 +242,26 @@ export function InlineStart({
   requestNow.current = JSON.stringify([entry?.id ?? null, entry?.launchId ?? null, repoRef, project, words.trim(), seats, deliver, offerReduced && reduced, offerQe, qeOff, skipQe, skipQeReason, forceQe, restOn]);
   const blockerNow = useRef<string | null>(null);
   blockerNow.current = blocker;
+  // Another repository, project, words, choice or Review plan on the box is another job: a held choice for the one
+  // crew refused retires, and so does opening the repository picker (codex r1, r2). A choice already being carried out
+  // finishes (the person chose that job); if it fails, what it leaves held retires then.
+  const requestKey = requestNow.current;
+  const changedWhileBusy = useRef(false);
+  useEffect(() => {
+    if (standInNow.current.busy) changedWhileBusy.current = true;
+    else standInNow.current.ask(null, []);
+  }, [requestKey, choosing, reviewPlan, powerDefaultOn]);
+  useEffect(() => {
+    if (standIn.busy || !changedWhileBusy.current) return;
+    changedWhileBusy.current = false;
+    standInNow.current.ask(null, []);
+  }, [standIn.busy]);
+  const composerNow = useRef(composerKey);
+  composerNow.current = composerKey;
 
   handle.current = {
     start: async (typed: string): Promise<boolean> => {
-      if (busy || inFlight.has(composerKey)) return false;
+      if (busy || standIn.busy || inFlight.has(composerKey)) return false;
       if (blocker !== null || entry === null) { setError(blocker); return false; }
       const asked = requestNow.current;
       // What the box showed at the press (the setting and Review plan), captured before any read can redraw it.
@@ -216,8 +271,12 @@ export function InlineStart({
       inFlight.add(composerKey);
       setBusy(true);
       setError(null);
+      standIn.ask(null, []);
       // On success only THIS card leaves the composer (never a chip someone added meanwhile).
       const spend = (): void => { if (chip !== undefined) removeAboutChip(composerKey, chip.key); };
+      // The launch as sent, for the stand-in card to start again.
+      let sent: LaunchBodyWithDeliver | null = null;
+      let sentChat: string | null = null;
       try {
         if (entry.launchKind === 'app') {
           const r = await startAppByChat(typed.trim(), project!);
@@ -290,6 +349,8 @@ export function InlineStart({
           power: chatStartPower(powerCapNow, defaultNow, reviewAsked),
         });
         if (forceAcceptance) body.forceQeAcceptance = true;
+        sent = body;
+        sentChat = chatId;
         const launched = await api.launchRun(body);
         const { runId } = launched;
         useProvenanceStore.getState().markLaunchedHere(runId);
@@ -300,6 +361,15 @@ export function InlineStart({
         navigate(chatId !== null ? sessionPath(chatId) : sessionPath(`run:${runId}`));
         return true;
       } catch (e) {
+        const refusal = standInChoiceOf(e);
+        if (refusal !== null && sent !== null) {
+          // A refusal that lands after the person changed the job (another card, repository or words) holds nothing:
+          // that job is not the one on the composer now (codex r1).
+          const chipNow = chipsOf(useComposerChips.getState(), composerKey).some((c) => c.kind === 'workflow' && c.key === chip?.key);
+          if (!mounted.current || !chipNow || composerNow.current !== composerKey || requestNow.current !== asked || reviewNow.current !== reviewAsked) return false;
+          standIn.ask(refusal, [{ body: sent, meta: { chatId: sentChat, typed, spend } }]);
+          return false;
+        }
         setError(`Not started: ${e instanceof Error ? e.message : String(e)}`);
         return false;
       } finally {
@@ -375,6 +445,7 @@ export function InlineStart({
         <button type="button" data-testid="composer-start-retry" className="wk-btn wk-btn--link wk-btn--sm" onClick={() => invalidatePresets()}>Try again</button>
       )}
       {error !== null && <span data-testid="composer-start-error" role="alert" className="wk-composer-note wk-composer-note--bad">{error}</span>}
+      {standIn.card('composer-start-standin')}
     </div>
   );
 }

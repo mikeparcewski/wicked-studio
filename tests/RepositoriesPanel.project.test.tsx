@@ -251,7 +251,7 @@ describe('Repository page — Add to a project', () => {
  * one — `projectId` rides the existing `launchRun` wire (`LaunchRunBody.projectId`, api-types 0.38.0) — and sends NO
  * `projectId` otherwise, so an unfiled run is unfiled honestly (no repo→project guess). The verb lives on the
  * repository's page (Settings) since the 2026-11-05 redesign: a row opened from a project's Repositories tab carries
- * the project to the page as `?project=`. Mutation: drop the spread in `launchCaptureLearnings` → the first case fails.
+ * the project to the page as `?project=`. Mutation: drop the spread in `captureLearningsBody` → the first case fails.
  */
 describe('Capture learnings — ambient project filing (L4-⑩)', () => {
   beforeEach(() => {
