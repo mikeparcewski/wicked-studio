@@ -88,7 +88,8 @@ export function useStandInChoice<T, R>(
 
   const card = (testId: string): React.ReactElement | null => (held === null ? null : (
     <StandInChoice refusal={held.refusal} name={helperNamer(null)} busy={busy} error={error} testId={testId}
-      onChoose={(id) => { void choose(id); }} />
+      // No `signedInNow` is passed here, so the card never offers studio's `pick` (studio#1436): crew's ids only.
+      onChoose={(id) => { if (id !== 'pick') void choose(id); }} />
   ));
 
   return { ask, card, busy: busy !== null, held: held?.retries.map((r) => r.meta) ?? [] };

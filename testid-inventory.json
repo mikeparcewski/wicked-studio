@@ -10359,6 +10359,12 @@
       ]
     },
     {
+      "testId": "launch-standin-error",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
       "testId": "launch-started",
       "files": [
         "src/components/ChatInput.tsx"
