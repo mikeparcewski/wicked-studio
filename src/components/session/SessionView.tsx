@@ -1227,7 +1227,11 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
       // Delta (codex P2): only a helper's step reads a message; crew's own machinery (a tool command, a program path)
       // has no one to read it, and the sheet would send it there. Such a job is passed over, not the end of the search.
       const unit = v.units.find((u) => u.ord === ord);
-      if (unit !== undefined && isHelperSeat(unit.assigned_cli) && !isToolUnitGate(v.units, ord)) return { runId: v.session.id, ord };
+      // studio#1458: a step dispatched on this attempt reads no new message until it is dispatched again; only a power
+      // build reads one between its turns (wicked-core#1967: the engine refuses any other, crew answers 409).
+      const p = powerOf(v.session);
+      const hears = p !== null && p.on && p.orchestrator.ord === ord;
+      if (hears && unit !== undefined && isHelperSeat(unit.assigned_cli) && !isToolUnitGate(v.units, ord)) return { runId: v.session.id, ord };
     }
     return null;
   }, [mine, pauses]);

@@ -21,6 +21,9 @@ const { composerScopeNote, MESSAGE_STEP_LABEL, SEPARATE_ASK_NOTE } = await impor
 const { useSheets } = await import('../src/store/sheets.js');
 const { markHeld } = await import('../src/board/heldRuns.js');
 const { makeUnit, makeView } = await import('./factories.js');
+const { state: powerState } = await import('./powerFixtures.js');
+/** studio#1458: only a power build reads a message mid-run (its orchestrator, step 2 here), so the link tests run on one. */
+const POWER = { power: powerState({ orchestrator: { cli: 'codex', ord: 2, turns: 3, inTurn: true, sessionRestarts: 0 } }) };
 
 const T0 = Date.now() - 600_000;
 const CHAT = 'chat-polish';
@@ -30,6 +33,7 @@ const JOB = makeView({ id: 'r-job', status: 'executing', problem: 'polish the ma
   makeUnit({ id: 'r-job:u2', session_id: 'r-job', ord: 2, status: 'distributed', stage: 'review', assigned_cli: 'codex', description: 'review — polish' }),
   makeUnit({ id: 'r-job:u3', session_id: 'r-job', ord: 3, status: 'pending', stage: 'review', assigned_cli: 'pi', description: 'review — polish' }),
 ]);
+const POWER_JOB = makeView({ ...JOB.session, ...POWER } as never, JOB.units);
 const QUESTION = 'For the reviewer and the next steps: keep both rules from the ask exactly as written';
 /** The ask the question started in the same chat, answered and parked at its turn. */
 const ASK = makeView({ id: 'r-ask', status: 'awaiting_human', problem: QUESTION, unit_ix: 1, chat_id: CHAT, ask_path: true, ask_turn: true, created_at: (T0 + 300_000) / 1000 } as never, [
@@ -99,7 +103,7 @@ describe('the job page\'s box says where a message for the job goes', () => {
 
   it('round 1 (codex P2): the note carries its own way to message the job\'s working step, never a menu that may not be drawn', async () => {
     useSheets.setState({ open: null } as never);
-    render(<SessionPage sessionId={CHAT} runs={[JOB, ASK]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    render(<SessionPage sessionId={CHAT} runs={[POWER_JOB, ASK]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
     const note = await screen.findByTestId('session-composer-scope');
     expect(note.textContent).not.toContain(MESSAGE_STEP_LABEL);
     fireEvent.click(await screen.findByTestId('session-composer-message-job'));
@@ -107,7 +111,7 @@ describe('the job page\'s box says where a message for the job goes', () => {
   });
 
   it('round 1 (codex P2): a job with no working step (planning) offers no message button', async () => {
-    const planning = makeView({ ...JOB.session, status: 'planning', unit_ix: 0 } as never, JOB.units.map((u) => ({ ...u, status: 'pending' })));
+    const planning = makeView({ ...JOB.session, ...POWER, status: 'planning', unit_ix: 0 } as never, JOB.units.map((u) => ({ ...u, status: 'pending' })));
     render(<SessionPage sessionId={CHAT} runs={[planning, ASK]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
     await screen.findByTestId('session-title');
     expect(screen.queryByTestId('session-composer-message-job')).toBeNull();
@@ -150,14 +154,14 @@ describe('round 1 delta (codex)', () => {
   });
 
   it('P2: a working step run by crew\'s own machinery (a script, a program path) offers no "Message the job"', async () => {
-    const scripted = makeView({ ...JOB.session } as never, JOB.units.map((u) => (u.ord === 2 ? { ...u, assigned_cli: '/opt/homebrew/bin/node', tool_cmd: ['node', 'check.js'] } : u)));
+    const scripted = makeView({ ...JOB.session, ...POWER } as never, JOB.units.map((u) => (u.ord === 2 ? { ...u, assigned_cli: '/opt/homebrew/bin/node', tool_cmd: ['node', 'check.js'] } : u)));
     render(<SessionPage sessionId={CHAT} runs={[scripted, ASK]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
     await screen.findByTestId('session-composer-scope');
     expect(screen.queryByTestId('session-composer-message-job')).toBeNull();
   });
 
   it('delta 2 (codex P2): a tool step (a tool_cmd) assigned a helper\'s name still offers no "Message the job"', async () => {
-    const tool = makeView({ ...JOB.session } as never, JOB.units.map((u) => (u.ord === 2 ? { ...u, assigned_cli: 'claude', tool_cmd: ['bash', 'deliver.sh'] } : u)));
+    const tool = makeView({ ...JOB.session, ...POWER } as never, JOB.units.map((u) => (u.ord === 2 ? { ...u, assigned_cli: 'claude', tool_cmd: ['bash', 'deliver.sh'] } : u)));
     render(<SessionPage sessionId={CHAT} runs={[tool, ASK]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
     await screen.findByTestId('session-composer-scope');
     expect(screen.queryByTestId('session-composer-message-job')).toBeNull();
@@ -165,8 +169,8 @@ describe('round 1 delta (codex)', () => {
 
   it('delta 2 (codex P2): a newer job on a machinery step does not hide an older job working on a helper\'s step', async () => {
     useSheets.setState({ open: null } as never);
-    const older = makeView({ ...JOB.session, id: 'r-old', created_at: (T0 - 60_000) / 1000 } as never, JOB.units.map((u) => ({ ...u, id: u.id.replace('r-job', 'r-old'), session_id: 'r-old' })));
-    const scripted = makeView({ ...JOB.session } as never, JOB.units.map((u) => (u.ord === 2 ? { ...u, assigned_cli: '/opt/homebrew/bin/node', tool_cmd: ['node', 'check.js'] } : u)));
+    const older = makeView({ ...JOB.session, ...POWER, id: 'r-old', created_at: (T0 - 60_000) / 1000 } as never, JOB.units.map((u) => ({ ...u, id: u.id.replace('r-job', 'r-old'), session_id: 'r-old' })));
+    const scripted = makeView({ ...JOB.session, ...POWER } as never, JOB.units.map((u) => (u.ord === 2 ? { ...u, assigned_cli: '/opt/homebrew/bin/node', tool_cmd: ['node', 'check.js'] } : u)));
     render(<SessionPage sessionId={CHAT} runs={[older, scripted, ASK]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
     fireEvent.click(await screen.findByTestId('session-composer-message-job'));
     expect(useSheets.getState().open).toMatchObject({ ref: { kind: 'step', runId: 'r-old', ord: 2 }, compose: expect.any(Number) });
@@ -176,7 +180,7 @@ describe('round 1 delta (codex)', () => {
     useSheets.setState({ open: null } as never);
     const answering = { ...ASK, session: { ...ASK.session, status: 'executing' as const, ask_turn: undefined } } as unknown as typeof ASK;
     useAskThreadStore.setState({ turns: { [CHAT]: [{ who: 'you', text: QUESTION, turnId: 't2', at: Date.now() }, { who: 'claude', text: '', pending: true, turnId: 't2', at: Date.now() }] } } as never);
-    render(<SessionPage sessionId={CHAT} runs={[JOB, answering]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    render(<SessionPage sessionId={CHAT} runs={[POWER_JOB, answering]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
     const link = await screen.findByTestId('session-composer-message-job');
     fireEvent.click(link);
     expect(useSheets.getState().open).toMatchObject({ ref: { kind: 'step', runId: 'r-job', ord: 2 }, compose: expect.any(Number) });

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { plainGateQuestion } from '../../board/deskWords.js';
 import { cliLabel, seatKeyName, seatLabel, standInBase } from '../../board/seatNames.js';
 import { api, downloadRunEvidence } from '../../api/client.js';
+import { ApiError } from '../../api/errors.js';
 import { executingOrd as rawExecutingOrd } from '../../api/run-state.js';
 import { isHeldRun } from '../../board/heldRuns.js';
 import type { ChatPathView, CoreEvent, RosterSeat, SessionView } from '../../api/types.js';
@@ -105,14 +106,16 @@ export function ObjectSheet({ runs, navigate, needCount }: { runs: SessionView[]
 /** "Message it": a box that sends to the working helper (`POST /runs/:id/inject`). */
 function MessageBox({ runId, target, can }: { runId: string; target: string; can: string | null }): React.ReactElement {
   const [text, setText] = useState('');
-  const [state, setState] = useState<{ kind: 'idle' } | { kind: 'sending' } | { kind: 'sent' } | { kind: 'error'; message: string }>({ kind: 'idle' });
+  const [state, setState] = useState<{ kind: 'idle' } | { kind: 'sending' } | { kind: 'sent' } | { kind: 'error'; message: string; reason: string | null }>({ kind: 'idle' });
   const send = (): void => {
     const body = text.trim();
     if (body === '' || can !== null) return;
     setState({ kind: 'sending' });
     api.injectMessage(runId, body, target)
       .then(() => { setText(''); setState({ kind: 'sent' }); })
-      .catch((e: unknown) => setState({ kind: 'error', message: e instanceof Error ? e.message : String(e) }));
+      // studio#1458: a refusal (crew's 409, the engine's sentence: a step mid-turn reads no new message) is said in the
+      // open, with its way on; anything else stays behind the details.
+      .catch((e: unknown) => setState({ kind: 'error', message: e instanceof Error ? e.message : String(e), reason: e instanceof ApiError && e.status === 409 && e.wire.trim() !== '' ? e.message : null }));
   };
   return (
     <div data-testid="sheet-message" className="wk-sheet-message">
@@ -129,7 +132,7 @@ function MessageBox({ runId, target, can }: { runId: string; target: string; can
       />
       <button type="button" data-testid="sheet-message-send" disabled={can !== null || text.trim() === '' || state.kind === 'sending'} onClick={send} className="wk-btn wk-btn--secondary">Send</button>
       {state.kind === 'sent' && <span data-testid="sheet-message-sent" role="status" className="wk-sheet-hint">Sent — it reads it at its next step.</span>}
-      {state.kind === 'error' && <><span data-testid="sheet-message-error" role="alert" className="wk-composer-note wk-composer-note--bad">The message could not be sent.</span><TechDetails text={state.message} /></>}
+      {state.kind === 'error' && <><span data-testid="sheet-message-error" role="alert" className="wk-composer-note wk-composer-note--bad">{state.reason !== null ? `The message could not be sent: ${state.reason}` : 'The message could not be sent.'}</span><TechDetails text={state.message} /></>}
     </div>
   );
 }
