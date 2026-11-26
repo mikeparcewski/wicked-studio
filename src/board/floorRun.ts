@@ -1,3 +1,4 @@
+import { cliLabel } from '../api/skillUsage.js';
 import type { CoreEvent } from '../api/types.js';
 import { arrivedAt } from '../store/events.js';
 import { floorLineOf } from './floorLine.js';
@@ -19,14 +20,17 @@ import { floorLineOf } from './floorLine.js';
 
 export interface RunningFloor {
   ord: number;
-  /** `checks`: running the repository's checks; `judge`: the judge reviewing the change before them. */
-  phase: 'checks' | 'judge';
+  /** `checks`: running the repository's checks; `judge`: the judge reviewing the change before them; `rules`: the
+   *  engine judging the steering rules after the step's own turn (studio#1441). */
+  phase: 'checks' | 'judge' | 'rules';
   /** The check running now, when the floor's newest line names it. */
   check: string | null;
   /** Whole minutes since the floor started. */
   minutes: number;
   /** When the floor started (unix ms). */
   since: number;
+  /** The rule check's judges (seat keys), when its note named them. */
+  judges?: string[];
 }
 
 type Ev = CoreEvent & Record<string, unknown>;
@@ -36,40 +40,54 @@ const RUN_ENDED: ReadonlySet<string> = new Set(['sessionCompleted', 'sessionFail
 
 /** The run header's badge while the engine works: the judge reviewing, else the checks running. */
 export function floorBadge(f: RunningFloor): string {
-  return f.phase === 'judge' ? 'Judge reviewing' : 'Running checks';
+  return f.phase === 'judge' ? 'Judge reviewing' : f.phase === 'rules' ? 'Checking rules' : 'Running checks';
 }
 
 const timeOf = (e: Ev): number | null => (typeof e.ts === 'number' ? e.ts : arrivedAt(e));
 
 /** The floor running now (the newest one still open), or null. */
 export function runningFloor(events: readonly CoreEvent[] | null | undefined, now: number): RunningFloor | null {
-  const open = new Map<number, { phase: 'checks' | 'judge'; since: number; check: string | null; seen: number }>();
+  type Open = { phase: RunningFloor['phase']; since: number; check: string | null; seen: number; judges?: string[] };
+  const open = new Map<number, Open>();
   let n = 0;
   for (const e of (events ?? []) as readonly Ev[]) {
     n += 1;
     if (RUN_ENDED.has(e.type)) { open.clear(); continue; }
     if (typeof e.ord !== 'number') continue;
     if (UNIT_MOVED_ON.has(e.type)) { open.delete(e.ord); continue; }
-    // The judge's verdict is in: its review is over (a floor's own result is `repoChecksEvaluated`).
-    if (e.type === 'gateEvaluated' && open.get(e.ord)?.phase === 'judge') { open.delete(e.ord); continue; }
+    // The judge's verdict, or the rule check's, is in: its work is over (a floor's own result is `repoChecksEvaluated`).
+    if (e.type === 'gateEvaluated' && (open.get(e.ord)?.phase === 'judge' || open.get(e.ord)?.phase === 'rules')) { open.delete(e.ord); continue; }
     if (e.type !== 'unitOutputDelta') continue;
     const line = floorLineOf(e.text);
     if (line === null) continue;
     const at = timeOf(e) ?? now;
     const cur = open.get(e.ord);
     // A new phase (the judge, then the checks) starts its own clock.
-    if (cur === undefined || cur.phase !== line.phase) open.set(e.ord, { phase: line.phase, since: at - line.minutes * 60_000, check: line.check, seen: n });
-    else { cur.check = line.check; cur.seen = n; }
+    if (cur === undefined || cur.phase !== line.phase) {
+      open.set(e.ord, { phase: line.phase, since: at - line.minutes * 60_000, check: line.check, seen: n, ...(line.judges !== undefined ? { judges: line.judges } : {}) });
+    } else {
+      cur.check = line.check;
+      cur.seen = n;
+      if (line.judges !== undefined) cur.judges = line.judges;
+    }
   }
-  let best: { ord: number; phase: 'checks' | 'judge'; since: number; check: string | null; seen: number } | null = null;
+  let best: (Open & { ord: number }) | null = null;
   for (const [ord, f] of open) if (best === null || f.seen > best.seen) best = { ord, ...f };
   if (best === null) return null;
-  return { ord: best.ord, phase: best.phase, check: best.check, since: best.since, minutes: Math.max(0, Math.floor((now - best.since) / 60_000)) };
+  return {
+    ord: best.ord, phase: best.phase, check: best.check, since: best.since, minutes: Math.max(0, Math.floor((now - best.since) / 60_000)),
+    ...(best.judges !== undefined && best.judges.length > 0 ? { judges: best.judges } : {}),
+  };
 }
 
 /** "Running checks · test targeted · 12 min" (a check's id in words, as the Checks block's chips say it); before the
  *  checks, "A judge seat is reviewing the change · 1 min". */
 export function floorWords(f: RunningFloor): string {
   if (f.phase === 'judge') return `A judge seat is reviewing the change · ${f.minutes} min`;
+  if (f.phase === 'rules') {
+    const judges = (f.judges ?? []).map(cliLabel);
+    const who = judges.length === 0 ? '' : ` · ${judges.length === 1 ? 'judge' : 'judges'} ${judges.length === 1 ? judges[0]! : `${judges.slice(0, -1).join(', ')} and ${judges[judges.length - 1]!}`}`;
+    return `Checking the steering rules · ${f.minutes} min${who}`;
+  }
   return `Running checks${f.check !== null ? ` · ${f.check.replace(/_/gu, ' ')}` : ''} · ${f.minutes} min`;
 }
