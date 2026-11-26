@@ -49,13 +49,13 @@ export function KnowMarks({ marks, onOpen, variant = 'strip', repoName, testId =
   );
 }
 
-/** A tone dot, or for the requirements the real share as a small meter with the minimum marked. */
+/** A tone dot, or for the requirements the real share as a small meter (an older engine's minimum marked when sent). */
 function MarkGlyph({ mark }: { mark: KnowMark }): React.ReactElement {
   if (mark.meter !== undefined) {
     return (
       <span className="wk-know-meter" aria-hidden data-testid="repo-know-meter" data-pct={mark.meter.pct} data-min={mark.meter.min}>
         <span className="wk-know-meter-fill" style={{ width: `${mark.meter.pct}%` }} />
-        <span className="wk-know-meter-min" style={{ left: `${mark.meter.min}%` }} />
+        {mark.meter.min !== undefined && <span className="wk-know-meter-min" style={{ left: `${mark.meter.min}%` }} />}
       </span>
     );
   }

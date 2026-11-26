@@ -825,7 +825,12 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
 
           {step === 'options' && (
             <>
-              {eligible.length > 0 && (
+              {domainRun && (
+                <p className="wk-field-note" data-testid="launch-wizard-helpers-own">
+                  A domain model uses its own two helpers, a writer and a checker; the next step shows which.
+                </p>
+              )}
+              {eligible.length > 0 && !domainRun && (
                 <fieldset className="wk-launch-wizard-fieldset" data-testid="launch-wizard-helpers">
                   <legend className="wk-field-label">Helpers</legend>
                   <div className="wk-launch-wizard-seats">
@@ -1084,7 +1089,9 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
               <div><dt>What</dt><dd className="wk-launch-wizard-review-intent">{problemText.trim()}</dd></div>
               {offerRest && <div data-testid="launch-wizard-review-rest"><dt>REST API</dt><dd>{restOn ? 'Yes: HTTP routes and an OpenAPI description beside MCP' : 'No: MCP only'}</dd></div>}
               <div><dt>Where</dt><dd>{repoName ?? 'No repository'}{projectName !== null ? ` · in ${projectName}` : ''}</dd></div>
-              {seats.length > 0 && <div><dt>Helpers</dt><dd>{seats.map(seatLabel).join(', ')}</dd></div>}
+              {/* studio#1431 (J6 W8): a domain model run uses its own writer and checker (the scope card says which), so
+                  the helpers picked here are not listed beside them. */}
+              {seats.length > 0 && !domainRun && <div><dt>Helpers</dt><dd>{seats.map(seatLabel).join(', ')}</dd></div>}
               {offerLead && <div data-testid="launch-wizard-review-lead"><dt>Lead helper</dt><dd>{lead === null ? 'Random (picked when it starts)' : seatLabel(leadable.find((s) => s.key === lead)!)}</dd></div>}
               {offerPower && <div data-testid="launch-wizard-review-power"><dt>Power mode</dt><dd>{powerOn ? `On: one orchestrator${powerAsksAtHandOff ? ', rigor at hand-off' : ''}` : powerNotice !== null ? `Off: phased (${powerNotice})` : 'Off: phased'}</dd></div>}
               <div><dt>Ask me</dt><dd>{powerOn ? (powerAsksAtHandOff ? 'At hand-off' : 'Only where policy requires') : gatePostureWord(draft.confirmMode, beforeOrd, deliver === 'pr' && deliverGateCap === true)}</dd></div>

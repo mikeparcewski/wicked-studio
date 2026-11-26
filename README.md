@@ -114,8 +114,8 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
 - **Explore your codebase** — graph view with focus navigation, blast radius, hotspots, and the
   domain graph.
 - **See how much of the code is mapped to requirements** — Repositories → a repo → Requirements
-  heads the list with "80% real requirements · minimum 80%" and its parts (real, placeholders,
-  unmapped, not product code). A placeholder is never counted toward the share and never shows as
+  heads the list with "80% real requirements" and its parts (real, placeholders, unmapped, not product
+  code); an engine from before J6 v3 also sends its minimum ("· minimum 80%"), and only then is one shown. A placeholder is never counted toward the share and never shows as
   validated; a real one with corroboration data carries **validated** (with its count of
   independent sources) or **unconfirmed** with why (rows from an older build, or outside the
   count, may carry no verdict). A row the share does not count (a type shape, code that is not
@@ -123,9 +123,9 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
   under the coverage says how many stated rules and placeholders are not counted, for any of those reasons. The Config &
   data filter is hidden when crew reports no config and data rows. When the list is an older graph build than the header's numbers, it says
   so. A repo with no requirements graph yet offers **Generate it** (or **Keep mapping** once some real
-  requirements are mapped), which opens New job filled in with the generating workflow; while a mapping job
-  runs, the view shows its progress with **Open the job** instead. The minimum is a setting (Settings → General → Code graph,
-  default 80%).
+  requirements are mapped), which opens New job on the generating workflow and asks what the model should
+  cover; while a mapping job runs, the view shows its progress with **Open the job** instead. A domain model has
+  no minimum to set.
 - **Plan the product** — a project's page has a Requirements section (its count across the
   project's repositories) and a full list at `/projects/:id/requirements`, grouped by repo and
   searchable. Choose up to 40 requirements and **Draft epics** opens New job on the Draft epics

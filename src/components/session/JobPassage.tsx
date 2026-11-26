@@ -1206,7 +1206,7 @@ function DeclinedInstall({ run, install }: { run: SessionView; install: boolean 
   );
 }
 
-/** studio#1365: what a finished domain mapping found (the share of real requirements against the minimum, and the business
+/** studio#1365: what a finished domain mapping found (the share of real requirements, an older engine's minimum, and the business
  *  domains), read once from the repository's requirements, with the way to the requirements themselves. */
 function DomainResultLine({ run, read, navigate }: { run: SessionView; read: OutcomeRead<DomainJobResult>; navigate?: Navigate }): React.ReactElement | null {
   const repoId = run.session.repo_ref;
@@ -1237,7 +1237,7 @@ function DomainResultLine({ run, read, navigate }: { run: SessionView; read: Out
         {result === 'failed' && <><button type="button" className="wk-pass-inl" data-testid="job-passage-domain-retry" onClick={read.again}>Try again</button>{' · '}</>}
         <button type="button" className="wk-pass-inl" data-testid="job-passage-requirements-open" onClick={() => setOpen(true)}>{result !== null && result !== 'failed' && result.model != null ? 'Open the model' : 'Open the requirements'}</button>
       </p>
-      {/* What the requirements view changed (a lowered minimum, a built map) is read again once it closes. */}
+      {/* What the requirements view changed (a ruling, a built map) is read again once it closes. */}
       {open && <RequirementsModal repoId={repoId} repoName={repoName ?? repoId} onClose={() => { setOpen(false); read.again(); }} />}
     </>
   );

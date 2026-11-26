@@ -10575,6 +10575,12 @@
       ]
     },
     {
+      "testId": "launch-wizard-helpers-own",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
       "testId": "launch-wizard-intent",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
@@ -22475,24 +22481,6 @@
     },
     {
       "testId": "settings-council-size",
-      "files": [
-        "src/components/SystemSettings.tsx"
-      ]
-    },
-    {
-      "testId": "settings-min-coverage",
-      "files": [
-        "src/components/SystemSettings.tsx"
-      ]
-    },
-    {
-      "testId": "settings-min-coverage-invalid",
-      "files": [
-        "src/components/SystemSettings.tsx"
-      ]
-    },
-    {
-      "testId": "settings-min-coverage-unsupported",
       "files": [
         "src/components/SystemSettings.tsx"
       ]
