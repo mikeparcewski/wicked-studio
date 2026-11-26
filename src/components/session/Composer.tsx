@@ -470,7 +470,11 @@ export function Composer({
   const sendSeats = wfChip === null ? chosenSeats(eligibleSeats, dropped, picked) : eligibleSeats.filter((k) => !isOffSeat(k));
   // (studio#1459 F1) The stand-in card's "Pick another helper": focus the helpers row, at the first helper left out.
   const seatsRow = useRef<HTMLDivElement | null>(null);
+  // The latest focus asked for wins: a box focus still waiting for its frame (focusEnd) is dropped once a later one
+  // is asked for, so it cannot take focus back from the helpers row after a pick (MAIN-RED on 8ed2e5c2).
+  const focusAsk = useRef(0);
   const pickHelpers = (): void => {
+    focusAsk.current += 1;
     const row = seatsRow.current;
     const chip = row?.querySelector<HTMLButtonElement>('[data-testid="composer-seat"][aria-pressed="false"]') ?? row?.querySelector<HTMLButtonElement>('[data-testid="composer-seat"]') ?? null;
     chip?.focus();
@@ -505,9 +509,10 @@ export function Composer({
 
   const syncCaret = (el: HTMLTextAreaElement): void => setCaret(el.selectionStart ?? el.value.length);
   const focusEnd = (value: string): void => {
+    const ask = ++focusAsk.current;
     requestAnimationFrame(() => {
       const el = box.current;
-      if (el === null) return;
+      if (el === null || focusAsk.current !== ask) return;
       el.focus();
       el.setSelectionRange(value.length, value.length);
       setCaret(value.length);
