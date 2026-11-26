@@ -156,6 +156,22 @@ describe('round 1 delta (codex)', () => {
     expect(screen.queryByTestId('session-composer-message-job')).toBeNull();
   });
 
+  it('delta 2 (codex P2): a tool step (a tool_cmd) assigned a helper\'s name still offers no "Message the job"', async () => {
+    const tool = makeView({ ...JOB.session } as never, JOB.units.map((u) => (u.ord === 2 ? { ...u, assigned_cli: 'claude', tool_cmd: ['bash', 'deliver.sh'] } : u)));
+    render(<SessionPage sessionId={CHAT} runs={[tool, ASK]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await screen.findByTestId('session-composer-scope');
+    expect(screen.queryByTestId('session-composer-message-job')).toBeNull();
+  });
+
+  it('delta 2 (codex P2): a newer job on a machinery step does not hide an older job working on a helper\'s step', async () => {
+    useSheets.setState({ open: null } as never);
+    const older = makeView({ ...JOB.session, id: 'r-old', created_at: (T0 - 60_000) / 1000 } as never, JOB.units.map((u) => ({ ...u, id: u.id.replace('r-job', 'r-old'), session_id: 'r-old' })));
+    const scripted = makeView({ ...JOB.session } as never, JOB.units.map((u) => (u.ord === 2 ? { ...u, assigned_cli: '/opt/homebrew/bin/node', tool_cmd: ['node', 'check.js'] } : u)));
+    render(<SessionPage sessionId={CHAT} runs={[older, scripted, ASK]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    fireEvent.click(await screen.findByTestId('session-composer-message-job'));
+    expect(useSheets.getState().open).toMatchObject({ ref: { kind: 'step', runId: 'r-old', ord: 2 }, compose: expect.any(Number) });
+  });
+
   it('P3: while an ask is answering, the link is still there and opens the job\'s step (it reads the runs, not the thread\'s rows)', async () => {
     useSheets.setState({ open: null } as never);
     const answering = { ...ASK, session: { ...ASK.session, status: 'executing' as const, ask_turn: undefined } } as unknown as typeof ASK;
