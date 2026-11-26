@@ -88,6 +88,41 @@ describe('studio#1441: a long rule check is the engine working, not a silent rev
       expect(document.body.textContent).toContain('Checking rules');
       expect(document.body.textContent).not.toMatch(/No output for/u);
       expect(document.body.textContent).not.toContain('Move it to another helper');
+      expect(document.body.textContent).not.toContain('what’s happening');
+    });
+  });
+
+  describe('round 1 (codex, pi): only the engine\'s own lines, and only while the check runs', () => {
+    const DONE = '\nrule check: 5 rule(s) checked: 5 pass (702113 ms)\n';
+
+    it('a line quoted inside the reviewer\'s own output is not the engine\'s', () => {
+      const quoted = 'The fixture expects "rule check: judging the steering rules — 10 min" here.';
+      expect(floorLineOf(quoted)).toBeNull();
+      expect(floorLineOf(`I saw rule check: 5 steering rule(s) in force; judges: codex`)).toBeNull();
+      expect(isFloorDelta({ type: 'unitOutputDelta', text: quoted })).toBe(false);
+    });
+
+    it('the check\'s summary ends it, without waiting for the gate', () => {
+      expect(runningFloor([...ruleCheck(), ...ev([delta(T0 + 11 * MIN, DONE)])], T0 + 11.7 * MIN)).toBeNull();
+      expect(isFloorDelta({ type: 'unitOutputDelta', text: DONE })).toBe(true);
+    });
+
+    it('a check whose heartbeat stopped is no longer said to be running', () => {
+      // The last tick was at 10 min; the engine ticks every 5 min, so at 21 min the check is not running any more.
+      expect(runningFloor(ruleCheck(), T0 + 21 * MIN)).toBeNull();
+      expect(runningFloor(ruleCheck(), T0 + 14 * MIN)).not.toBeNull();
+    });
+
+    it('an earlier attempt\'s late tick never reopens the check over a new attempt', () => {
+      const redispatched = [...ruleCheck(), ...ev([{ type: 'unitDispatched', ord: 5, attempt: 1, ts: T0 + 10.5 * MIN }, delta(T0 + 11 * MIN, TICK(11))])];
+      expect(runningFloor(redispatched, T0 + 11.5 * MIN)).toBeNull();
+    });
+
+    it('the judges note and the first tick in one chunk keep the judges', () => {
+      const chunk = ev([delta(T0, `${JUDGES}${TICK(0)}`)]);
+      expect(floorWords(runningFloor(chunk, T0 + 2 * MIN)!)).toBe('Checking the steering rules · 2 min · judges Codex and Pi');
+      expect(floorLineOf('\nrule check: 1 steering rule(s) in force; judges: none\n')).toMatchObject({ phase: 'rules', judges: [] });
+      expect(floorLineOf('\nrule check: 2 steering rule(s) in force; judges: codex#2, claude-b\n')?.judges).toEqual(['codex#2', 'claude-b']);
     });
   });
 });
