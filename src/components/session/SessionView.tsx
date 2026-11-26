@@ -74,6 +74,7 @@ import { isHeldRun } from '../../board/heldRuns.js';
 import { executingOrd } from '../../api/run-state.js';
 import { phaseLabel } from '../gateVerdictModel.js';
 import { CREW, isHelperSeat, responderKey, turnResponder, type Responder } from '../../board/responder.js';
+import { isToolUnitGate } from '../../board/gateRowModel.js';
 import { TurnWho } from './TurnWho.js';
 import { PowerSwitchButton, RigorChipButton } from './PowerMode.js';
 import { LiveActivity } from './LiveActivity.js';
@@ -1222,10 +1223,11 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     for (const v of [...mine].reverse()) {
       if (isAskPathRun(v.session) || isHeldRun(v.session) || pauses.has(v.session.id)) continue;
       const ord = executingOrd(v.session, v.units);
-      // Delta (codex P2): only a helper's step reads a message; crew's own machinery (a script, a program path) has no
-      // one to read it, and the sheet would send it to that path.
-      if (ord !== null && isHelperSeat(v.units.find((u) => u.ord === ord)?.assigned_cli)) return { runId: v.session.id, ord };
-      if (ord !== null) return null;
+      if (ord === null) continue;
+      // Delta (codex P2): only a helper's step reads a message; crew's own machinery (a tool command, a program path)
+      // has no one to read it, and the sheet would send it there. Such a job is passed over, not the end of the search.
+      const unit = v.units.find((u) => u.ord === ord);
+      if (unit !== undefined && isHelperSeat(unit.assigned_cli) && !isToolUnitGate(v.units, ord)) return { runId: v.session.id, ord };
     }
     return null;
   }, [mine, pauses]);
