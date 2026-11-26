@@ -851,21 +851,22 @@ async function proposeGate(gate: OpenGate, heard: string, words: NonNullable<Ret
 }
 
 /** The system read voice shows (its own poll first, as {@link snapshotNow}), only while it is fresh enough to call
- *  now: no older than the Nerve Center trusts (round 1: a kept read went out as now after voice reopened). */
+ *  now: its latest poll answered and it is no older than the Nerve Center trusts (round 1 and its delta: a kept read went
+ *  out as now after voice reopened, or after a poll failed). */
 function freshSnapshot(now: number): SystemSnapshot | null {
   const d = useDashStore.getState();
-  if (d.system !== null && d.readAt !== null && now - d.readAt <= STALE_MS) return d.system;
+  if (d.system !== null && d.readError === null && d.readAt !== null && now - d.readAt <= STALE_MS) return d.system;
   const s = useSystemStore.getState();
-  if (s.snapshot !== null && s.snapshotAt !== null && now - s.snapshotAt <= STALE_MS) return s.snapshot;
+  if (s.snapshot !== null && s.snapshotError === null && s.healthError === null && s.snapshotAt !== null && now - s.snapshotAt <= STALE_MS) return s.snapshot;
   return null;
 }
 
 /** What voice mode shows now, for a question (studio#1438): read when it is asked. */
 function groundNow(): string {
   const now = Date.now();
-  const { phase, rows } = useNeedsCount.getState();
+  const { phase, count, rows } = useNeedsCount.getState();
   const needs = needsSource(useSystemStore.getState(), useConnectionStore.getState().status, rows, now);
-  return voiceGround({ snapshot: freshSnapshot(now), needs, needsPhase: phase, now });
+  return voiceGround({ snapshot: freshSnapshot(now), needs, needsPhase: phase, count, now });
 }
 
 async function askChat(question: string): Promise<void> {
