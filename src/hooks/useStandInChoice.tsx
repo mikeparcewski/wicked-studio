@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { LaunchBodyWithDeliver } from '../api/types.js';
 import { helperNamer, saveStandInsEveryJob, standInRelaunchBody, type StandInChoiceId, type StandInChoiceRefusal } from '../board/standIn.js';
 import { StandInChoice } from '../components/StandInChoice.js';
@@ -21,8 +21,10 @@ const message = (e: unknown): string => (e instanceof Error ? e.message : String
  * `launch` only starts a job. A held launch that fails again stays held, with its error on the card. The jobs that
  * started are handed to `started` once, together, so the launcher records them in one write; a failure to record is
  * the launcher's to say, and never starts a job again. `ask` (a new hold, or `null`) retires a choice in flight: it
- * starts nothing more and records nothing, and frees the launcher's Start at once (a stalled request of a retired
- * choice never holds it); so does leaving the page (studio#1444 r1).
+ * starts nothing more and hands nothing more to `started`, and frees the launcher's Start at once (a stalled request
+ * of a retired choice never holds it; studio#1444 r1). A choice the person made outlives its card: a start that answers
+ * after the card is gone is still handed to `started`, as the launcher's own Start would land (studio#1444 r2: the chat
+ * drawer's composer unmounts when the drawer closes, and its job must still be filed).
  */
 export function useStandInChoice<T, R>(
   launch: (body: LaunchBodyWithDeliver, meta: T) => Promise<R>,
@@ -53,9 +55,6 @@ export function useStandInChoice<T, R>(
     setHeld(refusal !== null && retries.length > 0 ? { refusal, retries } : null);
     setError(null);
   };
-
-  // Leaving the page retires a choice in flight: nothing more starts, and nothing is recorded or opened.
-  useEffect(() => () => { gen.current += 1; }, []);
 
   const choose = async (id: StandInChoiceId): Promise<void> => {
     if (held === null || busyRef.current) return;

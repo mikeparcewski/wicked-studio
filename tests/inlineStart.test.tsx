@@ -375,6 +375,100 @@ describe('studio#1444: crew holds a start for want of helpers: the stand-in card
     expect(screen.queryByTestId('composer-start-standin')).toBeNull();
   });
 
+  it('r2: Review plan turned on after the refusal is another job: the card retires and Enter holds at the plan', async () => {
+    powerModeDefault = true;
+    runsFirst = [CHOICE];
+    render(<Harness navigate={vi.fn()} />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    const toggle = await screen.findByTestId('composer-start-review-plan-toggle');
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    enter();
+    await screen.findByTestId('composer-start-standin');
+    expect(launches()[0]!['power']).toBe(true);
+    fireEvent.click(screen.getByTestId('composer-start-review-plan-toggle'));
+    await waitFor(() => expect(screen.queryByTestId('composer-start-standin')).toBeNull());
+    enter();
+    await waitFor(() => expect(launches()).toHaveLength(2));
+    expect(launches()[1]).toMatchObject({ power: false, humanConfirm: 'before:1' });
+  });
+
+  it('r2: words changed while "this job" starts, and the start fails: the old job is not left on the card', async () => {
+    let fail!: () => void;
+    const gate = new Promise<void>((r) => { fail = r; });
+    const base = globalThis.fetch;
+    let sent = 0;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (!String(url).endsWith('/runs') || init?.method !== 'POST') return base(url, init);
+      sent += 1;
+      if (sent !== 2) return base(url, init);
+      return gate.then(() => new Response(JSON.stringify({ error: 'busy' }), { status: 503, headers: { 'content-type': 'application/json' } }));
+    }));
+    runsFirst = [CHOICE];
+    render(<Harness navigate={vi.fn()} />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    enter();
+    fireEvent.click(await screen.findByTestId('composer-start-standin-job'));
+    await waitFor(() => expect(sent).toBe(2));
+    type('something else entirely');
+    expect(screen.getByTestId('composer-start-standin')).toBeInTheDocument();
+    await act(async () => { fail(); await new Promise((r) => setTimeout(r, 100)); });
+    expect(screen.queryByTestId('composer-start-standin')).toBeNull();
+    expect(box().value).toBe('something else entirely');
+  });
+
+  it('r2: a refusal that lands after the page moved to another chat with the same draft holds nothing there', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const base = globalThis.fetch;
+    let sent = 0;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (!String(url).endsWith('/runs') || init?.method !== 'POST') return base(url, init);
+      sent += 1;
+      return gate.then(() => base(url, init));
+    }));
+    runsFirst = [CHOICE];
+    const view = render(<Harness navigate={vi.fn()} composerKey="chat-1" />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    enter();
+    await waitFor(() => expect(sent).toBe(1));
+    // The session page is reused for chat B, whose composer holds the same workflow and words.
+    act(() => { addAboutChip('chat-2', workflowChipFor({ id: 'bug', title: 'Bug', launchId: 'bug' })); });
+    view.rerender(<Harness navigate={vi.fn()} composerKey="chat-2" />);
+    await act(async () => { release(); await new Promise((r) => setTimeout(r, 100)); });
+    expect(screen.queryByTestId('composer-start-standin')).toBeNull();
+  });
+
+  it('r2: the drawer\'s composer closes while "this job" starts: the job is still filed and its card spent', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const base = globalThis.fetch;
+    let sent = 0;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (!String(url).endsWith('/runs') || init?.method !== 'POST') return base(url, init);
+      sent += 1;
+      return sent === 2 ? gate.then(() => base(url, init)) : base(url, init);
+    }));
+    runsFirst = [CHOICE];
+    useProvenanceStore.setState({ launchedHere: {} });
+    const view = render(<Harness navigate={vi.fn()} />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    enter();
+    fireEvent.click(await screen.findByTestId('composer-start-standin-job'));
+    await waitFor(() => expect(sent).toBe(2));
+    view.unmount();
+    await act(async () => { release(); await new Promise((r) => setTimeout(r, 100)); });
+    expect(useProvenanceStore.getState().launchedHere['run-new']).toBe(true);
+    expect(wfChip('chat-1')).toBeUndefined();
+  });
+
   it('r1: while a choice starts its job, the chat\'s other composer starts nothing', async () => {
     let release!: () => void;
     const gate = new Promise<void>((r) => { release = r; });
@@ -387,7 +481,8 @@ describe('studio#1444: crew holds a start for want of helpers: the stand-in card
       return sent === 2 ? gate.then(() => base(url, init)) : base(url, init);
     }));
     runsFirst = [CHOICE];
-    render(<><Harness navigate={vi.fn()} /><Harness navigate={vi.fn()} /></>);
+    // Two composers of one chat (its thread and its full-screen drawer): one key, so one workflow card on both.
+    render(<><Harness navigate={vi.fn()} composerKey="chat-1" /><Harness navigate={vi.fn()} composerKey="chat-1" /></>);
     const [first, second] = screen.getAllByTestId('session-composer-input') as HTMLTextAreaElement[];
     const typeIn = (b: HTMLTextAreaElement, text: string): void => {
       fireEvent.change(b, { target: { value: text, selectionStart: text.length } });
@@ -399,6 +494,7 @@ describe('studio#1444: crew holds a start for want of helpers: the stand-in card
     typeIn(first!, 'the charge never clears');
     typeIn(second!, 'something else');
     await waitFor(() => expect(screen.getAllByTestId('composer-start-line')[0]).toHaveTextContent('in svc'));
+    expect(screen.getAllByTestId('composer-start')).toHaveLength(2);
     fireEvent.keyDown(first!, { key: 'Enter' });
     fireEvent.click(await screen.findByTestId('composer-start-standin-job'));
     await waitFor(() => expect(sent).toBe(2));

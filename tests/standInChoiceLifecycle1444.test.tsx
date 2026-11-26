@@ -1,6 +1,7 @@
 /**
- * studio#1444 round 1 (codex): a stand-in choice belongs to the page that holds it.
- * - Leaving the page retires a choice in flight: a start that answers later is not recorded and opens nothing.
+ * studio#1444 rounds 1 and 2 (codex): what a retired choice and a closed card do.
+ * - A choice the person made outlives its card: a start that answers after the card unmounted is still handed to
+ *   `started` (the chat drawer's composer unmounts when the drawer closes; its job must still be filed).
  * - Retiring a choice frees the launcher's Start at once, so a stalled request of the old choice never holds it.
  * The refusal is crew's own 409 body (tests/fixtures/stand-in-choice.learn-one-helper.crew.json, its route writer).
  */
@@ -31,8 +32,8 @@ function Probe({ launch, started, exposeAsk }: {
   return <div><span data-testid="busy">{String(s.busy)}</span>{s.card('probe')}</div>;
 }
 
-describe('studio#1444 r1: a stand-in choice ends with its page, and a retired one never holds Start', () => {
-  it('leaving the page while "this job" is starting: the late answer records nothing', async () => {
+describe('studio#1444: a chosen start outlives its card, and a retired one never holds Start', () => {
+  it('r2: the card unmounts while "this job" is starting: the late answer is still filed', async () => {
     let answer!: (id: string) => void;
     const launch = vi.fn(() => new Promise<string>((res) => { answer = res; }));
     const started = vi.fn();
@@ -42,11 +43,12 @@ describe('studio#1444 r1: a stand-in choice ends with its page, and a retired on
     fireEvent.click(screen.getByTestId('probe-job'));
     expect(launch).toHaveBeenCalledTimes(1);
     view.unmount();
-    await act(async () => { answer('run-late'); await Promise.resolve(); });
-    expect(started).not.toHaveBeenCalled();
+    await act(async () => { answer('run-late'); await new Promise((r) => setTimeout(r, 0)); });
+    expect(started).toHaveBeenCalledTimes(1);
+    expect(started.mock.calls[0]![0]).toEqual([{ result: 'run-late', meta: 1 }]);
   });
 
-  it('a retired choice whose start never answers frees Start at once', async () => {
+  it('r1: a retired choice whose start never answers frees Start at once', async () => {
     const launch = vi.fn(() => new Promise<string>(() => {}));
     let ask!: Ask;
     render(<Probe launch={launch} started={vi.fn()} exposeAsk={(a) => { ask = a; }} />);

@@ -677,7 +677,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                       <button type="button" data-testid="repo-capture-learnings" disabled={capturing || standIn.busy} className="wk-btn wk-btn--secondary"
                         title={`Start a tracked run that saves what this repository’s history teaches${ambientProject !== null ? ', filed under this project' : ''}`}
                         onClick={() => void captureLearnings()}>
-                        {capturing ? 'Starting…' : !jobsFailed && capture.state === 'captured' ? 'Capture learnings again' : 'Capture learnings'}
+                        {capturing || standIn.busy ? 'Starting…' : !jobsFailed && capture.state === 'captured' ? 'Capture learnings again' : 'Capture learnings'}
                       </button>
                       <p>A tracked run that saves what this repository’s history teaches.</p>
                       {jobsFailed

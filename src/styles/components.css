@@ -1284,7 +1284,10 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-standin-choice-text { margin: 6px 0 0; line-height: 1.45; }
 .wk-standin-choice-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .wk-standin-choice-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
-.wk-standin-choice-row .wk-btn { flex: 0 0 auto; min-width: 13.5rem; justify-content: center; }
+/* A narrow column (Start analysis's side panel) never pushes a button past the card (studio#1444). */
+.wk-standin-choice-row .wk-btn { flex: 0 0 auto; min-width: min(13.5rem, 100%); justify-content: center; }
+/* In a chat's composer the card scrolls inside itself, so on a phone the box and its words stay on screen. */
+.wk-composer-start .wk-standin-choice { flex-basis: 100%; max-height: 45vh; overflow-y: auto; }
 .wk-standin-choice-next { flex: 1 1 14rem; min-width: 0; color: var(--ink-dim); }
 .wk-standin-choice-error { color: var(--status-bad, var(--ink-high)); font-weight: var(--weight-semi); }
 .wk-qe-offer { color: var(--ink-body); font-family: var(--font-sans); }

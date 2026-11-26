@@ -357,6 +357,7 @@ describe('review folds (codex on #998)', () => {
     fireEvent.click(await screen.findByTestId('repo-capture-standin-job'));
     await waitFor(() => expect(launchRun).toHaveBeenCalledTimes(2));
     expect(screen.getByTestId('repo-capture-learnings')).toBeDisabled();
+    expect(screen.getByTestId('repo-capture-learnings')).toHaveTextContent('Starting…');
     fireEvent.click(screen.getByTestId('repo-more-button'));
     expect(screen.getByTestId('repo-menu-capture')).toHaveTextContent('Starting…');
   });

@@ -235,11 +235,22 @@ export function InlineStart({
   requestNow.current = JSON.stringify([entry?.id ?? null, entry?.launchId ?? null, repoRef, project, words.trim(), seats, deliver, offerReduced && reduced, offerQe, qeOff, skipQe, skipQeReason, forceQe, restOn]);
   const blockerNow = useRef<string | null>(null);
   blockerNow.current = blocker;
-  // Another repository, project, words or choice on the box is another job: a held choice for the one crew refused
-  // retires, and so does opening the repository picker (codex r1). A choice already being carried out finishes: the
-  // person chose that job.
+  // Another repository, project, words, choice or Review plan on the box is another job: a held choice for the one
+  // crew refused retires, and so does opening the repository picker (codex r1, r2). A choice already being carried out
+  // finishes (the person chose that job); if it fails, what it leaves held retires then.
   const requestKey = requestNow.current;
-  useEffect(() => { if (!standInNow.current.busy) standInNow.current.ask(null, []); }, [requestKey, choosing]);
+  const changedWhileBusy = useRef(false);
+  useEffect(() => {
+    if (standInNow.current.busy) changedWhileBusy.current = true;
+    else standInNow.current.ask(null, []);
+  }, [requestKey, choosing, reviewPlan, powerDefaultOn]);
+  useEffect(() => {
+    if (standIn.busy || !changedWhileBusy.current) return;
+    changedWhileBusy.current = false;
+    standInNow.current.ask(null, []);
+  }, [standIn.busy]);
+  const composerNow = useRef(composerKey);
+  composerNow.current = composerKey;
 
   handle.current = {
     start: async (typed: string): Promise<boolean> => {
@@ -348,7 +359,7 @@ export function InlineStart({
           // A refusal that lands after the person changed the job (another card, repository or words) holds nothing:
           // that job is not the one on the composer now (codex r1).
           const chipNow = chipsOf(useComposerChips.getState(), composerKey).some((c) => c.kind === 'workflow' && c.key === chip?.key);
-          if (!mounted.current || !chipNow || requestNow.current !== asked) return false;
+          if (!mounted.current || !chipNow || composerNow.current !== composerKey || requestNow.current !== asked || reviewNow.current !== reviewAsked) return false;
           standIn.ask(refusal, [{ body: sent, meta: { chatId: sentChat, typed, spend } }]);
           return false;
         }
