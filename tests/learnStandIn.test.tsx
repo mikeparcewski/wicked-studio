@@ -130,7 +130,7 @@ describe('Learn → Style: Learn my style, refused for want of helpers (crew#193
 });
 
 describe('Learn → Style: a mixed Learn my style, one job held back', () => {
-  it('the started job stays; the held one, started from the card, joins the same record with its decisions kept', async () => {
+  it('the started job stays; the held one, started from the card, joins the same record', async () => {
     runsRefuseOnce();
     d.on('POST /governance/steering/author', { runId: 'rd' });
     d.on('GET /runs/rd', { run: { session: { id: 'rd', status: 'executing', unit_ix: 0 }, units: [{}, {}] } });
@@ -149,6 +149,9 @@ describe('Learn → Style: a mixed Learn my style, one job held back', () => {
     fireEvent.click(screen.getByTestId('style-standin-job'));
     await waitFor(() => expect((settings['studio.learn.style'] as { jobs: Array<{ runId: string }> }).jobs.map((j) => j.runId)).toEqual(['rd', 'rr']));
     expect((settings['studio.learn.style'] as { startedAt: number }).startedAt).toBe(startedAt);
+    // (delta round, codex P2) A decision made before covers the jobs it saw; the asks open again for the new job's
+    // suggestions (the decided ones are no longer pending).
+    expect((settings['studio.learn.style'] as { decided?: unknown }).decided).toBeUndefined();
     await waitFor(() => expect(screen.getByTestId('style-runline').textContent).toContain('Running as 2 jobs'));
   });
 
@@ -213,11 +216,12 @@ describe('First run → the style ask, refused for want of helpers (crew#1932)',
 describe('First run → the style ask: a job that started but was not filed', () => {
   const agents = [{ key: 'claude', name: 'Claude Code', usable: true, optIn: false, issues: [], login: null }] as never;
 
-  it('says so, and the card never starts it again', async () => {
+  it('says so; answering again files that job, and nothing starts it again', async () => {
     settings['studio.firstRun'] = { answers: Object.fromEntries(['repos', 'agents'].map((k) => [k, { line: k, words: k, done: true }])) };
     runsRefuseOnce();
+    let busy = true;
     d.on('PUT /settings', (b) => {
-      if ((b as Record<string, unknown>)['studio.learn.style'] !== undefined) throw Object.assign(new Error('x'), { status: 503, body: { error: 'the settings store is busy; try again' } });
+      if (busy && (b as Record<string, unknown>)['studio.learn.style'] !== undefined) throw Object.assign(new Error('x'), { status: 503, body: { error: 'the settings store is busy; try again' } });
       Object.assign(settings, b as object);
       return { settings };
     });
@@ -228,6 +232,14 @@ describe('First run → the style ask: a job that started but was not filed', ()
     fireEvent.click(await screen.findByTestId('first-run-standin-job'));
     await waitFor(() => expect(screen.getByTestId('first-run-error').textContent).toContain('the settings store is busy'));
     expect(screen.queryByTestId('first-run-standin')).toBeNull();
+    expect(d.sent('POST /runs')).toHaveLength(2);
+    // (delta round, codex P2) The ask is still open: answering it again files the job that started, never a second one.
+    busy = false;
+    const again = await screen.findByTestId('first-run-ask-style');
+    fireEvent.click(within(again).getAllByTestId('ask-option').find((o) => o.getAttribute('data-ask-option') === 'repo:r1')!);
+    fireEvent.click(within(again).getByTestId('ask-confirm'));
+    await waitFor(() => expect((settings['studio.firstRun'] as { answers: Record<string, { done: boolean }> }).answers['style']?.done).toBe(true));
+    expect((settings['studio.learn.style'] as { jobs: unknown[] }).jobs).toEqual([{ runId: 'rr', kind: 'repo', sources: ['web-store'] }]);
     expect(d.sent('POST /runs')).toHaveLength(2);
   });
 });
