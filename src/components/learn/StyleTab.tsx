@@ -91,11 +91,12 @@ export function StyleTab({ navigate }: { navigate: Navigate }): React.ReactEleme
   };
   // (wicked-crew#1932) A repo's job crew answered with the stand-in choice: the card, not a line of text.
   // The jobs that start from it join this Learn my style's record in one write, or start a new one when none of its
-  // jobs had started.
+  // jobs had started. A decision made before covered the jobs it saw (what it kept or dropped is no longer pending), so
+  // joining reopens the asks for the new jobs' suggestions.
   const standIn = useStandInChoice<string, StyleJob>((body, label) => launchRepo(body, label), (done) => {
     const more = done.map((d) => d.result);
     const r = current.current;
-    keepHere(r !== null && r.startedAt === batchAt.current ? { ...r, jobs: [...r.jobs, ...more] } : { jobs: more, startedAt: batchAt.current });
+    keepHere(r !== null && r.startedAt === batchAt.current ? { jobs: [...r.jobs, ...more], startedAt: r.startedAt } : { jobs: more, startedAt: batchAt.current });
   }, navigate);
   useEffect(() => {
     api.listRepos().then((r) => setRepos(r.repos), () => setRepos([]));

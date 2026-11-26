@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Code2, FolderGit2, TerminalSquare, UserRound } from 'lucide-react';
 import { api, apiFetch } from '../../api/client.js';
 import type { Ask, AskAnswer } from '../../api/ask.js';
@@ -56,17 +56,20 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
   /** Filed under Learn → Style, so Style follows it. */
   const fileStyleJob = (runId: string, name: string): Promise<unknown> =>
     apiFetch('/settings', { method: 'PUT', body: JSON.stringify({ 'studio.learn.style': { jobs: [{ runId, kind: 'repo', sources: [name] }], startedAt: Date.now() } }) });
+  /** The style ask's job that started, so answering again files it rather than starting another. */
+  const styleRun = useRef<{ repoId: string; runId: string } | null>(null);
   // (wicked-crew#1932) The style ask's job crew answered with the stand-in choice: the card, in the ask's place; the
-  // ask is answered once the job starts. A job that started but was not filed or answered says so and is never
-  // started again from here.
-  const styleStandIn = useStandInChoice<{ name: string; answer: SetupAnswer }, string>(startStyleJob, async ([d]) => {
+  // ask is answered once the job starts. A job that started but was not filed or answered says so; answering again
+  // files it.
+  const styleStandIn = useStandInChoice<{ repoId: string; name: string; answer: SetupAnswer }, string>(startStyleJob, async ([d]) => {
     if (d === undefined) return;
+    styleRun.current = { repoId: d.meta.repoId, runId: d.result };
     try {
       await fileStyleJob(d.result, d.meta.name);
       setFlash('style');
       await useFirstRun.getState().answer('style', d.meta.answer);
     } catch (e) {
-      setFail(e instanceof Error ? e.message : String(e));
+      setFail(`The job started, but it wasn’t filed under Learn → Style (${e instanceof Error ? e.message : String(e)}). Answer again to file it.`);
     }
   }, navigate, '/agents?setup=1');
 
@@ -123,14 +126,17 @@ export function FirstRun({ navigate, agents, hasRoster, onDone }: {
           const repo = (repos ?? []).find((r) => r.id === a.option!.slice('repo:'.length));
           if (repo !== undefined) {
             const body: LaunchBodyWithDeliver = { problem: repoStyleProblem(repo.name), repoRef: repo.id, workflow: 'capture-learnings' };
-            let runId: string;
-            try {
-              runId = await startStyleJob(body);
-            } catch (e) {
-              const choice = standInChoiceOf(e);
-              if (choice === null) throw e;
-              styleStandIn.ask(choice, [{ body, meta: { name: repo.name, answer: styleAnswer } }]);
-              return;
+            let runId = styleRun.current?.repoId === repo.id ? styleRun.current.runId : null;
+            if (runId === null) {
+              try {
+                runId = await startStyleJob(body);
+              } catch (e) {
+                const choice = standInChoiceOf(e);
+                if (choice === null) throw e;
+                styleStandIn.ask(choice, [{ body, meta: { repoId: repo.id, name: repo.name, answer: styleAnswer } }]);
+                return;
+              }
+              styleRun.current = { repoId: repo.id, runId };
             }
             await fileStyleJob(runId, repo.name);
           }
