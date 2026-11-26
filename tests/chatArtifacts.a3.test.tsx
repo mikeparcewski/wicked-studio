@@ -329,19 +329,27 @@ describe('Change something on a create card (A3)', () => {
     // later than the test's own clock assumed.
     [' (a loaded runner: the chat read takes 400 ms)', 400],
   ])('"Starting it…" ends on the same card when its window closes: Go again appears without a remount%s', async (_, delay) => {
-    chatDelayMs = delay;
-    const now = Date.now();
-    chatBody = { ...chatBody, messages: [
-      ...TURN,
-      { at: now - 2000, turnId: 't1', kind: 'proposal', proposal: proposal() },
-      { at: now - (PROPOSAL_STARTING_MS - 300), turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } },
-    ] };
-    page();
-    await waitFor(() => expect(text('artifact-proposal-record')).toBe('Starting it…'));
-    expect(screen.queryByTestId('artifact-proposal-go-again')).toBeNull();
-    // The window closes ~300 ms later on this same mounted card.
-    await screen.findByTestId('artifact-proposal-go-again', undefined, { timeout: 2000 });
-    expect(text('artifact-proposal-record')).toBe('Interrupted before it was recorded as started.');
+    // The test owns the clock: the window closes when the test moves time past it, never on the runner's own timing.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      chatDelayMs = delay;
+      const now = Date.now();
+      const LEFT = 60_000;
+      chatBody = { ...chatBody, messages: [
+        ...TURN,
+        { at: now - 2000, turnId: 't1', kind: 'proposal', proposal: proposal() },
+        { at: now - (PROPOSAL_STARTING_MS - LEFT), turnId: 't1', kind: 'proposal_accepting', pid: PID, actor: 'local', edits: null, resolution: proposal(), identity: { artifactRef: '_unfiled/x', runId: 'r' } },
+      ] };
+      page();
+      await waitFor(() => expect(text('artifact-proposal-record')).toBe('Starting it…'));
+      expect(screen.queryByTestId('artifact-proposal-go-again')).toBeNull();
+      // The window closes on this same mounted card.
+      await act(async () => { await vi.advanceTimersByTimeAsync(LEFT + 100); });
+      await screen.findByTestId('artifact-proposal-go-again');
+      expect(text('artifact-proposal-record')).toBe('Interrupted before it was recorded as started.');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('a live accepting record closes the form before the answer fails with no view: the refusal shows once, under the card', async () => {

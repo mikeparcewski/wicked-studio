@@ -494,26 +494,47 @@ function stallOnce(ms: number): () => void {
 }
 
 describe('R5: owner lookup is O(1)', () => {
+  /** A chain of `n` rows in one file, all at depth 1: one level, one closed group. */
+  const chain = (n: number) => buildCodeRings({
+    query: 'Q',
+    rows: Array.from({ length: n }, (_, i): CodeRow => ({ symbolId: `s${i}`, name: `s${i}`, file: 'big.ts', depth: 1 })),
+    edges: Array.from({ length: n }, (_, i): CodeRawEdge => ({ src: `s${i}`, tgt: i === 0 ? 'Q' : `s${i - 1}` })),
+  });
+  /** model()'s fastest time over 50k rows and over 10k, sampled in turn: a stall or a loaded runner only ever adds time,
+   *  and it adds it to both sizes alike, so the fastest of each and their ratio say how the work grows. */
+  function growth(): { big: number; small: number } {
+    let big = Infinity;
+    let small = Infinity;
+    for (let i = 0; i < 3; i += 1) {
+      for (const [n, keep] of [[10_000, (ms: number) => { small = Math.min(small, ms); }], [50_000, (ms: number) => { big = Math.min(big, ms); }]] as const) {
+        const cr = chain(n);
+        const st = cr.defaultState();
+        const t0 = performance.now();
+        cr.model(st);
+        keep(performance.now() - t0);
+      }
+    }
+    return { big, small };
+  }
+
   it.each([
     ['', 0],
     [' (on a runner that stalls once for 1.1 s)', 1100],
-  ])('model() over 50k rows + 50k edges with one closed group finishes under 1s and agrees with brute force%s', (_, stall) => {
+  ])('model() over 50k rows + 50k edges with one closed group grows linearly and agrees with brute force%s', (_, stall) => {
     const restore = stallOnce(stall);
     try {
-    const N = 50000;
-    const rowsBig: CodeRow[] = Array.from({ length: N }, (_, i) => ({ symbolId: `s${i}`, name: `s${i}`, file: 'big.ts', depth: 1 }));
-    const edgesBig: CodeRawEdge[] = Array.from({ length: N }, (_, i) => ({ src: `s${i}`, tgt: i === 0 ? 'Q' : `s${i - 1}` }));
-    const cr = buildCodeRings({ query: 'Q', rows: rowsBig, edges: edgesBig });
-    const st = cr.defaultState(); // one level, one closed group
-    const t0 = performance.now();
-    const m = cr.model(st);
-    const elapsed = performance.now() - t0;
-    expect(elapsed).toBeLessThan(1000);
-    expect(m.counts.visible).toBe(2); // focus + one closed group
-    // brute-force owner check on sampled ids: a closed single-file group owns every member
-    const expectedGroup = `g:1:${encodeURIComponent('big.ts')}`;
-    const owner = cr.view(st).ownerOf;
-    for (const i of [0, 1, 1234, 25000, N - 1]) expect(owner(`n:s${i}`)).toBe(expectedGroup);
+      // 5x the rows: about 5x the time when the owner lookup is O(1), about 25x when it scans.
+      const { big, small } = growth();
+      expect(big / Math.max(small, 1)).toBeLessThan(12);
+      const N = 50_000;
+      const cr = chain(N);
+      const st = cr.defaultState(); // one level, one closed group
+      const m = cr.model(st);
+      expect(m.counts.visible).toBe(2); // focus + one closed group
+      // brute-force owner check on sampled ids: a closed single-file group owns every member
+      const expectedGroup = `g:1:${encodeURIComponent('big.ts')}`;
+      const owner = cr.view(st).ownerOf;
+      for (const i of [0, 1, 1234, 25000, N - 1]) expect(owner(`n:s${i}`)).toBe(expectedGroup);
     } finally {
       restore();
     }
