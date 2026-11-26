@@ -247,7 +247,7 @@ export function Composer({
   const cmdsOn = useCapabilities((s) => commandsOn(s));
   const startNote = useStartNotes((s) => s.notes[composerKey] ?? null);
   // studio#1472: a job that asks for the person's words first says its question on the job line and in the box.
-  const jobAsk = useJobAsks((s) => (jobChip !== null ? s.asks[composerKey] ?? null : null));
+  const jobAsk = useJobAsks((s) => (jobChip !== null ? s.asks[jobChip.key] ?? null : null));
   const askPathOn = useCapabilities((s) => s.askPath);
   const own = useRef<HTMLTextAreaElement | null>(null);
   // A one-row box on a phone shows only the placeholder's first clause, ended by an ellipsis —
@@ -810,7 +810,7 @@ export function Composer({
           {/* A command's own answer shows even beside a seat refusal: it is the reason that applies (pi r2). */}
           {note !== null && (refusal === null || commandLine || jobChip !== null) && <span data-testid="composer-note" role="status" className="wk-composer-note">{note}</span>}
           {jobChip !== null && refusal === null && (
-            <span data-testid="composer-job-line" role="status" className="wk-composer-note">
+            <span data-testid="composer-job-line" id={`composer-job-line-${composerKey}`} role="status" className="wk-composer-note">
               {jobBusy ? 'Putting the job in the chat…' : jobAsk !== null
                 ? `${jobAsk} Say it here: Enter puts this job in the chat with your words. Nothing runs until you press Start.`
                 : 'Enter puts this job in the chat for you to look over. Nothing runs until you press Start.'}
@@ -894,6 +894,8 @@ export function Composer({
           data-testid={variant === 'desk' ? 'desk-composer-input' : 'session-composer-input'}
           data-type-target="page"
           aria-label={ariaLabel}
+          // studio#1472: the question a waiting job asks is read with the box, not only shown beside it.
+          aria-describedby={jobAsk !== null && refusal === null ? `composer-job-line-${composerKey}` : undefined}
           aria-expanded={menuOpen}
           aria-controls={menuOpen ? `composer-menu-list-${composerKey}` : undefined}
           aria-activedescendant={menuOpen && count > 0 ? `composer-menu-option-${composerKey}-${active}` : undefined}

@@ -87,11 +87,11 @@ it('Generate it posts nothing: the job waits on a new chat\'s composer under the
   expect(calls.filter((c) => c.method === 'POST')).toEqual([]);
   const chatId = freshId();
   expect(useComposerChips.getState().byComposer[chatId]?.map((c) => c.label)).toEqual(['Analyze a codebase · Domain']);
-  expect(useJobAsks.getState().asks[chatId]).toBe(ASK);
+  expect(Object.values(useJobAsks.getState().asks)).toEqual([ASK]);
   // The composer asks it, as a question, not as a refusal: no alert note.
   render(<Composer composerKey={chatId} text="" setText={() => {}} onSend={() => {}} placeholder="p" ariaLabel="a" variant="session" />);
   expect(screen.getByTestId('composer-job-line')).toHaveTextContent(`${ASK} Say it here: Enter puts this job in the chat with your words.`);
-  expect(screen.getByPlaceholderText(ASK)).toBeInTheDocument();
+  expect(screen.getByPlaceholderText(ASK)).toHaveAccessibleDescription(expect.stringContaining(ASK));
   expect(screen.queryByTestId('composer-start-note')).toBeNull();
   expect(useStartNotes.getState().notes[chatId]).toBeUndefined();
 });
@@ -121,4 +121,15 @@ it('words already given, or an opener that does not ask, post at once as before'
   expect(calls.find((c) => c.path === '/chats' && c.method === 'POST')!.body['seed']).toMatchObject({ card: '/workflow-domain-extraction', option: 'domain', words: SCOPE });
   await startInChat({ workflowId: 'draft-epics', projectId: 'p1' });
   await waitFor(() => expect(calls.filter((c) => c.path === '/chats' && c.method === 'POST')).toHaveLength(2));
+});
+
+it('the question goes with its job: a later job picked on the same composer does not ask it (pi r1)', async () => {
+  await startInChat({ workflowId: 'domain-extraction', repoRef: 'r1', words: '', askWords: ASK });
+  const chatId = freshId();
+  const first = useComposerChips.getState().byComposer[chatId]![0]!;
+  // The job chip leaves (sent, or taken off); another job is picked on the same composer.
+  useComposerChips.setState({ byComposer: { [chatId]: [{ ...first, key: 'job:later:1', label: 'Draft epics' }] } });
+  render(<Composer composerKey={chatId} text="" setText={() => {}} onSend={() => {}} placeholder="p" ariaLabel="a" variant="session" />);
+  expect(screen.getByTestId('composer-job-line')).toHaveTextContent('Enter puts this job in the chat for you to look over.');
+  expect(screen.getByTestId('composer-job-line')).not.toHaveTextContent(ASK);
 });
