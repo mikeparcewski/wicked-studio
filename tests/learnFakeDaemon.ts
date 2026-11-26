@@ -28,7 +28,9 @@ export function fakeDaemon(): FakeDaemon {
       return new Response(JSON.stringify(out ?? {}), { status: 200, headers: { 'content-type': 'application/json' } });
     } catch (e) {
       const status = (e as { status?: number }).status ?? 500;
-      return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), { status });
+      // A thrown `{ status, body }` answers crew's own refusal body (a coded 409, say) as it is.
+      const coded = (e as { body?: unknown }).body;
+      return new Response(JSON.stringify(coded ?? { error: e instanceof Error ? e.message : String(e) }), { status });
     }
   }));
   return {

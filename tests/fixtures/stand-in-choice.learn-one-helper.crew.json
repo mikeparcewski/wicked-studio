@@ -1,0 +1,150 @@
+{
+  "$comment": "WRITER'S OUTPUT. crew's 409 body for Learn my style (POST /runs, workflow capture-learnings, repo-bound) on Claude Code alone: the engine's preflight through crew's CoreAdapter.independencePreflight (core-ts 0.15.49, a scratch store), then crew's preflightRefusal at wicked-crew#1936 (packages/crew/src/core/stand-in.ts). Unedited.",
+  "status": 409,
+  "body": {
+    "code": "stand_in_choice",
+    "error": "This job's helpers can't check it independently: it needs a reviewer and a judge that did not build the work, and, if the job calls for them, a rules checker, a rules council, a council and a monitor. wicked can fill those roles with stand-ins (a fresh session that sees the work but none of the builder's reasoning), labelled on the job, every gate, the delivery and the pull request. They are not independent reviews. Use stand-ins for this job or for every job, or add another helper to the job.",
+    "preflight": {
+      "short": true,
+      "primary": null,
+      "roles": [
+        {
+          "role": "evaluator",
+          "needed": 1,
+          "real": [],
+          "shortBy": 1,
+          "canStandIn": true,
+          "standInFrom": {
+            "cli": "claude",
+            "models": [
+              null
+            ]
+          },
+          "conditional": false,
+          "why": "no signed-in helper that did not build the work can be the evaluator"
+        },
+        {
+          "role": "judge",
+          "needed": 1,
+          "real": [],
+          "shortBy": 1,
+          "canStandIn": true,
+          "standInFrom": {
+            "cli": "claude",
+            "models": [
+              null
+            ]
+          },
+          "conditional": false,
+          "why": "no signed-in helper that did not build the work can be the judge"
+        },
+        {
+          "role": "rule_judge",
+          "needed": 1,
+          "real": [],
+          "shortBy": 1,
+          "canStandIn": true,
+          "standInFrom": {
+            "cli": "claude",
+            "models": [
+              null
+            ]
+          },
+          "conditional": true,
+          "why": "no signed-in helper that did not build the work can be the rule judge"
+        },
+        {
+          "role": "rule_council",
+          "needed": 3,
+          "real": [],
+          "shortBy": 3,
+          "canStandIn": true,
+          "standInFrom": {
+            "cli": "claude",
+            "models": [
+              null
+            ]
+          },
+          "conditional": true,
+          "why": "no signed-in helper that did not build the work can be the rule council"
+        },
+        {
+          "role": "council",
+          "needed": 3,
+          "real": [],
+          "shortBy": 3,
+          "canStandIn": true,
+          "standInFrom": {
+            "cli": "claude",
+            "models": [
+              null
+            ]
+          },
+          "conditional": true,
+          "why": "no signed-in helper that did not build the work can be the council"
+        },
+        {
+          "role": "monitor",
+          "needed": 3,
+          "real": [],
+          "shortBy": 3,
+          "canStandIn": true,
+          "standInFrom": {
+            "cli": "claude",
+            "models": [
+              null
+            ]
+          },
+          "conditional": true,
+          "why": "no signed-in helper that did not build the work can be the monitor"
+        }
+      ],
+      "reason": "only Claude Code was signed in",
+      "reasonData": {
+        "kind": "only_one_helper",
+        "cli": "Claude Code"
+      },
+      "signedIn": [
+        "claude"
+      ],
+      "benched": [],
+      "judges": [
+        {
+          "seat": "claude",
+          "judges": [],
+          "soleJudge": null,
+          "notJudges": []
+        }
+      ],
+      "diversity": {
+        "providers": 1,
+        "needed": 2,
+        "neededWithFailover": 3,
+        "sharing": [],
+        "outsideHelper": "Codex",
+        "note": "This job has 1 independent provider; its reviews need 2, plus 1 to survive one failover. Signing in Codex could add another."
+      }
+    },
+    "choices": [
+      {
+        "id": "job",
+        "label": "Use stand-ins for this job"
+      },
+      {
+        "id": "always",
+        "label": "Use stand-ins for every job"
+      },
+      {
+        "id": "sign_in",
+        "label": "Add or sign in another helper"
+      },
+      {
+        "id": "cancel",
+        "label": "Cancel"
+      }
+    ],
+    "retryWith": {
+      "standIns": true
+    }
+  }
+}

@@ -11,7 +11,7 @@ import { ApiError, api } from '../../api/client.js';
 import type { ChatPathView, SessionView as RunView } from '../../api/types.js';
 import { needsByRun } from '../../board/deskModel.js';
 import type { NeedRow } from '../../board/needsYou.js';
-import { CLOSED_LINE, MESSAGE_STEP_LABEL, composerScopeNote, conversationOf, parseSessionId, runChatIdOf, sessionPath, runState, sessionTitle, type Conversation, type SessionState } from '../../board/sessionModel.js';
+import { CLOSED_LINE, MESSAGE_JOB_LABEL, MESSAGE_STEP_LABEL, composerScopeNote, conversationOf, headlinePool, parseSessionId, runChatIdOf, sessionPath, runState, sessionTitle, type Conversation, type SessionState } from '../../board/sessionModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { proposalIsStub, useCapabilities } from '../../store/capabilities.js';
 import { useConnectionStore } from '../../store/connection.js';
@@ -73,11 +73,12 @@ import { useRoster } from '../../hooks/useRoster.js';
 import { isHeldRun } from '../../board/heldRuns.js';
 import { executingOrd } from '../../api/run-state.js';
 import { phaseLabel } from '../gateVerdictModel.js';
-import { CREW, responderKey, turnResponder, type Responder } from '../../board/responder.js';
+import { CREW, isHelperSeat, responderKey, turnResponder, type Responder } from '../../board/responder.js';
+import { isToolUnitGate } from '../../board/gateRowModel.js';
 import { TurnWho } from './TurnWho.js';
 import { PowerSwitchButton, RigorChipButton } from './PowerMode.js';
 import { LiveActivity } from './LiveActivity.js';
-import { usePower } from '../../hooks/usePower.js';
+import { usePower, usePowerLocal } from '../../hooks/usePower.js';
 import { powerOf } from '../../api/power.js';
 import { mergePower, pauseCause } from '../../board/powerMode.js';
 import { TrackerSet } from '../trackers/TrackerSet.js';
@@ -104,7 +105,7 @@ import { headlineProgress } from '../../board/repeatProgress.js';
 import { plainGateQuestion } from '../../board/deskWords.js';
 import { needTone } from '../../board/needTone.js';
 import { displayText } from '../../board/homePath.js';
-import { isAskTurnRun } from '../../board/askTurn.js';
+import { isAskPathRun, isAskTurnRun } from '../../board/askTurn.js';
 import { InlineUndo } from '../InlineUndo.js';
 
 /** The project a chat's scope (`GET /chats/:id` `scope.projectId`) files it in, or null. */
@@ -183,6 +184,13 @@ const OPEN_GRACE_MS = 60_000;
 /** studio#663: a kickoff longer than this shows its first lines with Show all (DES-CHAT-NATIVE-RUN: a chat bubble
  *  holds the rest of a goal in full — `.wk-session-turn--kickoff` clamps at 8 lines, about this many characters). */
 const KICKOFF_LONG = 600;
+
+/** A session's state over some of its runs: any waiting, else any working, else the newest's. */
+function sessionStateOf(runs: readonly RunView[]): SessionState {
+  return runs.some((v) => runState(v) === 'waiting') ? 'waiting'
+    : runs.some((v) => runState(v) === 'working') ? 'working'
+      : runs.length > 0 ? runState(runs[runs.length - 1]!) : 'quiet';
+}
 
 function launchedMs(v: RunView): number {
   const c = (v.session as unknown as { created_at?: unknown }).created_at;
@@ -562,37 +570,39 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // The closed line above the entries is crew's: the first crew entry under it needs no second label.
   const leadWho: Responder | null = conversation === 'closed' && mine.length > 0 ? CREW : null;
   const badges = useMemo(() => needsByRun(needRows), [needRows]);
-  const state: SessionState = mine.some((v) => runState(v) === 'waiting') ? 'waiting'
-    : mine.some((v) => runState(v) === 'working') ? 'working'
-      : mine.length > 0 ? runState(mine[mine.length - 1]!) : 'quiet';
+  const state: SessionState = sessionStateOf(mine);
+  // studio#1442: the header, its badge and Details are about the job; an ask turn asked on its page is answered beside
+  // it in the thread (`headlinePool`). The session's `data-state` stays the engine's, over every run.
+  const head = headlinePool(mine);
+  const headState: SessionState = sessionStateOf(head);
   // An answered ask parked at its turn (`ask_turn`) waits on no one: when it is all that waits here, the header's word
   // is its own ("Answered"), never "Waiting" (e2e-1105: "Waiting" beside a red Stop run). The session's state stays the
   // engine's (`data-state`, the rail's ring and the ask journeys read it).
-  const answeredOnly = state === 'waiting' && mine.every((v) => runState(v) !== 'waiting' || (v.session.status === 'awaiting_human' && isAskTurnRun(v.session)));
+  const answeredOnly = headState === 'waiting' && head.every((v) => runState(v) !== 'waiting' || (v.session.status === 'awaiting_human' && isAskTurnRun(v.session)));
   // (J4 0.16.6) A step silent past crew's quiet mark is not "Working": the header says how long it has said nothing.
-  const silent = useSilentStep(mine.length > 0 ? mine[mine.length - 1] : undefined);
-  const silentRunId = silent !== null ? mine[mine.length - 1]!.session.id : null;
+  const silent = useSilentStep(head.length > 0 ? head[head.length - 1] : undefined);
+  const silentRunId = silent !== null ? head[head.length - 1]!.session.id : null;
   // The engine's checks floor is running: the seat is idle on purpose; the page says what runs (retime 0.16.11).
-  const floor = useRunningFloor(mine.length > 0 ? mine[mine.length - 1] : undefined);
-  const floorRunId = floor !== null ? mine[mine.length - 1]!.session.id : null;
+  const floor = useRunningFloor(head.length > 0 ? head[head.length - 1] : undefined);
+  const floorRunId = floor !== null ? head[head.length - 1]!.session.id : null;
   // Power mode (DES-POWER-MODE §2): the switch beside a run's name and its rigor chip — on a session of one run.
-  const powerRun = mine.length === 1 ? mine[0]! : null;
+  const powerRun = head.length === 1 ? head[0]! : null;
   const power = usePower(powerRun);
   // studio#1364: the newest run ended at a consent Decline (the install, after its pull request was delivered): the
   // badge says what that is, in a calm tone, never a red "Cancelled".
-  const declined = useConsentDecline(mine.length > 0 ? mine[mine.length - 1] : undefined);
+  const declined = useConsentDecline(head.length > 0 ? head[head.length - 1] : undefined);
   // studio#1382: the newest run finished, but its MCP install registered nothing (a token to add) or failed: not a green
   // "Finished". The passage's own kept read of the install record; nothing else is read.
-  const lastRun = mine.length > 0 ? mine[mine.length - 1]! : null;
+  const lastRun = head.length > 0 ? head[head.length - 1]! : null;
   // An archived run keeps its Archived badge (statusWord's archived-first precedence, codex r2).
   const installed = useInstallOutcome(lastRun !== null && lastRun.session.status === 'completed' && statusWord(lastRun).word !== 'Archived' ? lastRun : null).standing;
-  const settledHere = state !== 'waiting' && state !== 'working';
+  const settledHere = headState !== 'waiting' && headState !== 'working';
   const badge = declined !== null && settledHere ? { word: declined.install ? 'Not installed' : 'Declined', tone: 'quiet' as const }
     : installed === 'not-registered' && settledHere ? { word: 'Not registered', tone: 'gate' as const }
     : installed === 'failed' && settledHere ? { word: 'Install failed', tone: 'danger' as const }
     // While the install's record is read, Finished claims no success colour (codex r1).
     : installed === 'loading' && settledHere ? { word: 'Finished', tone: 'quiet' as const }
-    : mine.length > 0 ? (state === 'working' && powerRun !== null && power?.pause != null ? { word: 'Waiting', tone: 'gate' as const } : state === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : state === 'working' && floor !== null ? { word: floorBadge(floor), tone: 'run' as const } : headerBadge(mine, answeredOnly ? 'done' : state)) : null;
+    : head.length > 0 ? (headState === 'working' && powerRun !== null && power?.pause != null ? { word: 'Waiting', tone: 'gate' as const } : headState === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : headState === 'working' && floor !== null ? { word: floorBadge(floor), tone: 'run' as const } : headerBadge(head, answeredOnly ? 'done' : headState)) : null;
   // The banner takes this session's slice of the same source as the brand badge.
   const gates = useGateStore((s) => s.gates);
   useSystemPoll();
@@ -621,6 +631,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // opens for it — the dock holds its decision, the header says Waiting, and no "working" line runs under it.
   const powerCap = useCapabilities((s) => s.powerMode);
   const eventsByRun = useRunEventStore((s) => s.byRun);
+  const powerLocal = usePowerLocal((s) => s.byRun);
   // domain-graph-3: a job that keeps going (page after page) says where it got to in its headline — the step's own
   // line, "Mapping wicked-crew · 3% → 12% → 19% · target 80% · page 4 · about 2 h left" — not only in its details.
   // Only a run still going says it, the newest first (a finished one's badge says it ended).
@@ -1206,6 +1217,28 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   }, [mine, gates, elicitations, roster, attention, askBlockHidden, askRunId, ref, pauses, jobRunIds]);
   const dockWho = dockItems[0]?.who ?? null;
 
+  // studio#1442 (round 1): the job's working step to message, beside the note: the newest job here with an executing
+  // step that is not held or paused (the thread's working row draws its ⋯ under the same guards, but a passage's
+  // working step and an answering ask do not draw it, so the note carries its own way there).
+  const messageJob = useMemo(() => {
+    for (const v of [...mine].reverse()) {
+      if (isAskPathRun(v.session) || isHeldRun(v.session) || pauses.has(v.session.id)) continue;
+      const ord = executingOrd(v.session, v.units);
+      if (ord === null) continue;
+      // Delta (codex P2): only a helper's step reads a message; crew's own machinery (a tool command, a program path)
+      // has no one to read it, and the sheet would send it there. Such a job is passed over, not the end of the search.
+      const unit = v.units.find((u) => u.ord === ord);
+      // studio#1458: a step dispatched on this attempt reads no new message until it is dispatched again; only a power
+      // build reads one between its turns (wicked-core#1967: the engine refuses any other, crew answers 409).
+      // Round 1 (codex P2): the power state as this page holds it now (a live toggle frame, this page's own answer), as
+      // the power controls read it (usePower), not only the run list's last read.
+      const p = mergePower(powerOf(v.session), eventsByRun[v.session.id], powerLocal[v.session.id] ?? null);
+      const hears = p !== null && p.on && p.orchestrator.ord === ord;
+      if (hears && unit !== undefined && isHelperSeat(unit.assigned_cli) && !isToolUnitGate(v.units, ord)) return { runId: v.session.id, ord };
+    }
+    return null;
+  }, [mine, pauses, eventsByRun, powerLocal]);
+
   // H3: the composer's props, shared by the thread's composer and the full-screen chat drawer's (one draft).
   const composerProps = {
     suggestions,
@@ -1214,7 +1247,15 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     // chat's page (nothing opened yet) seeds a new chat instead.
     jobChatId: ref.kind === 'chat' && (conversation === 'live' || awaitingOpenRead) ? ref.chatId : null,
     // studio#606 (4): while a run here is live, Send starts a separate Ask — say so before Send.
-    footer: scopeNote !== null ? <p data-testid="session-composer-scope" role="note" className="wk-composer-hint">{scopeNote}</p> : null,
+    footer: scopeNote !== null ? (
+      <p data-testid="session-composer-scope" role="note" className="wk-composer-hint">
+        {scopeNote}
+        {messageJob !== null && (
+          <>{' '}<button type="button" data-testid="session-composer-message-job" className="wk-link"
+            onClick={() => openSheet({ kind: 'step', runId: messageJob.runId, ord: messageJob.ord }, undefined, { compose: true })}>{MESSAGE_JOB_LABEL}</button></>
+        )}
+      </p>
+    ) : null,
     text: draft,
     setText: (t: string) => setDraft(sessionId, t),
     // S16a-4e: on a live chat's own session the composer replies into THAT chat.
