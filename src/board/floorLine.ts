@@ -11,10 +11,13 @@
  */
 
 const JUDGE = /judge: an? (?:judge|distinct) seat is reviewing the change(?: before the checks run)?\s*[—-]\s*(\d+) min/gu;
-/** (studio#1441) The steering-rule check: its judges note ("rule check: 5 steering rule(s) in force; judges: codex, pi")
- *  as it starts, then its heartbeat ("rule check: judging the steering rules — 10 min"; `cli_runner.rs`). */
-const RULES = /rule check: judging the steering rules\s*[—-]\s*(\d+) min/gu;
-const RULE_JUDGES = /rule check: \d+ steering rule\(s\) in force; judges: ([^\n]*)/gu;
+/** (studio#1441) The steering-rule check, each a whole line of the engine's own (`engine_note` writes "\n{text}\n", so a
+ *  line quoted in a seat's output is not one): its judges note ("rule check: 5 steering rule(s) in force; judges: codex,
+ *  pi") as it starts, its heartbeat ("rule check: judging the steering rules — 10 min", every 5 min), and its summary
+ *  ("rule check: 5 rules checked: 5 kept, 0 broken, 0 not applicable (702113 ms)") as it ends (`cli_runner.rs`). */
+const RULES = /(?:^|\n)rule check: judging the steering rules\s*[—-]\s*(\d+) min(?:;[^\n]*)?(?=\n|$)/gu;
+const RULE_JUDGES = /(?:^|\n)rule check: \d+ steering rules?(?:\(s\))? in force; judges: ([^\n]*)/gu;
+const RULES_DONE = /(?:^|\n)rule check: \d+ rules? checked: [^\n]*\(\d+ ms\)(?=\n|$)/gu;
 const FLOOR = /repo checks floor \(([^)]*)\): running the repository's own checks\s*[—-]\s*(\d+) min(?:; now `([^`]+)`)?/gu;
 
 export interface FloorLine {
@@ -29,6 +32,8 @@ export interface FloorLine {
   check: string | null;
   /** The rule check's judges (seat keys), when the line names them. */
   judges?: string[];
+  /** The rule check's summary: it is over. */
+  done?: boolean;
 }
 
 /** The newest floor line in a streamed chunk (a chunk may carry two), or null when it has none. */
@@ -39,11 +44,15 @@ export function floorLineOf(text: unknown): FloorLine | null {
   for (const m of text.matchAll(FLOOR)) take(m.index, { phase: 'checks', role: m[1]!, minutes: Number(m[2]), check: m[3] ?? null });
   for (const m of text.matchAll(JUDGE)) take(m.index, { phase: 'judge', role: 'judge', minutes: Number(m[1]), check: null });
   for (const m of text.matchAll(RULES)) take(m.index, { phase: 'rules', role: 'rules', minutes: Number(m[1]), check: null });
+  let judges: string[] | undefined;
   for (const m of text.matchAll(RULE_JUDGES)) {
-    const judges = m[1]!.split(',').map((s) => s.trim()).filter((s) => s !== '' && s !== 'none');
+    judges = m[1]!.split(',').map((s) => s.trim()).filter((s) => s !== '' && s !== 'none');
     take(m.index, { phase: 'rules', role: 'rules', minutes: 0, check: null, judges });
   }
-  return (last as { at: number; line: FloorLine } | null)?.line ?? null;
+  for (const m of text.matchAll(RULES_DONE)) take(m.index, { phase: 'rules', role: 'rules', minutes: 0, check: null, done: true });
+  const line = (last as { at: number; line: FloorLine } | null)?.line ?? null;
+  // The judges note and the first tick can come in one chunk: the tick keeps the judges the note named.
+  return line !== null && line.phase === 'rules' && line.done !== true && line.judges === undefined && judges !== undefined ? { ...line, judges } : line;
 }
 
 /** A frame that is the floor talking: an output delta carrying a floor line. */

@@ -93,7 +93,8 @@ describe('studio#1441: a long rule check is the engine working, not a silent rev
   });
 
   describe('round 1 (codex, pi): only the engine\'s own lines, and only while the check runs', () => {
-    const DONE = '\nrule check: 5 rule(s) checked: 5 pass (702113 ms)\n';
+    // `rule_check.rs` RuleReport::summary, then " ({elapsed} ms)" (`cli_runner.rs`).
+    const DONE = '\nrule check: 5 rules checked: 5 kept, 0 broken, 0 not applicable (702113 ms)\n';
 
     it('a line quoted inside the reviewer\'s own output is not the engine\'s', () => {
       const quoted = 'The fixture expects "rule check: judging the steering rules — 10 min" here.';

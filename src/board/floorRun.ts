@@ -45,34 +45,47 @@ export function floorBadge(f: RunningFloor): string {
 
 const timeOf = (e: Ev): number | null => (typeof e.ts === 'number' ? e.ts : arrivedAt(e));
 
+/** (studio#1441) The rule check ticks every 5 min: one whose last line is older than this has stopped, and the step's
+ *  own silence is said again. */
+const RULES_STALE_MS = 7 * 60_000;
+
 /** The floor running now (the newest one still open), or null. */
 export function runningFloor(events: readonly CoreEvent[] | null | undefined, now: number): RunningFloor | null {
-  type Open = { phase: RunningFloor['phase']; since: number; check: string | null; seen: number; judges?: string[] };
+  type Open = { phase: RunningFloor['phase']; since: number; check: string | null; seen: number; last: number; judges?: string[] };
   const open = new Map<number, Open>();
+  // Each unit's current attempt: a late line from an attempt the engine moved past never reopens a phase.
+  const attemptOf = new Map<number, number>();
   let n = 0;
   for (const e of (events ?? []) as readonly Ev[]) {
     n += 1;
     if (RUN_ENDED.has(e.type)) { open.clear(); continue; }
     if (typeof e.ord !== 'number') continue;
+    if (e.type === 'unitDispatched' && typeof e.attempt === 'number') attemptOf.set(e.ord, e.attempt);
     if (UNIT_MOVED_ON.has(e.type)) { open.delete(e.ord); continue; }
     // The judge's verdict, or the rule check's, is in: its work is over (a floor's own result is `repoChecksEvaluated`).
     if (e.type === 'gateEvaluated' && (open.get(e.ord)?.phase === 'judge' || open.get(e.ord)?.phase === 'rules')) { open.delete(e.ord); continue; }
     if (e.type !== 'unitOutputDelta') continue;
     const line = floorLineOf(e.text);
     if (line === null) continue;
+    if (typeof e.attempt === 'number' && e.attempt < (attemptOf.get(e.ord) ?? 0)) continue;
+    if (line.done === true) { if (open.get(e.ord)?.phase === 'rules') open.delete(e.ord); continue; }
     const at = timeOf(e) ?? now;
     const cur = open.get(e.ord);
     // A new phase (the judge, then the checks) starts its own clock.
     if (cur === undefined || cur.phase !== line.phase) {
-      open.set(e.ord, { phase: line.phase, since: at - line.minutes * 60_000, check: line.check, seen: n, ...(line.judges !== undefined ? { judges: line.judges } : {}) });
+      open.set(e.ord, { phase: line.phase, since: at - line.minutes * 60_000, check: line.check, seen: n, last: at, ...(line.judges !== undefined ? { judges: line.judges } : {}) });
     } else {
       cur.check = line.check;
       cur.seen = n;
+      cur.last = at;
       if (line.judges !== undefined) cur.judges = line.judges;
     }
   }
   let best: (Open & { ord: number }) | null = null;
-  for (const [ord, f] of open) if (best === null || f.seen > best.seen) best = { ord, ...f };
+  for (const [ord, f] of open) {
+    if (f.phase === 'rules' && now - f.last > RULES_STALE_MS) continue;
+    if (best === null || f.seen > best.seen) best = { ord, ...f };
+  }
   if (best === null) return null;
   return {
     ord: best.ord, phase: best.phase, check: best.check, since: best.since, minutes: Math.max(0, Math.floor((now - best.since) / 60_000)),
