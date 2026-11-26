@@ -51,9 +51,12 @@ export function worstFirst(items: readonly SystemAttention[]): SystemAttention[]
 /**
  * The studio-side items no crew can know: the live socket. Said in both modes.
  */
+/** The id of studio's own "live updates paused" item: said on the Nerve Center, never counted as a thing that needs you. */
+export const SOCKET_ID = 'studio-socket';
+
 function socketItems(ws: 'connecting' | 'connected' | 'disconnected'): SystemAttention[] {
   return ws === 'disconnected'
-    ? [item('studio-socket', 'yellow', 'infra', 'live updates paused', 'Studio lost its live connection to crew, so pages stop updating on their own.', 'It reconnects by itself. Reload the page if it does not.')]
+    ? [item(SOCKET_ID, 'yellow', 'infra', 'live updates paused', 'Studio lost its live connection to crew, so pages stop updating on their own.', 'It reconnects by itself. Reload the page if it does not.')]
     : [];
 }
 
@@ -227,17 +230,21 @@ export function systemSummary(a: SystemAttention): string {
  * The words are a summary ("disk low", "2 need you", "3 need a look (disk low, 2 jobs)", "3 to tidy up", "all clear"), never an item's title.
  */
 function systemVerdict(attention: SystemAttention[], unresolved: number): NerveState {
-  const system = attention.filter((a) => a.panel !== 'runs');
-  const waiting = attention.length - system.length;
+  // studio#1469: studio's paused socket is said as its own part, never in the count crew's items make (the badge's).
+  const paused = attention.some((a) => a.id === SOCKET_ID);
+  const crew = attention.filter((a) => a.id !== SOCKET_ID);
+  const system = crew.filter((a) => a.panel !== 'runs');
+  const waiting = crew.length - system.length;
   const stops = system.filter(preventsWork);
   const lead = stops[0] ?? system[0];
   const parts: string[] = [];
   const said = lead === undefined ? null : system.length > 1 ? `${systemSummary(lead)} and ${system.length - 1} more` : systemSummary(lead);
   // studio#1429: with system items and jobs both waiting, the total is the badge's (every attention item), then the split.
-  if (said !== null && waiting > 0) parts.push(`${attention.length} need a look (${said}, ${waiting} ${waiting === 1 ? 'job' : 'jobs'})`);
+  if (said !== null && waiting > 0) parts.push(`${crew.length} need a look (${said}, ${waiting} ${waiting === 1 ? 'job' : 'jobs'})`);
   else if (said !== null) parts.push(said);
   else if (waiting > 0) parts.push(`${waiting} ${waiting === 1 ? 'needs' : 'need'} you`);
   if (parts.length === 0 && unresolved > 0) parts.push(`${unresolved} to tidy up`);
+  if (paused) parts.push(systemSummary(attention.find((a) => a.id === SOCKET_ID)!));
   const tone: NerveTone = stops.length > 0 ? 'red' : parts.length > 0 ? 'yellow' : 'green';
   return { tone, read: 'fresh', words: parts.length === 0 ? ALL_CLEAR : parts.join(' · '), attention };
 }
