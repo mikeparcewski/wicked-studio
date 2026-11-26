@@ -1,6 +1,7 @@
 import type { AgentSession, CoreEvent, SessionStatus } from '../api/types.js';
 import { useRunEventStore } from '../store/events.js';
 import { useRuntimeStore, type LoggedEvent } from '../store/runtime.js';
+import { cliLabel, standInBase } from '../board/seatNames.js';
 
 /** Coarse age word — "45s", "12m", "3h", "2d" (kept here when the retired DashboardTiles went). */
 export function ageWord(ms: number): string {
@@ -231,11 +232,13 @@ export function deriveRunCost(session: unknown): RunCostView {
   if (typeof costUsd !== 'number' || !Number.isFinite(costUsd)) {
     return { text: 'cost not in run record', title: NO_COST_TITLE };
   }
+  // A stand-in seat (`claude~1`) is never shown bare (studio#1437); other seats keep their key as before.
+  const seatWord = (x: string): string => (standInBase(x) !== null ? cliLabel(x) : x);
   const reported = Array.isArray(s['usage_seats_reported'])
-    ? (s['usage_seats_reported'] as unknown[]).filter((x): x is string => typeof x === 'string').join(', ')
+    ? (s['usage_seats_reported'] as unknown[]).filter((x): x is string => typeof x === 'string').map(seatWord).join(', ')
     : '';
   const unmetered = s['usage_seats_unmetered'];
-  const missing = Array.isArray(unmetered) ? unmetered.filter((x): x is string => typeof x === 'string').join(', ') : '';
+  const missing = Array.isArray(unmetered) ? unmetered.filter((x): x is string => typeof x === 'string').map(seatWord).join(', ') : '';
   if (missing !== '' || unmetered === true) {
     return { text: `${formatCostUsd(costUsd)} partial (${missing !== '' ? missing : 'some seats'} not metered)` };
   }

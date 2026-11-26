@@ -2,6 +2,7 @@ import { actorWords } from './actorWords.js';
 import type { CoreEvent, RuleCouncilRecord, RuleCouncilVote, RulePosition, RuleVerdictOrigin, RuleVerdictStatus, SessionView, WorkUnit } from '../api/types.js';
 import { floorOverrideOf, isToolCheckOverride, type FloorOverrideView } from './floorOverride.js';
 import { isCommandPath } from './responder.js';
+import { cliLabel, standInBase } from './seatNames.js';
 
 /**
  * The assurance receipt (wicked-core#850 / #852, core-ts 0.7.46): what a run REQUIRES, and for each
@@ -167,6 +168,32 @@ export interface AssuranceReceipt extends RunAssurance {
   /** (crew api-types 0.190.0, DES-RULE-CHECK-001) Every steering rule in force and its verdict at this
    *  gate (a delivery: the worst row per rule across the run's gates); absent when no rule check ran. */
   rules?: RuleRow[];
+  /** (wicked-core#1930, studio#1437) The roles a stand-in answered at this gate (`roles[]` with `filled: 'stand_in'`):
+   *  the engine leaves `evaluator`/`judge` null and skips the instrument with reason `stand_in`, so these say who
+   *  checked instead. Absent when none. A delivery lists the run's. */
+  standIns?: ReceiptStandIn[];
+}
+
+/** One role a stand-in answered: `evaluator` or `judge` (the role's own word), its seat key and the engine's sentence. */
+export interface ReceiptStandIn { role: string; seat: string; label: string | null }
+
+function standInsOfRoles(v: unknown): ReceiptStandIn[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((r) => {
+    if (!isRecord(r) || r['filled'] !== 'stand_in' || r['state'] !== 'answered' || typeof r['role'] !== 'string') return [];
+    const si = isRecord(r['standIn']) ? r['standIn'] : null;
+    const seat = str(si?.['cli']) ?? str(r['seat']);
+    if (seat === null) return [];
+    const label = typeof si?.['label'] === 'string' && si['label'].trim() !== '' ? si['label'].trim() : null;
+    return [{ role: r['role'], seat, label }];
+  });
+}
+
+/** Every stand-in role the receipts carry, once each (role and seat), in first-seen order. */
+function standInsOf(receipts: readonly AssuranceReceipt[]): ReceiptStandIn[] {
+  const out: ReceiptStandIn[] = [];
+  for (const r of receipts) for (const s of r.standIns ?? []) if (!out.some((o) => o.role === s.role && o.seat === s.seat)) out.push(s);
+  return out;
 }
 
 /** One steering rule's verdict (`AssuranceReceipt.rules[]`). */
@@ -448,8 +475,10 @@ export function receiptOf(raw: unknown): AssuranceReceipt | null {
     : [];
   const judged = operatorJudgesOf(raw['operatorJudges']);
   const rules = rulesOf(raw['rules']);
+  const standIns = standInsOfRoles(raw['roles']);
   return {
     ...run,
+    ...(standIns.length > 0 ? { standIns } : {}),
     ...(fallbacks.length > 0 ? { judgeFallbacks: fallbacks } : {}),
     ...(judged.length > 0 ? { operatorJudges: judged } : {}),
     ...(rules.length > 0 ? { rules } : {}),
@@ -582,7 +611,8 @@ export function deliveryReceiptOf(
     // The lift's receipt is cut BEFORE the deliver step judged the rules deferred to it: each gate's current
     // rows speak for the rules they name (a delivery verdict replaces a deferral, a retry's skip its hold).
     const rules = currentRules(r.rules, gateRuleRows(view, log));
-    return { ...r, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), ...(rules.length > 0 ? { rules } : {}), creator: r.creator ?? who.creator, evaluator: r.evaluator ?? who.evaluator, judge: r.judge ?? who.judge, aggregateKind: deliveryKind(r, gates) };
+    const si = standInsOf([r, ...gates]);
+    return { ...r, ...(si.length > 0 ? { standIns: si } : {}), ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), ...(rules.length > 0 ? { rules } : {}), creator: r.creator ?? who.creator, evaluator: r.evaluator ?? who.evaluator, judge: r.judge ?? who.judge, aggregateKind: deliveryKind(r, gates) };
   }
   if (gates.length === 0) return null;
   const run = sessionAssurance(view, log) ?? { mode: gates[0]!.mode, required: gates[0]!.required };
@@ -598,14 +628,18 @@ export function deliveryReceiptOf(
         judgeNotDue ??= s;
         continue;
       }
-      if (!out.skipped.some((k) => k.instrument === s.instrument)) out.skipped.push(s);
+      const at = out.skipped.findIndex((k) => k.instrument === s.instrument);
+      if (at < 0) out.skipped.push(s);
+      // (studio#1437) A stand-in that answered is not a missing check: another gate's real skip reason wins over it.
+      else if (out.skipped[at]!.reason === 'stand_in' && s.reason !== 'stand_in') out.skipped[at] = s;
     }
   }
   if (judgeNotDue !== null && !out.ran.includes('judge') && !out.skipped.some((k) => k.instrument === 'judge')) out.skipped.push(judgeNotDue);
   const fb = fallbacksOf(gates);
   const oj = judgmentsOf(gates, durableFloorOverrides(view));
   const rules = worstRules(gateRuleRows(view, log));
-  return { ...out, ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), ...(rules.length > 0 ? { rules } : {}), aggregateKind: deliveryKind(out, gates) };
+  const si = standInsOf(gates);
+  return { ...out, ...(si.length > 0 ? { standIns: si } : {}), ...(fb.length > 0 ? { judgeFallbacks: fb } : {}), ...(oj.length > 0 ? { operatorJudges: oj } : {}), ...(rules.length > 0 ? { rules } : {}), aggregateKind: deliveryKind(out, gates) };
 }
 
 /** Every "judged by operator" record the receipts carry, once each (by who and when), in first-seen
@@ -771,6 +805,8 @@ const REASON_WORD: Record<string, string> = {
   no_boundary: 'no boundary',
   error: 'error',
   not_applicable: 'not applicable',
+  // wicked-core#1930: the role was filled by a stand-in, the same helper checking again (studio#1437).
+  stand_in: 'a stand-in checked instead',
 };
 
 /** An instrument token in words; a newer engine's token passes through with `_` spaced. */
@@ -802,7 +838,8 @@ export function assuranceKind(r: AssuranceReceipt): AssuranceKind {
   // A judge accepts independently only on a KNOWN seat that is not the creator's.
   const judged = r.ran.includes('judge');
   if (judged && r.judge !== null && r.creator !== null && r.judge !== r.creator) return 'independent';
-  if ((judged && r.judge !== null && r.judge === r.creator) || skippedSame) return 'same-seat';
+  // A stand-in that checked (wicked-core#1930) is the same helper checking again: never "only automatic checks".
+  if ((judged && r.judge !== null && r.judge === r.creator) || skippedSame || (r.standIns?.length ?? 0) > 0) return 'same-seat';
   if (r.ran.length > 0) return 'floor-only';
   return 'unchecked';
 }
@@ -815,14 +852,17 @@ export function assuranceKind(r: AssuranceReceipt): AssuranceKind {
  */
 export function passedWord(r: AssuranceReceipt | null): string {
   if (r === null) return 'Passed';
+  // (studio#1437) A judge a stand-in answered is a judge that ran, said as a stand-in's: never "No judge ran".
+  const standInJudged = (r.standIns ?? []).some((s) => s.role === 'judge');
   // What ran, not the kind: a skipped distinct evaluator alone reads `same-seat` with nothing run (codex r1 on #1350).
-  if (r.ran.length === 0) return 'Nothing verified';
-  const judgeSkips = r.skipped.filter((s) => s.instrument === 'judge');
+  // An answered stand-in is something that checked.
+  if (r.ran.length === 0 && (r.standIns?.length ?? 0) === 0) return 'Nothing verified';
+  const judgeSkips = r.skipped.filter((s) => s.instrument === 'judge' && !(s.reason === 'stand_in' && standInJudged));
   if (judgeSkips.some((s) => s.reason === 'reduced_assurance')) return 'Judge skipped (reduced assurance)';
   const operatorJudged = (r.operatorJudges ?? []).some((j) => j.floorOverride === undefined);
   // A delivery's receipt is its gates' union: a judge that ran at one gate and not another is "in part".
-  if (judgeSkips.length > 0 || operatorJudged) return r.ran.includes('judge') ? 'Judged in part' : 'No judge ran';
-  return 'Passed';
+  if (judgeSkips.length > 0 || operatorJudged) return r.ran.includes('judge') || standInJudged ? 'Judged in part' : 'No judge ran';
+  return standInJudged ? 'Passed, judged by a stand-in' : 'Passed';
 }
 
 /** The lead word when the decision PASSED (an approval, a delivery) … */
@@ -845,6 +885,8 @@ const CHECKED_LABEL: Record<AssuranceKind, string> = {
 /** How the evaluator stood to the creator: separate seats, the same seat (and why), or no
  *  evaluator on this gate. */
 export function separationWords(r: AssuranceReceipt): string | null {
+  // (studio#1437) A stand-in checked: the same helper again, never "separate seats".
+  if ((r.standIns?.length ?? 0) > 0 && !r.ran.includes('distinct_evaluator')) return 'a stand-in, not a different helper';
   if (r.aggregateKind !== undefined) {
     const k = r.aggregateKind;
     return k === 'independent' ? 'separate seats' : k === 'same-seat' ? (r.mode === 'reduced' ? 'same seat, reduced assurance' : 'same seat') : null;
@@ -881,7 +923,8 @@ export interface ReceiptWords {
 function seatNames(list: string | null): string | null {
   if (list === null) return null;
   const kept = list.split(', ').filter((x) => x.trim() !== '' && !isCommandPath(x.trim()));
-  return kept.length === 0 ? null : kept.join(', ');
+  // A stand-in seat (`claude~1`) is never shown bare: "Claude Code (stand-in)" (studio#1437).
+  return kept.length === 0 ? null : kept.map((x) => (standInBase(x.trim()) !== null ? cliLabel(x.trim()) : x)).join(', ');
 }
 
 /** `passed`: the decision the receipt is for passed (`true`), did not (`false`), or is unknown (`null`). */
@@ -904,6 +947,15 @@ export function receiptWords(r: AssuranceReceipt, passed: boolean | null = null)
   const evaluator = seatNames(r.evaluator);
   if (creator !== null) seats.push(`built by ${creator}`);
   if (evaluator !== null) seats.push(`evaluated by ${evaluator}`);
+  // (studio#1437) The roles a stand-in answered, named as stand-ins (the engine leaves evaluator/judge null for them).
+  const standInSeats = (role: string): string[] => [...new Set((r.standIns ?? []).filter((s) => s.role === role).map((s) => (standInBase(s.seat) !== null ? cliLabel(s.seat) : `${cliLabel(s.seat)} (stand-in)`)))];
+  // Merged per role with the ordinary seats: a delivery can carry a stand-in gate beside an ordinary one.
+  const evaluatedIdx = seats.findIndex((x) => x.startsWith('evaluated by '));
+  if (standInSeats('evaluator').length > 0) {
+    if (evaluatedIdx >= 0) seats[evaluatedIdx] = `${seats[evaluatedIdx]}, ${standInSeats('evaluator').join(', ')}`;
+    else seats.push(`evaluated by ${standInSeats('evaluator').join(', ')}`);
+  }
+  const judgeStandIns = standInSeats('judge');
   // A fallback judge is named by the engine's own line, never as a plain "judged by" (operator ruling 2026-10-14);
   // every other judge keeps its plain words (a delivery can mix the run's own judges and a fallback).
   const fallbacks = r.judgeFallbacks ?? [];
@@ -913,7 +965,8 @@ export function receiptWords(r: AssuranceReceipt, passed: boolean | null = null)
   });
   // The operator's judgment (`judge: "operator:<who>"`) is said as such, never as a seat that judged.
   const ownJudges = (r.judge ?? '').split(', ').filter((j) => j !== '' && !fallbackSeats.includes(j) && !j.startsWith('operator:'));
-  if (ownJudges.length > 0) seats.push(`judged by ${ownJudges.join(', ')}`);
+  const judgeNames = [...ownJudges.map((j) => (standInBase(j) !== null ? cliLabel(j) : j)), ...judgeStandIns.filter((n) => !ownJudges.some((j) => cliLabel(j) === n))];
+  if (judgeNames.length > 0) seats.push(`judged by ${judgeNames.join(', ')}`);
   // (api-types 0.135.0) A floor the operator overrode is said as such — the engine's label — never as a judge.
   const overriders = [...new Set((r.operatorJudges ?? []).filter((j) => j.floorOverride !== undefined && !isToolCheckOverride(j.floorOverride)).map((j) => actorWords(j.by)))];
   // wicked-core#1318: a tool check the operator overrode is said in its own label.

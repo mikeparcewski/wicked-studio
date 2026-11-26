@@ -5,6 +5,7 @@
  */
 
 import { stepLabelOf } from '../../board/chainModel.js';
+import { cliLabel, STAND_IN_WORD, standInBase } from '../../board/seatNames.js';
 import { clock as clockOf, gateWord, openGates, type PauseChoice, type Report } from './model.js';
 
 export type SectionId = 'goal' | 'approach' | 'decisions' | 'constraints' | 'questions' | 'next';
@@ -86,13 +87,20 @@ const SEAT_NAMES: Readonly<Record<string, string>> = {
   claude: 'Claude Code', codex: 'Codex', agy: 'Antigravity', antigravity: 'Antigravity', pi: 'Pi CLI', opencode: 'OpenCode', copilot: 'Copilot',
 };
 
+/** A seat key's name; a stand-in (`claude~1`) is named through its base seat, never bare (studio#1437). */
+function seatWord(seat: string): string {
+  const base = standInBase(seat);
+  if (base !== null) return `${SEAT_NAMES[base] ?? cliLabel(base)} (${STAND_IN_WORD})`;
+  return SEAT_NAMES[seat] ?? seat;
+}
+
 /** "You", a plugin's own name, an agent's seat ("Claude Code (agent)"), or crew. */
 export function authorWord(a: Author): string {
   if (a.kind === 'human') return a.id === 'local' ? 'You' : a.id;
   if (a.kind === 'plugin') return /^plugin:wicked-phase-report@/u.test(a.id) ? 'Phase report (plugin)' : `${a.id.replace(/^plugin:/u, '').replace(/@.*$/u, '')} (plugin)`;
   if (a.kind === 'agent') {
     const seat = a.id.replace(/^agent:/u, '');
-    return `${SEAT_NAMES[seat] ?? seat} (agent)`;
+    return `${seatWord(seat)} (agent)`;
   }
   return 'From the job’s request';
 }
@@ -154,7 +162,7 @@ export function seenByWords(c: DocContext | undefined, stepOfOrd: (ord: number) 
   const names: string[] = [];
   for (const r of c.seenBy) {
     const role = r.recipient === 'unit' ? (stepOfOrd(r.ord) ?? `step ${r.ord}`) : (RECIPIENT_WORDS[r.recipient] ?? r.recipient.replace(/_/gu, ' '));
-    const seat = r.cli !== '' ? ` (${SEAT_NAMES[r.cli] ?? r.cli})` : '';
+    const seat = r.cli !== '' ? ` (${seatWord(r.cli)})` : '';
     const name = `${role}${seat}`;
     if (!names.includes(name)) names.push(name);
   }

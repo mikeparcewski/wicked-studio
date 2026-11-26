@@ -1,6 +1,7 @@
 import { CopyButton } from './CopyButton.js';
 import { useDisplayText } from '../hooks/useHomePath.js';
 import { TechDetails } from './ui/index.js';
+import { cliLabel } from '../board/seatNames.js';
 import {
   checkOutcome,
   checkTails,
@@ -78,8 +79,11 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
             data-judge-distinct={view.judgeDistinct === null ? 'unknown' : String(view.judgeDistinct)}
             style={{ color: 'var(--ink-muted)' }}
             {...(view.judgeFallback ? { 'data-judge-fallback': 'true' } : {})}
+            {...(view.judgeStandIn ? { 'data-judge-stand-in': 'true' } : {})}
             title={
-              view.judgeFallback
+              view.judgeStandIn
+                ? view.judgeStandIn
+                : view.judgeFallback
                 ? 'the run\'s preferred judge was benched or unavailable, so the engine seated this distinct seat as a fallback judge'
                 : view.judgeDistinct === true
                   ? 'the judge ran on a seat identity-distinct from the creator (the rotation pick)'
@@ -88,11 +92,16 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
                     : 'which seat rendered the judge verdict'
             }
           >
-            {' · '}{view.judgeFallback ? view.judgeFallback : `judge: ${view.judgeCli}`}
+            {' · '}{view.judgeStandIn ? `judge: ${cliLabel(view.judgeCli)}` : view.judgeFallback ? view.judgeFallback : `judge: ${view.judgeCli}`}
           </span>
         )}
       </p>
 
+      {view.judgeStandIn && (
+        <p className="text-xs" data-testid="gate-verdict-judge-stand-in" style={{ color: 'var(--ink-muted)' }}>
+          {view.judgeStandIn}: a stand-in, not a different helper
+        </p>
+      )}
       {view.judgeCli !== null && view.judgeDistinct === false && (
         <p className="text-xs" data-testid="gate-verdict-judge-same-seat" style={{ color: 'var(--status-gate)' }}>
           same seat as the creator — evaluator ≠ creator is not held on this verdict: the judge fell back to the

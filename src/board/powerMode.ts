@@ -1,5 +1,6 @@
 import type { CoreEvent } from '../api/types.js';
 import { arrivedAt } from '../store/events.js';
+import { standInBase } from './seatNames.js';
 import {
   POWER_EVENT_TYPES, RIGORS, isRigor, rigorRank,
   type HandoffStep, type PowerActivityEvent, type PowerCheckpointEvent, type PowerState, type PowerToggle, type PowerTurnEvent,
@@ -501,9 +502,11 @@ export interface HandoffRowWords {
 
 export function handoffRow(s: HandoffStep, rigor: Rigor | null, seatName: (cli: string) => string, overridden: boolean | 'carried' = false): HandoffRowWords {
   const seat = s.seat !== null && s.seat !== '' ? seatName(s.seat) : null;
+  // studio#1437: a stand-in seat (`claude~1`) is the same helper checking again, never "its own seat".
+  const standIn = s.seat !== null && standInBase(s.seat) !== null;
   const role = s.step === 'checks' ? `${rigor === 'high' || rigor === 'highest' ? 'full suite' : 'targeted tests'}${rigor !== null ? `, rigor ${rigor}` : ''}`
-    : s.step === 'review' ? 'reviewing on its own seat'
-      : s.step === 'security' ? 'security review on its own seat'
+    : s.step === 'review' ? (standIn ? 'a stand-in review, not a different helper' : 'reviewing on its own seat')
+      : s.step === 'security' ? (standIn ? 'a stand-in security review, not a different helper' : 'security review on its own seat')
         : s.step === 'qe' ? 'QE acceptance'
           : s.step === 'compliance' ? 'steering rules on the change'
             : 'the final diff, re-scored';

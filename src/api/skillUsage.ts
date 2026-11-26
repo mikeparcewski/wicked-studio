@@ -110,32 +110,8 @@ export function isUsageUnavailable(v: SkillUsageResponse | SkillUsageUnavailable
   return v !== undefined && 'unavailable' in v;
 }
 
-const FAMILY_LABEL: Record<string, string> = {
-  claude: 'Claude Code',
-  codex: 'Codex',
-  pi: 'Pi',
-  agy: 'Antigravity',
-  copilot: 'GitHub Copilot',
-  opencode: 'opencode',
-};
-
-/** A seat key's CLI family and its own suffix (`codex-2` → `codex`, `2`; separators `-`, `#`, `_`). */
-export function cliFamily(cli: string): { family: string; suffix: string } {
-  const k = cli.toLowerCase();
-  for (const f of Object.keys(FAMILY_LABEL)) {
-    if (k === f) return { family: f, suffix: '' };
-    if (k.startsWith(f) && ['-', '#', '_'].includes(k.charAt(f.length))) return { family: f, suffix: cli.slice(f.length + 1) };
-  }
-  return { family: k, suffix: '' };
-}
-
-/** A seat key as a person reads it (`codex` → `Codex`, `codex-2` → `Codex (2)`, `claude` → `Claude Code`). */
-export function cliLabel(cli: string): string {
-  const { family, suffix } = cliFamily(cli);
-  if (!Object.hasOwn(FAMILY_LABEL, family)) return cli;
-  const label = FAMILY_LABEL[family] as string;
-  return suffix === '' ? label : `${label} (${suffix})`;
-}
+// One family table for every seat name (studio#1437): it lives with seatLabel.
+export { cliFamily, cliLabel } from '../board/seatNames.js';
 
 /** Uses (opened + ran) in the window, across CLIs. */
 export function usesIn(row: SkillUsageRow, window: 'd30' | 'd90'): number {

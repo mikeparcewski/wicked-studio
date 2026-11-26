@@ -3,6 +3,7 @@ import { useDisplayText } from '../hooks/useHomePath.js';
 import { api } from '../api/client.js';
 import type { WorkUnit } from '../api/types.js';
 import { phaseLabel } from './gateVerdictModel.js';
+import { seatKeyName } from '../board/seatNames.js';
 import { unitKey } from './NarratorFeed.js';
 
 /**
@@ -40,7 +41,7 @@ export function GateUnderReview({ runId, units, reviewed, next }: {
     <div data-testid="gate-under-review" data-reviewed-ord={reviewed.ord} className="mb-3">
       <p className="text-sm" style={{ color: 'var(--ink-high)' }}>
         <span className="font-semibold">Under review: {phase}</span>
-        <span className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}> · unit #{reviewed.ord} finished{reviewed.assigned_cli ? ` on ${reviewed.assigned_cli}` : ''}</span>
+        <span className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}> · unit #{reviewed.ord} finished{reviewed.assigned_cli ? ` on ${seatKeyName(reviewed.assigned_cli, null)}` : ''}</span>
       </p>
       {next !== null && (
         <p data-testid="gate-next" className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>
