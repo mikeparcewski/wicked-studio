@@ -152,9 +152,11 @@ interface TranscriptLike {
 export function headlinePool<T extends Pick<SessionView, 'session'>>(runs: readonly T[]): readonly T[] {
   const jobs = runs.filter((v) => !isAskPathRun(v.session));
   if (jobs.length === 0) return runs;
-  // Round 1 (codex P1): an ask at a gate a person must answer (no `ask_turn`: Continue in Build, a creator step) still
-  // waits on them, so it stays in the header's and Details' reading beside the job.
-  return runs.filter((v) => !isAskPathRun(v.session) || (v.session.status === 'awaiting_human' && !isAskTurnRun(v.session)));
+  // Round 1 and its delta (codex P1): an ask that waits on the person stays in the header's and Details' reading beside
+  // the job: a gate they must answer (no `ask_turn`: Continue in Build, a creator step) or one held for them while it
+  // executes (an open question: `runState` reads the hold). Only an answered turn or a live answer steps aside.
+  return runs.filter((v) => !isAskPathRun(v.session)
+    || (runState(v) === 'waiting' && !(v.session.status === 'awaiting_human' && isAskTurnRun(v.session))));
 }
 
 const launchedAt = (v: SessionView): number => {
