@@ -36,7 +36,7 @@ let asked: Array<[string, unknown]> = [];
 function crewSays(snap: SystemSnapshot, count: number): void {
   const now = Date.now();
   useSystemStore.setState({ mode: 'system', healthAt: now, healthError: null, snapshot: snap, snapshotAt: now, snapshotError: null } as never);
-  useDashStore.setState({ system: snap });
+  useDashStore.setState({ system: snap, readAt: now, readError: null });
   useConnectionStore.setState({ status: 'connected' } as never);
   useNeedsCount.setState({ phase: 'complete', count });
 }
@@ -82,7 +82,7 @@ describe('a voice question carries what voice mode shows', () => {
     await waitFor(() => expect(asked).toHaveLength(1));
     const pack = asked[0]![1] as string;
     expect(pack).toMatch(/jobs running: 1/);
-    expect(pack).toContain('Dark mode for settings');
+    expect(pack).toContain('Dark mode for settings · on build');
   });
 
   it('is read when the question is asked, not when voice mode opened', async () => {
@@ -108,6 +108,48 @@ describe('a voice question carries what voice mode shows', () => {
     await askByVoice();
     await waitFor(() => expect(asked).toHaveLength(1));
     expect(asked[0]![1] as string).toContain('Ship the billing export');
+  });
+});
+
+describe('round 1 (codex): never an all-clear or a "now" it has not read', () => {
+  const base = { failedAt: {}, attachedAt: {}, projectIds: {}, chats: [], repos: [], campaigns: [], now: Date.now(), deliveryAttempted: new Set<string>(), deliveredNow: new Set<string>() } as unknown as Omit<NeedsYouInputs, 'runs' | 'gates'>;
+
+  it('P1: on a crew without /system, a needs count still loading is "not read yet", not "nothing"', async () => {
+    useSystemStore.setState({ mode: 'fallback', healthAt: Date.now(), healthError: null, snapshot: null } as never);
+    useNeedsCount.setState({ phase: 'loading', count: null, rows: [] } as never);
+    await askByVoice();
+    await waitFor(() => expect(asked).toHaveLength(1));
+    const pack = asked[0]![1] as string;
+    expect(pack).toMatch(/needs you: not read yet/);
+    expect(pack).not.toMatch(/needs you: nothing/);
+  });
+
+  it('P2: a system read older than the Nerve Center trusts is not described as now', async () => {
+    crewSays(normalizeSnapshot({ ...cert.body, runs: [WORKING] }), 4);
+    const old = Date.now() - 10 * 60_000;
+    useDashStore.setState({ readAt: old });
+    useSystemStore.setState({ snapshotAt: old, healthAt: Date.now() } as never);
+    await askByVoice();
+    await waitFor(() => expect(asked).toHaveLength(1));
+    const pack = asked[0]![1] as string;
+    expect(pack).toMatch(/jobs running: not read yet/);
+    expect(pack).not.toContain('Dark mode for settings');
+  });
+
+  it('P2: a gate is named by the question the Desk shows, not the engine\'s narration', async () => {
+    const waiting = makeView({ id: 'r-plan', status: 'awaiting_human', problem: 'Add rate limiting', unit_ix: 1 } as never, [makeUnit({ id: 'r-plan:u1', session_id: 'r-plan', ord: 1, status: 'done' })]);
+    const gate = { runId: 'r-plan', ord: 1, prompt: 'Approve plan rev 2 before unit 1 runs.', lifecycle: 'open', receivedAt: 1, gateKind: 'plan' };
+    const rows = needsYouRows({ ...base, runs: [waiting], gates: { 'r-plan': gate } as never });
+    const row = rows.find((r) => r.kind === 'gate')!;
+    expect(row.question).toBeTruthy();
+    expect(row.question).not.toBe(row.text);
+    useSystemStore.setState({ mode: 'fallback', healthAt: Date.now(), healthError: null, snapshot: null } as never);
+    useNeedsCount.setState({ phase: 'complete', count: 1, rows } as never);
+    await askByVoice();
+    await waitFor(() => expect(asked).toHaveLength(1));
+    const pack = asked[0]![1] as string;
+    expect(pack).toContain(row.question!);
+    expect(pack).not.toContain(row.text);
   });
 });
 
