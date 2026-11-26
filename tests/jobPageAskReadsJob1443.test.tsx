@@ -1,6 +1,6 @@
 import { useNewWorkSeatsStore } from '../src/store/newWorkSeats.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ApiError } from '../src/api/errors.js';
 import type { RosterSeat } from '../src/api/types.js';
 
@@ -34,7 +34,7 @@ const { AskDock } = await import('../src/components/AskDock.js');
 const { setCachedRoster, clearCachedRoster } = await import('../src/store/rosterCache.js');
 const { useCapabilities } = await import('../src/store/capabilities.js');
 const { useAskThreadStore } = await import('../src/store/askThread.js');
-const { rememberChatChoices } = await import('../src/store/askSession.js');
+const { chatChoices, rememberChatChoices } = await import('../src/store/askSession.js');
 const { pageContext } = await import('../src/board/pagePrompts.js');
 const { makeUnit, makeView } = await import('./factories.js');
 
@@ -91,7 +91,7 @@ describe('a question on a job\'s page can read that job', () => {
     expect(text).toMatch(/step 1 \(build\): claude, done/);
     expect(text).toMatch(/step 2 \(review\): codex, rejected[^\n]*divide\(\) lost its zero guard/);
     expect(text).toMatch(/step 3 \(review\): pi, done/);
-    expect(text).toMatch(/delivery: delivered[^\n]*https:\/\/github\.com\/acme\/tiny-math\/pull\/7/);
+    expect(text).toMatch(/delivery: PR open, https:\/\/github\.com\/acme\/tiny-math\/pull\/7/);
   });
 
   it('an ask in the chat is not a job: only the job is carried', async () => {
@@ -125,5 +125,85 @@ describe('a question on a job\'s page can read that job', () => {
   it('the page\'s "where" names the job, not the question asked on it', () => {
     const ctx = pageContext({ pathname: `/s/${CHAT}`, runs: [JOB, ASK], projects: [], repos: [] } as never);
     expect(ctx.label).toContain('polish the math helpers');
+  });
+});
+
+/** A job of this chat with its own id, launched `ago` seconds before the newest. */
+const jobOf = (id: string, at: number, units = JOB.units): typeof JOB => makeView({ ...JOB.session, id, created_at: at } as never, units.map((u) => ({ ...u, id: u.id.replace('r-job', id), session_id: id })));
+
+describe('round 1 (codex)', () => {
+  it('P1: the record is told again when something it says changed, though no status moved (a delivery recorded later)', async () => {
+    const before = makeView({ ...JOB.session, deliverUrl: undefined, delivery: undefined } as never, JOB.units);
+    pageSend([before, ASK]);
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    cleanup();
+    pageSend([JOB, ASK]);
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
+    expect(sentText()).toContain('https://github.com/acme/tiny-math/pull/7');
+  });
+
+  it('P1 + P2 (tests): a job the person turns off in the dock stays off on the page\'s next send', async () => {
+    pageSend();
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    cleanup();
+    sessionStorage.setItem('wicked.ask.session', JSON.stringify({ chatId: CHAT, title: 'q', seeded: true, chips: chatChoices(CHAT)!.chips }));
+    render(<AskDock runs={[JOB, ASK]} pathname="/" onClose={() => undefined} />);
+    const chip = (await screen.findAllByTestId('chat-scope-chip')).find((c) => c.getAttribute('data-key') === 'run:r-job')!;
+    fireEvent.click(chip);
+    await waitFor(() => expect(chatChoices(CHAT)!.chips!.find((c) => c.key === 'run:r-job')?.on ?? false).toBe(false));
+    cleanup();
+    pageSend();
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
+    expect(sentText()).not.toMatch(/step 1 \(build\)/);
+    // The choice itself survives (a removed chip would be added back on, and only an unchanged signature hid it).
+    expect(chatChoices(CHAT)!.chips!.find((c) => c.key === 'run:r-job')).toMatchObject({ on: false });
+  });
+
+  it('P1: the delivery says only what the record holds: a deliver step that ran with no PR recorded is "deliver ran"; one a cancelled job never ran is "pending"', async () => {
+    const deliver = (status: 'done' | 'pending') => makeUnit({ id: 'r-job:deliver', session_id: 'r-job', ord: 4, status, stage: 'deliver' as never, assigned_cli: null, description: 'deliver' });
+    const ran = makeView({ ...JOB.session, deliverUrl: undefined, delivery: undefined } as never, [...JOB.units, deliver('done')]);
+    pageSend([ran, ASK]);
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    expect(sentText()).toMatch(/delivery: deliver ran/);
+    expect(sentText()).not.toMatch(/delivery: delivered/);
+    cleanup();
+    const stopped = makeView({ ...JOB.session, status: 'cancelled', deliverUrl: undefined, delivery: undefined } as never, [...JOB.units, deliver('pending')]);
+    pageSend([stopped, ASK]);
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
+    expect(sentText()).toMatch(/delivery: pending/);
+    expect(sentText()).not.toMatch(/in-flight/);
+  });
+
+  it('P1: a legacy delivery object with a PR and no deliver step never reads "none"', async () => {
+    const legacy = makeView({ ...JOB.session, deliverUrl: undefined, delivery: { url: 'https://github.com/acme/tiny-math/pull/7' } } as never, JOB.units);
+    pageSend([legacy, ASK]);
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    expect(sentText()).not.toMatch(/delivery: none/);
+  });
+
+  it('P2: the newest three jobs ride, across sends too (an older automatic choice is let go)', async () => {
+    const [j1, j2, j3, j4] = [jobOf('j1', T0 - 400), jobOf('j2', T0 - 300), jobOf('j3', T0 - 200), jobOf('j4', T0 - 100)];
+    pageSend([j1!, j2!, j3!, ASK]);
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    expect(sentText()).toContain('job j1');
+    cleanup();
+    pageSend([j1!, j2!, j3!, j4!, ASK]);
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
+    expect(sentText()).toContain('job j4');
+    expect(sentText()).not.toContain('job j1');
+  });
+
+  it('P2: a step that passed is named by what it does (its description), so "what did the parity step check" has an answer', async () => {
+    const units = [...JOB.units.slice(0, 1), makeUnit({ id: 'r-job:u2', session_id: 'r-job', ord: 2, status: 'done', stage: 'review', assigned_cli: 'codex', description: 'parity — the polished helpers return what the old ones did' })];
+    pageSend([makeView({ ...JOB.session } as never, units), ASK]);
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    expect(sentText()).toMatch(/step 2 \(review\): codex, done[^\n]*parity — the polished helpers return what the old ones did/);
+  });
+
+  it('P2: a stand-in reviewer is named as the same helper checking again, never a different one', async () => {
+    const units = JOB.units.map((u) => (u.ord === 3 ? { ...u, assigned_cli: 'claude~1' } : u));
+    pageSend([makeView({ ...JOB.session } as never, units), ASK]);
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    expect(sentText()).toMatch(/step 3 \(review\): Claude Code \(stand-in\)[^\n]*claude~1/);
   });
 });
