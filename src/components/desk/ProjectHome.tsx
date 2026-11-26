@@ -22,7 +22,6 @@ import { useSystemStore } from '../../store/systemSnapshot.js';
 import { useRowSilence } from '../../hooks/useCrewSilence.js';
 import { relTime } from '../../board/relTime.js';
 import { sessionPath } from '../../board/sessionModel.js';
-import { deskLiveCounts } from '../../board/statusWords.js';
 import { projectDetailPath, type Navigate } from '../../hooks/useRoute.js';
 import { openLaunchWizard } from '../../store/launchWizard.js';
 import { useNotificationStore } from '../../store/notifications.js';
@@ -129,13 +128,16 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
   const foldedGateRuns = useMemo(() => (items !== null ? [] : folded.filter((r) => r.kind === 'gate').map(needRunId).filter((id): id is string => id !== null)), [items, folded]);
   const refusedDeliver = useDeliverRefusals(foldedGateRuns, runs);
   const waiting = items !== null ? items.length : folded.length;
-  const held = useMemo(() => new Set(items !== null
-    ? items.flatMap((a) => [a.runId, ...(a.blockedRunIds ?? [])]).filter((id): id is string => id != null)
-    : folded.map(needRunId).filter((id): id is string => id !== null)), [items, folded]);
-  const running = useMemo(() => deskLiveCounts(runs, held).working, [runs, held]);
   // studio#1368: crew's liveness per run, so a silent job never reads "Working".
   const silentOf = useRowSilence(now);
-  const progress = useMemo(() => homeProgress(runs, ROWS_MAX, silentOf), [runs, silentOf]);
+  // studio#1440: a job a need holds is under Needs you, not In progress; a job a ranked item only slows (`slows`: a
+  // helper signed out, its `blockedRunIds`) still works, so it stays listed. The sentence counts the list's own jobs,
+  // so it never says "Nothing is running" beside a Working row, nor counts a job the list leaves out.
+  const held = useMemo(() => new Set(items !== null
+    ? items.filter((a) => a.kind !== 'slows').flatMap((a) => [a.runId, ...(a.blockedRunIds ?? [])]).filter((id): id is string => id != null)
+    : folded.map(needRunId).filter((id): id is string => id !== null)), [items, folded]);
+  const progress = useMemo(() => homeProgress(runs.filter((v) => !held.has(v.session.id)), ROWS_MAX, silentOf), [runs, held, silentOf]);
+  const running = progress.total;
   const shownRepos = repos.filter((u) => u.attached || u.jobs > 0);
   const ready = known && !crewPending;
   const sentence = projectHomeSentence({ known: ready, waiting, running, repos: shownRepos.length });

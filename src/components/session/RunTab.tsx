@@ -2,7 +2,7 @@ import { useDisplayText } from '../../hooks/useHomePath.js';
 import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { SessionView } from '../../api/types.js';
 import type { Navigate } from '../../hooks/useRoute.js';
-import type { ChainModel, ChainStep } from '../../board/chainModel.js';
+import { stepNow, type ChainModel, type ChainStep } from '../../board/chainModel.js';
 import { jobTitle } from '../../board/deskWords.js';
 import { deriveRunCost } from '../runIdentity.js';
 import { workflowLabel } from '../../board/workflowNames.js';
@@ -82,9 +82,7 @@ function primaryRun(runs: SessionView[]): SessionView | undefined {
 /** The step the run is on: the running one, else (a live run waiting or between steps) the first step
  *  not yet finished — a step waiting on you at its gate is not "done", and the next one is not "now". */
 function currentStep(view: SessionView, chain: ChainModel): ChainStep | undefined {
-  if (isTerminal(view)) return undefined;
-  return chain.steps.find((step) => step.state === 'running')
-    ?? chain.steps.find((step) => !['done', 'checked', 'replaced', 'struck'].includes(step.state));
+  return isTerminal(view) ? undefined : stepNow(chain);
 }
 
 function assignedClis(view: SessionView): string[] {
