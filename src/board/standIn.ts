@@ -164,10 +164,10 @@ export function listWords(items: readonly string[]): string {
 
 const uniq = (xs: readonly string[]): string[] => [...new Set(xs.filter((x) => x.trim() !== ''))];
 
-/** "A disagreement would need 1 stand-in" / "… 3 stand-ins". */
-function standInsWord(n: number): string {
-  return `A disagreement would need ${n} ${n === 1 ? 'stand-in' : 'stand-ins'}`;
-}
+/** (coord N5 on wicked-crew#1932) The roles a stand-in fills: the engine's one fill site is the review's distribution
+ *  (a reviewer, the party-excluded review), plus the judge's and the QE reviewer's holds. None sits on a council, watches
+ *  the team or checks the rules. */
+const STAND_IN_ROLES: ReadonlySet<string> = new Set(['evaluator', 'party_excluded', 'judge', 'qe_reviewer']);
 
 /** One choice as the card draws it: the button, and what happens next. */
 export interface StandInChoiceLine {
@@ -201,14 +201,17 @@ const CHOICE_WORDS: Readonly<Record<StandInChoiceId, readonly [string, string]>>
  */
 export function standInChoiceWords(r: StandInChoiceRefusal, name: (cli: string) => string): StandInChoiceWords {
   const signedIn = uniq(r.preflight.signedIn.map(name));
-  const short = r.preflight.roles.filter((x) => x.shortBy > 0);
-  const firm = uniq(short.filter((x) => !(x.conditional && x.role === 'council')).map(roleWords));
-  const councils = short.filter((x) => x.conditional && x.role === 'council');
+  // (wicked-crew#1932, coord N5) The card names the short roles a stand-in fills, and only those: a short council,
+  // monitor or rules check is met by the run as it would be with no stand-ins. A crew that asks for those alone (before
+  // wicked-crew#1936) is told so, and no stand-in is promised.
+  const shortAll = r.preflight.roles.filter((x) => x.shortBy > 0);
+  const fillable = shortAll.filter((x) => STAND_IN_ROLES.has(x.role));
+  const short = fillable.length > 0 ? fillable : shortAll;
+  const firm = uniq(short.filter((x) => x.role !== 'council').map(roleWords));
+  const councils = short.filter((x) => x.role === 'council');
   const council = councils.length > 0 ? `a council of ${Math.max(...councils.map((c) => Math.max(c.needed, 1)))} if a disagreement comes up` : null;
 
-  const title = signedIn.length === 1 ? 'Only one helper can check this job'
-    : firm.length === 0 && councils.length > 0 ? standInsWord(Math.max(...councils.map((c) => c.shortBy)))
-      : 'Not enough helpers can check this job';
+  const title = signedIn.length === 1 ? 'Only one helper can check this job' : 'Not enough helpers can check this job';
 
   const who = signedIn.length === 0 ? 'No other helper is signed in.'
     : signedIn.length === 1 ? `${signedIn[0]!} is the only helper signed in.`
@@ -222,9 +225,12 @@ export function standInChoiceWords(r: StandInChoiceRefusal, name: (cli: string) 
 
   const bases = uniq(short.filter((x) => x.canStandIn && x.standInFrom !== null).map((x) => name(x.standInFrom!.cli)));
   const tool = bases.length > 0 ? listWords(bases) : signedIn.length === 1 ? signedIn[0]! : 'a signed-in helper';
-  const meaning = `wicked can fill ${short.length === 1 && council === null ? 'that role' : 'those roles'} with stand-ins. `
-    // No model is named: studio names no model anywhere on screen (coord round 2 on #1361).
-    + `A stand-in is ${tool} again, in a separate, fresh session: it sees the work but none of the builder's reasoning.`;
+  const meaning = fillable.length === 0
+    ? `${councils.length === short.length ? 'No stand-in sits on a council.' : `No stand-in does ${short.length === 1 ? 'that check' : 'those checks'}.`} `
+      + 'Starting the job anyway runs it with the helpers it has.'
+    : `wicked can fill ${short.length === 1 ? 'that role' : 'those roles'} with stand-ins. `
+      // No model is named: studio names no model anywhere on screen (coord round 2 on #1361).
+      + `A stand-in is ${tool} again, in a separate, fresh session: it sees the work but none of the builder's reasoning.`;
   const record = 'The job, every check, the delivery and the pull request will say a stand-in did the check. '
     + 'It is never counted as a check by a different helper.';
 

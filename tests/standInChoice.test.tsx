@@ -93,7 +93,8 @@ describe('the words a first-time user reads', () => {
   it('one CLI: who is signed in, what the job needs, what a stand-in is, and what the record says', () => {
     expect(words.title).toBe('Only one helper can check this job');
     // coord round 2: the QE role by what it does; no model named (studio names none on screen).
-    expect(words.why).toBe('Claude Code is the only helper signed in. This job needs checks by helpers that did not build the work: a reviewer, a judge, a tester who checks the result does what you asked, and a rules checker, plus a council of 3 if a disagreement comes up.');
+    // (wicked-crew#1932, coord N5) A stand-in fills only a reviewer, a judge or a tester: the card names only those.
+    expect(words.why).toBe('Claude Code is the only helper signed in. This job needs checks by helpers that did not build the work: a reviewer, a judge, and a tester who checks the result does what you asked.');
     expect(words.meaning).toBe('wicked can fill those roles with stand-ins. A stand-in is Claude Code again, in a separate, fresh session: it sees the work but none of the builder\'s reasoning.');
     expect(words.record).toMatch(/say a stand-in did the check/);
     expect(words.record).toMatch(/never counted as a check by a different helper/);
@@ -120,16 +121,17 @@ describe('the words a first-time user reads', () => {
     body.preflight.signedIn = ['claude', 'codex'];
     body.preflight.roles = body.preflight.roles.map((r) => (r['role'] === 'council' ? r : { ...r, real: ['codex'], shortBy: 0 }));
     const w = standInChoiceWords(standInChoiceOf(refusalError(body as never))!, helperNamer([...ROSTER, seat('codex', 'Codex')]));
-    expect(w.title).toBe('A disagreement would need 3 stand-ins');
+    // (coord N5) Only a crew before wicked-crew#1936 asks this. No stand-in sits on a council, so none is promised.
+    expect(w.title).toBe('Not enough helpers can check this job');
     expect(w.why).toBe('Claude Code and Codex are signed in. If a disagreement comes up, it goes to a council of helpers that did not build or review the work. There are not enough of them left for that.');
-    expect(w.meaning).toMatch(/^wicked can fill those roles with stand-ins\. A stand-in is Claude Code again/);
+    expect(w.meaning).toBe('No stand-in sits on a council. Starting the job anyway runs it with the helpers it has.');
   });
 
-  it('one council seat short reads "1 stand-in"', () => {
+  it('one council seat short promises no stand-in either', () => {
     const body = structuredClone(CHOICE.body) as { preflight: { signedIn: string[]; roles: Array<Record<string, unknown>> } };
     body.preflight.signedIn = ['claude', 'codex', 'pi'];
     body.preflight.roles = body.preflight.roles.map((r) => (r['role'] === 'council' ? { ...r, real: ['pi', 'codex'], shortBy: 1 } : { ...r, real: ['codex'], shortBy: 0 }));
-    expect(standInChoiceWords(standInChoiceOf(refusalError(body as never))!, name).title).toBe('A disagreement would need 1 stand-in');
+    expect(standInChoiceWords(standInChoiceOf(refusalError(body as never))!, name).title).toBe('Not enough helpers can check this job');
   });
 
   it('a helper the roster does not name is named the way studio names its family; no model said when none is known', () => {
