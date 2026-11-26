@@ -2,12 +2,13 @@
  * studio#1441: during a long steering-rule check the run page said "No output for 11 min from Codex on Review" and
  * offered "Ask Codex what's happening" and "Move it to another helper", though Codex had finished its review and the
  * engine was judging the rules. The rule check is the engine's work, like the checks floor and the judge before it.
- * Now the step says "Checking the steering rules · 11 min · judges Codex and Pi CLI" and offers nothing that moves the
+ * Now the step says "Checking the steering rules · 11 min · judges Codex and Pi" and offers nothing that moves the
  * reviewer; the rule check's own lines count as output.
  *
  * The lines are the engine's own, as `cli_runner.rs` writes them through `engine_note` ("\n{text}\n"): the judges note
  * ("rule check: {n} steering rule(s) in force; judges: {seats}") and `with_floor_heartbeat`'s ticks under the label
- * "rule check: judging the steering rules" ("{label} — {m} min", at 0 min and every 5 min).
+ * "rule check: judging the steering rules" ("{label} — {m} min", at 0 min and every 5 min). The judges are named as
+ * studio names a seat key with no roster at hand (`cliLabel`: `pi` → Pi).
  */
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -54,10 +55,10 @@ describe('studio#1441: a long rule check is the engine working, not a silent rev
     expect(useRunEventStore.getState().byRun['rz']).toHaveLength(1);
   });
 
-  it('"Checking the steering rules · 11 min · judges Codex and Pi CLI" until the gate is evaluated', () => {
+  it('"Checking the steering rules · 11 min · judges Codex and Pi" until the gate is evaluated', () => {
     const f = runningFloor(ruleCheck(), T0 + 11.7 * MIN)!;
     expect(f).toMatchObject({ ord: 5, phase: 'rules', minutes: 11, since: T0 });
-    expect(floorWords(f)).toBe('Checking the steering rules · 11 min · judges Codex and Pi CLI');
+    expect(floorWords(f)).toBe('Checking the steering rules · 11 min · judges Codex and Pi');
     expect(floorBadge(f)).toBe('Checking rules');
     expect(runningFloor([...ruleCheck(), ...ev([{ type: 'gateEvaluated', ord: 5, attempt: 0, ts: T0 + 12 * MIN }])], T0 + 13 * MIN)).toBeNull();
   });
@@ -83,7 +84,7 @@ describe('studio#1441: a long rule check is the engine working, not a silent rev
         makeUnit({ id: `${R}:review`, session_id: R, ord: 5, status: 'distributed', assigned_cli: 'codex', stage: 'review', description: 'review it' }),
       ]);
       render(<SessionPage sessionId={`run:${R}`} runs={[run]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
-      expect(screen.getByTestId('session-working-text').textContent).toBe('studio · Checking the steering rules · 11 min · judges Codex and Pi CLI');
+      expect(screen.getByTestId('session-working-text').textContent).toBe('studio · Checking the steering rules · 11 min · judges Codex and Pi');
       expect(document.body.textContent).toContain('Checking rules');
       expect(document.body.textContent).not.toMatch(/No output for/u);
       expect(document.body.textContent).not.toContain('Move it to another helper');
