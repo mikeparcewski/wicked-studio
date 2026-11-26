@@ -59,10 +59,11 @@ export interface HoldRead {
 }
 
 /** (studio#1430, DES-S-NEEDS-HOLDS) The runs a ranked crew holds back for a person's snooze (`/system.snoozed[]`), each
- *  with its held item. Fail-open: a hold counts only while the last /system read SUCCEEDED and was asked after
- *  everything this page saw for that run (`seenAt`: the run's gate arriving, or a Wake of the hold's key, both on this
- *  browser's clock) and its end is still ahead. Otherwise the item shows: a snoozed item can come back for one poll,
- *  work is never hidden. Empty against an older crew. */
+ *  with its held item. A hold holds the run's open gate (its gate row, {@link crewHeldOf}) and nothing else. Fail-open:
+ *  it counts only while the last /system read SUCCEEDED, its end is still ahead, this page holds the run's gate, and the
+ *  read was asked after everything this page saw for the run (`seenAt`: that gate's arrival, and a Wake of the hold's
+ *  key, both on this browser's clock; `undefined`, nothing to judge by, holds nothing). Otherwise the item shows: a
+ *  snoozed item can come back for one poll, work is never hidden. Empty against an older crew. */
 export function crewHeldRuns(read: HoldRead, now: number, seenAt: (runId: string, wakeKey: string | null) => number | undefined): ReadonlyMap<string, SystemSnoozed> {
   const out = new Map<string, SystemSnoozed>();
   const { snapshot, askedAt } = read;
@@ -70,14 +71,15 @@ export function crewHeldRuns(read: HoldRead, now: number, seenAt: (runId: string
   for (const h of snapshot.snoozed ?? []) {
     if (h.runId == null || out.has(h.runId) || (h.until !== null && h.until <= now)) continue;
     const seen = seenAt(h.runId, h.wakeKey);
-    if (seen !== undefined && seen >= askedAt) continue;
+    if (seen === undefined || seen >= askedAt) continue;
     out.set(h.runId, h);
   }
   return out;
 }
 
-/** A row's run crew holds back, or null. */
+/** A row crew holds back, or null: only a run's gate row (a failure, a stall or any other row of a held run shows). */
 export function crewHeldOf(row: NeedRow, held: ReadonlyMap<string, SystemSnoozed>): SystemSnoozed | null {
+  if (row.kind !== 'gate') return null;
   const id = needRunId(row);
   return id === null ? null : held.get(id) ?? null;
 }

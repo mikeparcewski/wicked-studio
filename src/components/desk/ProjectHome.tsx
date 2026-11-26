@@ -114,7 +114,8 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
   // not there: they are crew's `unresolved[]`, folded into one "to tidy up" line with their spend.
   // An older crew: the board's fold, without failures older than a week. Until crew first answers, the
   // section is held (no number from the fold flashing before crew's).
-  const snapshot = useSystemStore((s) => (s.mode === 'system' ? s.snapshot : null));
+  // A failed read's retained list is not crew's word now (useRankedNeeds' rule): the fold stands in, so nothing waits unseen.
+  const snapshot = useSystemStore((s) => (s.mode === 'system' && s.snapshotError === null ? s.snapshot : null));
   const crewPending = useSystemStore((s) => s.mode === 'unknown' && s.healthError === null);
   const items = useMemo(() => projectAttention(snapshot, ids), [snapshot, ids]);
   // Each gate row says what the dock says (its plain cause); the job's title moves to the line.

@@ -153,7 +153,8 @@ it('D: a batch response reports sent while preserving a newer open gate', async 
   useGateStore.getState().setGate(next);
   release();
   await batch;
-  expect(useGateStore.getState().gates[runId]).toEqual(next);
+  // setGate stamps when this page saw the gate (studio#1430's `seenAt`).
+  expect(useGateStore.getState().gates[runId]).toEqual({ ...next, seenAt: expect.any(Number) });
   expect(useGateActionStore.getState().byGate[runId]?.answered ?? null).toBeNull();
   expect(useBatchGateStore.getState()).toMatchObject({ done: 1, failures: [], selected: [] });
   useGateStore.getState().clearGate(runId);
