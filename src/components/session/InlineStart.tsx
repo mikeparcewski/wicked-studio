@@ -62,7 +62,7 @@ const realProject = (p: string | null | undefined): string | null => (p === unde
  * The choices are client state; the only write is the start itself.
  */
 export function InlineStart({
-  composerKey, entry: composerEntry, catalogState, sessionRepo, projectId: projectIn, seatKeys, words, navigate, handle, onBlocker, onStartedLater,
+  composerKey, entry: composerEntry, catalogState, sessionRepo, projectId: projectIn, seatKeys, signedInNow, onPickHelpers, words, navigate, handle, onBlocker, onStartedLater,
 }: {
   composerKey: string;
   /** The card on the composer, or null while the catalog is read (or the card is gone). */
@@ -74,6 +74,11 @@ export function InlineStart({
   projectId: string | null;
   /** The helpers the composer's row has on (New job's rule: one that cannot take work joins only when picked). */
   seatKeys: readonly string[];
+  /** (studio#1459 F1) The helpers the composer's row offers that can take work now: crew's preflight counts only the
+   *  picked ones (`seatKeys`), so the stand-in card names the rest as signed in but not picked (studio#1436). */
+  signedInNow?: readonly string[];
+  /** The card's "Pick another helper": the composer puts focus on its helpers row. */
+  onPickHelpers?: () => void;
   words: string;
   navigate: (path: string) => void;
   handle: React.MutableRefObject<InlineStartHandle | null>;
@@ -118,6 +123,7 @@ export function InlineStart({
   // (studio#1444) crew held the start for want of helpers that did not build the work: the stand-in card, as on New
   // job. A start it carries out lands as Enter's would (the job filed, this card spent, its page opened).
   type Held = { chatId: string | null; typed: string; spend: () => void };
+  const roster = useRoster();
   const standIn = useStandInChoice<Held, { launched: Awaited<ReturnType<typeof api.launchRun>>; body: LaunchBodyWithDeliver }>(
     // One start per chat at a time, as Enter's (the thread's and the drawer's composers share the key).
     async (body: LaunchBodyWithDeliver) => {
@@ -137,6 +143,8 @@ export function InlineStart({
       }
     },
     navigate,
+    undefined,
+    signedInNow !== undefined && onPickHelpers !== undefined ? { signedInNow, roster, onPick: onPickHelpers } : undefined,
   );
   // Effects retire the card through the latest hook (its functions are new each render).
   const standInNow = useRef(standIn);
@@ -198,7 +206,6 @@ export function InlineStart({
   });
 
   // The helpers: exactly the row's (the composer applies New job's J4 rule to it).
-  const roster = useRoster();
   const seats: RosterSeat[] = seatKeys.flatMap((key) => (roster ?? []).filter((x) => x.key === key));
 
   const offerReduced = reducedCap && entry !== null && entry.launchKind === 'run' && seats.length === 1;

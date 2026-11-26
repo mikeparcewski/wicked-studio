@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
-import type { LaunchBodyWithDeliver } from '../api/types.js';
-import { helperNamer, saveStandInsEveryJob, standInRelaunchBody, type StandInChoiceId, type StandInChoiceRefusal } from '../board/standIn.js';
+import type { LaunchBodyWithDeliver, RosterSeat } from '../api/types.js';
+import { helperNamer, saveStandInsEveryJob, standInRelaunchBody, type StandInChoiceId, type StandInChoiceLineId, type StandInChoiceRefusal } from '../board/standIn.js';
 import { StandInChoice } from '../components/StandInChoice.js';
 import { AGENTS_PATH, type Navigate } from './useRoute.js';
 
@@ -32,6 +32,13 @@ export function useStandInChoice<T, R>(
   navigate: Navigate,
   /** Where "sign in another helper" goes (Helpers; the first run keeps its setup there). */
   signInPath: string = AGENTS_PATH,
+  /**
+   * (studio#1459 F1) A launcher that sends picked helpers (the chat's inline Start): crew's preflight counts only those,
+   * so the card needs the helpers signed in now to say "picked" and offer "Pick another helper" (studio#1436), the
+   * roster to name them, and what a pick does. A launcher that sends no helpers (crew counts every signed-in one)
+   * passes none, and the card offers crew's choices only.
+   */
+  picking?: { signedInNow: readonly string[]; roster: readonly RosterSeat[] | null; onPick: () => void },
 ): {
   /** Hold `retries` under `refusal` (none: the card closes). */
   ask: (refusal: StandInChoiceRefusal | null, retries: readonly StandInRetry<T>[]) => void;
@@ -56,10 +63,11 @@ export function useStandInChoice<T, R>(
     setError(null);
   };
 
-  const choose = async (id: StandInChoiceId): Promise<void> => {
+  const choose = async (id: StandInChoiceLineId): Promise<void> => {
     if (held === null || busyRef.current) return;
     if (id === 'cancel') { ask(null, []); return; }
     if (id === 'sign_in') { navigate(signInPath); return; }
+    if (id === 'pick') { ask(null, []); picking?.onPick(); return; }
     const mine = gen.current;
     const live = (): boolean => gen.current === mine;
     busyRef.current = true;
@@ -92,9 +100,10 @@ export function useStandInChoice<T, R>(
   };
 
   const card = (testId: string): React.ReactElement | null => (held === null ? null : (
-    <StandInChoice refusal={held.refusal} name={helperNamer(null)} busy={busy} error={error} testId={testId}
-      // No `signedInNow` is passed here, so the card never offers studio's `pick` (studio#1436): crew's ids only.
-      onChoose={(id) => { if (id !== 'pick') void choose(id); }} />
+    <StandInChoice refusal={held.refusal} name={helperNamer(picking?.roster ?? null)} busy={busy} error={error} testId={testId}
+      // Without `picking` no `signedInNow` is passed, so the card never offers studio's `pick` (studio#1436).
+      signedInNow={picking?.signedInNow}
+      onChoose={(id) => { if (id !== 'pick' || picking !== undefined) void choose(id); }} />
   ));
 
   return { ask, card, busy: busy !== null, held: held?.retries.map((r) => r.meta) ?? [] };
