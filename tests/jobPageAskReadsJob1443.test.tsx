@@ -107,6 +107,21 @@ describe('a question on a job\'s page can read that job', () => {
     expect(sentText()).not.toMatch(/step 1 \(build\)/);
   });
 
+  it('a later question re-tells the record only when the job moved since', async () => {
+    pageSend();
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    expect(sentText()).toMatch(/step 1 \(build\)/);
+    cleanup();
+    pageSend();
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
+    expect(sentText()).not.toMatch(/step 1 \(build\)/);
+    cleanup();
+    const moved = makeView({ ...JOB.session, status: 'executing' } as never, JOB.units.map((u) => (u.ord === 3 ? { ...u, status: 'distributed' as const } : u)));
+    pageSend([moved, ASK]);
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(3));
+    expect(sentText()).toMatch(/step 3 \(review\): pi, distributed/);
+  });
+
   it('the page\'s "where" names the job, not the question asked on it', () => {
     const ctx = pageContext({ pathname: `/s/${CHAT}`, runs: [JOB, ASK], projects: [], repos: [] } as never);
     expect(ctx.label).toContain('polish the math helpers');

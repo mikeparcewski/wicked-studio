@@ -50,7 +50,7 @@ import { History } from 'lucide-react';
 import { ASK_SESSION_KEY, PAGE_SEND_SESSION_KEY } from '../store/askSession.js';
 import { PAGE_CHAT_SPECS, pageChatRules, pageChatSessionKey, type PageChatKind, type PageFocus } from '../board/pageChat.js';
 import { pageChatEpoch } from '../store/pageChat.js';
-import { focusPack } from './askContext.js';
+import { focusPack, jobRecordSig } from './askContext.js';
 import { CHAT_ATTACHMENT_LIMITS, type ChatAttachmentError, type ChatStartedOn } from '../api/chatHistory-wire.js';
 import { artifactRefOf, CONTEXT_PAGE_MAX, parseArtifactRef, type ChatContextAppearance, type ChatMessageContext } from '../api/chatArtifacts-wire.js';
 import { effectiveAppearance, useAppearanceStore } from '../theming/appearance.js';
@@ -316,6 +316,9 @@ export interface PageChatBinding {
   userText?: (text: string) => string;
 }
 
+/** studio#1443: at most this many of a chat's jobs ride a page's send (the newest). */
+const PAGE_JOBS_MAX = 3;
+
 export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary, sendChatId, sendOpenChatId, sendWorkflow, sendRepos, sendArtifact, startProjectId, startText, startFresh = false, page, headless }: {
   runs: SessionView[];
   pathname: string;
@@ -534,7 +537,23 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   // A chat started in the project on screen (the rail's Chat) simply follows the page; one started in a
   // project from elsewhere (⌘K "Chat in this project") is held to that project, with the page's repo.
   const startProject = sendProjectId ?? startProjectId;
-  const [chipEdits, setChipEdits] = useState<ScopeChip[] | null>(() => {
+  // studio#1443: a page's own send (headless, into the chat on screen) carries the job(s) that chat holds, on: the
+  // question was asked on the job's page. A job the chat's record already names keeps its choice (one turned off in the
+  // dock stays off); an ask turn in the chat is not a job.
+  const withPageJobs = (base: ScopeChip[] | null): ScopeChip[] | null => {
+    if (headless === undefined || sendChatId === undefined || sendText === undefined) return base;
+    const jobs = runs.filter((v) => (v.session as { chat_id?: string | null }).chat_id === sendChatId
+      && (v.session as { ask_path?: unknown }).ask_path !== true)
+      .sort((a, b) => Number((b.session as { created_at?: number }).created_at ?? 0) - Number((a.session as { created_at?: number }).created_at ?? 0))
+      .slice(0, PAGE_JOBS_MAX);
+    if (jobs.length === 0) return base;
+    let out = base ?? defaultScopeChips(ctx);
+    for (const v of jobs) {
+      if (!out.some((c) => c.key === `run:${v.session.id}`)) out = addChip(out, { key: `run:${v.session.id}`, kind: 'run', label: jobTitle(v.session), ref: v.session.id });
+    }
+    return out;
+  };
+  const [chipEdits, setChipEdits] = useState<ScopeChip[] | null>(() => withPageJobs((() => {
     if (aboutSeed !== null && resumed === null) {
       return askAboutChips(aboutSeed, aboutSeed.projectId === null ? null : useProjectsStore.getState().projects.find((p) => p.id === aboutSeed.projectId)?.name ?? null);
     }
@@ -562,7 +581,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
     if (startProject === undefined || startProject === ctx.project?.id) return null;
     const name = useProjectsStore.getState().projects.find((p) => p.id === startProject)?.name ?? startProject;
     return defaultScopeChips({ project: { id: startProject, name }, repo: ctx.repo });
-  });
+  })()));
   const chips = useMemo(() => chipEdits ?? defaultScopeChips(ctx), [chipEdits, ctx]);
   const chipsRef = useRef(chips);
   chipsRef.current = chips;
@@ -651,7 +670,9 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
     const chipsNow = chipsRef.current;
     // What this turn's answer will say it saw: the chips on when it was sent.
     sentSourcesRef.current = chosenChips(chipsNow).length;
-    const sig = `${chipsSignature(chipsNow)}@${packInputs.current.pathname}`;
+    // studio#1443: a chosen job's record rides the pack, so a job that moved since is told again.
+    const jobs = jobRecordSig(chipsNow, packInputs.current.runs);
+    const sig = `${chipsSignature(chipsNow)}@${packInputs.current.pathname}${jobs !== '' ? `#${jobs}` : ''}`;
     const pg = pageRef.current;
     const focus = pg?.focus ?? null;
     if (seededRef.current && lastPackRef.current === sig) {

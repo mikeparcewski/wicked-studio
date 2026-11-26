@@ -3,7 +3,8 @@ import type { Diagnostics } from '../api/diagnostics.js';
 import { statusCounts } from '../board/windowStats.js';
 import { jobTitle } from '../board/deskWords.js';
 import { PACK_OPENING } from '../board/askPack.js';
-import { scopePackLines, type ScopeChip } from '../board/chatScopes.js';
+import { chosenChips, scopePackLines, type ScopeChip } from '../board/chatScopes.js';
+import { deliveryOf } from './delivery.js';
 
 /**
  * The ASK context pack (the app-wide Ask feature) — pure derivations, pinned by unit test.
@@ -211,6 +212,49 @@ export function focusPack(focus: { label: string; lines: readonly string[] }, no
   return [`${PACK_OPENING}${new Date(now ?? Date.now()).toISOString()}]`, ...focusLines(focus)].join('\n');
 }
 
+const RECORD_STEPS_MAX = 40;
+const REASON_MAX = 240;
+
+/** The runs the ON `run:` chips name, as the studio's list holds them (a run the list no longer holds is named only). */
+function chosenJobs(chips: readonly ScopeChip[], runs: readonly SessionView[]): SessionView[] {
+  return chosenChips(chips).flatMap((c) => {
+    const v = c.kind === 'run' && c.ref !== undefined ? runs.find((r) => r.session.id === c.ref) : undefined;
+    return v === undefined ? [] : [v];
+  });
+}
+
+/**
+ * studio#1443: a chosen job's record as studio holds it, so a question about the job ("who reviewed this", "why did
+ * review fail") is answered from it: its state, each step's helper and state (with crew's reason when a step was turned
+ * back), its delivery, and whether it waits on the person.
+ */
+export function jobRecordLines(chips: readonly ScopeChip[], runs: readonly SessionView[]): string[] {
+  return chosenJobs(chips, runs).flatMap((v) => {
+    const s = v.session;
+    const units = [...v.units].sort((a, b) => a.ord - b.ord);
+    const steps = units.slice(0, RECORD_STEPS_MAX).map((u) => {
+      const reason = typeof u.denial_reason === 'string' && u.denial_reason.trim() !== '' ? u.denial_reason.trim() : null;
+      const why = reason === null ? '' : ` \u2014 ${reason.length <= REASON_MAX ? reason : `${reason.slice(0, REASON_MAX - 1)}\u2026`}`;
+      return `  step ${u.ord} (${u.stage}): ${u.assigned_cli ?? 'no helper yet'}, ${u.status}${why}`;
+    });
+    const more = units.length > RECORD_STEPS_MAX ? [`  and ${units.length - RECORD_STEPS_MAX} more steps`] : [];
+    const d = deliveryOf(v);
+    const delivery = d.state === 'none' && d.url === null ? 'none'
+      : `${d.state}${d.url !== null ? `, ${d.url}` : ''}${d.pushed !== undefined ? `, branch ${d.pushed.branch}` : ''}${d.reason !== null ? ` \u2014 ${d.reason}` : ''}`;
+    return [
+      `job ${s.id} (${jobTitle(s)}), its record as studio holds it: ${s.status}${s.status === 'awaiting_human' ? ' (waiting on the person)' : ''}`,
+      ...steps,
+      ...more,
+      `  delivery: ${delivery}`,
+    ];
+  });
+}
+
+/** What the chosen jobs' records say now, for the pack's signature: a job that moved is told again. */
+export function jobRecordSig(chips: readonly ScopeChip[], runs: readonly SessionView[]): string {
+  return chosenJobs(chips, runs).map((v) => `${v.session.id}:${v.session.status}:${v.units.map((u) => u.status).join(',')}`).join('|');
+}
+
 /**
  * Assemble the pack that rides the first send. Everything in it is something the app
  * actually holds or the wire actually answered — counts from the one runs list, the
@@ -259,6 +303,7 @@ export function buildContextPack(args: {
       ...focusLines(args.focus ?? null),
       ...(recent ? [runsLine] : []),
       ...scopePackLines(chips, recent ? newest : []),
+      ...jobRecordLines(chips, runs),
       'Answer from what you can actually read (the estate/garden tooling reaches the code graph,',
       'stores, and run record) within what the user chose above; when a fact is not reachable, say so instead of guessing.',
     ].join('\n');
