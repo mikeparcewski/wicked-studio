@@ -73,6 +73,8 @@ export interface OpenLaunchWizard {
   requirements?: readonly { repoId: string; key: string; title: string }[];
   /** The catalog card picked (a box's `/` row names its entry, as New job's own card pick does). */
   catalogEntryId?: string | null;
+  /** (studio#1472) A named job that takes the person's words first: the question they answer (see `StartInChat.askWords`). */
+  askWords?: string;
 }
 
 interface LaunchWizardStore {
@@ -191,6 +193,7 @@ function openLaunchWizardNow(init: OpenLaunchWizard, gen: number): void {
       void startInChat({
         workflowId: init.workflowId!, words: init.intent ?? '', projectId: init.projectId ?? null, repoRef: init.contextRepo ?? null,
         ...(init.requirements !== undefined ? { requirements: init.requirements } : {}),
+        ...(init.askWords !== undefined ? { askWords: init.askWords } : {}),
       }, () => gen === openGeneration).then((ok) => { if (!ok && gen === openGeneration) useLaunchWizard.getState().openWith(init); },
         () => { if (gen === openGeneration) useLaunchWizard.getState().openWith(init); });
       return;
