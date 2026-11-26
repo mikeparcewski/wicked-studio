@@ -1,4 +1,5 @@
 import { ApiError } from '../api/errors.js';
+import { domainModelOf, modelHeadline } from './domainModel.js';
 
 /** The preset whose last step (`wicked-core domain-graph`) writes a repository's requirements graph. */
 export const DOMAIN_EXTRACTION_ID = 'domain-extraction';
@@ -292,38 +293,6 @@ export function codeDriftLine(d: CodeDrift | null, now: Date = new Date()): stri
   return `Built from code ${count(n)} ${n === 1 ? 'commit' : 'commits'} old${date !== null ? ` (${date})` : ''}`;
 }
 
-/** The minimum in force and where it comes from (crew api-types 0.197.0 `minimum`). */
-export interface RequirementsMinimum {
-  pct: number;
-  source: 'repo' | 'settings';
-  repoPct: number | null;
-  settingsPct: number | null;
-}
-
-const isPct = (v: unknown): v is number => isCount(v) && v >= 1 && v <= 100;
-
-/** The `minimum` a page (or crew's notGenerated 404 body) carries, or null when absent or malformed. */
-export function minimumOf(holder: unknown): RequirementsMinimum | null {
-  const m = (holder as { minimum?: unknown } | null)?.minimum as Record<string, unknown> | null | undefined;
-  if (m === null || m === undefined || typeof m !== 'object') return null;
-  const { pct, source, repoPct, settingsPct } = m;
-  if (!isPct(pct) || (source !== 'repo' && source !== 'settings')) return null;
-  return {
-    pct,
-    source,
-    repoPct: isPct(repoPct) ? repoPct : null,
-    settingsPct: isPct(settingsPct) ? settingsPct : null,
-  };
-}
-
-/** "Minimum 66%, this repository's own (Settings: 80%)" / "Minimum 80%, from Settings". */
-export function minimumLine(m: RequirementsMinimum): string {
-  if (m.source === 'repo') {
-    return `Minimum ${m.pct}%, this repository's own${m.settingsPct !== null ? ` (Settings: ${m.settingsPct}%)` : ''}`;
-  }
-  return `Minimum ${m.pct}%, from Settings`;
-}
-
 /** An item's `codeMismatch` (crew api-types 0.197.0): how the code does not meet it, or null. */
 export function codeMismatchOf(item: unknown): string | null {
   const v = (item as { codeMismatch?: unknown } | null)?.codeMismatch;
@@ -346,6 +315,8 @@ export interface DomainJobResult {
   /** The business-domain catalog's size (crew api-types 0.207.0 `businessDomains`); null when the daemon sends none. */
   domains: number | null;
   built: boolean;
+  /** J6 S1: the domain model in words ("1 rule · 2 checked statements · …"), when the page carries a 1.2.0 model. */
+  model?: string | null;
 }
 
 export function domainJobResultOf(page: unknown): DomainJobResult {
@@ -354,5 +325,6 @@ export function domainJobResultOf(page: unknown): DomainJobResult {
   // `coverage` counts the store now, which a later mapping can move on without building. An older daemon sends no
   // build record: its one coverage is the best said.
   const built = graphBuildOf(page)?.coverage ?? null;
-  return { coverage: built ?? coverageOf(page), domains: Array.isArray(d) ? d.length : null, built: true };
+  const model = domainModelOf(page);
+  return { coverage: built ?? coverageOf(page), domains: Array.isArray(d) ? d.length : null, built: true, model: model === null ? null : modelHeadline(model) };
 }

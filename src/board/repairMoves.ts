@@ -1,6 +1,7 @@
 import type { DiagnosticsGovernance, LaunchBodyWithDeliver, RosterSeat, SessionView } from '../api/types.js';
 import type { GovernanceReplayOutcome } from '../api/governanceReplay.js';
 import { ONBOARDING_WORKFLOW_ID } from './repoStats.js';
+import { DOMAIN_EXTRACTION_ID } from './requirementsState.js';
 import { noCarryingSeatReason, seatCanCarry, seatJoinStanding } from '../components/gateVerdictModel.js';
 
 /**
@@ -124,6 +125,9 @@ export function retryLaunchOf(v: SessionView, roster: readonly RosterSeat[] | nu
  */
 export function retryBlocker(v: SessionView, roster: readonly RosterSeat[] | null): string | null {
   if (v.session.workflow_id === ONBOARDING_WORKFLOW_ID) return null;
+  // J6 S1 (coord R2 on K1): crew keeps no scope for a domain model run, so a batch cannot start it again; its own Retry
+  // opens the composer with its words, where the person sees the scope before it starts.
+  if (v.session.workflow_id === DOMAIN_EXTRACTION_ID) return 'not relaunched: a domain model starts again from its words, so open it and choose Retry';
   const reason = noCarryingSeatReason(v.session.clis, roster);
   return reason === null ? null : `not relaunched: no seat in its pool can take it (${reason})`;
 }

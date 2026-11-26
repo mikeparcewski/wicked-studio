@@ -992,13 +992,18 @@ export function seatJoinStanding(seat: RosterSeat | undefined, now: number = Dat
   const st = seatStanding(seat, now);
   // Only the work refusal is lifted: a signed-out reading still reads signed out (codex r1 on #1302). The daemon's `auth`
   // decides when it says one; the `signed_in` heuristic only when it does not (codex r2, as `seatStanding` reads them).
-  const bag = (seat ?? {}) as Record<string, unknown>;
-  const auth = bag['auth'];
-  const signedOut = auth === 'signed_out' || (auth !== 'signed_in' && auth !== 'not_required' && bag['signed_in'] === false);
-  if (st.state === 'ineligible' && reviewsOnly(seat) && !signedOut) {
+  if (st.state === 'ineligible' && reviewsOnly(seat) && !seatSignedOut(seat)) {
     return { state: 'ready', note: 'reviews only' };
   }
   return st;
+}
+
+/** Whether a seat is signed out, read on its own (a signed-out seat is also not work-eligible, which `seatStanding` says
+ *  first): the daemon's `auth` decides when it says one; the `signed_in` heuristic only when it does not. */
+export function seatSignedOut(seat: RosterSeat | undefined): boolean {
+  const bag = (seat ?? {}) as Record<string, unknown>;
+  const auth = bag['auth'];
+  return auth === 'signed_out' || (auth !== 'signed_in' && auth !== 'not_required' && bag['signed_in'] === false);
 }
 
 /** A reviewer-only seat as the daemon says it (`work_eligible: false`, `council_eligible: true`): it votes, takes no step. */

@@ -26,7 +26,7 @@ import { clearSteerPrefill, peekSteerPrefill } from '../store/steerPrefill.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { seatStandingWord } from './HealthRailSection.js';
 import { noCarryingSeatReason, seatJoinStanding } from './gateVerdictModel.js';
-import { assuranceNoticeOf, baseSkillRefusalOf, describeBaseSkill, gatePostureWord, LAUNCH_PROBE_AFTER_SECS, launchNeedsRepo, launchSubmit, newLaunchId, readyLead } from '../board/launchModel.js';
+import { assuranceNoticeOf, baseSkillRefusalOf, describeBaseSkill, gatePostureWord, LAUNCH_PROBE_AFTER_SECS, launchNeedsRepo, launchSubmit, newLaunchId, readyLead, withWordsAsDomainScope } from '../board/launchModel.js';
 import { isSystemWorkflowIn, setCachedWorkflows } from '../store/workflowCache.js';
 import { loadPresets, presetSystemFlag, usePlanCatalog } from '../store/planCatalog.js';
 import { menuToken, dropToken } from '../board/planDraft.js';
@@ -901,6 +901,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // (studio#1150) The fields that decide the run's gates — target, workflow or plan, project, delivery and
     // its gate — are the ones the form previewed, from the one builder (`launchPosture`).
     Object.assign(body, payload.fields);
+    // J6 S1: a domain model run started here maps what these words say it covers.
+    withWordsAsDomainScope(body);
     // studio#596: the linked issues the operator left out (only to a daemon that takes the key).
     if (daemonLinkedIssues && linkedExclude.length > 0) body.excludeLinkedIssues = [...linkedExclude];
     // Lineage (§4.3, CREW-UX-3): recorded in the system of record at launch —

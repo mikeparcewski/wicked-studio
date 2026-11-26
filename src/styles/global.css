@@ -59,6 +59,7 @@
 @import './sections/sources.css';
 @import './sections/knowledge.css';
 @import './sections/trackers.css';
+@import './sections/domain-model.css';
 
 @tailwind base;
 @tailwind components;
