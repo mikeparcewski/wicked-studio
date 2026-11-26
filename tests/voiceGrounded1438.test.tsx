@@ -164,6 +164,22 @@ describe('round 1 delta (codex): the number the person sees, and only reads that
     expect(pack).not.toMatch(/needs you: nothing/);
   });
 
+  it('P1 (delta 2, P3): a held count of 3 beside one current row names nobody', async () => {
+    const base = { failedAt: {}, attachedAt: {}, projectIds: {}, chats: [], repos: [], campaigns: [], now: Date.now(), deliveryAttempted: new Set<string>(), deliveredNow: new Set<string>() } as unknown as Omit<NeedsYouInputs, 'runs' | 'gates'>;
+    const waiting = makeView({ id: 'r-plan', status: 'awaiting_human', problem: 'Add rate limiting', unit_ix: 1 } as never, [makeUnit({ id: 'r-plan:u1', session_id: 'r-plan', ord: 1, status: 'done' })]);
+    const gate = { runId: 'r-plan', ord: 1, prompt: 'Approve plan rev 2 before unit 1 runs.', lifecycle: 'open', receivedAt: 1, gateKind: 'plan' };
+    const rows = needsYouRows({ ...base, runs: [waiting], gates: { 'r-plan': gate } as never });
+    const row = rows.find((r) => r.kind === 'gate')!;
+    useSystemStore.setState({ mode: 'fallback', healthAt: Date.now(), healthError: null, snapshot: null } as never);
+    useNeedsCount.setState({ phase: 'complete', count: 3, rows: [row] } as never);
+    await askByVoice();
+    await waitFor(() => expect(asked).toHaveLength(1));
+    const pack = asked[0]![1] as string;
+    expect(pack).toMatch(/needs you: 3\b/);
+    expect(pack).not.toContain(row.subject);
+    expect(pack).not.toContain(row.question!);
+  });
+
   it('P2: a system read whose latest poll failed is not described as now', async () => {
     crewSays(normalizeSnapshot({ ...cert.body, runs: [WORKING] }), 4);
     useDashStore.setState({ readError: 'crew did not answer' });
