@@ -402,7 +402,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         {/* A run still going has nothing delivered to say ("in-flight" is only "it has a deliver step"). */}
         {delivered && (
           <div data-testid="run-tab-delivery" className="wk-run-tab-block">
-            <p data-testid="run-tab-delivery-outcome" className="wk-run-tab-line">{view.session.status === 'completed' ? outcomeLine(view) : prUrl !== null ? 'Pull request opened · the job is still going' : 'Not delivered'}</p>
+            <p data-testid="run-tab-delivery-outcome" className="wk-run-tab-line">{view.session.status === 'completed' ? outcomeLine(view, prUrl) : prUrl !== null ? 'Pull request opened · the job is still going' : 'Not delivered'}</p>
             {prUrl !== null && <p className="wk-run-tab-line"><a data-testid="run-tab-pr" href={prUrl} target="_blank" rel="noreferrer">Pull request{prNumber !== null ? ` #${prNumber}` : ''} ↗</a></p>}
             {delivery.pushed !== undefined && <p data-testid="run-tab-branch" className="wk-run-tab-line">Branch <code>{delivery.pushed.branch}</code></p>}
             {delivery.reason !== null && delivery.state !== 'delivered' && <p data-testid="run-tab-delivery-reason" className="wk-run-tab-muted">{showText(delivery.reason)}</p>}

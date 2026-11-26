@@ -102,4 +102,15 @@ describe('studio#1454 (2): Details names the PR the deliver step opened while a 
     expect(output).toHaveBeenCalledWith(RUN, `${RUN}:deliver`);
     expect(document.body.textContent).not.toContain('Not delivered');
   });
+
+  it('a finished run whose record carries no url (an older crew) says delivered over the PR its deliver step names', async () => {
+    vi.spyOn(client.api, 'getUnitOutput').mockResolvedValue({ output: 'https://github.com/acme/wicked-e2e-j6-plugins/pull/16\n' } as never);
+    const done = UNITS.map((u) => ({ ...u, status: 'done' as const }));
+    const view: SessionView = makeView({ id: RUN, status: 'completed', unit_ix: 3, repo_ref: 'j6-plugins', delivery: 'none' } as never, done);
+    await act(async () => { render(<RunTab runs={[view]} sessionId={`run:${RUN}`} title="Make an editor plugin" />); });
+    await waitFor(() => expect(screen.getByTestId('run-tab-glance-changes')).toHaveTextContent('Pull request #16'));
+    // The delivery block's outcome line agrees with the PR link drawn under it.
+    expect(screen.getByTestId('run-tab-delivery-outcome')).toHaveTextContent('Finished · delivered');
+    expect(screen.getByTestId('run-tab-pr')).toHaveAttribute('href', 'https://github.com/acme/wicked-e2e-j6-plugins/pull/16');
+  });
 });

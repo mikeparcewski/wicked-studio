@@ -163,11 +163,11 @@ export function statusSentence(view: SessionView, chain: ChainModel, gate: OpenG
 }
 
 /** A finished run's one outcome line, from the daemon's delivery verdict — never more than it says. */
-export function outcomeLine(view: SessionView): string {
+export function outcomeLine(view: SessionView, readUrl: string | null = null): string {
   const d = deliveryOf(view);
   switch (d.state) {
     // J4: "delivered" only over a recorded pull request or pushed branch, never a finished unit alone.
-    case 'delivered': return hasDeliveredRef(view) ? 'Finished · delivered' : 'Finished · no pull request or pushed branch is recorded';
+    case 'delivered': return hasDeliveredRef(view, readUrl) ? 'Finished · delivered' : 'Finished · no pull request or pushed branch is recorded';
     case 'pushed': return 'Finished · branch pushed';
     case 'stranded':
       return deliverUnit(view) === null
