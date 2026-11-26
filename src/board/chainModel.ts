@@ -351,6 +351,36 @@ export function stepNow(chain: ChainModel): ChainStep | undefined {
     ?? chain.steps.find((step) => !['done', 'checked', 'replaced', 'struck'].includes(step.state));
 }
 
+/**
+ * Where a live run is, from its units alone (the Desk's and a project's In progress rows, studio#1440): the step
+ * {@link stepNow} names on the chain its session draws. A plain run's chain is one step per unit
+ * ({@link chainFromUnits}); a team run's (`team_run` units) is its plan, one step per phase, which may hold several
+ * units, so its units are grouped by phase id in plan order. `unit`: the one the step is on (the cursor's, else its
+ * first unfinished). Pure.
+ */
+export function runStepPosition(view: Pick<SessionView, 'session' | 'units'>): { at: number; total: number; unit: SessionView['units'][number] | undefined } {
+  const sorted = [...(view.units ?? [])].sort((a, b) => a.ord - b.ord);
+  const cursor = executingOrd(view.session, sorted);
+  const team = sorted.some((u) => (u as { team_run?: boolean }).team_run === true);
+  const groups: Array<SessionView['units'][number][]> = [];
+  const byKey = new Map<string, SessionView['units'][number][]>();
+  for (const [i, u] of sorted.entries()) {
+    // A plain run: one step per unit, whatever its ord says (chainFromUnits keeps every unit).
+    const key = team ? (unitPhaseId(u) ?? `#${i}`) : `#${i}`;
+    const g = byKey.get(key);
+    if (g !== undefined) { g.push(u); continue; }
+    const fresh = [u];
+    byKey.set(key, fresh);
+    groups.push(fresh);
+  }
+  const finished = (g: SessionView['units'][number][]): boolean => g.every((u) => u.status === 'done');
+  const now = groups.findIndex((g) => g.some((u) => u.ord === cursor));
+  const i = now >= 0 ? now : groups.findIndex((g) => !finished(g));
+  if (i < 0) return { at: groups.length, total: groups.length, unit: undefined };
+  const g = groups[i]!;
+  return { at: i + 1, total: groups.length, unit: g.find((u) => u.ord === cursor) ?? g.find((u) => u.status !== 'done') };
+}
+
 /** Run clarity: the chain step a unit ran as — on a units chain the step is `u<ord>`; on a team chain
  *  it is the step whose id is the unit's phase id (a team step may itself be NAMED `u2`, so the `u<ord>`
  *  key is never read there — codex). `undefined` when the chain has no step for that unit. Pure. */
