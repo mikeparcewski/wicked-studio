@@ -28,6 +28,7 @@ import { resetComposerSeats } from '../src/store/composerSeats.js';
 import { openLaunchWizard, resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
 import { resetPlanCatalog } from '../src/store/planCatalog.js';
 import { useProjectsStore } from '../src/store/projects.js';
+import { useProvenanceStore } from '../src/store/provenance.js';
 import { clearRepoCache } from '../src/store/repoCache.js';
 import { clearCachedRoster, setCachedRoster } from '../src/store/rosterCache.js';
 import { useSessionDrafts } from '../src/store/sessionDrafts.js';
@@ -298,6 +299,10 @@ describe('studio#1444: crew holds a start for want of helpers: the stand-in card
 
   it('Enter shows the card; "this job" starts it again with crew\'s retryWith, opens the chat and clears the words', async () => {
     runsFirst = [CHOICE];
+    // The retry lands as Enter's would: filed as started here, and crew's assuranceNotice kept with the body as sent.
+    const notice = { code: 'single_cli_roster', message: 'm', seats: ['claude'], retryWith: { retryOf: 'run-new', reducedAssurance: true } };
+    runsAnswer = { runId: 'run-new', assuranceNotice: notice };
+    useProvenanceStore.setState({ launchedHere: {} });
     const nav = vi.fn();
     render(<Harness navigate={nav} />);
     await pick('bug', 'bug');
@@ -315,6 +320,92 @@ describe('studio#1444: crew holds a start for want of helpers: the stand-in card
     expect(wfChip('chat-1')).toBeUndefined();
     expect(box().value).toBe('');
     expect(screen.queryByTestId('composer-start-standin')).toBeNull();
+    expect(useProvenanceStore.getState().launchedHere['run-new']).toBe(true);
+    const kept = useLaunchNotices.getState().bySession;
+    expect(kept['chat-1']).toMatchObject({ runId: 'run-new', notice: { code: 'single_cli_roster' } });
+    expect(kept['chat-1']!.body).toEqual(launches()[1]);
+    expect(kept['run:run-new']).toBe(kept['chat-1']);
+  });
+
+  it('r1: another repository after the refusal is another job: the card retires and Enter starts the new one', async () => {
+    repos = [repo('svc'), repo('web')];
+    runsFirst = [CHOICE];
+    function WithRun(): React.ReactElement {
+      const [text, setText] = useState('');
+      const run = { session: { id: 'r-1', status: 'completed', problem: 'p', repo_ref: 'svc' }, units: [] } as never;
+      return <Composer composerKey="chat-1" text={text} setText={setText} onSend={() => {}} placeholder="p" ariaLabel="a" variant="session" navigate={() => {}} runs={[run]} />;
+    }
+    render(<WithRun />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    enter();
+    await screen.findByTestId('composer-start-standin');
+    fireEvent.click(screen.getByTestId('composer-start-repo-change'));
+    await waitFor(() => expect(screen.queryByTestId('composer-start-standin')).toBeNull());
+    fireEvent.click(screen.getAllByTestId('composer-start-repo').find((b) => b.dataset.repo === 'web')!);
+    enter();
+    await waitFor(() => expect(launches()).toHaveLength(2));
+    expect(launches().map((b) => b['repoRef'])).toEqual(['svc', 'web']);
+    expect(launches()[1]!['standIns']).toBeUndefined();
+  });
+
+  it('r1: a refusal that lands after another card replaced this one holds nothing', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const base = globalThis.fetch;
+    let sent = 0;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (!String(url).endsWith('/runs') || init?.method !== 'POST') return base(url, init);
+      sent += 1;
+      return gate.then(() => base(url, init));
+    }));
+    runsFirst = [CHOICE];
+    render(<Harness navigate={vi.fn()} />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    enter();
+    await waitFor(() => expect(sent).toBe(1));
+    // A New job card clicked into this chat while crew has not answered yet: the start row stays, for the new card.
+    act(() => { addAboutChip('chat-1', workflowChipFor({ id: 'feature', title: 'Feature', launchId: 'feature' })); });
+    await waitFor(() => expect(wfChip('chat-1')).toMatchObject({ workflowId: 'feature' }));
+    await act(async () => { release(); await new Promise((r) => setTimeout(r, 100)); });
+    expect(launches()).toHaveLength(1);
+    expect(screen.queryByTestId('composer-start-standin')).toBeNull();
+  });
+
+  it('r1: while a choice starts its job, the chat\'s other composer starts nothing', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const base = globalThis.fetch;
+    let sent = 0;
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (!String(url).endsWith('/runs') || init?.method !== 'POST') return base(url, init);
+      sent += 1;
+      // The stand-in retry (the second start) waits; any other answers at once.
+      return sent === 2 ? gate.then(() => base(url, init)) : base(url, init);
+    }));
+    runsFirst = [CHOICE];
+    render(<><Harness navigate={vi.fn()} /><Harness navigate={vi.fn()} /></>);
+    const [first, second] = screen.getAllByTestId('session-composer-input') as HTMLTextAreaElement[];
+    const typeIn = (b: HTMLTextAreaElement, text: string): void => {
+      fireEvent.change(b, { target: { value: text, selectionStart: text.length } });
+      b.setSelectionRange(text.length, text.length);
+      fireEvent.select(b);
+    };
+    typeIn(first!, '/bug');
+    await waitFor(() => { const r = document.querySelector<HTMLElement>('[data-testid="composer-menu-item"][data-entry="bug"]'); expect(r).not.toBeNull(); fireEvent.mouseDown(r!); });
+    typeIn(first!, 'the charge never clears');
+    typeIn(second!, 'something else');
+    await waitFor(() => expect(screen.getAllByTestId('composer-start-line')[0]).toHaveTextContent('in svc'));
+    fireEvent.keyDown(first!, { key: 'Enter' });
+    fireEvent.click(await screen.findByTestId('composer-start-standin-job'));
+    await waitFor(() => expect(sent).toBe(2));
+    fireEvent.keyDown(second!, { key: 'Enter' });
+    await act(async () => { await new Promise((r) => setTimeout(r, 150)); });
+    expect(sent).toBe(2);
+    await act(async () => { release(); await new Promise((r) => setTimeout(r, 50)); });
   });
 
   it('Cancel closes the card and starts nothing; the words stay', async () => {

@@ -348,6 +348,19 @@ describe('review folds (codex on #998)', () => {
     expect(screen.queryByTestId('repo-capture-standin')).toBeNull();
   });
 
+  it('studio#1444 r1: while "this job" starts the capture, Capture learnings says Starting… and is held', async () => {
+    const CHOICE = JSON.parse(readFileSync(resolve(process.cwd(), 'tests/fixtures/stand-in-choice.learn-one-helper.crew.json'), 'utf8')) as { status: number; body: Record<string, unknown> };
+    launchRun.mockImplementationOnce(() => Promise.reject(new ApiError(CHOICE.status, String(CHOICE.body['error'] ?? ''), CHOICE.body)))
+      .mockImplementationOnce(() => new Promise(() => {}));
+    render(<RepoDetailPage repoId="studio-api" onSelectRun={vi.fn()} navigate={() => {}} onOpenGraph={() => {}} search="?tab=settings" />);
+    fireEvent.click(await screen.findByTestId('repo-capture-learnings'));
+    fireEvent.click(await screen.findByTestId('repo-capture-standin-job'));
+    await waitFor(() => expect(launchRun).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId('repo-capture-learnings')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('repo-more-button'));
+    expect(screen.getByTestId('repo-menu-capture')).toHaveTextContent('Starting…');
+  });
+
   it('a capture in flight for one repository does not disable the next one’s', async () => {
     let settle!: () => void;
     launchRun.mockImplementation(() => new Promise((res) => { settle = () => res({ runId: 'r-a' }); }));

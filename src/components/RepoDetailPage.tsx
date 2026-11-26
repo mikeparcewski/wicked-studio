@@ -465,7 +465,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
 
   const menu = [
     { id: 'onboard', label: onboarding ? 'Starting…' : 'Rebuild the code map', onSelect: () => void startOnboarding(), testId: 'repo-menu-onboard', disabled: onboarding ? 'Starting…' : null },
-    { id: 'capture', label: capturing ? 'Starting…' : 'Capture learnings', onSelect: () => void captureLearnings(), testId: 'repo-menu-capture', disabled: capturing ? 'Starting…' : null },
+    { id: 'capture', label: capturing || standIn.busy ? 'Starting…' : 'Capture learnings', onSelect: () => void captureLearnings(), testId: 'repo-menu-capture', disabled: capturing || standIn.busy ? 'Starting…' : null },
     ...(gitLink !== null ? [{ id: 'web', label: 'View on the web', onSelect: () => { window.open(gitLink, '_blank', 'noopener,noreferrer'); }, testId: 'repo-menu-web' }] : []),
   ];
 
@@ -674,7 +674,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                     )}
                     <div className="wk-rp-upkeep">
                       <b>Capture learnings</b>
-                      <button type="button" data-testid="repo-capture-learnings" disabled={capturing} className="wk-btn wk-btn--secondary"
+                      <button type="button" data-testid="repo-capture-learnings" disabled={capturing || standIn.busy} className="wk-btn wk-btn--secondary"
                         title={`Start a tracked run that saves what this repository’s history teaches${ambientProject !== null ? ', filed under this project' : ''}`}
                         onClick={() => void captureLearnings()}>
                         {capturing ? 'Starting…' : !jobsFailed && capture.state === 'captured' ? 'Capture learnings again' : 'Capture learnings'}

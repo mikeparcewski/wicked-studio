@@ -119,7 +119,12 @@ export function InlineStart({
   // job. A start it carries out lands as Enter's would (the job filed, this card spent, its page opened).
   type Held = { chatId: string | null; typed: string; spend: () => void };
   const standIn = useStandInChoice<Held, { launched: Awaited<ReturnType<typeof api.launchRun>>; body: LaunchBodyWithDeliver }>(
-    async (body: LaunchBodyWithDeliver) => ({ launched: await api.launchRun(body), body }),
+    // One start per chat at a time, as Enter's (the thread's and the drawer's composers share the key).
+    async (body: LaunchBodyWithDeliver) => {
+      if (inFlight.has(composerKey)) throw new Error('Another start from this chat is on its way. Choose again once it lands.');
+      inFlight.add(composerKey);
+      try { return { launched: await api.launchRun(body), body }; } finally { inFlight.delete(composerKey); }
+    },
     (done) => {
       for (const { result: { launched, body }, meta } of done) {
         const { runId } = launched;
@@ -230,6 +235,11 @@ export function InlineStart({
   requestNow.current = JSON.stringify([entry?.id ?? null, entry?.launchId ?? null, repoRef, project, words.trim(), seats, deliver, offerReduced && reduced, offerQe, qeOff, skipQe, skipQeReason, forceQe, restOn]);
   const blockerNow = useRef<string | null>(null);
   blockerNow.current = blocker;
+  // Another repository, project, words or choice on the box is another job: a held choice for the one crew refused
+  // retires, and so does opening the repository picker (codex r1). A choice already being carried out finishes: the
+  // person chose that job.
+  const requestKey = requestNow.current;
+  useEffect(() => { if (!standInNow.current.busy) standInNow.current.ask(null, []); }, [requestKey, choosing]);
 
   handle.current = {
     start: async (typed: string): Promise<boolean> => {
@@ -335,6 +345,10 @@ export function InlineStart({
       } catch (e) {
         const refusal = standInChoiceOf(e);
         if (refusal !== null && sent !== null) {
+          // A refusal that lands after the person changed the job (another card, repository or words) holds nothing:
+          // that job is not the one on the composer now (codex r1).
+          const chipNow = chipsOf(useComposerChips.getState(), composerKey).some((c) => c.kind === 'workflow' && c.key === chip?.key);
+          if (!mounted.current || !chipNow || requestNow.current !== asked) return false;
           standIn.ask(refusal, [{ body: sent, meta: { chatId: sentChat, typed, spend } }]);
           return false;
         }

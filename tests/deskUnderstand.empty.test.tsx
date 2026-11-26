@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import type { InsightState } from '../src/hooks/useDeskInsights.js';
@@ -211,6 +211,18 @@ describe('studio#1444: crew holds Start analysis for want of helpers: the stand-
     expect(mocks.launch).toHaveBeenCalledTimes(2);
     expect(mocks.launch.mock.calls[1]![0]).toEqual({ ...mocks.launch.mock.calls[0]![0], ...(CHOICE.body['retryWith'] as Record<string, unknown>) });
     expect(screen.queryByTestId('desk-analyze-standin')).not.toBeInTheDocument();
+  });
+
+  it('r1: another window is another analysis: the card retires and nothing more starts', async () => {
+    mocks.launch.mockRejectedValueOnce(refused());
+    const p = props();
+    const view = render(<DeskUnderstand {...p} />);
+    suggest('agents');
+    fireEvent.click(screen.getByTestId('desk-analyze-start'));
+    await screen.findByTestId('desk-analyze-standin');
+    view.rerender(<DeskUnderstand {...p} days={7} />);
+    await waitFor(() => expect(screen.queryByTestId('desk-analyze-standin')).not.toBeInTheDocument());
+    expect(mocks.launch).toHaveBeenCalledTimes(1);
   });
 
   it('a new Start analysis retires the card', async () => {

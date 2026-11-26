@@ -90,6 +90,10 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
     navigate,
   );
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  // Another selection is another analysis: a held choice for the old one retires with it (codex r1 on studio#1444).
+  const standInNow = useRef(standIn);
+  standInNow.current = standIn;
+  const retire = (): void => { launchGen.current += 1; standInNow.current.ask(null, []); };
   const addRef = useRef<HTMLDivElement | null>(null);
   const held = useRef(new Map<string, HeldSpend>());
 
@@ -105,7 +109,7 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
 
   // Nothing is picked until the operator picks (operator r7): the empty state's suggestions pre-select.
   const sel = (picked[kind] ?? []).filter((id) => options.some((o) => o.id === id)).slice(0, MAX_CARDS);
-  const setSel = (ids: string[]): void => { setPicked((p) => ({ ...p, [kind]: ids })); setEditing(null); launchGen.current += 1; setLaunch({ phase: 'idle' }); };
+  const setSel = (ids: string[]): void => { setPicked((p) => ({ ...p, [kind]: ids })); setEditing(null); retire(); setLaunch({ phase: 'idle' }); };
   const items = sel.map((id) => ({ id, label: options.find((o) => o.id === id)?.label ?? id }));
   const input = { kind, items, days, api: apiBase(), project, projectLabel, filters };
   const intent = items.length === 0 ? '' : analysisIntent(input);
@@ -157,7 +161,7 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
   const scopeWords = [project === null ? null : `the project ${projectLabel ?? project} (${project})`, filters].filter((x): x is string => x !== null && x !== '').join(', ') || null;
   // A new window, scope or filter starts the analysis over: an edited intent or a pending launch
   // belongs to the comparison it was made for.
-  useEffect(() => { setEditing(null); launchGen.current += 1; setLaunch({ phase: 'idle' }); }, [days, project, filters, filterAgent, filterWorkflow]);
+  useEffect(() => { setEditing(null); retire(); setLaunch({ phase: 'idle' }); }, [days, project, filters, filterAgent, filterWorkflow]);
   const runInsights = (): void => { if (!runsShown) return; void generateInsights(insightKey, insightPrompt(kind, view, days, evidenceLinks(kind, items, days, apiBase(), project), scopeWords) + (kind === 'agents' && agentsTruncated ? `\n${PARTIAL_RECORD_NOTE}. The helper comparison is partial.` : '')); };
   const agentsUnread = kind === 'agents' && agentsRead !== 'done';
   const agentsUnavailable = kind === 'agents' && filterWorkflow !== null;
@@ -202,7 +206,7 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
         then <b>Generate insights</b> for a quick read here, or <b>Analyze</b> for a deeper, cited write-up as a job.
       </p>
       <div className="wk-und-bar">
-        <Segmented label="Compare what" data-testid="desk-pick-kind" value={kind} options={KINDS} onChange={(k) => { setKind(k); setEditing(null); launchGen.current += 1; setLaunch({ phase: 'idle' }); }} />
+        <Segmented label="Compare what" data-testid="desk-pick-kind" value={kind} options={KINDS} onChange={(k) => { setKind(k); setEditing(null); retire(); setLaunch({ phase: 'idle' }); }} />
         <div className="wk-und-chips" role="group" aria-label={`Picked ${kind === 'agents' ? 'helpers' : kind}`}>
           {items.map((it) => {
             const o = options.find((x) => x.id === it.id);
