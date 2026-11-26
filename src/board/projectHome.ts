@@ -39,7 +39,7 @@ export function homeProgress(runs: readonly SessionView[], max: number, silentOf
   const rows = all.slice(0, max).map((r) => {
     const v = byId.get(r.runId);
     const repo = v === undefined ? null : repoNameOf(v);
-    const step = r.total === 0 ? 'planning' : `step ${Math.min(r.total, r.done + 1)} of ${r.total}`;
+    const step = r.total === 0 ? 'planning' : `step ${r.at} of ${r.total}`;
     return { runId: r.runId, title: r.title, line: [repo, step].filter((x): x is string => x !== null && x !== '').join(' · '), silent: r.silent };
   });
   return { rows, total: all.length };

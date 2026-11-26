@@ -25733,6 +25733,12 @@
       ]
     },
     {
+      "testId": "style-standin-held",
+      "files": [
+        "src/components/learn/StyleTab.tsx"
+      ]
+    },
+    {
       "testId": "style-station",
       "files": [
         "src/components/learn/StyleTab.tsx"
