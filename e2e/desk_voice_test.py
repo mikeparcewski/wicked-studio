@@ -270,7 +270,11 @@ with sync_playwright() as p:
     say(page, "streaming", "() => document.querySelector('[data-testid=voice-mode]')?.textContent === '● Streaming'")
     say(page, "What's running right now?", "() => document.body.innerText.includes('webhook retries are in review')")
     page.wait_for_function("() => window.__said.some((s) => s.includes('webhook retries are in review'))", timeout=10000)
-    check("4-streaming-chat", posts["messages"] and posts["messages"][-1]["text"] == "What's running right now?"
+    # (studio#1438) The question goes to the system chat with what voice mode shows around it: this crew mock takes no
+    # message context, so the pack rides after the words (Ask's fallback route, `PACK_JOIN`), naming the running jobs.
+    asked, _, pack = (posts["messages"][-1]["text"] if posts["messages"] else "").partition("\n\n---\n")
+    check("4-streaming-chat", asked == "What's running right now?"
+          and pack.startswith("[studio context pack — assembled ") and "jobs running:" in pack
           and posts["chats"] and posts["chats"][0].get("scopeKind") == "system", messages=posts["messages"], chats=posts["chats"])
 
     sockets[-1].send(json.dumps({"type": "awaitingHuman", "session": "r-q3", "ord": 0, "prompt": "Approve the deck outline?", "ts": int(time.time() * 1000)}))
