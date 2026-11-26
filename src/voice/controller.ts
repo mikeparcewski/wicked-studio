@@ -44,7 +44,14 @@ import { INITIAL_VOICE, lineId, useVoiceStore, type ListenMode, type VoiceAskCon
 import { isLeave, parseConfirm, parseEntry, parseGateAnswer, parseMode } from './intent.js';
 import { BrowserMic, BrowserSpeaker, crewStt, type MicSource, type Speaker, type SttEngine } from './io.js';
 import { Vad } from './vad.js';
-import { isRunningJob, loadWord } from './widgets.js';
+import { dashboardWidgets, isRunningJob, jobsOnTile, loadWord } from './widgets.js';
+import { voiceGround } from './ground.js';
+import { needsSource } from '../board/attention.js';
+import { STALE_MS } from '../board/nerveCenter.js';
+import { PACK_JOIN } from '../board/askPack.js';
+import type { ChatMessageContext } from '../api/chatArtifacts-wire.js';
+import { useCapabilities } from '../store/capabilities.js';
+import { useConnectionStore } from '../store/connection.js';
 
 // ── The edges ─────────────────────────────────────────────────────────────────────────────────
 
@@ -52,8 +59,9 @@ export interface VoiceDeps {
   mic: () => MicSource;
   stt: SttEngine;
   speaker: Speaker;
-  /** Ask the system chat one question; resolves with the reply's words. */
-  ask: (question: string) => Promise<string>;
+  /** Ask the system chat one question, with what voice mode shows around it (`ground`, studio#1438); resolves with the
+   *  reply's words. */
+  ask: (question: string, ground?: string) => Promise<string>;
   /** Send a steer note to a running job (said by voice: `input: "voice"`). */
   steer: (runId: string, text: string) => Promise<void>;
   /** Add to a job's working document (Constraints or Next), as the person, said by voice. */
@@ -106,10 +114,18 @@ async function openVoiceChat(): Promise<string> {
   return chatOpening;
 }
 
-/** The system chat, kept open for the voice session: one question in, the reply's words out. */
-async function askSystemChat(question: string): Promise<string> {
+/** The system chat, kept open for the voice session: one question in, the reply's words out. What voice mode shows
+ *  (`ground`) rides as `context.page` on a crew that takes a message context, else after the words (Ask's two routes). */
+async function askSystemChat(question: string, ground?: string): Promise<string> {
   const id = await openVoiceChat();
-  const sent = await api.sendChatMessage(id, question);
+  let context: ChatMessageContext | undefined;
+  let text = question;
+  if (ground !== undefined) {
+    if (!useCapabilities.getState().loaded) await useCapabilities.getState().load().catch(() => undefined);
+    if (useCapabilities.getState().chatContext) context = { page: ground };
+    else text = `${question}${PACK_JOIN}${ground}`;
+  }
+  const sent = context !== undefined ? await api.sendChatMessage(id, text, undefined, undefined, context) : await api.sendChatMessage(id, text);
   const turnId = sent.turnId;
   return new Promise<string>((resolve, reject) => {
     const timer = setTimeout(() => { unsub(); reject(new Error('No answer after 3 minutes.')); }, 180_000);
@@ -834,11 +850,37 @@ async function proposeGate(gate: OpenGate, heard: string, words: NonNullable<Ret
   await say(`${q} Say confirm, or not that.`);
 }
 
+/** The system read voice shows (its own poll first, as {@link snapshotNow}), only while it is fresh enough to call
+ *  now: its latest poll answered and it is no older than the Nerve Center trusts (round 1 and its delta: a kept read went
+ *  out as now after voice reopened, or after a poll failed). */
+function freshSnapshot(now: number): SystemSnapshot | null {
+  const d = useDashStore.getState();
+  if (d.system !== null && d.readError === null && d.readAt !== null && now - d.readAt <= STALE_MS) return d.system;
+  const s = useSystemStore.getState();
+  if (s.snapshot !== null && s.snapshotError === null && s.healthError === null && s.snapshotAt !== null && now - s.snapshotAt <= STALE_MS) return s.snapshot;
+  return null;
+}
+
+/** What voice mode shows now, for a question (studio#1438): read when it is asked. */
+function groundNow(): string {
+  const now = Date.now();
+  const { phase, count, rows } = useNeedsCount.getState();
+  const needs = needsSource(useSystemStore.getState(), useConnectionStore.getState().status, rows, now);
+  // The tiles on the person's screen now: the full voice screen renders the saved layout once it is loaded
+  // (VoiceFullScreen); anywhere else no tile shows (codex delta on studio#1450).
+  const d = useDashStore.getState();
+  const tiles = useVoiceStore.getState().phase === 'full' && d.loaded ? dashboardWidgets(d.layout, d.widgets).map((w) => w.id) : [];
+  // The jobs the tile lists, off the read the tile renders (the dashboard's own, even when its latest poll failed and
+  // the pack reads the app-wide one): a job is called shown only when it is one of them (codex-check on studio#1450).
+  const onTile = jobsOnTile(d.system?.runs ?? []).map((r) => r.runId);
+  return voiceGround({ snapshot: freshSnapshot(now), needs, needsPhase: phase, count, now, tiles, onTile });
+}
+
 async function askChat(question: string): Promise<void> {
   const id = pushLine({ who: 'it', text: '…', partial: true });
   const gen = generation;
   try {
-    const reply = await deps.ask(question);
+    const reply = await deps.ask(question, groundNow());
     if (gen !== generation) return;
     patchLine(id, { text: reply, partial: false });
     await say(reply);

@@ -272,6 +272,11 @@ export function placeToken(): string {
 /** Words a start could not post, shown on the composer it was moved to (`startInChat`'s fallback). */
 export const useStartNotes = create<{ notes: Record<string, string> }>(() => ({ notes: {} }));
 
+/** (studio#1472) The question a job waiting on a composer asks first (`StartInChat.askWords`), by that job's chip key (one
+ *  per pick, so it never outlives its job onto a later one): the job line and the box say it, so the person's first
+ *  words are the job's, not a question to crew. */
+export const useJobAsks = create<{ asks: Record<string, string> }>(() => ({ asks: {} }));
+
 /** Add a line to a composer's note (two things can go wrong on one start: both are said; codex r3). */
 export function addStartNote(composerKey: string, note: string): void {
   const prev = useStartNotes.getState().notes[composerKey];
@@ -294,6 +299,10 @@ export interface StartInChat {
   projectId?: string | null;
   repoRef?: string | null;
   requirements?: readonly { repoId: string; key: string; title: string }[];
+  /** (studio#1472) The question the job's words answer, asked BEFORE anything is posted: with no words yet, the job waits
+   *  on a new chat's composer (its chip, its envelope) under this question, so the person's first Enter posts it with
+   *  their words. Without it, a named job is posted at once (the card asks for what it lacks). */
+  askWords?: string;
 }
 
 /**
@@ -353,6 +362,14 @@ export async function startInChat(s: StartInChat, stillOpen: () => boolean = () 
     requirements: reqInput !== undefined && s.requirements !== undefined && s.requirements.length > 0
       ? { inputId: reqInput.id, refs: s.requirements.map((r) => ({ repoId: r.repoId, key: r.key })) } : null,
   });
+  // studio#1472: the words come first. A card posted with none is answered as a question when the person then types
+  // the scope, so the job waits on the composer until they say it.
+  if (s.askWords !== undefined && words.trim() === '') {
+    const chatId = openChatFlow({ projectId });
+    useJobAsks.setState((st) => ({ asks: { ...st.asks, [chip.key]: s.askWords! } }));
+    addAboutChip(chatId, chip);
+    return true;
+  }
   try {
     await postJob({ card: hit.wireCard, option: hit.option, depth: null, words, source: 'pick', chatId: null, projectId, repoRef: s.repoRef ?? null, pickKey: chip.key, stillWanted });
   } catch (e) {

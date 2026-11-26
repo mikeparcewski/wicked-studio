@@ -511,7 +511,7 @@ export function App(): React.ReactElement {
   useEffect(() => { useHeldRuns.getState().setHeld(heldByNeeds); }, [heldByNeeds]);
   // Ambient (operator 2026-11-01): the mood the work sets, from the runs and the settled needs-you count already held.
   const { phase: needsPhase, count: needsCount } = useSettledNeeds(needRows, runsLoaded, runsError !== null);
-  useEffect(() => { useNeedsCount.setState({ phase: needsPhase, count: needsCount }); }, [needsPhase, needsCount]);
+  useEffect(() => { useNeedsCount.setState({ phase: needsPhase, count: needsCount, rows: needRows }); }, [needsPhase, needsCount, needRows]);
   useAmbientMood(shownRuns, needsCount ?? 0);
 
   // ── Studio wave 2a: peek (P), jump (G), back (B) — and the panels "back" reopens ──

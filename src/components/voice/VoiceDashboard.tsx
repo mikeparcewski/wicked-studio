@@ -5,7 +5,7 @@ import { useWindowSpend } from '../../hooks/useWindowSpend.js';
 import { useNeedsCount } from '../../store/needsCount.js';
 import { useVoiceStore } from '../../store/voice.js';
 import { saveDashboard, useDashStore } from '../../voice/dashboardStore.js';
-import { formatMetric, isRunningJob, loadWord, readMetric, removeWidget, stepWords, type DashboardWidget } from '../../voice/widgets.js';
+import { formatMetric, isRunningJob, JOBS_SHOWN, jobsOnTile, loadWord, readMetric, removeWidget, stepWords, type DashboardWidget } from '../../voice/widgets.js';
 
 /**
  * The live system around the transcript (mockup state g): built-in widgets (machine load, health, helpers, running
@@ -108,8 +108,8 @@ function JobsWidget({ w, snap }: { w: DashboardWidget; snap: SystemSnapshot | nu
     <WidgetTile w={w}>
       {runs.length === 0 ? <span className="wk-voice-small">{snap === null ? 'Not read yet' : 'Nothing running'}</span> : (
         <ul className="wk-voice-list">
-          {runs.slice(0, 4).map((r) => <li key={r.runId}><Dot tone={tone(r.liveness)} /><span className="wk-voice-ellip">{r.title}</span>{stepWords(r.phase) !== null ? <span className="wk-voice-small"> · {stepWords(r.phase)}</span> : null}</li>)}
-          {runs.length > 4 && <li className="wk-voice-small">and {runs.length - 4} more</li>}
+          {jobsOnTile(runs).map((r) => <li key={r.runId}><Dot tone={tone(r.liveness)} /><span className="wk-voice-ellip">{r.title}</span>{stepWords(r.phase) !== null ? <span className="wk-voice-small"> · {stepWords(r.phase)}</span> : null}</li>)}
+          {runs.length > JOBS_SHOWN && <li className="wk-voice-small">and {runs.length - JOBS_SHOWN} more</li>}
         </ul>
       )}
     </WidgetTile>

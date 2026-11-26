@@ -293,7 +293,9 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
     openLaunchWizard({
       workflowId: workflow,
       // J6 S1: the person says what the model covers ("What should the model cover?"); the scope card follows from it.
+      // studio#1472: asked before the job is posted, so their words reach the card's intent, not a question to crew.
       intent: '',
+      askWords: 'What should the model cover?',
       contextRepo: repoId,
       composerKey: `repo:${repoId}`,
     });

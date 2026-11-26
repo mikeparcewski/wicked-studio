@@ -564,7 +564,16 @@ export function sessionGateChoices(input: SessionGateInput): GateRowModel | null
   if (input.actions === undefined) return model;
   const ctx = gateContextOf(input.gate, input.events);
   if (isStepChoices(model, ctx)) return withListed(model, stepChoiceActions(model, input.actions), input.roster ?? null, ctx);
-  return CONTRACT_EXEMPT.has(model.reason) ? withListed(model, input.actions, input.roster ?? null, ctx) : withContract(model, input.actions, input.roster ?? null, ctx);
+  return CONTRACT_EXEMPT.has(model.reason) ? withListed(model, consentActions(model, input.actions), input.roster ?? null, ctx) : withContract(model, input.actions, input.roster ?? null, ctx);
+}
+
+/** (studio#1454) An install's consent is answered by its own choices or Decline. The engine lists its ordinary answers
+ *  there too (wicked-core `consent_actions`): its plain approve takes the default choice, already drawn and marked, and
+ *  a steer or a send-back is no install choice, so they are not drawn. A consent gate that lists no choice of its own
+ *  keeps its plain answers. */
+function consentActions(model: GateRowModel, actions: readonly GateAction[]): readonly GateAction[] {
+  if (model.reason !== 'consent' || !actions.some((a) => a.action.startsWith('consent:'))) return actions;
+  return actions.filter((a) => a.action.startsWith('consent:') || a.action === 'reject');
 }
 
 /** studio#1279: a loop's ask drawn from its step's own choices ({@link repeatChoicesOf}): their labels and the step's

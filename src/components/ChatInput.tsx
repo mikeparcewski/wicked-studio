@@ -2092,7 +2092,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
 
       {/* ── Main input bubble ────────────────────────────────────────────── */}
       <div
-        className="relative flex items-end gap-2 rounded-2xl px-4 py-3 transition-all"
+        className="wk-launch-bubble relative flex items-end gap-2 rounded-2xl px-4 py-3 transition-all"
         style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
       >
         {launchMenuOpen && (
@@ -2170,7 +2170,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           ref={textareaRef}
           data-testid="launch-problem"
           data-type-target="page"
-          className="flex-1 resize-none text-base outline-none border-0 bg-transparent leading-6"
+          className="wk-launch-problem flex-1 resize-none text-base outline-none border-0 bg-transparent leading-6"
           style={{ minHeight: '28px', color: 'var(--ink-high)', fontFamily: 'inherit' }}
           placeholder="What do you need built?"
           aria-expanded={launchMenuOpen}
