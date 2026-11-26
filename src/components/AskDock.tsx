@@ -547,9 +547,14 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
       .sort((a, b) => Number((b.session as { created_at?: number }).created_at ?? 0) - Number((a.session as { created_at?: number }).created_at ?? 0))
       .slice(0, PAGE_JOBS_MAX);
     if (jobs.length === 0) return base;
-    let out = base ?? defaultScopeChips(ctx);
+    const newest = new Set(jobs.map((v) => `run:${v.session.id}`));
+    // An earlier automatic choice still on is let go once its job is no longer among the newest (round 1, codex P2);
+    // one the person turned off stays, as their choice.
+    let out = (base ?? defaultScopeChips(ctx)).filter((c) => !(c.auto === true && c.on && !newest.has(c.key)));
     for (const v of jobs) {
-      if (!out.some((c) => c.key === `run:${v.session.id}`)) out = addChip(out, { key: `run:${v.session.id}`, kind: 'run', label: jobTitle(v.session), ref: v.session.id });
+      const key = `run:${v.session.id}`;
+      // Not an `added` chip: a click on it in the dock turns it off (kept), never removes it to be chosen again here.
+      if (!out.some((c) => c.key === key)) out = [...out, { key, kind: 'run', label: jobTitle(v.session), ref: v.session.id, on: true, auto: true }];
     }
     return out;
   };

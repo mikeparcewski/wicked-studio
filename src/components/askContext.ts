@@ -4,7 +4,8 @@ import { statusCounts } from '../board/windowStats.js';
 import { jobTitle } from '../board/deskWords.js';
 import { PACK_OPENING } from '../board/askPack.js';
 import { chosenChips, scopePackLines, type ScopeChip } from '../board/chatScopes.js';
-import { deliveryOf } from './delivery.js';
+import { DELIVERY_LABEL, deliveryOf, isPrUrl, resolveDelivery } from './delivery.js';
+import { cliLabel, standInBase } from '../board/seatNames.js';
 
 /**
  * The ASK context pack (the app-wide Ask feature) — pure derivations, pinned by unit test.
@@ -223,10 +224,29 @@ function chosenJobs(chips: readonly ScopeChip[], runs: readonly SessionView[]): 
   });
 }
 
+const DESC_MAX = 200;
+
+const clipTo = (t: string, max: number): string => (t.length <= max ? t : `${t.slice(0, max - 1)}\u2026`);
+
+/** A step's helper as the record names it: a stand-in seat (`claude~1`) is the same helper checking again (studio#1437). */
+function helperWords(cli: string | null): string {
+  if (cli === null || cli === '') return 'no helper yet';
+  return standInBase(cli) !== null ? `${cliLabel(cli)}, seat ${cli}: the same helper checking again, not a different one` : cli;
+}
+
+/** The delivery as studio may say it (`resolveDelivery`, the one claim step every surface uses), the PR only when recorded. */
+function deliveryWords(v: SessionView): string {
+  const d = deliveryOf(v);
+  const r = resolveDelivery(d);
+  const url = r.href ?? (d.url !== null && isPrUrl(d.url) ? d.url : null);
+  const word = r.claim === 'none' ? (url !== null ? 'a PR is recorded' : 'no deliver step') : DELIVERY_LABEL[r.claim];
+  return `${word}${url !== null ? `, ${url}` : ''}${d.pushed !== undefined ? `, branch ${d.pushed.branch}` : ''}${d.reason !== null ? ` \u2014 crew's reason: ${clipTo(d.reason, REASON_MAX)}` : ''}`;
+}
+
 /**
- * studio#1443: a chosen job's record as studio holds it, so a question about the job ("who reviewed this", "why did
- * review fail") is answered from it: its state, each step's helper and state (with crew's reason when a step was turned
- * back), its delivery, and whether it waits on the person.
+ * studio#1443: a chosen job's record as studio holds it, so a question about the job ("who reviewed this", "what did
+ * the parity step check", "why did review fail") is answered from it: its state, each step (what it does, its helper,
+ * its state, crew's reason when it has one), its delivery, and whether it waits on the person.
  */
 export function jobRecordLines(chips: readonly ScopeChip[], runs: readonly SessionView[]): string[] {
   return chosenJobs(chips, runs).flatMap((v) => {
@@ -234,25 +254,27 @@ export function jobRecordLines(chips: readonly ScopeChip[], runs: readonly Sessi
     const units = [...v.units].sort((a, b) => a.ord - b.ord);
     const steps = units.slice(0, RECORD_STEPS_MAX).map((u) => {
       const reason = typeof u.denial_reason === 'string' && u.denial_reason.trim() !== '' ? u.denial_reason.trim() : null;
-      const why = reason === null ? '' : ` \u2014 ${reason.length <= REASON_MAX ? reason : `${reason.slice(0, REASON_MAX - 1)}\u2026`}`;
-      return `  step ${u.ord} (${u.stage}): ${u.assigned_cli ?? 'no helper yet'}, ${u.status}${why}`;
+      const does = typeof u.description === 'string' && u.description.trim() !== '' ? `; does: ${clipTo(u.description.trim(), DESC_MAX)}` : '';
+      return `  step ${u.ord} (${u.stage}): ${helperWords(u.assigned_cli)}, ${u.status}${does}${reason !== null ? `; crew's reason: ${clipTo(reason, REASON_MAX)}` : ''}`;
     });
     const more = units.length > RECORD_STEPS_MAX ? [`  and ${units.length - RECORD_STEPS_MAX} more steps`] : [];
-    const d = deliveryOf(v);
-    const delivery = d.state === 'none' && d.url === null ? 'none'
-      : `${d.state}${d.url !== null ? `, ${d.url}` : ''}${d.pushed !== undefined ? `, branch ${d.pushed.branch}` : ''}${d.reason !== null ? ` \u2014 ${d.reason}` : ''}`;
     return [
       `job ${s.id} (${jobTitle(s)}), its record as studio holds it: ${s.status}${s.status === 'awaiting_human' ? ' (waiting on the person)' : ''}`,
       ...steps,
       ...more,
-      `  delivery: ${delivery}`,
+      `  delivery: ${deliveryWords(v)}`,
     ];
   });
 }
 
-/** What the chosen jobs' records say now, for the pack's signature: a job that moved is told again. */
+/** What the chosen jobs' records say now, for the pack's signature: anything the record says changed is told again. */
 export function jobRecordSig(chips: readonly ScopeChip[], runs: readonly SessionView[]): string {
-  return chosenJobs(chips, runs).map((v) => `${v.session.id}:${v.session.status}:${v.units.map((u) => u.status).join(',')}`).join('|');
+  const text = jobRecordLines(chips, runs).join('\n');
+  if (text === '') return '';
+  // FNV-1a, 32 bits: a short stable fingerprint (the signature is persisted with the chat's choices).
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
+  return (h >>> 0).toString(16).padStart(8, '0');
 }
 
 /**
