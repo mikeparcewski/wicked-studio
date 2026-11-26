@@ -21,25 +21,25 @@ function named(items: readonly string[]): string[] {
   return items.length > NAMED_MAX ? [...shown, `  - and ${items.length - NAMED_MAX} more`] : shown;
 }
 
-/** A needs row and a folded group's members, one line each. */
+/** A needs row and a folded group's members, one line each, in the Desk's words (a gate's plain question). */
 function rowWords(rows: readonly NeedRow[]): string[] {
-  return rows.flatMap((r) => (r.members !== undefined && r.members.length > 0 ? r.members : [r])).map((r) => `${r.subject}: ${r.text}`);
+  return rows.flatMap((r) => (r.members !== undefined && r.members.length > 0 ? r.members : [r])).map((r) => `${r.subject}: ${r.question ?? r.text}`);
 }
 
 /**
- * The pack. `snapshot` is the system read voice shows (its own poll, else the Nerve Center's); `needs` is the one
- * needs-you source the app counts from (crew's ranked list, else the app's needs rows), so the person's number and the
- * names agree.
+ * The pack. `snapshot` is the system read voice shows, `null` when none is fresh enough to call now; `needs` is the
+ * one needs-you source the app counts from (crew's ranked list, else the app's needs rows); `needsPhase` is the app's
+ * settled needs phase: while it is loading nothing is said about needs, and a partial read says so.
  */
-export function voiceGround(a: { snapshot: SystemSnapshot | null; needs: NeedsSource; now: number }): string {
+export function voiceGround(a: { snapshot: SystemSnapshot | null; needs: NeedsSource; needsPhase: 'loading' | 'complete' | 'partial'; now: number }): string {
   const jobs = a.snapshot === null ? null : a.snapshot.runs.filter(isRunningJob).map((r) => {
     const step = stepWords(r.phase);
     return `${r.title}${step !== null ? ` · on ${step}` : ''}${r.liveness !== 'working' ? ` (${r.liveness})` : ''}`;
   });
-  const needs = a.needs.phase === 'loading' ? null
+  const needs = a.needs.phase === 'loading' || a.needsPhase === 'loading' ? null
     : a.needs.from === 'crew' ? a.needs.items.map((i) => (i.reason !== null && i.reason !== '' ? `${i.text}: ${i.reason}` : i.text))
     : rowWords(a.needs.rows);
-  const from = a.needs.phase === 'ready' ? (a.needs.from === 'crew' ? " (crew's ranked list)" : " (studio's needs-you list)") : '';
+  const from = a.needsPhase === 'partial' ? ' (some of studio\u2019s reads have not answered, so there may be more)' : '';
   const load = a.snapshot?.infra.find((i) => i.key === 'load');
   return [
     `${PACK_OPENING}${new Date(a.now).toISOString()}]`,

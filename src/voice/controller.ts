@@ -47,6 +47,7 @@ import { Vad } from './vad.js';
 import { isRunningJob, loadWord } from './widgets.js';
 import { voiceGround } from './ground.js';
 import { needsSource } from '../board/attention.js';
+import { STALE_MS } from '../board/nerveCenter.js';
 import { PACK_JOIN } from '../board/askPack.js';
 import type { ChatMessageContext } from '../api/chatArtifacts-wire.js';
 import { useCapabilities } from '../store/capabilities.js';
@@ -849,11 +850,22 @@ async function proposeGate(gate: OpenGate, heard: string, words: NonNullable<Ret
   await say(`${q} Say confirm, or not that.`);
 }
 
+/** The system read voice shows (its own poll first, as {@link snapshotNow}), only while it is fresh enough to call
+ *  now: no older than the Nerve Center trusts (round 1: a kept read went out as now after voice reopened). */
+function freshSnapshot(now: number): SystemSnapshot | null {
+  const d = useDashStore.getState();
+  if (d.system !== null && d.readAt !== null && now - d.readAt <= STALE_MS) return d.system;
+  const s = useSystemStore.getState();
+  if (s.snapshot !== null && s.snapshotAt !== null && now - s.snapshotAt <= STALE_MS) return s.snapshot;
+  return null;
+}
+
 /** What voice mode shows now, for a question (studio#1438): read when it is asked. */
 function groundNow(): string {
   const now = Date.now();
-  const needs = needsSource(useSystemStore.getState(), useConnectionStore.getState().status, useNeedsCount.getState().rows, now);
-  return voiceGround({ snapshot: snapshotNow(), needs, now });
+  const { phase, rows } = useNeedsCount.getState();
+  const needs = needsSource(useSystemStore.getState(), useConnectionStore.getState().status, rows, now);
+  return voiceGround({ snapshot: freshSnapshot(now), needs, needsPhase: phase, now });
 }
 
 async function askChat(question: string): Promise<void> {
