@@ -88,6 +88,17 @@ describe('red when work is blocked, yellow when it needs a look', () => {
     expect(nerveState(system({ snapshot: snap({ attention: [disk, job] }) }), 'connected', 0, NOW)).toMatchObject({ tone: 'yellow', words: 'disk low · 1 needs you' });
   });
 
+  it('studio#1429: with system items and jobs both waiting, the chip says the badge\'s total, then the split', () => {
+    const job = (id: string) => ({ id, level: 'yellow' as const, panel: 'runs' as const, text: 'a job', reason: null, remedy: null, action: null, kind: 'prevents' as const });
+    const load = { id: 'infra:load', level: 'yellow' as const, panel: 'infra' as const, text: 'Host load: degraded', reason: null, remedy: null, action: null, kind: 'slows' as const };
+    // The case in #1423's shots: a failed run, a run's gate and infra:load in attention[] (the badge says 3).
+    expect(nerveState(system({ snapshot: snap({ attention: [load, job('run:a'), job('run:b')] }) }), 'connected', 0, NOW).words).toBe('3 need a look (machine busy, 2 jobs)');
+    expect(nerveState(system({ snapshot: snap({ attention: [load, job('run:a')] }) }), 'connected', 0, NOW).words).toBe('2 need a look (machine busy, 1 job)');
+    // Only jobs, or only the system: as before.
+    expect(nerveState(system({ snapshot: snap({ attention: [job('run:a'), job('run:b')] }) }), 'connected', 0, NOW).words).toBe('2 need you');
+    expect(nerveState(system({ snapshot: snap({ attention: [load] }) }), 'connected', 0, NOW).words).toBe('machine busy');
+  });
+
   it('a dropped socket is said (yellow) in both modes', () => {
     expect(nerveState(system(), 'disconnected', 0, NOW)).toMatchObject({ tone: 'yellow', words: 'live updates paused' });
     expect(nerveState(fallback(), 'disconnected', 0, NOW)).toMatchObject({ tone: 'yellow', words: 'live updates paused' });

@@ -807,3 +807,35 @@ it.each([true, false])('the disk row shows floor cache only when diagnostics rep
   if (present) expect(await screen.findByTestId('nc-infra-floor-cache')).toHaveTextContent('Repo-checks floor cache: 18 GB of its 20 GB cap (~/.cache/floors)');
   else expect(screen.queryByTestId('nc-infra-floor-cache')).toBeNull();
 });
+
+/**
+ * studio#1430 F2: a ranked crew holds a snoozed item out of `attention[]` (wicked-crew `holdSnoozed`) and lists it in
+ * `snoozed[]`. The Attention tab's count agrees with /needs; the way back to the held item is said under the list.
+ */
+describe('studio#1430 F2: the Attention tab says what a snooze holds back', () => {
+  const HELD_AT = iso(NOW - 6 * 3_600_000);
+  const held = {
+    id: 'run:290a7fee', severity: 'red', source: 'run', kind: 'prevents', title: 'wicked-core#840: a dead seat', reason: 'held at an escalation gate',
+    remedy: 'Open the gate.', blocks: 1, blockedRunIds: ['290a7fee'], waitedSince: HELD_AT, unitsLeft: 4,
+    target: { kind: 'run', runId: '290a7fee', gateOrd: 4, interactionId: 'ir_4' }, action: { kind: 'open_gate', label: 'Open the gate' },
+    snooze: { key: `attention:run:290a7fee@ir_4@${HELD_AT}`, rank: 201 }, until: iso(NOW + 3 * 3_600_000),
+  };
+
+  it('"1 snoozed", with a link to Needs you', async () => {
+    caps = { system: true, attentionRanked: true };
+    systemAnswer = () => Promise.resolve({ ...SNAPSHOT, unresolved: [], snoozed: [held] });
+    const navigate = renderBoth(vi.fn(), '?tab=attention');
+    const note = await screen.findByTestId('nc-snoozed');
+    expect(note).toHaveTextContent('1 snoozed, not counted until it comes back');
+    fireEvent.click(within(note).getByTestId('nc-snoozed-open'));
+    expect(navigate).toHaveBeenCalledWith('/needs');
+  });
+
+  it('nothing held back: no note', async () => {
+    caps = { system: true, attentionRanked: true };
+    systemAnswer = () => Promise.resolve({ ...SNAPSHOT, unresolved: [], snoozed: [] });
+    renderBoth(vi.fn(), '?tab=attention');
+    await screen.findByTestId('nc-to-resolve');
+    expect(screen.queryByTestId('nc-snoozed')).toBeNull();
+  });
+});
