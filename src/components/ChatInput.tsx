@@ -776,6 +776,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   useEffect(() => {
     if (!popoverOpen) return;
     function handleClick(e: MouseEvent): void {
+      // A control that its own click took off the page (the stand-in card's Pick, studio#1436) is not a click outside:
+      // in a browser this listener can see the very click that opened the options.
+      if (!(e.target instanceof Node) || !e.target.isConnected) return;
       if (
         popoverAnchorRef.current &&
         !popoverAnchorRef.current.contains(e.target as Node)
