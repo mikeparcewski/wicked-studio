@@ -500,12 +500,14 @@ describe('R5: owner lookup is O(1)', () => {
     rows: Array.from({ length: n }, (_, i): CodeRow => ({ symbolId: `s${i}`, name: `s${i}`, file: 'big.ts', depth: 1 })),
     edges: Array.from({ length: n }, (_, i): CodeRawEdge => ({ src: `s${i}`, tgt: i === 0 ? 'Q' : `s${i - 1}` })),
   });
-  /** model()'s fastest time over 50k rows and over 10k, sampled in turn: a stall or a loaded runner only ever adds time,
-   *  and it adds it to both sizes alike, so the fastest of each and their ratio say how the work grows. */
+  /** model()'s fastest time over 50k rows and over 10k, sampled in turn, five times each. Interference only ever adds
+   *  time: a stall lands in one sample, which the fastest of five drops, and a uniformly slow runner scales both sizes,
+   *  which the ratio cancels. A linear lookup reads 5-7 here, and a scanning one about 23-25 (its 10k sample alone takes
+   *  ~0.5 s, so no plausible interference on the small size hides it). */
   function growth(): { big: number; small: number } {
     let big = Infinity;
     let small = Infinity;
-    for (let i = 0; i < 3; i += 1) {
+    for (let i = 0; i < 5; i += 1) {
       for (const [n, keep] of [[10_000, (ms: number) => { small = Math.min(small, ms); }], [50_000, (ms: number) => { big = Math.min(big, ms); }]] as const) {
         const cr = chain(n);
         const st = cr.defaultState();
