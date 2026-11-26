@@ -49,18 +49,37 @@ export function snoozeOf(row: NeedRow, byKey: Readonly<Record<string, DeskSnooze
   return s;
 }
 
+/** How late a live gate may arrive after the held one's `waitedSince` and still be that same gate (studio's receipt
+ *  clock against crew's; one host, so a minute is generous). */
+const SAME_GATE_SLACK_MS = 60_000;
+
+/** A run's open gate, as the live gate store holds it: the occurrence a hold is checked against. */
+export interface LiveGate { ord: number; receivedAt: number }
+
 /** (studio#1430) The runs a ranked crew holds back for a person's snooze (`/system.snoozed[]`), each with its held item.
- *  A hold whose end has passed by `now` is over, even when the snapshot that listed it is the last one read (a failed
- *  re-read keeps it), so a stale snapshot never hides a run past its end; so is one this page woke (`woken`, the
- *  snoozes store's), whichever surface woke it. Empty against an older crew. */
-export function crewHeldRuns(snapshot: SystemSnapshot | null, now: number, woken: Readonly<Record<string, true>> = {}): ReadonlyMap<string, SystemSnoozed> {
+ *  The last snapshot read can be stale (a failed re-read keeps it), so a hold is over here, whatever it says, when:
+ *  - its end has passed by `now`;
+ *  - this page woke it (`woken`, the snoozes store's), whichever surface did;
+ *  - the run now waits at another gate than the one snoozed (`gates`, the live gate store: another ord, or the same
+ *    ord asked again after the snooze), since a snooze holds one gate occurrence, never the run's next one.
+ *  Empty against an older crew. */
+export function crewHeldRuns(snapshot: SystemSnapshot | null, now: number, woken: Readonly<Record<string, true>> = {}, gates: Readonly<Record<string, LiveGate>> = {}): ReadonlyMap<string, SystemSnoozed> {
   const out = new Map<string, SystemSnoozed>();
   if (snapshot === null || snapshot.ranked !== true) return out;
   for (const h of snapshot.snoozed ?? []) {
     if (h.runId == null || out.has(h.runId) || (h.until !== null && h.until <= now) || (h.wakeKey !== null && woken[h.wakeKey] === true)) continue;
+    if (!sameGate(h, gates[h.runId])) continue;
     out.set(h.runId, h);
   }
   return out;
+}
+
+/** The run's live gate is still the one the hold names (or none is known, so crew's word stands). */
+function sameGate(h: SystemSnoozed, live: LiveGate | undefined): boolean {
+  if (live === undefined) return true;
+  const ord = h.action?.ord ?? null;
+  if (ord !== null && live.ord !== ord) return false;
+  return h.waitedSince == null || live.receivedAt <= h.waitedSince + SAME_GATE_SLACK_MS;
 }
 
 /** A row's run crew holds back, or null. */
@@ -70,8 +89,7 @@ export function crewHeldOf(row: NeedRow, held: ReadonlyMap<string, SystemSnoozed
 }
 
 /** The rows whose run no ranked crew holds back (studio#1430): what a project's count counts. */
-export function withoutCrewHeld(rows: readonly NeedRow[], snapshot: SystemSnapshot | null, now: number, woken: Readonly<Record<string, true>> = {}): NeedRow[] {
-  const held = crewHeldRuns(snapshot, now, woken);
+export function withoutCrewHeld(rows: readonly NeedRow[], held: ReadonlyMap<string, SystemSnoozed>): NeedRow[] {
   return held.size === 0 ? [...rows] : rows.filter((r) => crewHeldOf(r, held) === null);
 }
 

@@ -22,7 +22,8 @@ import { InlineUndo } from '../InlineUndo.js';
 import { gateKeyOf } from '../../board/gateActions.js';
 import { batchFailedResult } from './BatchFailures.js';
 import { useDeskSnoozes } from '../../store/deskSnoozes.js';
-import { crewHeldRuns, snoozeChoices, snoozeEndWords, snoozeTargetOf, splitSnoozed, type SnoozedRow } from '../../board/deskSnooze.js';
+import { useCrewHolds } from '../../hooks/useCrewHolds.js';
+import { snoozeChoices, snoozeEndWords, snoozeTargetOf, splitSnoozed, type SnoozedRow } from '../../board/deskSnooze.js';
 import type { SystemSnapshot } from '../../api/system.js';
 import { useSystemStore } from '../../store/systemSnapshot.js';
 
@@ -92,8 +93,7 @@ export function DeskInbox({ rows: allRows, runs, navigate, now, settled, agentNa
   useEffect(() => { if (retrySnoozesAt !== null) void loadSnoozes(); }, [retrySnoozesAt, loadSnoozes]);
   // studio#1430: a run a ranked crew holds back for a snooze is snoozed here too, so the inbox counts what /needs counts.
   const snapshot = useSystemStore((st) => (st.mode === 'system' ? st.snapshot : null));
-  const woken = useDeskSnoozes((st) => st.woken);
-  const held = useMemo(() => crewHeldRuns(snapshot, now, woken), [snapshot, now, woken]);
+  const held = useCrewHolds(now);
   const phone = usePhone();
   const { awake: rows, snoozed } = useMemo(() => splitSnoozed(allRows, snoozes.byKey, now, held), [allRows, snoozes.byKey, now, held]);
   const canSnooze = snoozes.phase === 'ready';

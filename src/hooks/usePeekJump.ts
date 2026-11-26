@@ -11,9 +11,8 @@ import { anyModalOpen, useLayerStore } from '../store/layers.js';
 import { useMembershipStore } from '../store/membership.js';
 import { capturePlace, restorePlace, useReturnPlace } from '../store/place.js';
 import { useProjectsStore } from '../store/projects.js';
-import { useSystemStore } from '../store/systemSnapshot.js';
-import { crewHeldRuns, withoutCrewHeld } from '../board/deskSnooze.js';
-import { useDeskSnoozes } from '../store/deskSnoozes.js';
+import { withoutCrewHeld } from '../board/deskSnooze.js';
+import { useCrewHolds } from './useCrewHolds.js';
 import { altChord, useGlobalShortcuts, type ShortcutEntry } from './useGlobalShortcuts.js';
 import type { Navigate } from './useRoute.js';
 
@@ -76,24 +75,21 @@ export function usePeekJump(runs: SessionView[], navigate: Navigate, rows: reado
   const canReturn = useReturnPlace((s) => s.place !== null);
 
   const decisions = useGateActionStore((s) => s.byGate);
-  const snapshot = useSystemStore((s) => (s.mode === 'system' ? s.snapshot : null));
-  const woken = useDeskSnoozes((s) => s.woken);
+  const held = useCrewHolds(Date.now());
 
   // THE ranked queue's top item (wave 2b's `needsYouRows` → `compareNeeds`, folded once,
   // app-wide, by `useNeedsRows` — the same rows Home and the rail show, on every route).
   const target = useMemo(() => {
     // studio#1430 F3: a run a ranked crew holds back for a snooze is never the peek's "what needs you": not its
     // rows, and not its live gate either (peekTarget's not-yet-queued gate reads the gate store).
-    const now = Date.now();
-    const held = crewHeldRuns(snapshot, now, woken);
     // A gate that already has a decision (queued, in flight, answered) is never peeked again.
     const decided = (id: string): boolean => {
       if (held.has(id)) return true;
       const cur = decisions[id];
       return cur !== undefined && (cur.queued || cur.busy || cur.answered !== null);
     };
-    return peekTarget({ rows: withoutCrewHeld(rows, snapshot, now, woken), gates, runs, projectIdByRun, decided });
-  }, [rows, runs, gates, projectIdByRun, decisions, snapshot, woken]);
+    return peekTarget({ rows: withoutCrewHeld(rows, held), gates, runs, projectIdByRun, decided });
+  }, [rows, runs, gates, projectIdByRun, decisions, held]);
 
   // The handlers live in a stable entry table; they read the current world through refs.
   const targetRef = useRef(target);

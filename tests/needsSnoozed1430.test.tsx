@@ -168,6 +168,26 @@ describe('studio#1430 F1: a project inbox treats the run crew holds back as snoo
     expect(screen.getByTestId('desk-inbox-count')).not.toHaveTextContent('snoozed');
   });
 
+  it('a new gate on the held run is not held, even while the last snapshot read still lists the old hold (codex-check W20)', async () => {
+    // The snoozed gate (ord 4) was answered elsewhere and the run asked again; /system has not been read since.
+    const later = iso(NOW - 0.2 * H);
+    for (const next of [
+      gateFromInfo({ runId: '290a7fee', ord: 5, prompt: 'Approve the retry plan?', lifecycle: 'open', receivedAt: later }),
+      gateFromInfo({ runId: '290a7fee', ord: 4, prompt: 'Escalation: the seat died again', lifecycle: 'open', receivedAt: later }),
+    ]) {
+      useGateStore.setState({ gates: { '290a7fee': next } });
+      render(<DeskInbox rows={[...rowsOf({ gates: { ...gates, '290a7fee': next } }), failed(2)]} {...props} />);
+      await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
+      await waitFor(() => expect([...listed()].sort()).toEqual(['fail:run-2', 'group:approval']));
+      expect(screen.getByTestId('desk-inbox-count')).not.toHaveTextContent('snoozed');
+      cleanup();
+    }
+    // The gate the hold names is still held.
+    useGateStore.setState({ gates: { '290a7fee': gates['290a7fee'] } });
+    render(<DeskInbox rows={[...rowsOf(), failed(2)]} {...props} />);
+    await waitFor(() => expect(screen.getByTestId('desk-inbox-count')).toHaveTextContent('· 1 snoozed'));
+  });
+
   it('a hold whose end has passed holds nothing, even in the last snapshot read (a failed re-read keeps it)', async () => {
     useSystemStore.setState({ snapshot: snap({ snoozed: [{ ...HELD, until: iso(NOW - 1) }] }) });
     render(<DeskInbox rows={[...rowsOf(), failed(2)]} {...props} />);
