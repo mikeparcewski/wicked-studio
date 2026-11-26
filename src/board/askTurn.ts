@@ -11,3 +11,8 @@ import type { SessionView } from '../api/types.js';
 export function isAskTurnRun(session: SessionView['session']): boolean {
   return (session as unknown as { ask_turn?: unknown }).ask_turn === true;
 }
+
+/** An ask turn's run (`ask_path: true`): a question asked in a chat, answered by its seats. Absent on a job. */
+export function isAskPathRun(session: SessionView['session']): boolean {
+  return (session as unknown as { ask_path?: unknown }).ask_path === true;
+}

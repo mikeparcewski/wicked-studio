@@ -1441,6 +1441,8 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-composer-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-height: 24px; }
 .wk-composer-hint { margin: 0; font-size: var(--text-xs); color: var(--ink-dim); }
 .wk-composer-hint kbd { font: inherit; color: var(--ink-muted); }
+/* studio#1442: the note's own way to message a running job reads as a link, as the page's other links do. */
+.wk-composer-hint .wk-link { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
 .wk-composer-hint--bad { color: var(--status-fail); }
 .wk-composer-menu {
   position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 30;

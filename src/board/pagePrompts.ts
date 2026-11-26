@@ -47,7 +47,9 @@ function runOfSession(id: string, runs: readonly SessionView[]): SessionView | n
   const hits = runs.filter((v) => v.session.id === id || (runId !== null && v.session.id === runId)
     || (v.session as { chat_id?: string | null }).chat_id === id);
   if (hits.length === 0) return null;
-  return [...hits].sort((a, b) => Number((b.session as { created_at?: number }).created_at ?? 0) - Number((a.session as { created_at?: number }).created_at ?? 0))[0] ?? null;
+  // studio#1443: a question asked on a job's page is an ask turn in the job's chat; the page is still the job's.
+  const jobs = hits.filter((v) => (v.session as { ask_path?: unknown }).ask_path !== true);
+  return [...(jobs.length > 0 ? jobs : hits)].sort((a, b) => Number((b.session as { created_at?: number }).created_at ?? 0) - Number((a.session as { created_at?: number }).created_at ?? 0))[0] ?? null;
 }
 
 function projectNamed(id: string | null | undefined, projects: PageInputs['projects']): { id: string; name: string } | null {

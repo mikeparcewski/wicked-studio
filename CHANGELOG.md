@@ -24,7 +24,6 @@ Patch release on the train-15 cut 9a90caaa, carrying 12 PRs since 0.16.18: #1425
 
 ### Fixed
 
-- The chat's inline Start, Desk's Start analysis and a repository's Capture learnings show the stand-in card when crew holds a job for want of helpers that did not build the work, as New job does. They no longer show a line of text. The card offers stand-ins for this job or every job, signing in another helper, or Cancel. A job started from the card opens as the launcher's own start would (studio#1444).
 - When a stand-in judges the steering rules, the run page names one judge, "Claude Code (stand-in)". It no longer lists parts of the stand-in's label, which has commas of its own, as more judges (studio#1451).
 - The stand-in card on a launch no longer says a picked helper is "the only helper signed in" when other helpers are signed in but were not picked for the job. It says which helpers were picked, names the signed-in ones left out, and offers "Pick another helper", which opens the form's helper options (/runs/new) or the wizard's Options step, in place of "Sign in another helper" (studio#1436).
 - A project's page no longer says "Nothing is running" while its own In progress list shows a Working job: the sentence counts the list's jobs, so a job a need only slows (a helper signed out) is counted. In progress rows on the project page and the Desk say the step the job's session says (the running step, else the first one not finished), not the count of finished steps plus one (studio#1440).
