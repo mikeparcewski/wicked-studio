@@ -46,13 +46,23 @@ export function floorLineOf(text: unknown): FloorLine | null {
   for (const m of text.matchAll(RULES)) take(m.index, { phase: 'rules', role: 'rules', minutes: Number(m[1]), check: null });
   let judges: string[] | undefined;
   for (const m of text.matchAll(RULE_JUDGES)) {
-    judges = m[1]!.split(',').map((s) => s.trim()).filter((s) => s !== '' && s !== 'none');
+    judges = judgeKeys(m[1]!);
     take(m.index, { phase: 'rules', role: 'rules', minutes: 0, check: null, judges });
   }
   for (const m of text.matchAll(RULES_DONE)) take(m.index, { phase: 'rules', role: 'rules', minutes: 0, check: null, done: true });
   const line = (last as { at: number; line: FloorLine } | null)?.line ?? null;
   // The judges note and the first tick can come in one chunk: the tick keeps the judges the note named.
   return line !== null && line.phase === 'rules' && line.done !== true && line.judges === undefined && judges !== undefined ? { ...line, judges } : line;
+}
+
+/** (studio#1451) The judges note's seat keys. When a stand-in sits, the engine follows the keys with the stand-in's
+ *  label in parentheses ("claude~1 (Claude Code stood in for the rule check, using …: only Claude Code was signed in)",
+ *  `cli_runner.rs` with `standin::label`). The label has commas and parentheses of its own, and a seat key never has
+ *  " (", so the list ends at the first " (". The stand-in is named from its key ("Claude Code (stand-in)"). */
+function judgeKeys(list: string): string[] {
+  const paren = list.indexOf(' (');
+  const keys = paren >= 0 && list.trimEnd().endsWith(')') ? list.slice(0, paren) : list;
+  return keys.split(',').map((s) => s.trim()).filter((s) => s !== '' && s !== 'none');
 }
 
 /** A frame that is the floor talking: an output delta carrying a floor line. */
