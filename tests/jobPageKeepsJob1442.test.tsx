@@ -105,7 +105,7 @@ describe('the job page\'s box says where a message for the job goes', () => {
 
   it('a chat of asks only, or a job that ended, gets no note', () => {
     expect(composerScopeNote([ASK], true)).toBeNull();
-    const done = { ...JOB, session: { ...JOB.session, status: 'completed' } };
+    const done = { ...JOB, session: { ...JOB.session, status: 'completed' as const } };
     expect(composerScopeNote([done, ASK], true)).toBeNull();
   });
 });

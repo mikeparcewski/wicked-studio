@@ -10,7 +10,7 @@ import { chatStatusWord, statusWord } from '../../board/statusWords.js';
 import { useInstallOutcome } from './outcomeReads.js';
 import { seatKeyName } from '../../board/seatNames.js';
 import { seatedStandIns, standInLine } from '../../board/standIn.js';
-import { ORPHANED_LINE, orphanedOf } from '../../board/sessionModel.js';
+import { headlinePool, ORPHANED_LINE, orphanedOf } from '../../board/sessionModel.js';
 import { finishedDeliveryArm, proposalKindOf } from '../../board/proposalCard.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { isCommandPath, isHelperSeat, isReviewUnit } from '../../board/responder.js';
@@ -75,8 +75,11 @@ function nothingToStop(view: SessionView): boolean {
   return isTerminal(view) || (view.session.status === 'awaiting_human' && isAskTurnRun(view.session));
 }
 
+/** The run Details opens on: the newest live one, else the newest, of the runs the page is about (studio#1442: a job's,
+ *  not an ask answered beside it). */
 function primaryRun(runs: SessionView[]): SessionView | undefined {
-  return [...runs].reverse().find((view) => !isTerminal(view)) ?? runs[runs.length - 1];
+  const pool = headlinePool(runs);
+  return [...pool].reverse().find((view) => !isTerminal(view)) ?? pool[pool.length - 1];
 }
 
 /** The step the run is on: the running one, else (a live run waiting or between steps) the first step

@@ -11,7 +11,7 @@ import { ApiError, api } from '../../api/client.js';
 import type { ChatPathView, SessionView as RunView } from '../../api/types.js';
 import { needsByRun } from '../../board/deskModel.js';
 import type { NeedRow } from '../../board/needsYou.js';
-import { CLOSED_LINE, MESSAGE_STEP_LABEL, composerScopeNote, conversationOf, parseSessionId, runChatIdOf, sessionPath, runState, sessionTitle, type Conversation, type SessionState } from '../../board/sessionModel.js';
+import { CLOSED_LINE, MESSAGE_STEP_LABEL, composerScopeNote, conversationOf, headlinePool, parseSessionId, runChatIdOf, sessionPath, runState, sessionTitle, type Conversation, type SessionState } from '../../board/sessionModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { proposalIsStub, useCapabilities } from '../../store/capabilities.js';
 import { useConnectionStore } from '../../store/connection.js';
@@ -183,6 +183,13 @@ const OPEN_GRACE_MS = 60_000;
 /** studio#663: a kickoff longer than this shows its first lines with Show all (DES-CHAT-NATIVE-RUN: a chat bubble
  *  holds the rest of a goal in full — `.wk-session-turn--kickoff` clamps at 8 lines, about this many characters). */
 const KICKOFF_LONG = 600;
+
+/** A session's state over some of its runs: any waiting, else any working, else the newest's. */
+function sessionStateOf(runs: readonly RunView[]): SessionState {
+  return runs.some((v) => runState(v) === 'waiting') ? 'waiting'
+    : runs.some((v) => runState(v) === 'working') ? 'working'
+      : runs.length > 0 ? runState(runs[runs.length - 1]!) : 'quiet';
+}
 
 function launchedMs(v: RunView): number {
   const c = (v.session as unknown as { created_at?: unknown }).created_at;
@@ -562,37 +569,39 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // The closed line above the entries is crew's: the first crew entry under it needs no second label.
   const leadWho: Responder | null = conversation === 'closed' && mine.length > 0 ? CREW : null;
   const badges = useMemo(() => needsByRun(needRows), [needRows]);
-  const state: SessionState = mine.some((v) => runState(v) === 'waiting') ? 'waiting'
-    : mine.some((v) => runState(v) === 'working') ? 'working'
-      : mine.length > 0 ? runState(mine[mine.length - 1]!) : 'quiet';
+  const state: SessionState = sessionStateOf(mine);
+  // studio#1442: the header, its badge and Details are about the job; an ask turn asked on its page is answered beside
+  // it in the thread (`headlinePool`). The session's `data-state` stays the engine's, over every run.
+  const head = headlinePool(mine);
+  const headState: SessionState = sessionStateOf(head);
   // An answered ask parked at its turn (`ask_turn`) waits on no one: when it is all that waits here, the header's word
   // is its own ("Answered"), never "Waiting" (e2e-1105: "Waiting" beside a red Stop run). The session's state stays the
   // engine's (`data-state`, the rail's ring and the ask journeys read it).
-  const answeredOnly = state === 'waiting' && mine.every((v) => runState(v) !== 'waiting' || (v.session.status === 'awaiting_human' && isAskTurnRun(v.session)));
+  const answeredOnly = headState === 'waiting' && head.every((v) => runState(v) !== 'waiting' || (v.session.status === 'awaiting_human' && isAskTurnRun(v.session)));
   // (J4 0.16.6) A step silent past crew's quiet mark is not "Working": the header says how long it has said nothing.
-  const silent = useSilentStep(mine.length > 0 ? mine[mine.length - 1] : undefined);
-  const silentRunId = silent !== null ? mine[mine.length - 1]!.session.id : null;
+  const silent = useSilentStep(head.length > 0 ? head[head.length - 1] : undefined);
+  const silentRunId = silent !== null ? head[head.length - 1]!.session.id : null;
   // The engine's checks floor is running: the seat is idle on purpose; the page says what runs (retime 0.16.11).
-  const floor = useRunningFloor(mine.length > 0 ? mine[mine.length - 1] : undefined);
-  const floorRunId = floor !== null ? mine[mine.length - 1]!.session.id : null;
+  const floor = useRunningFloor(head.length > 0 ? head[head.length - 1] : undefined);
+  const floorRunId = floor !== null ? head[head.length - 1]!.session.id : null;
   // Power mode (DES-POWER-MODE §2): the switch beside a run's name and its rigor chip — on a session of one run.
-  const powerRun = mine.length === 1 ? mine[0]! : null;
+  const powerRun = head.length === 1 ? head[0]! : null;
   const power = usePower(powerRun);
   // studio#1364: the newest run ended at a consent Decline (the install, after its pull request was delivered): the
   // badge says what that is, in a calm tone, never a red "Cancelled".
-  const declined = useConsentDecline(mine.length > 0 ? mine[mine.length - 1] : undefined);
+  const declined = useConsentDecline(head.length > 0 ? head[head.length - 1] : undefined);
   // studio#1382: the newest run finished, but its MCP install registered nothing (a token to add) or failed: not a green
   // "Finished". The passage's own kept read of the install record; nothing else is read.
-  const lastRun = mine.length > 0 ? mine[mine.length - 1]! : null;
+  const lastRun = head.length > 0 ? head[head.length - 1]! : null;
   // An archived run keeps its Archived badge (statusWord's archived-first precedence, codex r2).
   const installed = useInstallOutcome(lastRun !== null && lastRun.session.status === 'completed' && statusWord(lastRun).word !== 'Archived' ? lastRun : null).standing;
-  const settledHere = state !== 'waiting' && state !== 'working';
+  const settledHere = headState !== 'waiting' && headState !== 'working';
   const badge = declined !== null && settledHere ? { word: declined.install ? 'Not installed' : 'Declined', tone: 'quiet' as const }
     : installed === 'not-registered' && settledHere ? { word: 'Not registered', tone: 'gate' as const }
     : installed === 'failed' && settledHere ? { word: 'Install failed', tone: 'danger' as const }
     // While the install's record is read, Finished claims no success colour (codex r1).
     : installed === 'loading' && settledHere ? { word: 'Finished', tone: 'quiet' as const }
-    : mine.length > 0 ? (state === 'working' && powerRun !== null && power?.pause != null ? { word: 'Waiting', tone: 'gate' as const } : state === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : state === 'working' && floor !== null ? { word: floorBadge(floor), tone: 'run' as const } : headerBadge(mine, answeredOnly ? 'done' : state)) : null;
+    : head.length > 0 ? (headState === 'working' && powerRun !== null && power?.pause != null ? { word: 'Waiting', tone: 'gate' as const } : headState === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : headState === 'working' && floor !== null ? { word: floorBadge(floor), tone: 'run' as const } : headerBadge(head, answeredOnly ? 'done' : headState)) : null;
   // The banner takes this session's slice of the same source as the brand badge.
   const gates = useGateStore((s) => s.gates);
   useSystemPoll();

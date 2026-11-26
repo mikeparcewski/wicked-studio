@@ -1,3 +1,4 @@
+import { isAskPathRun } from './askTurn.js';
 import { isHeldRun } from './heldRuns.js';
 import type { SessionView } from '../api/types.js';
 import { jobTitle, plainRunTitle } from './deskWords.js';
@@ -139,11 +140,34 @@ export function summarize(id: string, list: readonly SessionView[], badges: Reco
 interface TranscriptLike {
   kind: string;
   text?: unknown;
+  /** When it was said (unix millis), when the transcript says. */
+  at?: unknown;
 }
 
-/** R1: the chat's first operator turn, else the first run's intent. */
+/**
+ * studio#1442: the runs a session's page is about. A question asked on a job's page starts an ask turn
+ * (`ask_path`) in the job's chat; it is answered beside the job, never in its place. A session that holds a job is
+ * about its jobs; a chat of asks only is about its asks. `runs` in launch order.
+ */
+export function headlinePool<T extends Pick<SessionView, 'session'>>(runs: readonly T[]): readonly T[] {
+  const jobs = runs.filter((v) => !isAskPathRun(v.session));
+  return jobs.length > 0 ? jobs : runs;
+}
+
+const launchedAt = (v: SessionView): number => {
+  const c = (v.session as unknown as { created_at?: unknown }).created_at;
+  return typeof c === 'number' && Number.isFinite(c) ? c * 1000 : 0;
+};
+
+/** R1: the chat's first operator turn, else the first run's intent. studio#1442: a job launched before anything was
+ *  said in its chat (New job, then a question on its page) is titled by the job, not by the question. */
 export function sessionTitle(messages: readonly TranscriptLike[], runs: readonly SessionView[]): string {
   const first = messages.find((m) => m.kind === 'user' && typeof m.text === 'string' && m.text.trim() !== '');
+  const job = runs.find((v) => !isAskPathRun(v.session));
+  // crew's `created_at` is whole seconds: a job counts as launched first only a full second before the message.
+  if (job !== undefined && first !== undefined && typeof first.at === 'number' && launchedAt(job) > 0 && launchedAt(job) + 1000 <= first.at) {
+    return jobTitle(job.session);
+  }
   if (first !== undefined) return plainRunTitle(String(first.text));
   const v = runs[0];
   return v === undefined ? 'A session' : jobTitle(v.session);
@@ -208,7 +232,13 @@ export const SEPARATE_ASK_NOTE =
  *  (rig 0.15.8: the note named a ⋯ that row did not have). It opens the step's sheet with its message box. */
 export const MESSAGE_STEP_LABEL = 'Message this step';
 
+/** studio#1442: while a job here is live, the note also says where a message for the job goes (the box's words never
+ *  reach it: they start an ask beside it, in a live chat as well). */
+export const MESSAGE_JOB_NOTE = `${SEPARATE_ASK_NOTE} To tell the job something, use “${MESSAGE_STEP_LABEL}” on its working step.`;
+
 export function composerScopeNote(runs: readonly SessionView[], repliesIntoChat: boolean): string | null {
+  const live = runs.filter((v) => !LIVE_RUN_ENDS.has(v.session.status));
+  if (live.some((v) => !isAskPathRun(v.session))) return MESSAGE_JOB_NOTE;
   if (repliesIntoChat) return null;
-  return runs.some((v) => !LIVE_RUN_ENDS.has(v.session.status)) ? SEPARATE_ASK_NOTE : null;
+  return live.length > 0 ? SEPARATE_ASK_NOTE : null;
 }
