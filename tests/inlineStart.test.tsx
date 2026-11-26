@@ -565,6 +565,24 @@ describe('studio#1459 F1 (round 2): a helper signed in but left out of this star
     expect(document.activeElement).toBe(seatChip('codex'));
     expect(launches()).toHaveLength(1);
   });
+
+  it('MAIN-RED 8ed2e5c2: a box focus still waiting for its frame (the menu pick\'s) does not take focus back after the pick', async () => {
+    // CI ordering made deterministic: the `/bug` pick asks for the box's focus on the next animation frame; on a busy
+    // runner that frame can land after "Pick another helper" has put focus on the helpers row. Hold every frame until
+    // after the pick, then run them.
+    const frames: FrameRequestCallback[] = [];
+    const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => { frames.push(cb); return frames.length; });
+    try {
+      await refusedWithCodexOff();
+      fireEvent.click(screen.getByTestId('composer-start-standin-pick'));
+      await waitFor(() => expect(screen.queryByTestId('composer-start-standin')).toBeNull());
+      expect(frames.length).toBeGreaterThan(0);
+      act(() => { for (const cb of frames.splice(0)) cb(performance.now()); });
+      expect(document.activeElement).toBe(seatChip('codex'));
+    } finally {
+      raf.mockRestore();
+    }
+  });
 });
 
 describe('codex r1 on #982: the plan gate and the request are exactly what the row shows', () => {
