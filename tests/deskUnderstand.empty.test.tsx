@@ -1,8 +1,11 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import type { InsightState } from '../src/hooks/useDeskInsights.js';
 import { DeskUnderstand } from '../src/components/desk/DeskUnderstand.js';
+import { ApiError } from '../src/api/errors.js';
 import { agentRows, workflowRows } from '../src/board/deskInsights.js';
 import { NOW, deskRun, names } from './fixtures/deskV2.js';
 
@@ -188,5 +191,36 @@ describe('Understand empty state and insights', () => {
     expect(screen.getByTestId('desk-pick-add')).toBeDisabled();
     expect(screen.queryByTestId('desk-insights-generate')).not.toBeInTheDocument();
     expect(mocks.generate).not.toHaveBeenCalled();
+  });
+});
+
+describe('studio#1444: crew holds Start analysis for want of helpers: the stand-in card', () => {
+  // crew's own 409 body for a one-helper launch (its `preflightRefusal` writer, kept unedited by studio#1446).
+  const CHOICE = JSON.parse(readFileSync(resolve(process.cwd(), 'tests/fixtures/stand-in-choice.learn-one-helper.crew.json'), 'utf8')) as { status: number; body: Record<string, unknown> };
+  const refused = (): ApiError => new ApiError(CHOICE.status, String(CHOICE.body['error'] ?? ''), CHOICE.body);
+
+  it('shows the card, not "It didn’t start"; "this job" starts it again with crew’s retryWith and says it started', async () => {
+    mocks.launch.mockRejectedValueOnce(refused()).mockResolvedValueOnce({ runId: 'run-an' });
+    render(<DeskUnderstand {...props()} />);
+    suggest('agents');
+    fireEvent.click(screen.getByTestId('desk-analyze-start'));
+    await screen.findByTestId('desk-analyze-standin');
+    expect(screen.queryByTestId('desk-analyze-failed')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('desk-analyze-standin-job'));
+    await screen.findByTestId('desk-analyze-done');
+    expect(mocks.launch).toHaveBeenCalledTimes(2);
+    expect(mocks.launch.mock.calls[1]![0]).toEqual({ ...mocks.launch.mock.calls[0]![0], ...(CHOICE.body['retryWith'] as Record<string, unknown>) });
+    expect(screen.queryByTestId('desk-analyze-standin')).not.toBeInTheDocument();
+  });
+
+  it('a new Start analysis retires the card', async () => {
+    mocks.launch.mockRejectedValueOnce(refused()).mockResolvedValueOnce({ runId: 'run-b' });
+    render(<DeskUnderstand {...props()} />);
+    suggest('agents');
+    fireEvent.click(screen.getByTestId('desk-analyze-start'));
+    await screen.findByTestId('desk-analyze-standin');
+    fireEvent.click(screen.getByTestId('desk-analyze-start'));
+    await screen.findByTestId('desk-analyze-done');
+    expect(screen.queryByTestId('desk-analyze-standin')).not.toBeInTheDocument();
   });
 });

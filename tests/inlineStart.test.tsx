@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 /**
  * ux-tonight (operator 2026-11-04 on :7721): "clicking on a workflow opens a modal rather than starting an inline chat,
  * needs to be removed and chat done inline"; "are apps showing as coming soon (in chat)"; "don't I see a way to onboard
@@ -72,6 +74,8 @@ const gets = (): string[] => read;
 let posts: Array<{ path: string; body: Record<string, unknown> }> = [];
 /** `POST /runs` → 201: crew's answer (a full-assurance launch on a one-CLI roster adds `assuranceNotice`). */
 let runsAnswer: Record<string, unknown> = { runId: 'run-new' };
+/** (studio#1444) Answers for `POST /runs` before `runsAnswer`, in order: crew's 409 stand-in choice, as its route writes it. */
+let runsFirst: Array<{ status: number; body: Record<string, unknown> }> = [];
 function stubWire(): void {
   posts = [];
   read = [];
@@ -82,7 +86,7 @@ function stubWire(): void {
     if (init?.method !== undefined && init.method !== 'GET') {
       const body = typeof init.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : {};
       posts.push({ path, body });
-      if (path === '/runs') return json(runsAnswer, 201);
+      if (path === '/runs') { const f = runsFirst.shift(); return f !== undefined ? json(f.body, f.status) : json(runsAnswer, 201); }
       if (path === '/plans/preview') return json(preview);
       if (path === '/apps') return json({ app: { slug: String(body['slug']), name: 'x', projectId: body['projectId'], head: { version: 1 } } }, 201);
       if (/^\/apps\/[^/]+\/turns$/.test(path)) return json({ runId: 'turn-run', turnId: 't1' }, 202);
@@ -127,6 +131,7 @@ const launches = (): Array<Record<string, unknown>> => posts.filter((p) => p.pat
 
 beforeEach(() => {
   runsAnswer = { runId: 'run-new' };
+  runsFirst = [];
   useLaunchNotices.setState({ bySession: {} });
   repos = [repo('svc')];
   presets = [];
@@ -284,6 +289,45 @@ describe('a / pick starts the work in this chat', () => {
     await waitFor(() => expect(wfChip('chat-1')).toMatchObject({ workflowId: 'bug' }));
     expect(box().value).toBe('the charge never clears');
     expect(useLaunchWizard.getState().open).toBe(false);
+  });
+});
+
+describe('studio#1444: crew holds a start for want of helpers: the stand-in card, not a line of text', () => {
+  // crew's own 409 body for a one-helper launch (its `preflightRefusal` writer, kept unedited by studio#1446).
+  const CHOICE = JSON.parse(readFileSync(resolve(process.cwd(), 'tests/fixtures/stand-in-choice.learn-one-helper.crew.json'), 'utf8')) as { status: number; body: Record<string, unknown> };
+
+  it('Enter shows the card; "this job" starts it again with crew\'s retryWith, opens the chat and clears the words', async () => {
+    runsFirst = [CHOICE];
+    const nav = vi.fn();
+    render(<Harness navigate={nav} />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    enter();
+    await screen.findByTestId('composer-start-standin');
+    expect(screen.queryByTestId('composer-start-error')).toBeNull();
+    expect(nav).not.toHaveBeenCalled();
+    expect(box().value).toBe('the charge never clears');
+    fireEvent.click(screen.getByTestId('composer-start-standin-job'));
+    await waitFor(() => expect(launches()).toHaveLength(2));
+    expect(launches()[1]).toEqual({ ...launches()[0], ...(CHOICE.body['retryWith'] as Record<string, unknown>) });
+    await waitFor(() => expect(nav).toHaveBeenCalledWith('/s/chat-1'));
+    expect(wfChip('chat-1')).toBeUndefined();
+    expect(box().value).toBe('');
+    expect(screen.queryByTestId('composer-start-standin')).toBeNull();
+  });
+
+  it('Cancel closes the card and starts nothing; the words stay', async () => {
+    runsFirst = [CHOICE];
+    render(<Harness navigate={vi.fn()} />);
+    await pick('bug', 'bug');
+    type('the charge never clears');
+    await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
+    enter();
+    fireEvent.click(await screen.findByTestId('composer-start-standin-cancel'));
+    await waitFor(() => expect(screen.queryByTestId('composer-start-standin')).toBeNull());
+    expect(launches()).toHaveLength(1);
+    expect(box().value).toBe('the charge never clears');
   });
 });
 

@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { ApiError } from '../src/api/errors.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { RepoEntry } from '../src/api/types.js';
@@ -324,6 +327,25 @@ describe('review folds (codex on #998)', () => {
     expect(err).toHaveTextContent('Couldn’t start capturing learnings');
     expect(err.closest('[data-testid="repo-alerts"]')).not.toBeNull();
     expect(screen.getByRole('tabpanel')).toHaveAttribute('data-testid', 'repo-panel-overview');
+  });
+
+  it('studio#1444: crew holds the capture for want of helpers: the stand-in card, and "this job" opens the job', async () => {
+    // crew's own 409 body for a one-helper launch (its `preflightRefusal` writer, kept unedited by studio#1446).
+    const CHOICE = JSON.parse(readFileSync(resolve(process.cwd(), 'tests/fixtures/stand-in-choice.learn-one-helper.crew.json'), 'utf8')) as { status: number; body: Record<string, unknown> };
+    launchRun.mockImplementationOnce(() => Promise.reject(new ApiError(CHOICE.status, String(CHOICE.body['error'] ?? ''), CHOICE.body)));
+    const onSelectRun = vi.fn();
+    render(<RepoDetailPage repoId="studio-api" onSelectRun={onSelectRun} navigate={() => {}} onOpenGraph={() => {}} search="" />);
+    await screen.findByRole('heading', { name: 'studio-api' });
+    fireEvent.click(screen.getByTestId('repo-more-button'));
+    fireEvent.click(screen.getByTestId('repo-menu-capture'));
+    const card = await screen.findByTestId('repo-capture-standin');
+    expect(card.closest('[data-testid="repo-alerts"]')).not.toBeNull();
+    expect(screen.queryByTestId('repo-capture-error')).toBeNull();
+    fireEvent.click(screen.getByTestId('repo-capture-standin-job'));
+    await waitFor(() => expect(onSelectRun).toHaveBeenCalledWith('r-cap'));
+    expect(launchRun).toHaveBeenCalledTimes(2);
+    expect(launchRun.mock.calls[1]![0]).toEqual({ ...(launchRun.mock.calls[0]![0] as Record<string, unknown>), ...(CHOICE.body['retryWith'] as Record<string, unknown>) });
+    expect(screen.queryByTestId('repo-capture-standin')).toBeNull();
   });
 
   it('a capture in flight for one repository does not disable the next one’s', async () => {
