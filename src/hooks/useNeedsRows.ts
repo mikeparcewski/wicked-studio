@@ -17,6 +17,7 @@ import { useNeedsSources, type NeedsSource } from '../store/needsSources.js';
 import { attentionBadge, needsSource } from '../board/attention.js';
 import { needCount } from '../board/needsQueue.js';
 import { withoutCrewHeld } from '../board/deskSnooze.js';
+import { useDeskSnoozes } from '../store/deskSnoozes.js';
 import { useSystemPoll, useSystemStore } from '../store/systemSnapshot.js';
 import { useNotificationStore } from '../store/notifications.js';
 import { useStallEscalationStore } from '../store/stallEscalations.js';
@@ -211,6 +212,7 @@ export function useSettledNeeds(needRows: readonly NeedRow[], runsKnown: boolean
   // Crew has not answered its first read yet: a ranked crew's number may be on its way, so the
   // app-wide number is held (never the fold's count flashing before crew's, coordinator 2026-10-27).
   const signals = useSystemStore();
+  const woken = useDeskSnoozes((st) => st.woken);
   const ws = useConnectionStore((st) => st.status);
   const rec = settledScope(scope);
   const [since] = useState(() => Date.now());
@@ -222,7 +224,7 @@ export function useSettledNeeds(needRows: readonly NeedRow[], runsKnown: boolean
   const count = scope === ALL_NEEDS_SCOPE && source.phase === 'ready'
     ? source.from === 'crew' ? source.items.length : needCount(source.rows)
     // studio#1430: a project's count leaves out a run a ranked crew holds back for a snooze, as its inbox does.
-    : attentionBadge(withoutCrewHeld(needRows, signals.mode === 'system' ? signals.snapshot : null, now));
+    : attentionBadge(withoutCrewHeld(needRows, signals.mode === 'system' ? signals.snapshot : null, now, woken));
   const held = (): { phase: 'loading' | 'complete'; count: number | null; missing: string[] } =>
     rec.lastComplete === null ? { phase: 'loading', count: null, missing: [] } : { phase: 'complete', count: rec.lastComplete, missing: [] };
   // Decide first (no early return before the effects): what to say, and when to look again.

@@ -12,6 +12,7 @@ import type { RepoUse } from '../../board/projectModel.js';
 import { homeProgress, projectHomeSentence, weekWords } from '../../board/projectHome.js';
 import { projectAttention, projectUnresolved } from '../../board/projectsModel.js';
 import { crewHeldRuns } from '../../board/deskSnooze.js';
+import { useDeskSnoozes } from '../../store/deskSnoozes.js';
 import { needTone } from '../../board/needTone.js';
 import { QE_REFUSED_DELIVER } from '../../board/gateHeadline.js';
 import { tidyWords } from '../../board/nerveOverview.js';
@@ -120,8 +121,9 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
   // Each gate row says what the dock says (its plain cause); the job's title moves to the line.
   const causes = useRowHeadlines(items ?? NO_ITEMS, runs);
   const tidy = useMemo(() => projectUnresolved(snapshot, ids), [snapshot, ids]);
+  const woken = useDeskSnoozes((st) => st.woken);
   // studio#1430: what crew holds back for a snooze is said, so "Nothing here is waiting" never hides it.
-  const snoozedHere = useMemo(() => [...crewHeldRuns(snapshot, now).keys()].filter((id) => ids.has(id)).length, [snapshot, ids, now]);
+  const snoozedHere = useMemo(() => [...crewHeldRuns(snapshot, now, woken).keys()].filter((id) => ids.has(id)).length, [snapshot, ids, now, woken]);
   const tidySpend = tidy.some((u) => u.costUsd !== null) ? tidy.reduce((n, u) => n + (u.costUsd ?? 0), 0) : null;
   const folded = useMemo(() => attentionRows(needRows.filter((r) => {
     const id = needRunId(r);

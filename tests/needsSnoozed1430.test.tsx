@@ -20,7 +20,7 @@ import { DeskInbox } from '../src/components/desk/DeskInbox.js';
 import { ProjectHome } from '../src/components/desk/ProjectHome.js';
 import { usePeekJump } from '../src/hooks/usePeekJump.js';
 import { NEEDS_QUIET_MS, resetSettledNeedsForTest, useSettledNeeds } from '../src/hooks/useNeedsRows.js';
-import { resetDeskSnoozes } from '../src/store/deskSnoozes.js';
+import { resetDeskSnoozes, useDeskSnoozes } from '../src/store/deskSnoozes.js';
 import { gateFromInfo, useGateStore } from '../src/store/gates.js';
 import { useMembershipStore } from '../src/store/membership.js';
 import { useNeedsSources } from '../src/store/needsSources.js';
@@ -152,9 +152,20 @@ describe('studio#1430 F1: a project inbox treats the run crew holds back as snoo
     await act(async () => { fireEvent.click(screen.getByTestId('desk-inbox-folder-snoozed')); });
     await act(async () => { fireEvent.click(within(screen.getByTestId('desk-inbox-snoozed-item')).getByTestId('desk-inbox-wake')); });
     await waitFor(() => expect(refresh).toHaveBeenCalledWith({ force: true }));
-    expect(useSystemStore.getState().snapshot?.snoozed ?? []).toEqual([]);
+    // The last snapshot read still lists the hold; the Wake ended it here all the same.
+    expect(useSystemStore.getState().snapshot?.snoozed?.map((h) => h.wakeKey)).toEqual([HELD.snooze.key]);
     await act(async () => { fireEvent.click(screen.getByTestId('desk-inbox-folder-all')); });
     await waitFor(() => expect(listed()).toContain('group:approval'));
+  });
+
+  it('a Wake from ranked /needs (the same store Wake) frees the run here too, even when the re-read fails (codex-check W20)', async () => {
+    refresh.mockRejectedValue(new Error('crew did not answer'));
+    render(<DeskInbox rows={[...rowsOf(), failed(2)]} {...props} />);
+    await waitFor(() => expect(listed()).not.toContain(heldKey()));
+    // NeedsRanked's SnoozedItem wakes through the shared store, then re-reads /system (which fails here).
+    await act(async () => { expect(await useDeskSnoozes.getState().wake(HELD.snooze.key)).toBeNull(); });
+    await waitFor(() => expect(listed()).toContain('group:approval'));
+    expect(screen.getByTestId('desk-inbox-count')).not.toHaveTextContent('snoozed');
   });
 
   it('a hold whose end has passed holds nothing, even in the last snapshot read (a failed re-read keeps it)', async () => {

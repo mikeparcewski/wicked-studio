@@ -51,12 +51,13 @@ export function snoozeOf(row: NeedRow, byKey: Readonly<Record<string, DeskSnooze
 
 /** (studio#1430) The runs a ranked crew holds back for a person's snooze (`/system.snoozed[]`), each with its held item.
  *  A hold whose end has passed by `now` is over, even when the snapshot that listed it is the last one read (a failed
- *  re-read keeps it), so a stale snapshot never hides a run past its end. Empty against an older crew. */
-export function crewHeldRuns(snapshot: SystemSnapshot | null, now: number): ReadonlyMap<string, SystemSnoozed> {
+ *  re-read keeps it), so a stale snapshot never hides a run past its end; so is one this page woke (`woken`, the
+ *  snoozes store's), whichever surface woke it. Empty against an older crew. */
+export function crewHeldRuns(snapshot: SystemSnapshot | null, now: number, woken: Readonly<Record<string, true>> = {}): ReadonlyMap<string, SystemSnoozed> {
   const out = new Map<string, SystemSnoozed>();
   if (snapshot === null || snapshot.ranked !== true) return out;
   for (const h of snapshot.snoozed ?? []) {
-    if (h.runId == null || out.has(h.runId) || (h.until !== null && h.until <= now)) continue;
+    if (h.runId == null || out.has(h.runId) || (h.until !== null && h.until <= now) || (h.wakeKey !== null && woken[h.wakeKey] === true)) continue;
     out.set(h.runId, h);
   }
   return out;
@@ -69,8 +70,8 @@ export function crewHeldOf(row: NeedRow, held: ReadonlyMap<string, SystemSnoozed
 }
 
 /** The rows whose run no ranked crew holds back (studio#1430): what a project's count counts. */
-export function withoutCrewHeld(rows: readonly NeedRow[], snapshot: SystemSnapshot | null, now: number): NeedRow[] {
-  const held = crewHeldRuns(snapshot, now);
+export function withoutCrewHeld(rows: readonly NeedRow[], snapshot: SystemSnapshot | null, now: number, woken: Readonly<Record<string, true>> = {}): NeedRow[] {
+  const held = crewHeldRuns(snapshot, now, woken);
   return held.size === 0 ? [...rows] : rows.filter((r) => crewHeldOf(r, held) === null);
 }
 

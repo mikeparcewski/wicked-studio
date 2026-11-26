@@ -92,7 +92,8 @@ export function DeskInbox({ rows: allRows, runs, navigate, now, settled, agentNa
   useEffect(() => { if (retrySnoozesAt !== null) void loadSnoozes(); }, [retrySnoozesAt, loadSnoozes]);
   // studio#1430: a run a ranked crew holds back for a snooze is snoozed here too, so the inbox counts what /needs counts.
   const snapshot = useSystemStore((st) => (st.mode === 'system' ? st.snapshot : null));
-  const held = useMemo(() => crewHeldRuns(snapshot, now), [snapshot, now]);
+  const woken = useDeskSnoozes((st) => st.woken);
+  const held = useMemo(() => crewHeldRuns(snapshot, now, woken), [snapshot, now, woken]);
   const phone = usePhone();
   const { awake: rows, snoozed } = useMemo(() => splitSnoozed(allRows, snoozes.byKey, now, held), [allRows, snoozes.byKey, now, held]);
   const canSnooze = snoozes.phase === 'ready';
@@ -230,15 +231,10 @@ function usePhone(): boolean {
   return phone;
 }
 
-/** Re-read /system after a crew-held snooze or wake: crew moved the item, so /needs, the badge and this inbox follow. */
+/** Re-read /system after a crew-held snooze or wake: crew moved the item, so /needs, the badge and this inbox follow. (A
+ *  woken hold is already over here, whatever the re-read does: the snoozes store's `woken`, studio#1430.) */
 const reread = (): Promise<void> => useSystemStore.getState().refresh({ force: true }).then(() => undefined, () => undefined);
 
-/** After crew woke a held item: drop it from the last snapshot read at once, then read /system again, so a re-read that
- *  fails leaves the woken run awake, never held by the stale snapshot. */
-const forgetHeld = (wakeKey: string): void => {
-  useSystemStore.setState((st) => (st.snapshot === null ? {} : { snapshot: { ...st.snapshot, snoozed: (st.snapshot.snoozed ?? []).filter((h) => h.wakeKey !== wakeKey) } }));
-  void reread();
-};
 
 /** Focus that nobody holds (the control that had it left the page), so a settled snooze may place it. */
 const focusLost = (box: HTMLElement | null): boolean => {
@@ -258,7 +254,7 @@ function SnoozedItem({ item: { row, until, wakeKey, crew }, now, navigate }: { i
       {until !== null && <span className="wk-viz-meta" data-testid="desk-inbox-snoozed-until">Back {snoozeEndWords(until, now)}</span>}
       {wakeKey !== null && (
         <button type="button" data-testid="desk-inbox-wake" className="wk-btn wk-btn--quiet wk-btn--sm" disabled={state.kind === 'sending'}
-          onClick={() => { setState({ kind: 'sending' }); void wake(wakeKey).then((why) => { setState(why === null ? { kind: 'idle' } : { kind: 'failed', words: why }); if (why === null && crew) forgetHeld(wakeKey); }); }}>
+          onClick={() => { setState({ kind: 'sending' }); void wake(wakeKey).then((why) => { setState(why === null ? { kind: 'idle' } : { kind: 'failed', words: why }); if (why === null && crew) void reread(); }); }}>
           Wake now
         </button>
       )}
