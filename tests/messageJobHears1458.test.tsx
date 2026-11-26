@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -102,6 +102,13 @@ describe('round 1 (codex P2, P3): the power state as the page holds it now', () 
     render(<SessionPage sessionId={CHAT} runs={[POWER, ASK]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
     await screen.findByTestId('session-composer-scope');
     expect(screen.queryByTestId('session-composer-message-job')).toBeNull();
+  });
+
+  it('round 2 (codex P3): a power-off frame that arrives while the page is open takes the link away', async () => {
+    render(<SessionPage sessionId={CHAT} runs={[POWER, ASK]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await screen.findByTestId('session-composer-message-job');
+    act(() => { useRunEventStore.setState({ byRun: { 'r-job': [{ type: 'powerToggled', session: 'r-job', ts: powerAt(30), toggle: { at: powerAt(30), on: false, by: 'you', reason: null, stayPhased: [] } }] } } as never); });
+    await waitFor(() => expect(screen.queryByTestId('session-composer-message-job')).toBeNull());
   });
 
   it('this page\'s own power-off answer (before the run list catches up): no link', async () => {
