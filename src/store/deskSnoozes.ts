@@ -14,9 +14,6 @@ type Phase = 'idle' | 'loading' | 'ready' | 'unsupported' | 'failed';
 interface State {
   phase: Phase;
   byKey: Record<string, DeskSnooze>;
-  /** (studio#1430) When this page last woke each key, on this browser's clock: a crew hold with that key is trusted only
-   *  from a /system read asked after it. */
-  wokeAt: Readonly<Record<string, number>>;
   load: () => Promise<void>;
   /** Snooze one item; resolves with null when done, else the words saying why not. */
   snooze: (key: string, until: string, severity: number) => Promise<string | null>;
@@ -36,7 +33,6 @@ function refusal(e: unknown, doing: 'snooze' | 'wake'): string {
 export const useDeskSnoozes = create<State>((set, get) => ({
   phase: 'idle',
   byKey: {},
-  wokeAt: {},
   load: async () => {
     const mine = ++readSeq;
     if (get().phase === 'idle') set({ phase: 'loading' });
@@ -63,7 +59,7 @@ export const useDeskSnoozes = create<State>((set, get) => ({
   wake: async (key) => {
     try {
       await deskSnoozeApi.wake(key);
-      set((st) => { const byKey = { ...st.byKey }; delete byKey[key]; return { byKey, wokeAt: { ...st.wokeAt, [key]: Date.now() } }; });
+      set((st) => { const byKey = { ...st.byKey }; delete byKey[key]; return { byKey }; });
       void get().load();
       return null;
     } catch (e) {
@@ -75,5 +71,5 @@ export const useDeskSnoozes = create<State>((set, get) => ({
 /** Test seam. */
 export function resetDeskSnoozes(): void {
   readSeq += 1;
-  useDeskSnoozes.setState({ phase: 'idle', byKey: {}, wokeAt: {} });
+  useDeskSnoozes.setState({ phase: 'idle', byKey: {} });
 }

@@ -1,18 +1,15 @@
 /**
- * studio#1430: a snooze on the ranked Needs-you page makes crew hold the item out of `/system.attention[]` and list it in
- * `/system.snoozed[]` (wicked-crew `holdSnoozed`). The ranked surfaces follow crew; these surfaces read studio's own fold,
- * so they kept counting and listing the held run. The rule: on a ranked crew, a run in `snoozed[]` has its gate snoozed
- * everywhere, with Wake by the held item's `wakeKey`, and the inbox snoozes with crew's own key where crew has one. A hold
- * counts only while the last /system read succeeded and was asked after all this page saw for the run (its gate
- * arriving, a Wake); otherwise the item shows, for a poll at most (DES-S-NEEDS-HOLDS, below).
- *  - F1: a project's inbox and its count leave the held run out (it waits in Snoozed); its home says "1 snoozed".
- *  - F3: the peek's top item is never the held run.
- *  - F4: a gate snoozed in a project's inbox uses crew's `attention:` key and rank, so crew holds it back too.
+ * studio#1430 (narrowed, option C of DES-S-NEEDS-HOLDS): a snooze on the ranked Needs-you page makes crew hold the item
+ * out of `/system.attention[]` and list it in `/system.snoozed[]` (wicked-crew `holdSnoozed`). Studio says so where its
+ * ranked surfaces would otherwise go quiet, and the inbox snoozes on a phone; it does not apply crew's holds to its own
+ * fold (that is the follow-up filed from this PR).
+ *  - F2 (tests/nerveCenterPage.test.tsx): the Nerve Center's Attention tab says how many are snoozed, with the way back.
+ *  - The project home says "N snoozed" for its runs in crew's `snoozed[]`, with the way to Needs you.
  *  - F5: on a phone (the reading pane hidden) each row carries its own Snooze.
- * The wire shapes are crew's (`attentionSnooze`, packages/crew/src/api/desk-snoozes.ts:54, and `holdSnoozed` at :69), as
+ * The wire shapes are crew's (`holdSnoozed`, packages/crew/src/api/desk-snoozes.ts:69), as
  * tests/needsRanked.snooze1416.test.tsx copies them.
  */
-import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { normalizeSnapshot, type SystemSnapshot } from '../src/api/system.js';
 import type { Project, SessionView } from '../src/api/types.js';
@@ -20,12 +17,8 @@ import { needsYouRows, type NeedRow, type NeedsYouInputs } from '../src/board/ne
 import { snoozeKey } from '../src/board/deskSnooze.js';
 import { DeskInbox } from '../src/components/desk/DeskInbox.js';
 import { ProjectHome } from '../src/components/desk/ProjectHome.js';
-import { usePeekJump } from '../src/hooks/usePeekJump.js';
-import { NEEDS_QUIET_MS, resetSettledNeedsForTest, useSettledNeeds } from '../src/hooks/useNeedsRows.js';
-import { resetDeskSnoozes, useDeskSnoozes } from '../src/store/deskSnoozes.js';
+import { resetDeskSnoozes } from '../src/store/deskSnoozes.js';
 import { gateFromInfo, useGateStore } from '../src/store/gates.js';
-import { useMembershipStore } from '../src/store/membership.js';
-import { useNeedsSources } from '../src/store/needsSources.js';
 import { resetSystemStore, useSystemStore } from '../src/store/systemSnapshot.js';
 import { makeView } from './factories.js';
 
@@ -65,10 +58,9 @@ const snap = (over: Record<string, unknown> = {}): SystemSnapshot => ({ ...norma
 
 const run = (id: string, status: string): SessionView =>
   ({ session: { id, status, problem: `problem ${id}`, archived_at: null }, units: [] }) as unknown as SessionView;
-// `seenAt: 1`: this page saw both gates long before any /system read in this file was asked.
 const gates = {
-  '290a7fee': { ...gateFromInfo({ runId: '290a7fee', ord: 4, prompt: 'Escalation: the seat died', lifecycle: 'open', receivedAt: HELD_AT }), seenAt: 1 },
-  '68c26704': { ...gateFromInfo({ runId: '68c26704', ord: 1, prompt: 'Approve the plan?', lifecycle: 'open', receivedAt: GATE_AT }), seenAt: 1 },
+  '290a7fee': gateFromInfo({ runId: '290a7fee', ord: 4, prompt: 'Escalation: the seat died', lifecycle: 'open', receivedAt: HELD_AT }),
+  '68c26704': gateFromInfo({ runId: '68c26704', ord: 1, prompt: 'Approve the plan?', lifecycle: 'open', receivedAt: GATE_AT }),
 };
 const RUNS = [run('290a7fee', 'awaiting_human'), run('68c26704', 'awaiting_human')];
 const rowsOf = (over: Partial<NeedsYouInputs> = {}): NeedRow[] => needsYouRows({
@@ -90,11 +82,8 @@ beforeEach(() => {
   resetSystemStore();
   resetDeskSnoozes();
   refresh.mockReset().mockResolvedValue(undefined);
-  // The last /system read: it succeeded, asked a moment ago (systemSnapshot.ts readTick's success answer).
-  const read = Date.now() - 1000;
-  useSystemStore.setState({ mode: 'system', snapshot: snap(), snapshotAt: read + 100, snapshotAskedAt: read, snapshotError: null, healthAt: read + 100, healthError: null, refresh } as never);
-  // This page holds the held run's gate (a hold holds only a gate the page has).
-  useGateStore.setState({ gates: { '290a7fee': gates['290a7fee'] } });
+  useSystemStore.setState({ mode: 'system', snapshot: snap(), refresh } as never);
+  useGateStore.setState({ gates: {} });
   calls = [];
   snoozes = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
@@ -117,8 +106,6 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); resetSystemStore(); });
 
 const props = { runs: RUNS, navigate: vi.fn(), now: NOW, settled: 'complete' as const, agentName: (s: string) => s };
 const listed = (): string[] => screen.queryAllByTestId('desk-inbox-row').map((b) => b.getAttribute('data-key') ?? '');
-const heldKey = (): string => rowsOf().find((r) => r.key.endsWith('290a7fee'))!.key;
-const awakeKey = (): string => rowsOf().find((r) => r.key.endsWith('68c26704'))!.key;
 /** A window `phone` ? 390 : 1440 px wide: each width query answers as it would there (the inbox reads 767 and 768). */
 const phoneWidth = (phone: boolean): void => {
   const width = phone ? 390 : 1440;
@@ -127,74 +114,7 @@ const phoneWidth = (phone: boolean): void => {
     addEventListener: () => undefined, removeEventListener: () => undefined, addListener: () => undefined, removeListener: () => undefined, dispatchEvent: () => false }));
 };
 
-describe('studio#1430 F1: a project inbox treats the run crew holds back as snoozed', () => {
-  it('the held run leaves the list and the count, waits in Snoozed with crew\'s end, and Wake sends the held wakeKey', async () => {
-    refresh.mockImplementation(async () => { useSystemStore.setState({ snapshot: snap({ attention: [GATE, HELD], snoozed: [] }) }); });
-    render(<DeskInbox rows={[...rowsOf(), failed(2)]} {...props} />);
-    await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
-    await waitFor(() => expect(listed()).not.toContain(heldKey()));
-    expect([...listed()].sort()).toEqual([awakeKey(), 'fail:run-2'].sort());
-    expect(screen.getByTestId('desk-inbox-count')).toHaveTextContent('2 waiting');
-    expect(screen.getByTestId('desk-inbox-count')).toHaveTextContent('· 1 snoozed');
-    await act(async () => { fireEvent.click(screen.getByTestId('desk-inbox-folder-snoozed')); });
-    const item = screen.getByTestId('desk-inbox-snoozed-item');
-    expect(item).toHaveAttribute('data-key', heldKey());
-    expect(within(item).getByTestId('desk-inbox-snoozed-until').textContent).toMatch(/^Back today \d+:\d\d$/);
-    await act(async () => { fireEvent.click(within(item).getByTestId('desk-inbox-wake')); });
-    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE')).toBe(true));
-    expect(calls.find((c) => c.method === 'DELETE')!.url.endsWith(`/desk/snoozes/${encodeURIComponent(HELD.snooze.key)}`)).toBe(true);
-    // crew moved the item back: /system is read again (forced: a read already out may predate the wake), so the inbox,
-    // /needs and the badge follow.
-    await waitFor(() => expect(refresh).toHaveBeenCalledWith({ force: true }));
-    await act(async () => { fireEvent.click(screen.getByTestId('desk-inbox-folder-all')); });
-    await waitFor(() => expect(listed()).toEqual(expect.arrayContaining(['group:approval', 'fail:run-2'])));
-    expect(screen.getByTestId('desk-inbox-count')).not.toHaveTextContent('snoozed');
-  });
-
-  it('a woken run stays awake when the re-read fails: the last snapshot no longer holds it (codex r1)', async () => {
-    refresh.mockRejectedValue(new Error('crew did not answer'));
-    render(<DeskInbox rows={[...rowsOf(), failed(2)]} {...props} />);
-    await waitFor(() => expect(listed()).not.toContain(heldKey()));
-    await act(async () => { fireEvent.click(screen.getByTestId('desk-inbox-folder-snoozed')); });
-    await act(async () => { fireEvent.click(within(screen.getByTestId('desk-inbox-snoozed-item')).getByTestId('desk-inbox-wake')); });
-    await waitFor(() => expect(refresh).toHaveBeenCalledWith({ force: true }));
-    // The last snapshot read still lists the hold; the Wake ended it here all the same.
-    expect(useSystemStore.getState().snapshot?.snoozed?.map((h) => h.wakeKey)).toEqual([HELD.snooze.key]);
-    await act(async () => { fireEvent.click(screen.getByTestId('desk-inbox-folder-all')); });
-    await waitFor(() => expect(listed()).toContain('group:approval'));
-  });
-
-  it('a hold whose end has passed holds nothing, even in the last snapshot read (a failed re-read keeps it)', async () => {
-    useSystemStore.setState({ snapshot: snap({ snoozed: [{ ...HELD, until: iso(NOW - 1) }] }) });
-    render(<DeskInbox rows={[...rowsOf(), failed(2)]} {...props} />);
-    await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
-    await waitFor(() => expect([...listed()].sort()).toEqual(['fail:run-2', 'group:approval']));
-    expect(screen.getByTestId('desk-inbox-count')).not.toHaveTextContent('snoozed');
-  });
-
-  it('an older crew (no ranked snapshot) holds nothing back', async () => {
-    useSystemStore.setState({ mode: 'fallback', snapshot: null } as never);
-    render(<DeskInbox rows={[...rowsOf(), failed(2)]} {...props} />);
-    await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
-    // Both gates wait (the queue groups the two approvals) and nothing is snoozed.
-    await waitFor(() => expect([...listed()].sort()).toEqual(['fail:run-2', 'group:approval']));
-    expect(screen.getByTestId('desk-inbox-count')).not.toHaveTextContent('snoozed');
-  });
-
-  it('the project\'s count leaves the held run out', () => {
-    vi.useFakeTimers({ now: NOW });
-    try {
-      resetSettledNeedsForTest();
-      const t = Date.now();
-      useNeedsSources.setState({ chats: [], proposals: [], repos: [], campaigns: [], readAt: { chats: t, proposals: t, repos: t, campaigns: t }, readOk: {} } as never);
-      useSystemStore.setState({ healthAt: t, snapshotAt: t } as never);
-      const rows = rowsOf();
-      const { result } = renderHook(() => useSettledNeeds(rows, true, false, 'proj-1430', 2));
-      act(() => { vi.advanceTimersByTime(NEEDS_QUIET_MS + 50); });
-      expect(result.current).toMatchObject({ phase: 'complete', count: 1 });
-    } finally { vi.useRealTimers(); }
-  });
-
+describe('studio#1430: the project home says what crew holds back', () => {
   it('the project home says what crew holds back, with the way to it', () => {
     const PROJECT = { id: 'p1', name: 'Core', description: null, status: 'active', scope: 'project:p1', created_at: 0, updated_at: 0 } as unknown as Project;
     const views = [makeView({ id: '290a7fee', status: 'awaiting_human', problem: 'wicked-core#840' } as never, [])];
@@ -202,161 +122,17 @@ describe('studio#1430 F1: a project inbox treats the run crew holds back as snoo
     render(<ProjectHome project={PROJECT} projectId="p1" runs={views} allRuns={views} needRows={[]} repos={[]} now={NOW} known loading={false} navigate={navigate} isDefault={false} />);
     expect(screen.getByTestId('project-needs-snoozed')).toHaveTextContent('1 snoozed, not counted until it comes back');
     fireEvent.click(screen.getByTestId('project-needs-snoozed-open'));
-    expect(navigate).toHaveBeenCalledWith(expect.stringMatching(/work/u));
+    expect(navigate).toHaveBeenCalledWith('/needs');
   });
 });
 
-/**
- * DES-S-NEEDS-HOLDS (coord ruling, option B): a crew hold hides an item only while the last /system read SUCCEEDED and
- * was asked after everything this page saw for that run (a gate arrival on the browser clock, or a Wake). Otherwise the
- * item shows: a snoozed item can come back for one poll; work is never hidden. The three codex-check W20 cases first.
- */
-describe('a crew hold is fail-open: it hides only on a fresh, successful read (DES-S-NEEDS-HOLDS)', () => {
-  const HELD_MS = Date.parse(HELD_AT);
-  // systemSnapshot.ts readTick: a /system read that fails keeps the last snapshot and sets snapshotError.
-  const failRead = (): void => { useSystemStore.setState({ snapshotError: 'crew did not answer in time' }); };
-  afterEach(() => { vi.useRealTimers(); });
-
-  it('W20 #1: a Wake from ranked /needs (the shared store Wake), then a failed read: the woken run shows', async () => {
-    render(<DeskInbox rows={[...rowsOf(), failed(2)]} {...props} />);
-    await waitFor(() => expect(listed()).not.toContain(heldKey()));
-    await act(async () => { expect(await useDeskSnoozes.getState().wake(HELD.snooze.key)).toBeNull(); });
-    act(() => { failRead(); });
-    await waitFor(() => expect(listed()).toContain('group:approval'));
-    expect(screen.getByTestId('desk-inbox-count')).not.toHaveTextContent('snoozed');
-  });
-
-  it('W20 #2: under a hold that names no gate (id only), the run\'s next gate arrives 20 s after the held one: it shows', async () => {
-    const idOnly = { ...HELD, target: { kind: 'run', runId: '290a7fee', interactionId: 'ir_4' } };
-    vi.useFakeTimers({ now: HELD_MS + 10_000, toFake: ['Date'] });
-    useSystemStore.setState({ snapshot: snap({ snoozed: [idOnly] }), snapshotAskedAt: Date.now() - 200, snapshotAt: Date.now() } as never);
-    vi.setSystemTime(HELD_MS + 20_000);
-    act(() => { useGateStore.getState().ingest({ type: 'awaitingHuman', session: '290a7fee', ord: 5, prompt: 'Approve the retry plan?' } as never); });
-    render(<DeskInbox rows={[...rowsOf({ gates: { ...gates, '290a7fee': useGateStore.getState().gates['290a7fee']! } }), failed(2)]} {...props} />);
+describe('studio#1430: a gate in the inbox offers no Snooze (it could not leave this inbox)', () => {
+  it('on a ranked crew that lists a snooze key for the gate, the reading pane still draws none', async () => {
+    phoneWidth(false);
+    render(<DeskInbox rows={rowsOf().filter((r) => r.key.endsWith('68c26704'))} {...props} />);
     await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
-    await waitFor(() => expect([...listed()].sort()).toEqual(['fail:run-2', 'group:approval']));
-    expect(screen.getByTestId('desk-inbox-count')).not.toHaveTextContent('snoozed');
-  });
-
-  it('W20 #3: the same ord asked again 31 s after the held gate opened, after the read was asked: it shows (the read succeeded)', async () => {
-    vi.useFakeTimers({ now: HELD_MS + 10_000, toFake: ['Date'] });
-    useSystemStore.setState({ snapshotAskedAt: Date.now() - 200, snapshotAt: Date.now() } as never);
-    vi.setSystemTime(HELD_MS + 31_000);
-    act(() => { useGateStore.getState().ingest({ type: 'awaitingHuman', session: '290a7fee', ord: 4, prompt: 'Escalation: the seat died again' } as never); });
-    render(<DeskInbox rows={[...rowsOf({ gates: { ...gates, '290a7fee': useGateStore.getState().gates['290a7fee']! } }), failed(2)]} {...props} />);
-    await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
-    await waitFor(() => expect([...listed()].sort()).toEqual(['fail:run-2', 'group:approval']));
-    expect(screen.getByTestId('desk-inbox-count')).not.toHaveTextContent('snoozed');
-  });
-
-  it('studio#1470: a key woken here is held again once a read asked after the Wake lists it (someone snoozed it again)', async () => {
-    render(<DeskInbox rows={[...rowsOf(), failed(2)]} {...props} />);
-    await waitFor(() => expect(listed()).not.toContain(heldKey()));
-    await act(async () => { expect(await useDeskSnoozes.getState().wake(HELD.snooze.key)).toBeNull(); });
-    await waitFor(() => expect(listed()).toContain('group:approval'));
-    // Another tab snoozes the same item again; this page's next read, asked after the Wake, lists the hold.
-    const asked = Date.now() + 1;
-    act(() => { useSystemStore.setState({ snapshot: snap(), snapshotAskedAt: asked, snapshotAt: asked + 50, snapshotError: null } as never); });
-    await waitFor(() => expect([...listed()].sort()).toEqual([awakeKey(), 'fail:run-2'].sort()));
-    expect(screen.getByTestId('desk-inbox-count')).toHaveTextContent('· 1 snoozed');
-  });
-
-  it('a failed read holds nothing, though its last snapshot lists the hold', async () => {
-    failRead();
-    render(<DeskInbox rows={[...rowsOf(), failed(2)]} {...props} />);
-    await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
-    await waitFor(() => expect([...listed()].sort()).toEqual(['fail:run-2', 'group:approval']));
-  });
-
-  it('a failed /health read holds nothing either (crew did not answer)', async () => {
-    useSystemStore.setState({ healthError: 'Failed to fetch' });
-    render(<DeskInbox rows={[...rowsOf(), failed(2)]} {...props} />);
-    await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
-    await waitFor(() => expect([...listed()].sort()).toEqual(['fail:run-2', 'group:approval']));
-  });
-
-  it('a hold holds only the run\'s gate: the held run\'s failure shows once its gate is gone', async () => {
-    act(() => { useGateStore.getState().ingest({ type: 'sessionFailed', session: '290a7fee' } as never); });
-    const failedHere: NeedRow = { ...failed(1), key: 'fail:290a7fee', subject: 'wicked-core#840', subjectPath: '/run/290a7fee', action: { kind: 'open', path: '/run/290a7fee', label: 'Open' } };
-    render(<DeskInbox rows={[...rowsOf({ gates: { '68c26704': gates['68c26704'] } }).filter((r) => r.key !== heldKey()), failedHere]} {...props} />);
-    await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
-    await waitFor(() => expect([...listed()].sort()).toEqual([awakeKey(), 'fail:290a7fee'].sort()));
-    expect(screen.getByTestId('desk-inbox-count')).not.toHaveTextContent('snoozed');
-  });
-
-  it('a gate row this page holds no gate for (the runs list says it waits; its gate read is still out) shows', async () => {
-    useGateStore.setState({ gates: {} });
-    render(<DeskInbox rows={[...rowsOf(), failed(2)]} {...props} />);
-    await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
-    await waitFor(() => expect([...listed()].sort()).toEqual(['fail:run-2', 'group:approval']));
-  });
-
-  it('a fresh, successful read asked after the gate arrived still hides it', async () => {
-    act(() => { useGateStore.getState().ingest({ type: 'awaitingHuman', session: '290a7fee', ord: 4, prompt: 'Escalation: the seat died' } as never); });
-    const asked = Date.now() + 1;
-    useSystemStore.setState({ snapshotAskedAt: asked, snapshotAt: asked + 50, snapshotError: null } as never);
-    render(<DeskInbox rows={[...rowsOf(), failed(2)]} {...props} />);
-    await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
-    await waitFor(() => expect([...listed()].sort()).toEqual([awakeKey(), 'fail:run-2'].sort()));
-    expect(screen.getByTestId('desk-inbox-count')).toHaveTextContent('· 1 snoozed');
-  });
-});
-
-describe('studio#1430 F3: the peek never jumps to the run crew holds back', () => {
-  function Peek({ rows }: { rows: NeedRow[] }): React.ReactElement {
-    const view = usePeekJump(RUNS, vi.fn(), rows);
-    return <span data-testid="peek-run" data-run={view.target?.runId ?? 'none'} />;
-  }
-  beforeEach(() => {
-    // The peek reads the clock (a hold ends at its `until`): this file's NOW.
-    vi.useFakeTimers({ now: NOW, toFake: ['Date'] });
-    useGateStore.setState({ gates });
-    useMembershipStore.setState({ projectIdByRun: {}, attachedAtByRun: {} });
-  });
-  afterEach(() => { vi.useRealTimers(); });
-
-  it('the awake gate is the top item, though the held one is older', () => {
-    render(<Peek rows={rowsOf()} />);
-    expect(screen.getByTestId('peek-run')).toHaveAttribute('data-run', '68c26704');
-  });
-
-  it('with only the held gate left, nothing needs you (its live gate is not picked up either)', () => {
-    useGateStore.setState({ gates: { '290a7fee': gates['290a7fee'] } });
-    render(<Peek rows={rowsOf().filter((r) => r.key === heldKey())} />);
-    expect(screen.getByTestId('peek-run')).toHaveAttribute('data-run', 'none');
-  });
-});
-
-describe('studio#1430 F4: a gate snoozed in the inbox uses crew\'s key, so crew holds it back too', () => {
-  it('sends crew\'s attention key and rank, then reads /system again', async () => {
-    // The re-read is asked after the snooze, as systemSnapshot.ts readTick stamps it.
-    refresh.mockImplementation(async () => { useSystemStore.setState({ snapshot: snap({ attention: [], snoozed: [HELD, { ...GATE, until: iso(NOW + H) }] }), snapshotAskedAt: Date.now(), snapshotAt: Date.now() } as never); });
-    useGateStore.setState({ gates });
-    render(<DeskInbox rows={rowsOf().filter((r) => r.key === awakeKey())} {...props} />);
-    await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
-    await act(async () => { fireEvent.click(screen.getAllByTestId('desk-inbox-row').find((b) => b.getAttribute('data-key') === awakeKey())!); });
-    const pane = screen.getByTestId('desk-inbox-read');
-    await act(async () => { fireEvent.click(within(pane).getByTestId('desk-inbox-snooze')); });
-    await act(async () => { fireEvent.click(within(pane).getByTestId('desk-inbox-snooze-hour')); });
-    await waitFor(() => expect(calls.some((c) => c.method === 'PUT')).toBe(true));
-    const put = calls.find((c) => c.method === 'PUT')!;
-    expect(put.url.endsWith(`/desk/snoozes/${encodeURIComponent(GATE.snooze.key)}`)).toBe(true);
-    expect(put.body).toEqual({ until: iso(NOW + H), severity: 101 });
-    await waitFor(() => expect(refresh).toHaveBeenCalledWith({ force: true }));
-    await waitFor(() => expect(listed()).toEqual([]));
-    expect(screen.getByTestId('desk-inbox-count')).toHaveTextContent('1 snoozed');
-  });
-
-  it('focus reaches the All tab while the re-read after a crew-key snooze is still out (codex r2)', async () => {
-    refresh.mockImplementation(() => new Promise<undefined>(() => undefined));
-    render(<DeskInbox rows={rowsOf().filter((r) => r.key === awakeKey())} {...props} />);
-    await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
-    await act(async () => { fireEvent.click(screen.getAllByTestId('desk-inbox-row').find((b) => b.getAttribute('data-key') === awakeKey())!); });
-    const pane = screen.getByTestId('desk-inbox-read');
-    await act(async () => { fireEvent.click(within(pane).getByTestId('desk-inbox-snooze')); });
-    await act(async () => { fireEvent.click(within(pane).getByTestId('desk-inbox-snooze-hour')); });
-    await waitFor(() => expect(refresh).toHaveBeenCalledWith({ force: true }));
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('desk-inbox-folder-all')));
+    await act(async () => { fireEvent.click(screen.getAllByTestId('desk-inbox-row')[0]!); });
+    expect(within(screen.getByTestId('desk-inbox-read')).queryByTestId('desk-inbox-snooze')).toBeNull();
   });
 });
 

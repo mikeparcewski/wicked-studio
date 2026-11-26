@@ -54,10 +54,6 @@ export interface OpenGate {
   /** F31: set when the gate came from a `GET /runs/:id/gate` read (a page load, a late join), not a live frame. The
    *  toast strip orders read gates by their runs' age and queues live ones after them in arrival order. */
   fromRead?: true;
-  /** (studio#1430) When this page saw this gate occurrence, on this browser's clock: a live frame, or a read that crew's
-   *  own time does not prove is the occurrence read before. A crew hold on the run is trusted only from a /system read
-   *  asked after it. */
-  seenAt?: number;
 }
 
 /** `recommended` off a gate payload: a non-negative integer, else absent. */
@@ -257,10 +253,7 @@ export const useGateStore = create<GateStore>((set) => {
 
   setGate: (gate) => {
     bump(gate.runId);
-    // studio#1430: a gate set here carries no sighting (`seenAt`), so no crew hold can hide it until a read or frame stamps one.
-    const unseen = { ...gate };
-    delete unseen.seenAt;
-    put(unseen);
+    put(gate);
   },
 
   clearGate: (runId) => {
@@ -286,11 +279,8 @@ export const useGateStore = create<GateStore>((set) => {
       // crew's own times compare (`crewAt`), so a same-ord gate asked again still reads as a new one.
       const sameShape = prev !== undefined && prev.ord === gate.ord && prev.prompt === gate.prompt && prev.gateKind === gate.gateKind;
       const same = sameShape && (prev.actionsRead !== true || crewAt[runId] === gate.receivedAt);
-      // studio#1430: when this page saw the occurrence stays put only where crew's own time proves it is the one read
-      // before; the first read after a live frame (a frame may have been missed) counts as a new sighting.
-      const seen = sameShape && prev.seenAt !== undefined && crewAt[runId] === gate.receivedAt ? prev.seenAt : Date.now();
       crewAt[runId] = gate.receivedAt;
-      const next = { ...(same ? { ...gate, receivedAt: prev.receivedAt } : gate), seenAt: seen };
+      const next = same ? { ...gate, receivedAt: prev.receivedAt } : gate;
       put(prev === undefined || prev.fromRead === true ? { ...next, fromRead: true } : next);
       return true;
     }
@@ -354,7 +344,6 @@ export const useGateStore = create<GateStore>((set) => {
                   prompt: event.prompt,
                   lifecycle: 'open',
                   receivedAt: Date.now(),
-                  seenAt: Date.now(),
                   // Omitted rather than set to `undefined`: `exactOptionalPropertyTypes`.
                   ...(choices !== undefined ? { choices } : {}),
                   ...gateKindOf(event),
