@@ -15,6 +15,8 @@ import { statusWord } from '../../board/statusWords.js';
 import { sessionPath } from '../../board/sessionModel.js';
 import { createdAtMs } from '../../board/windowStats.js';
 import type { Navigate } from '../../hooks/useRoute.js';
+import { useStandInChoice } from '../../hooks/useStandInChoice.js';
+import { standInChoiceOf } from '../../board/standIn.js';
 import { agentColor } from '../charts/Chart.js';
 import { Segmented, Skeleton } from '../ui/index.js';
 
@@ -78,6 +80,15 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
   // A launch answers for the selection it was started on, and never after the panel is gone.
   const launchGen = useRef(0);
   const mounted = useRef(true);
+  // (studio#1444) A start the stand-in card carries out lands as Start analysis's would, unless a newer start began.
+  const standIn = useStandInChoice<number, string>(
+    (body) => api.launchRun(body).then((r) => r.runId),
+    (done) => {
+      const last = done[done.length - 1];
+      if (last !== undefined && mounted.current && launchGen.current === last.meta) { setLaunch({ phase: 'done', runId: last.result }); setEditing(null); }
+    },
+    navigate,
+  );
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const addRef = useRef<HTMLDivElement | null>(null);
   const held = useRef(new Map<string, HeldSpend>());
@@ -165,12 +176,21 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
     .sort((a, b) => (createdAtMs(b) ?? 0) - (createdAtMs(a) ?? 0)).slice(0, 5), [allRuns]);
 
   const start = (): void => {
+    if (standIn.busy) return;
+    standIn.ask(null, []);
     const gen = (launchGen.current += 1);
     const current = (): boolean => mounted.current && launchGen.current === gen;
     setLaunch({ phase: 'sending' });
-    api.launchRun(analysisLaunchBody(input, editing ?? undefined)).then(
+    const body = analysisLaunchBody(input, editing ?? undefined);
+    api.launchRun(body).then(
       ({ runId }) => { if (current()) { setLaunch({ phase: 'done', runId }); setEditing(null); } },
-      (e: unknown) => { if (current()) setLaunch({ phase: 'failed', error: e instanceof Error ? e.message : String(e) }); },
+      (e: unknown) => {
+        if (!current()) return;
+        // (studio#1444) crew held it for want of helpers that did not build the work: the stand-in card, as on New job.
+        const refusal = standInChoiceOf(e);
+        if (refusal !== null) { setLaunch({ phase: 'idle' }); standIn.ask(refusal, [{ body, meta: gen }]); return; }
+        setLaunch({ phase: 'failed', error: e instanceof Error ? e.message : String(e) });
+      },
     );
   };
   const addable = options.filter((o) => !sel.includes(o.id));
@@ -324,7 +344,7 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
               <pre className="wk-und-intent" data-testid="desk-analyze-intent">{intent}</pre>
             )}
             <div className="wk-inbox-read-acts">
-              <button type="button" data-testid="desk-analyze-start" className="wk-btn wk-btn--primary" disabled={!runsShown || items.length === 0 || launch.phase === 'sending' || (editing !== null && editing.trim() === '')} onClick={start}>
+              <button type="button" data-testid="desk-analyze-start" className="wk-btn wk-btn--primary" disabled={!runsShown || items.length === 0 || launch.phase === 'sending' || standIn.busy || (editing !== null && editing.trim() === '')} onClick={start}>
                 {launch.phase === 'sending' ? 'Starting…' : 'Start analysis'}
               </button>
               {items.length > 0 && (editing === null
@@ -332,6 +352,7 @@ export function DeskUnderstand({ runsShown = true, agents, agentsRead = 'done', 
                 : <button type="button" className="wk-btn wk-btn--quiet" onClick={() => setEditing(null)}>Use the drafted words</button>)}
             </div>
             {launch.phase === 'failed' && <p className="wk-viz-meta" data-testid="desk-analyze-failed">It didn’t start. {launch.error}</p>}
+            {standIn.card('desk-analyze-standin')}
             {launch.phase === 'done' && launch.runId !== undefined && (
               <p className="wk-analyze-done" data-testid="desk-analyze-done">Analysis started.{' '}
                 <a href={sessionPath(`run:${launch.runId}`)} className="wk-link" onClick={(e) => { e.preventDefault(); navigate(sessionPath(`run:${launch.runId!}`)); }}>Open the analysis job</a>

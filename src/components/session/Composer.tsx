@@ -859,6 +859,7 @@ export function Composer({
           navigate={navigate ?? goToPath}
           handle={inline}
           onBlocker={setStartBlocker}
+          onStartedLater={(words) => { if (textNow.current === words) { setText(''); setNote(null); } }}
         />
       )}
       {suggestions.length > 0 && text === '' && !menuOpen && wfChip === null && (

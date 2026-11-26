@@ -38,7 +38,9 @@ import { RepoFindings, findingNeedsReonboard } from './RepoFindings.js';
 import { KnowMarks } from './RepoKnowledge.js';
 import { RepoTrackers } from './RepoTrackers.js';
 import { RequirementsModal } from './RequirementsModal.js';
-import { launchCaptureLearnings, onPlainClick, reindexAsPrefill } from './repoActions.js';
+import { captureLearningsBody, onPlainClick, reindexAsPrefill, startCaptureLearnings } from './repoActions.js';
+import { useStandInChoice } from '../hooks/useStandInChoice.js';
+import { standInChoiceOf } from '../board/standIn.js';
 
 /** A click the browser keeps (a new tab or window): modified, or not the primary button. */
 const modified = (e: React.MouseEvent): boolean => e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey;
@@ -161,6 +163,16 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   const capturingRef = useRef<string | null>(null);
   const captureSeq = useRef(0);
   const [captureError, setCaptureError] = useState<string | null>(null);
+  // (studio#1444) A start the stand-in card carries out opens its job, as Capture learnings would, unless a newer
+  // capture (or another repository) came first.
+  const standIn = useStandInChoice<number, string>(
+    (body) => startCaptureLearnings(body),
+    (done) => { const last = done[done.length - 1]; if (last !== undefined && captureSeq.current === last.meta) onSelectRun(last.result); },
+    navigate,
+  );
+  // Effects retire the card through the latest hook (its functions are new each render).
+  const standInNow = useRef(standIn);
+  standInNow.current = standIn;
   const entryOnboardError = useHistoryEntryValue('onboardError');
   const registrationError = typeof entryOnboardError === 'string' && entryOnboardError.trim() !== '' ? entryOnboardError : null;
   // crew-0182: the register form's project attach that did not land, said here (the repo itself is registered).
@@ -182,6 +194,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
     setRerunError(null);
     setOnboarding(false);
     setCaptureError(null);
+    standInNow.current.ask(null, []);
     // Another repository's launch in flight does not disable this one's, and its answer is dropped (even back here).
     captureSeq.current += 1;
     setCapturing(false);
@@ -419,17 +432,22 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
 
   async function captureLearnings(): Promise<void> {
     // A double click before the disabled state renders must not launch twice.
-    if (capturingRef.current !== null || repo === null) return;
+    if (capturingRef.current !== null || repo === null || standIn.busy) return;
     const forRepo = repo.id;
     const mine = ++captureSeq.current;
     capturingRef.current = forRepo;
     setCapturing(true);
     setCaptureError(null);
+    standIn.ask(null, []);
+    const body = captureLearningsBody(forRepo, repo.name, ambientProject);
     try {
-      const runId = await launchCaptureLearnings(forRepo, repo.name, ambientProject);
+      const runId = await startCaptureLearnings(body);
       if (captureSeq.current === mine) onSelectRun(runId);
     } catch (e: unknown) {
-      if (captureSeq.current === mine) setCaptureError(e instanceof Error ? e.message : String(e));
+      // (studio#1444) crew held it for want of helpers that did not build the work: the stand-in card, as on New job.
+      const refusal = standInChoiceOf(e);
+      if (captureSeq.current === mine && refusal !== null) standIn.ask(refusal, [{ body, meta: mine }]);
+      else if (captureSeq.current === mine) setCaptureError(e instanceof Error ? e.message : String(e));
     } finally {
       if (captureSeq.current === mine) { capturingRef.current = null; setCapturing(false); }
     }
@@ -476,7 +494,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
           <RepoWatchLine status={watch} repoId={repo.id} now={now} navigate={navigate} />
 
           {/* What blocks the code map, above the tabs (seen on every tab); silent when nothing does. */}
-          {(onboardErrorText !== null || hasFindings || graphFailedHere || captureError !== null || jobsFailed) && (
+          {(onboardErrorText !== null || hasFindings || graphFailedHere || captureError !== null || jobsFailed || standIn.held.length > 0) && (
             <div className="wk-rp-alerts" data-testid="repo-alerts">
               {onboardErrorText !== null && (
                 <div data-testid="repo-onboard-error" role="status" className="wk-state-banner wk-state-banner--warn">
@@ -502,6 +520,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
               {/* The jobs could not be read: the states they decide (indexed, learnings) are unknown, never "none". */}
               {jobsFailed && <StateBanner data-testid="repo-runs-failed" kind="error" what="this repository’s jobs" error="" onRetry={() => setReload((n) => n + 1)} />}
               {/* Capture learnings can start from More on any tab: its failure is said here, on every tab. */}
+              {standIn.card('repo-capture-standin')}
               {captureError !== null && (
                 <div data-testid="repo-capture-error" role="status" className="wk-state-banner wk-state-banner--warn">
                   <div className="wk-state-banner-row">
