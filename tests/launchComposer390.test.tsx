@@ -16,8 +16,8 @@ import { useNewWorkSeatsStore } from '../src/store/newWorkSeats.js';
 
 const css = readFileSync(resolve(process.cwd(), 'src/styles/sections/composer.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//gu, '');
 
-/** The bodies of every `@media (max-width: 767px) {` block, joined. */
-function phone(): string {
+/** The bodies of every `@media (max-width: 767px) {` block. */
+function phoneBlocks(): string[] {
   const out: string[] = [];
   for (let at = css.indexOf('@media (max-width: 767px) {'); at > -1; at = css.indexOf('@media (max-width: 767px) {', at + 1)) {
     let depth = 0;
@@ -27,7 +27,7 @@ function phone(): string {
       else if (css[i] === '}' && --depth === 0) { out.push(css.slice(open + 1, i)); break; }
     }
   }
-  return out.join('\n');
+  return out;
 }
 const rule = (selector: string, within: string): string | null => {
   const esc = selector.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
@@ -59,13 +59,13 @@ describe('studio#1461: the launch composer on a phone', () => {
   });
 
   it('wraps the row on a phone, the words first and full width, the buttons at the end of the next row', () => {
-    const block = phone();
+    const block = phoneBlocks().join('\n');
     expect(rule('.wk-launch-bubble', block) ?? '').toMatch(/flex-wrap:\s*wrap/u);
     const words = rule('.wk-launch-bubble > .wk-launch-problem', block) ?? '';
     expect(words).toMatch(/order:\s*-1/u);
     expect(words).toMatch(/flex:\s*1 0 100%/u);
     expect(rule('.wk-launch-bubble > .wk-launch-problem + *', block) ?? '').toMatch(/margin-inline-start:\s*auto/u);
     // Only on a phone: at 1440 the row keeps its one line.
-    expect(css.replace(block, '')).not.toMatch(/\.wk-launch-(?:bubble|problem)/u);
+    expect(phoneBlocks().reduce((rest, b) => rest.replace(b, ''), css)).not.toMatch(/\.wk-launch-(?:bubble|problem)/u);
   });
 });

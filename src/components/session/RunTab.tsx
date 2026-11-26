@@ -36,7 +36,8 @@ import { silentWords } from '../../board/silentStep.js';
 import { useRunningFloor } from '../../hooks/useRunningFloor.js';
 import { floorWords } from '../../board/floorRun.js';
 import { deliveryAssuranceOf, deliveryReceiptOf, passedWord, runRuleRows } from '../../board/assuranceModel.js';
-import { deliveryOf, prNumberOf } from '../delivery.js';
+import { deliveryOf, isPrUrl, prNumberOf } from '../delivery.js';
+import { useDeliveryStore } from '../../store/delivery.js';
 import { useRunCoverage } from '../../hooks/useRunCoverage.js';
 import { endedAtMs, finishedAtMs } from '../../board/needsYou.js';
 import { ago } from '../AgeStamp.js';
@@ -161,6 +162,12 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   const floor = useRunningFloor(view);
   const coverage = useRunCoverage(view);
   const delivery = deliveryOf(view);
+  // studio#1454: crew records the PR url only once the run ends; a deliver step that is done already printed it, so a
+  // later gate (an install's consent) shows the PR now. The one per-run read RunDelivery makes too (deduped per run).
+  const readUrl = useDeliveryStore((s) => s.byRun[id]?.url ?? null);
+  const deliverRead = delivery.state === 'delivered' && delivery.url === null ? delivery.unitId : null;
+  useEffect(() => { if (deliverRead !== null) useDeliveryStore.getState().load(id, deliverRead); }, [id, deliverRead]);
+  const prUrl = delivery.url ?? (delivery.state === 'delivered' && readUrl !== null && isPrUrl(readUrl) ? readUrl : null);
   const recorded = deliveryAssuranceOf(view);
   const runReceipt = deliveryReceiptOf(view, events ?? null, recorded);
   const receipt = view.session.status === 'completed' ? runReceipt : null;
@@ -188,7 +195,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   // is open, so a closed panel never doubles them (one live instance of each on the page you are reading).
   const narrow = useNarrow();
   const panelShown = useHostPanel((st) => (narrow ? st.overlay : !st.folded));
-  const prNumber = delivery.url === null ? null : ((n) => (n === null ? null : String(n)))(prNumberOf(delivery.url));
+  const prNumber = prUrl === null ? null : ((n) => (n === null ? null : String(n)))(prNumberOf(prUrl));
   const roster = useRoster();
   const stopping = useSheets((s) => s.stopping[id] !== undefined);
   const [confirmStop, setConfirmStop] = useState(false);
@@ -257,7 +264,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
     const making = view.units.filter((unit) => unit.assigned_cli === cli && (unit.role === 'creator' || (unit.role == null && !isReviewUnit(unit))));
     return `${name} ${running ? (reviews ? 'reviewing' : 'building') : making.length > 0 ? (making.every((unit) => unit.status === 'done') ? 'built it' : 'builds') : reviews ? 'reviews' : 'builds'}`;
   });
-  const changesWord = deliverySummary(view) ?? (delivered ? 'Nothing pushed' : 'Nothing delivered yet');
+  const changesWord = deliverySummary(view, prUrl) ?? (delivered ? 'Nothing pushed' : 'Nothing delivered yet');
   const glance = (
     <div data-testid="run-tab-glance" data-undo-host="run-tab" className="wk-run-glance">
       <div className="wk-run-glance-item">
@@ -391,12 +398,12 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
       </Section>
     ),
     changes: (
-      <Section id="changes" {...fold} summary={deliverySummary(view) ?? (delivered ? 'Nothing pushed' : quiet.has('changes') ? 'Nothing changed yet' : 'Nothing delivered yet')}>
+      <Section id="changes" {...fold} summary={deliverySummary(view, prUrl) ?? (delivered ? 'Nothing pushed' : quiet.has('changes') ? 'Nothing changed yet' : 'Nothing delivered yet')}>
         {/* A run still going has nothing delivered to say ("in-flight" is only "it has a deliver step"). */}
         {delivered && (
           <div data-testid="run-tab-delivery" className="wk-run-tab-block">
-            <p data-testid="run-tab-delivery-outcome" className="wk-run-tab-line">{view.session.status === 'completed' ? outcomeLine(view) : 'Not delivered'}</p>
-            {delivery.url !== null && <p className="wk-run-tab-line"><a data-testid="run-tab-pr" href={delivery.url} target="_blank" rel="noreferrer">Pull request{prNumber !== null ? ` #${prNumber}` : ''} ↗</a></p>}
+            <p data-testid="run-tab-delivery-outcome" className="wk-run-tab-line">{view.session.status === 'completed' ? outcomeLine(view) : prUrl !== null ? 'Pull request opened · the job is still going' : 'Not delivered'}</p>
+            {prUrl !== null && <p className="wk-run-tab-line"><a data-testid="run-tab-pr" href={prUrl} target="_blank" rel="noreferrer">Pull request{prNumber !== null ? ` #${prNumber}` : ''} ↗</a></p>}
             {delivery.pushed !== undefined && <p data-testid="run-tab-branch" className="wk-run-tab-line">Branch <code>{delivery.pushed.branch}</code></p>}
             {delivery.reason !== null && delivery.state !== 'delivered' && <p data-testid="run-tab-delivery-reason" className="wk-run-tab-muted">{showText(delivery.reason)}</p>}
             {receipt !== null && <AssuranceReceipt receipt={receipt} passed={recorded !== null && !recorded.verified ? null : true} testId="run-tab-assurance" units={view.units} />}

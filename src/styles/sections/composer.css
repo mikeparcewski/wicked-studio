@@ -29,6 +29,11 @@
   .wk-composer-form-select.wk-field { min-height: var(--tap-min); }
   [data-testid='phase-picker-toggle'] { min-height: var(--tap-min); }
   button.wk-composer-form-plus { width: var(--tap-min); height: var(--tap-min); }
+  /* studio#1461: the launch form's words take the whole row; +, Voice and Send sit on the row under them, Voice and
+     Send at its end (beside the words they squeezed the text to a fifth of the card). */
+  .wk-launch-bubble { flex-wrap: wrap; }
+  .wk-launch-bubble > .wk-launch-problem { order: -1; flex: 1 0 100%; }
+  .wk-launch-bubble > .wk-launch-problem + * { margin-inline-start: auto; }
 }
 
 /* The launch form (/runs/new) option row (UX audit rows 25, 41): labels are the .wk-field-label

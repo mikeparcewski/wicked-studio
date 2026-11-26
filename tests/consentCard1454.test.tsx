@@ -54,7 +54,7 @@ const gate = (): OpenGate => ({
 } as OpenGate);
 const UNITS = [
   makeUnit({ id: `${RUN}:build`, session_id: RUN, ord: 7, stage: 'build', status: 'done' }),
-  makeUnit({ id: `${RUN}:deliver`, session_id: RUN, ord: 8, stage: 'deliver', status: 'done' }),
+  makeUnit({ id: `${RUN}:deliver`, session_id: RUN, ord: 8, stage: 'build', phase_ref: 'deliver', status: 'done' }),
   makeUnit({ id: `${RUN}:install`, session_id: RUN, ord: 9, stage: 'build', status: 'pending', tool_cmd: ['bash', '-c', 'install'] as never }),
 ];
 
