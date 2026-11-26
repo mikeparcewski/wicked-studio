@@ -13,6 +13,8 @@ export interface FindingCouncil {
   seated: number | null;
   returned: number | null;
   agreementPct: number | null;
+  /** (wicked-core#1822) Why, in words, on a `not_convened` no-verdict ("the step ended before its turn"); else null. */
+  detail?: string | null;
 }
 
 export interface DisputeFinding {
@@ -63,6 +65,7 @@ export function disputeFindingsOf(rows: readonly TeamRow[], ord: number, ids: re
       council: c === undefined ? null : {
         verdict: words(c['verdict']), reason: words(c['reason']), seats: strings(c['seats']),
         seated: number(c['seated']), returned: number(c['returned']), agreementPct: number(c['agreement_pct']),
+        detail: words(c['detail']),
       },
     };
   });
@@ -70,6 +73,8 @@ export function disputeFindingsOf(rows: readonly TeamRow[], ord: number, ids: re
 
 /** Say the ballot count, rather than attributing a single seat's ruling to the whole team. */
 export function councilLine(c: FindingCouncil): string {
+  // (studio#1447 T-S3, wicked-core#1822) No ballot ever started: never a council that sat and could not rule.
+  if (c.verdict === 'no_verdict' && c.reason === 'not_convened') return `The council never started${c.detail ? `: ${c.detail}` : ''}`;
   if (c.verdict === 'no_verdict') return `The council could not rule${c.reason === null ? '' : ` (${c.reason.replace(/_/g, ' ')})`}`;
   const count = c.returned ?? c.seated ?? c.seats.length;
   const seated = c.seated ?? c.seats.length;
