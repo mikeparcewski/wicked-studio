@@ -400,6 +400,13 @@ export function proposalRecordLine(e: ProposalEntry, starting = false, pending =
   return `You chose: ${e.decision === 'go' ? goWords(e.proposal) : 'Not now'}`;
 }
 
+/** (studio#1417) Where the record line stands: a Go still starting or still being made is in progress, an `accepting`
+ *  one that is neither was interrupted (stopped), and anything decided or replaced is done. */
+export function proposalRecordState(e: ProposalEntry, starting = false, pending = false): 'done' | 'progress' | 'stopped' {
+  if (e.state !== 'accepting') return 'done';
+  return starting || pending ? 'progress' : 'stopped';
+}
+
 /** What Go did, in plain words, for the record line's meta. */
 export function proposalResultWords(e: ProposalEntry): string | null {
   if (e.state !== 'decided' || e.decision !== 'go' || e.result === null || e.result === undefined) return null;

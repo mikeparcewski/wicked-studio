@@ -131,9 +131,19 @@ export function approveProposal(id: string, body?: ApproveProposalBody): Promise
   });
 }
 
+/** The memory kinds a person may file (crew#1878, api-types 0.227.0 `FileProposalTier`): a fact, a how-to, or
+ *  something that happened. Mirrored until studio's pin carries it. */
+export const FILE_PROPOSAL_TIERS = ['semantic', 'procedural', 'episodic'] as const;
+export type FileProposalTier = (typeof FILE_PROPOSAL_TIERS)[number];
+
+/** The body with crew#1878's two fields (api-types 0.227.0 `FileProposalBody.tier` / `.repo`): the kind, and the one
+ *  repository it is recalled on (the `repo` facet). An older crew refuses either with a 400 (its schema is strict). */
+export type FileProposalScopedBody = FileProposalBody & { tier?: FileProposalTier; repo?: string };
+
 /** `POST /proposals` — file one memory into the review queue (crew files it as a pending
- *  `semantic` memory proposal); answers the pending id. Memory's Add memory files then approves. */
-export function fileProposal(body: FileProposalBody): Promise<{ id: string }> {
+ *  memory proposal, a `semantic` one unless `tier` says otherwise); answers the pending id. Memory's Add memory files
+ *  then approves. */
+export function fileProposal(body: FileProposalScopedBody): Promise<{ id: string }> {
   return apiFetch<{ id: string }>('/proposals', {
     method: 'POST',
     body: JSON.stringify(body),

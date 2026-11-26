@@ -24,18 +24,28 @@ import userEvent from '@testing-library/user-event';
 const apiFetch = vi.fn();
 vi.mock('../src/api/client.js', () => ({
   apiFetch: (...a: unknown[]) => apiFetch(...a),
+  // The repository list Add a memory offers (`GET /repos`, through the one repo cache).
+  api: { listRepos: () => apiFetch('/repos'), getProject: (id: string) => apiFetch(`/projects/${encodeURIComponent(id)}`) },
 }));
 
 const { MemoryPage } = await import('../src/components/memory/MemoryPage.js');
 const { ApiError } = await import('../src/api/errors.js');
 const { useProjectsStore } = await import('../src/store/projects.js');
 const { useCapabilities } = await import('../src/store/capabilities.js');
+const { clearRepoCache } = await import('../src/store/repoCache.js');
 type MemoryItem = import('../src/api/memory.js').MemoryItem;
 type Proposal = import('../src/api/proposals.js').Proposal;
 
 const M1: MemoryItem = { id: 'm1', content: 'gh account flips to a secondary → push 403', tier: 'semantic', scope: 'brain:wicked/doc:ops', facets: { project: 'p-wicked', domain: 'ops' }, created_at: 1_700_000_200 };
 const M2: MemoryItem = { id: 'm2', content: 'overwritten .node module → silent SIGKILL; codesign -s - -f', tier: 'episodic', scope: 'brain:wicked/doc:macos', facets: { domain: 'macos' }, created_at: 1_700_000_100 };
 const PM: Proposal = { id: 'pm1', kind_type: 'memory', payload: { content: 'tests run with --runInBand on CI', tier: 'semantic' }, facets: {}, provenance: { agent: 'claude' }, state: 'pending', created_at: 1_700_000_000 };
+/** Registered repositories as `GET /repos` answers them (crew RepoEntry: the id is what a run on it names). */
+const REPOS = [
+  { id: 'r-api', name: 'northwind-api', root_path: '/srv/northwind-api', default_branch: 'main', registered_at: 1_700_000_000 },
+  { id: 'r-web', name: 'northwind-web', root_path: '/srv/northwind-web', default_branch: 'main', registered_at: 1_700_000_000 },
+];
+/** (studio#1433) Each project's `crew.repo` members, by project id. */
+let PROJECT_REPOS: Record<string, string[]> = {};
 const PP: Proposal = { id: 'pp1', kind_type: 'policy:testing', payload: { rule: 'every PR runs the journeys', severity: 'warn' }, facets: {}, provenance: {}, state: 'pending', created_at: 1_700_000_000 };
 
 /** A stateful wire: memories, coverage over them, retire, edit, proposals (file / approve / reject; a decided
@@ -77,9 +87,29 @@ function wire(initial: MemoryItem[], proposals: Proposal[] = []): { calls: strin
       const q = new URLSearchParams(s.split('?')[1] ?? '').get('query');
       return Promise.resolve({ memories: q === null ? store.rows : store.rows.filter((m) => m.content.toLowerCase().includes(q.toLowerCase())) });
     }
+    if (s === '/repos') return Promise.resolve({ repos: REPOS });
+    // (studio#1433) `GET /projects/:id` as crew answers it: {project, members}; a repository belongs to a project as a
+    // `crew.repo` member whose ref is its registry id (crew routes.ts repoMembersOf).
+    const proj = /^\/projects\/([^/?]+)$/.exec(s);
+    if (proj !== null && PROJECT_REPOS[decodeURIComponent(proj[1]!)] !== undefined) {
+      const id = decodeURIComponent(proj[1]!);
+      return Promise.resolve({
+        project: { id, name: id, description: null, status: 'active', created_at: 1_700_000_000, updated_at: 1_700_000_000 },
+        members: PROJECT_REPOS[id]!.map((ref) => ({ id: `${id}:crew.repo:${ref}`, project_id: id, member_kind: 'crew.repo', member_ref: ref, meta: null, attached_at: 1_700_000_000, attached_by: 'studio' })),
+      });
+    }
+    if (s === '/proposals' && init?.method === 'POST' && body?.repo !== undefined && !REPOS.some((r) => r.id === body.repo)) {
+      // crew main routes.ts POST /proposals (crew#1913): a repository no registry row carries.
+      return Promise.reject(new ApiError(400, `no registered repository has the id '${String(body.repo)}', so a memory on it would never be recalled; pick one from GET /repos`,
+        { error: `no registered repository has the id '${String(body.repo)}', so a memory on it would never be recalled; pick one from GET /repos`, code: 'repo_unknown' }));
+    }
     if (s === '/proposals' && init?.method === 'POST') {
       const id = `pref-${queue.length + 1}`;
-      queue = [...queue, { id, kind_type: 'memory', payload: { content: body?.content, tier: 'semantic', capture: 'preference' }, facets: body?.project !== undefined ? { project: String(body.project) } : {}, provenance: {}, state: 'pending', created_at: 1_700_000_300 }];
+      // crew#1878 (routes.ts POST /proposals): payload {content, tier: tier ?? 'semantic', capture}, facets {project?, repo?}.
+      const facets: Record<string, string> = {};
+      if (body?.project !== undefined) facets['project'] = String(body.project);
+      if (body?.repo !== undefined) facets['repo'] = String(body.repo);
+      queue = [...queue, { id, kind_type: 'memory', payload: { content: body?.content, tier: body?.tier ?? 'semantic', capture: 'preference' }, facets, provenance: {}, state: 'pending', created_at: 1_700_000_300 }];
       return Promise.resolve({ id });
     }
     const approve = /^\/proposals\/([^/]+)\/approve$/.exec(s);
@@ -94,8 +124,8 @@ function wire(initial: MemoryItem[], proposals: Proposal[] = []): { calls: strin
         return Promise.resolve({ outcome: 'promoted', active_id: `proposal:${copy.id}`, edited: { from: p.id, to: copy.id } });
       }
       queue = queue.map((x) => (x === p ? { ...x, state: 'approved' as const } : x));
-      const content = (p.payload as { content: string }).content;
-      store.rows = [...store.rows, { id: `proposal:${p.id}`, content, tier: 'semantic', scope: '', facets: p.facets, created_at: 1_700_000_400 }];
+      const { content, tier } = p.payload as { content: string; tier: string };
+      store.rows = [...store.rows, { id: `proposal:${p.id}`, content, tier, scope: '', facets: p.facets, created_at: 1_700_000_400 }];
       return Promise.resolve({ outcome: 'promoted', active_id: `proposal:${p.id}` });
     }
     const reject = /^\/proposals\/([^/]+)\/reject$/.exec(s);
@@ -133,9 +163,11 @@ async function search(user: ReturnType<typeof userEvent.setup>, words: string): 
 }
 
 beforeEach(() => {
+  clearRepoCache();
   apiFetch.mockReset();
   navigate.mockReset();
   useProjectsStore.setState({ projects: [{ id: 'p-wicked', name: 'Wicked' }] } as never);
+  PROJECT_REPOS = { 'p-wicked': ['r-api'] };
   // An older crew unless a test says otherwise: `retire-item` erases (no `capabilities.memoryRestore`).
   useCapabilities.setState({ loaded: true, memoryRestore: false });
 });
@@ -266,6 +298,437 @@ describe('MemoryPage — Add a memory (a proposal you approve as you add it)', (
     expect(await screen.findByTestId('memories-note')).toHaveTextContent('Added: Deploys freeze on Fridays');
     expect(screen.queryByTestId('memory-add-dialog')).toBeNull();
     await waitFor(() => expect(screen.getAllByTestId('memory-content').map((c) => c.textContent)).toContain('Deploys freeze on Fridays'));
+  });
+
+  it('studio#1095: the person picks the kind and one repository; crew gets tier and repo, and the row says where it applies', async () => {
+    const { calls, bodies } = wire([]);
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    await openAdd(user);
+    const dialog = await screen.findByTestId('memory-add-dialog');
+    // A fact unless the person says otherwise; any repository unless one is picked.
+    expect(within(dialog).getByTestId('memory-add-tier')).toHaveValue('semantic');
+    expect([...within(dialog).getByTestId('memory-add-tier').querySelectorAll('option')].map((o) => o.textContent))
+      .toEqual(['A fact or decision', 'How something is done', 'Something that happened']);
+    expect(within(dialog).getByTestId('memory-add-repo')).toHaveValue('');
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-api' })).toHaveLength(1));
+    expect(dialog).not.toHaveTextContent('It is saved as a fact');
+    await user.type(within(dialog).getByTestId('memory-add-text'), 'Run the migrations before the tests');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-tier'), 'procedural');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-project'), 'p-wicked');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-repo'), 'r-api');
+    await user.click(within(dialog).getByTestId('memory-add-save'));
+    await waitFor(() => expect(calls).toContain('/proposals/pref-1/approve'));
+    expect(bodies['/proposals']).toEqual([{ content: 'Run the migrations before the tests', project: 'p-wicked', repo: 'r-api', tier: 'procedural' }]);
+    const row = await waitFor(() => screen.getAllByTestId('memory-row').find((r) => r.textContent?.includes('Run the migrations'))!);
+    expect(row).toHaveAttribute('data-tier', 'procedural');
+    expect(row).toHaveTextContent('repository northwind-api');
+  });
+
+  it('studio#1433: a project offers only its own repositories, read when it is chosen, and a repository outside it is dropped', async () => {
+    const { calls, bodies } = wire([]);
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    await openAdd(user);
+    const dialog = await screen.findByTestId('memory-add-dialog');
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-web' })).toHaveLength(1));
+    expect(calls.filter((c) => c.startsWith('/projects/'))).toEqual([]);
+    await user.type(within(dialog).getByTestId('memory-add-text'), 'Run the migrations before the tests');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-repo'), 'r-web');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-project'), 'p-wicked');
+    // Wicked holds northwind-api only: northwind-web, picked before, is not one of its repositories.
+    await waitFor(() => expect(within(dialog).queryByRole('option', { name: 'northwind-web' })).toBeNull());
+    expect(within(dialog).getByTestId('memory-add-repo')).toHaveValue('');
+    expect(within(dialog).getAllByRole('option', { name: 'northwind-api' })).toHaveLength(1);
+    expect(within(dialog).getByTestId('memory-add-repo-note')).toHaveTextContent('northwind-web isn’t one of Wicked’s repositories, so it was dropped.');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-repo'), 'r-api');
+    await user.click(within(dialog).getByTestId('memory-add-save'));
+    await waitFor(() => expect(bodies['/proposals']).toEqual([{ content: 'Run the migrations before the tests', project: 'p-wicked', repo: 'r-api' }]));
+  });
+
+  it('studio#1433: a project with no repositories, or whose repositories cannot be read, offers Any repository only and says why', async () => {
+    PROJECT_REPOS = { 'p-wicked': [] };
+    wire([]);
+    const base = apiFetch.getMockImplementation()!;
+    let fail = false;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) =>
+      String(path) === '/projects/p-wicked' && fail ? Promise.reject(new ApiError(503, 'the engine is busy')) : base(path, init));
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    await openAdd(user);
+    const dialog = await screen.findByTestId('memory-add-dialog');
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-api' })).toHaveLength(1));
+    await user.selectOptions(within(dialog).getByTestId('memory-add-project'), 'p-wicked');
+    expect(await within(dialog).findByTestId('memory-add-repo-note')).toHaveTextContent('Wicked has no repositories yet, so this memory is recalled on any of its runs.');
+    expect([...within(dialog).getByTestId('memory-add-repo').querySelectorAll('option')].map((o) => o.textContent)).toEqual(['Any repository']);
+    fail = true;
+    await user.selectOptions(within(dialog).getByTestId('memory-add-project'), '');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-project'), 'p-wicked');
+    expect(await within(dialog).findByTestId('memory-add-repo-failed')).toHaveTextContent('Couldn’t read Wicked’s repositories.');
+    expect([...within(dialog).getByTestId('memory-add-repo').querySelectorAll('option')].map((o) => o.textContent)).toEqual(['Any repository']);
+    fail = false;
+    PROJECT_REPOS = { 'p-wicked': ['r-web'] };
+    await user.click(within(dialog).getByTestId('memory-add-repo-retry'));
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-web' })).toHaveLength(1));
+    expect(within(dialog).queryByTestId('memory-add-repo-failed')).toBeNull();
+  });
+
+  it('studio#1433: a repository crew no longer knows is said so, nothing is saved, and the list is read again', async () => {
+    const { calls, bodies } = wire([]);
+    // The cache still holds a repository another tab removed.
+    const base = apiFetch.getMockImplementation()!;
+    let listed = [...REPOS, { id: 'r-gone', name: 'northwind-old', root_path: '/srv/northwind-old', default_branch: 'main', registered_at: 1_700_000_000 }];
+    let repoReads = 0;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) =>
+      String(path) === '/repos' ? (repoReads++, Promise.resolve({ repos: listed })) : base(path, init));
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    await openAdd(user);
+    const dialog = await screen.findByTestId('memory-add-dialog');
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-old' })).toHaveLength(1));
+    await user.type(within(dialog).getByTestId('memory-add-text'), 'keep these words');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-repo'), 'r-gone');
+    listed = [...REPOS];
+    const reads = repoReads;
+    await user.click(within(dialog).getByTestId('memory-add-save'));
+    expect(await within(dialog).findByTestId('memory-add-refused')).toHaveTextContent('northwind-old is no longer registered, so nothing was saved. Pick another repository, or Any repository.');
+    expect(bodies['/proposals']).toEqual([{ content: 'keep these words', repo: 'r-gone' }]);
+    expect(calls).not.toContain('/proposals/pref-1/approve');
+    await waitFor(() => expect(within(dialog).queryByRole('option', { name: 'northwind-old' })).toBeNull());
+    expect(repoReads).toBeGreaterThan(reads);
+    expect(within(dialog).getByTestId('memory-add-repo')).toHaveValue('');
+    expect(within(dialog).getByTestId('memory-add-text')).toHaveValue('keep these words');
+    expect(within(dialog).queryByTestId('state-banner')).toBeNull();
+  });
+
+  it('studio#1433: a registry crew cannot read (503) says nothing was saved, not that a load failed, and Retry sends again', async () => {
+    const { bodies } = wire([]);
+    const base = apiFetch.getMockImplementation()!;
+    let down = true;
+    const said = 'the repository list could not be read (database is locked); nothing was filed, try again';
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) =>
+      String(path) === '/proposals' && init?.method === 'POST' && down ? Promise.reject(new ApiError(503, said, { error: said })) : base(path, init));
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    await openAdd(user);
+    const dialog = await screen.findByTestId('memory-add-dialog');
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-api' })).toHaveLength(1));
+    await user.type(within(dialog).getByTestId('memory-add-text'), 'keep these words');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-repo'), 'r-api');
+    await user.click(within(dialog).getByTestId('memory-add-save'));
+    const banner = await within(dialog).findByTestId('state-banner');
+    expect(banner).toHaveTextContent('crew couldn’t read its repository list, so nothing was saved.');
+    expect(banner).not.toHaveTextContent(/load/i);
+    down = false;
+    await user.click(within(dialog).getByTestId('state-banner-retry'));
+    await waitFor(() => expect(bodies['/proposals']).toEqual([{ content: 'keep these words', repo: 'r-api' }]));
+  });
+
+  it('studio#1433 r1: Save waits for the chosen project\'s repositories, and an earlier project\'s late answer changes nothing', async () => {
+    useProjectsStore.setState({ projects: [{ id: 'p-wicked', name: 'Wicked' }, { id: 'p-north', name: 'Northwind' }] } as never);
+    PROJECT_REPOS = { 'p-wicked': ['r-api'], 'p-north': ['r-web'] };
+    const { bodies } = wire([]);
+    const base = apiFetch.getMockImplementation()!;
+    const held: Record<string, { go: () => void; fail: () => void }> = {};
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) => {
+      const s = String(path);
+      if (!s.startsWith('/projects/')) return base(path, init);
+      return new Promise((res, rej) => { held[s] = { go: () => res(base(path, init)), fail: () => rej(new ApiError(503, 'the engine is busy')) }; });
+    });
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    await openAdd(user);
+    const dialog = await screen.findByTestId('memory-add-dialog');
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-web' })).toHaveLength(1));
+    await user.type(within(dialog).getByTestId('memory-add-text'), 'Run the migrations before the tests');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-project'), 'p-wicked');
+    await waitFor(() => expect(held['/projects/p-wicked']).toBeDefined());
+    expect(within(dialog).getByTestId('memory-add-save')).toBeDisabled();
+    await user.click(within(dialog).getByTestId('memory-add-save'));
+    expect(bodies['/proposals']).toBeUndefined();
+    await user.selectOptions(within(dialog).getByTestId('memory-add-project'), 'p-north');
+    await waitFor(() => expect(held['/projects/p-north']).toBeDefined());
+    // Northwind answers first and the person picks its repository; Wicked's answers land after, a success and then
+    // (once Wicked is asked again and abandoned) a failure. Neither replaces Northwind's repositories or locks Save.
+    await act(async () => { held['/projects/p-north']!.go(); await Promise.resolve(); });
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-web' })).toHaveLength(1));
+    await user.selectOptions(within(dialog).getByTestId('memory-add-repo'), 'r-web');
+    await act(async () => { held['/projects/p-wicked']!.go(); await Promise.resolve(); await Promise.resolve(); });
+    const settled = (): void => {
+      expect(within(dialog).getByTestId('memory-add-project')).toHaveValue('p-north');
+      expect(within(dialog).getByTestId('memory-add-repo')).toHaveValue('r-web');
+      expect(within(dialog).queryByRole('option', { name: 'northwind-api' })).toBeNull();
+      expect(within(dialog).queryByTestId('memory-add-repo-failed')).toBeNull();
+      expect(within(dialog).getByTestId('memory-add-save')).toBeEnabled();
+    };
+    settled();
+    delete held['/projects/p-wicked']; delete held['/projects/p-north'];
+    await user.selectOptions(within(dialog).getByTestId('memory-add-project'), 'p-wicked');
+    await waitFor(() => expect(held['/projects/p-wicked']).toBeDefined());
+    await user.selectOptions(within(dialog).getByTestId('memory-add-project'), 'p-north');
+    await waitFor(() => expect(held['/projects/p-north']).toBeDefined());
+    await act(async () => { held['/projects/p-north']!.go(); await Promise.resolve(); });
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-web' })).toHaveLength(1));
+    await user.selectOptions(within(dialog).getByTestId('memory-add-repo'), 'r-web');
+    await act(async () => { held['/projects/p-wicked']!.fail(); await Promise.resolve(); await Promise.resolve(); });
+    settled();
+    await user.click(within(dialog).getByTestId('memory-add-save'));
+    await waitFor(() => expect(bodies['/proposals']).toEqual([{ content: 'Run the migrations before the tests', project: 'p-north', repo: 'r-web' }]));
+  });
+
+  it('studio#1433 r1: a picked repository a project cannot be checked against is kept and said so, never dropped as not in it', async () => {
+    const { bodies } = wire([]);
+    const base = apiFetch.getMockImplementation()!;
+    let fail = true;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) =>
+      String(path) === '/projects/p-wicked' && fail ? Promise.reject(new ApiError(503, 'the engine is busy')) : base(path, init));
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    await openAdd(user);
+    const dialog = await screen.findByTestId('memory-add-dialog');
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-api' })).toHaveLength(1));
+    await user.type(within(dialog).getByTestId('memory-add-text'), 'Run the migrations before the tests');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-repo'), 'r-api');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-project'), 'p-wicked');
+    expect(await within(dialog).findByTestId('memory-add-repo-failed')).toHaveTextContent('Couldn’t read Wicked’s repositories, so northwind-api can’t be checked against it. Try again, or pick Any repository.');
+    expect(within(dialog).getByTestId('memory-add-repo')).toHaveValue('r-api');
+    expect(within(dialog).queryByTestId('memory-add-repo-note')).toBeNull();
+    expect(within(dialog).getByTestId('memory-add-save')).toBeDisabled();
+    fail = false;
+    await user.click(within(dialog).getByTestId('memory-add-repo-retry'));
+    await waitFor(() => expect(within(dialog).queryByTestId('memory-add-repo-failed')).toBeNull());
+    // Wicked does hold northwind-api: nothing was dropped, and nothing says it was.
+    expect(within(dialog).getByTestId('memory-add-repo')).toHaveValue('r-api');
+    expect(within(dialog).queryByTestId('memory-add-repo-note')).toBeNull();
+    await user.click(within(dialog).getByTestId('memory-add-save'));
+    await waitFor(() => expect(bodies['/proposals']).toEqual([{ content: 'Run the migrations before the tests', project: 'p-wicked', repo: 'r-api' }]));
+  });
+
+  it('studio#1433 r1: a refused repository leaves the picker at once, even when the list cannot be read again; the scope is locked while saving', async () => {
+    PROJECT_REPOS = { 'p-wicked': ['r-api', 'r-gone'] };
+    const { calls } = wire([]);
+    const base = apiFetch.getMockImplementation()!;
+    const listed = [...REPOS, { id: 'r-gone', name: 'northwind-old', root_path: '/srv/northwind-old', default_branch: 'main', registered_at: 1_700_000_000 }];
+    let reposDown = false;
+    let answer: (() => void) | null = null;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) => {
+      const s = String(path);
+      if (s === '/repos') return reposDown ? Promise.reject(new ApiError(503, 'the engine is busy')) : Promise.resolve({ repos: listed });
+      if (s === '/proposals' && init?.method === 'POST') {
+        const e = "no registered repository has the id 'r-gone', so a memory on it would never be recalled; pick one from GET /repos";
+        return new Promise((_res, rej) => { answer = () => rej(new ApiError(400, e, { error: e, code: 'repo_unknown' })); });
+      }
+      return base(path, init);
+    });
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    await openAdd(user);
+    const dialog = await screen.findByTestId('memory-add-dialog');
+    await user.type(within(dialog).getByTestId('memory-add-text'), 'keep these words');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-project'), 'p-wicked');
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-old' })).toHaveLength(1));
+    await user.selectOptions(within(dialog).getByTestId('memory-add-repo'), 'r-gone');
+    const memberReads = calls.filter((c) => c === '/projects/p-wicked').length;
+    reposDown = true;
+    await user.click(within(dialog).getByTestId('memory-add-save'));
+    await waitFor(() => expect(answer).not.toBeNull());
+    expect(within(dialog).getByTestId('memory-add-repo')).toBeDisabled();
+    expect(within(dialog).getByTestId('memory-add-project')).toBeDisabled();
+    expect(within(dialog).getByTestId('memory-add-tier')).toBeDisabled();
+    await act(async () => { answer!(); await Promise.resolve(); });
+    expect(await within(dialog).findByTestId('memory-add-refused')).toHaveTextContent('northwind-old is no longer registered');
+    await waitFor(() => expect(within(dialog).getByTestId('memory-add-repo-failed')).toHaveTextContent('Couldn’t read your repositories.'));
+    expect(within(dialog).queryByRole('option', { name: 'northwind-old' })).toBeNull();
+    expect(within(dialog).getAllByRole('option', { name: 'northwind-api' })).toHaveLength(1);
+    expect(within(dialog).getByTestId('memory-add-project')).toHaveValue('p-wicked');
+    expect(calls.filter((c) => c === '/projects/p-wicked').length).toBe(memberReads);
+  });
+
+  it('studio#1095: an episodic memory on a repository only, with no project', async () => {
+    const { bodies } = wire([]);
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    await openAdd(user);
+    const dialog = await screen.findByTestId('memory-add-dialog');
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-web' })).toHaveLength(1));
+    await user.type(within(dialog).getByTestId('memory-add-text'), 'The Friday deploy broke search');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-tier'), 'episodic');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-repo'), 'r-web');
+    await user.click(within(dialog).getByTestId('memory-add-save'));
+    await waitFor(() => expect(bodies['/proposals']).toEqual([{ content: 'The Friday deploy broke search', repo: 'r-web', tier: 'episodic' }]));
+  });
+
+  /** An older crew's strict schema refusing `keys` (crew routes.ts `invalidBody`: its error sentence and zod's issues). */
+  const unknownFields = (keys: string[]): InstanceType<typeof ApiError> => new ApiError(400,
+    `Invalid proposal body: unknown field${keys.length > 1 ? 's' : ''} ${keys.map((k) => `\`${k}\``).join(', ')} — this endpoint does not accept ${keys.length > 1 ? 'them' : 'it'}, and ignoring ${keys.length > 1 ? 'them' : 'it'} would run a different request than you sent`,
+    { error: 'Invalid proposal body', details: [{ code: 'unrecognized_keys', keys, path: [], message: `Unrecognized key(s) in object: ${keys.map((k) => `'${k}'`).join(', ')}` }] });
+  /** The fake crew, older: it refuses `tier` and `repo` as unknown fields, as its strict schema did before crew#1878. */
+  const olderCrew = (): void => {
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) => {
+      const b = init?.body !== undefined ? JSON.parse(init.body) as Record<string, unknown> : {};
+      const unknown = ['tier', 'repo'].filter((k) => k in b);
+      return String(path) === '/proposals' && init?.method === 'POST' && unknown.length > 0 ? Promise.reject(unknownFields(unknown)) : base(path, init);
+    });
+  };
+  async function addWith(user: ReturnType<typeof userEvent.setup>, tier: string, repo: string): Promise<HTMLElement> {
+    await openAdd(user);
+    const dialog = await screen.findByTestId('memory-add-dialog');
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-api' })).toHaveLength(1));
+    await user.type(within(dialog).getByTestId('memory-add-text'), 'Run the migrations before the tests');
+    await user.selectOptions(within(dialog).getByTestId('memory-add-tier'), tier);
+    await user.selectOptions(within(dialog).getByTestId('memory-add-repo'), repo);
+    await user.click(within(dialog).getByTestId('memory-add-save'));
+    return dialog;
+  }
+
+  it('studio#1095: an older crew refuses a kind (unknown field): nothing is filed, the words stay, and it says what to do in plain view', async () => {
+    const { calls } = wire([]);
+    olderCrew();
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    const dialog = await addWith(user, 'procedural', '');
+    const refused = await within(dialog).findByTestId('memory-add-refused');
+    // The plain line is the alert itself, not behind Technical details.
+    expect(refused.querySelector('.wk-state-banner-text')).toHaveTextContent('This crew can’t save a kind other than a fact yet, so nothing was saved. Update wicked-crew, or save it as a fact.');
+    expect(within(dialog).getByTestId('memory-add-text')).toHaveValue('Run the migrations before the tests');
+    expect(calls.some((c) => c.endsWith('/approve'))).toBe(false);
+    // As a fact on any repository it is the body an older crew takes.
+    await user.selectOptions(within(dialog).getByTestId('memory-add-tier'), 'semantic');
+    await user.click(within(dialog).getByTestId('memory-add-save'));
+    await waitFor(() => expect(calls).toContain('/proposals/pref-1/approve'));
+  });
+
+  it('studio#1095: a fact on one repository sends {content, repo} (no tier); an older crew refusing it says to drop the repository', async () => {
+    wire([]);
+    olderCrew();
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    const dialog = await addWith(user, 'semantic', 'r-api');
+    await within(dialog).findByTestId('memory-add-refused');
+    // What was sent (the older crew refused it before the fake's own record): the fact's body has no tier.
+    const sent = apiFetch.mock.calls.filter(([p, i]) => p === '/proposals' && (i as { method?: string } | undefined)?.method === 'POST').map(([, i]) => JSON.parse((i as { body: string }).body) as unknown);
+    expect(sent).toEqual([{ content: 'Run the migrations before the tests', repo: 'r-api' }]);
+    expect(within(dialog).getByTestId('memory-add-refused')).toHaveTextContent('This crew can’t save a repository yet, so nothing was saved. Update wicked-crew, or save it for any repository.');
+  });
+
+  it('studio#1095: both refused names both', async () => {
+    wire([]);
+    olderCrew();
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    const dialog = await addWith(user, 'episodic', 'r-web');
+    expect(await within(dialog).findByTestId('memory-add-refused')).toHaveTextContent('This crew can’t save a kind other than a fact or a repository yet, so nothing was saved. Update wicked-crew, or save it as a fact on any repository.');
+  });
+
+  it('studio#1095: any other 400 with a kind is the refusal it was (not "update crew")', async () => {
+    wire([]);
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) =>
+      String(path) === '/proposals' && init?.method === 'POST'
+        ? Promise.reject(new ApiError(400, 'Invalid proposal body: `content` — String must contain at most 4000 character(s)', { error: 'x', details: [{ code: 'too_big', path: ['content'], message: 'too long' }] }))
+        : base(path, init));
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    const dialog = await addWith(user, 'procedural', '');
+    await waitFor(() => expect(within(dialog).getByTestId('state-banner')).toBeInTheDocument());
+    expect(within(dialog).queryByTestId('memory-add-refused')).toBeNull();
+  });
+
+  it('studio#1095: a repository list that cannot be read says so beside the picker, and Try again keeps the form', async () => {
+    wire([]);
+    const base = apiFetch.getMockImplementation()!;
+    let fail = true;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) =>
+      String(path) === '/repos' && fail ? Promise.reject(new ApiError(503, 'unavailable')) : base(path, init));
+    page();
+    const user = userEvent.setup();
+    await screen.findByTestId('memories-empty');
+    await openAdd(user);
+    const dialog = await screen.findByTestId('memory-add-dialog');
+    await user.type(within(dialog).getByTestId('memory-add-text'), 'keep these words');
+    expect(await within(dialog).findByTestId('memory-add-repo-failed')).toHaveTextContent('Couldn’t read your repositories.');
+    fail = false;
+    await user.click(within(dialog).getByTestId('memory-add-repo-retry'));
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-api' })).toHaveLength(1));
+    expect(within(dialog).queryByTestId('memory-add-repo-failed')).toBeNull();
+    expect(within(dialog).getByTestId('memory-add-text')).toHaveValue('keep these words');
+  });
+
+  it('studio#1095: a repository list that could not be read is read again on Refresh, and the row names it then', async () => {
+    wire([{ ...M2, id: 'm-r', facets: { repo: 'r-web' } }]);
+    const base = apiFetch.getMockImplementation()!;
+    let fail = true;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) =>
+      String(path) === '/repos' && fail ? Promise.reject(new ApiError(503, 'unavailable')) : base(path, init));
+    page();
+    const user = userEvent.setup();
+    const row = (await screen.findAllByTestId('memory-row'))[0]!;
+    await waitFor(() => expect(row).toHaveTextContent('Repository r-web'));
+    fail = false;
+    await user.click(screen.getByTestId('memory-more-button'));
+    await user.click(screen.getByTestId('memories-refresh'));
+    await waitFor(() => expect(screen.getAllByTestId('memory-row')[0]!).toHaveTextContent('Repository northwind-web'));
+    // Once read, Refresh never reads it again (the one session cache).
+    const reads = (): number => apiFetch.mock.calls.filter((c) => String(c[0]) === '/repos').length;
+    const before = reads();
+    await user.click(screen.getByTestId('memory-more-button'));
+    await user.click(screen.getByTestId('memories-refresh'));
+    await waitFor(() => expect(screen.getAllByTestId('memory-row')[0]!).toHaveTextContent('Repository northwind-web'));
+    expect(reads()).toBe(before);
+  });
+
+  it('studio#1095: the list Add a memory reads names the rows too (after the page’s own read failed)', async () => {
+    wire([{ ...M2, id: 'm-r', facets: { repo: 'r-web' } }]);
+    const base = apiFetch.getMockImplementation()!;
+    let fail = true;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string; method?: string }) =>
+      String(path) === '/repos' && fail ? Promise.reject(new ApiError(503, 'unavailable')) : base(path, init));
+    page();
+    const user = userEvent.setup();
+    const row = (await screen.findAllByTestId('memory-row'))[0]!;
+    await waitFor(() => expect(row).toHaveTextContent('Repository r-web'));
+    fail = false;
+    await openAdd(user);
+    const dialog = await screen.findByTestId('memory-add-dialog');
+    await waitFor(() => expect(within(dialog).getAllByRole('option', { name: 'northwind-web' })).toHaveLength(1));
+    await user.click(within(dialog).getByTestId('memory-add-cancel'));
+    await waitFor(() => expect(screen.getAllByTestId('memory-row')[0]!).toHaveTextContent('Repository northwind-web'));
+  });
+
+  it('studio#1095: no repository read for the queue, or for a list where no row names a repository', async () => {
+    const reads = (): number => apiFetch.mock.calls.filter((c) => String(c[0]) === '/repos').length;
+    wire([{ ...M2, id: 'm-r', facets: { repo: 'r-web' } }]);
+    const queue = page('?view=proposals');
+    await screen.findByTestId('memory-proposals');
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(reads()).toBe(0);
+    queue.unmount();
+    wire([M2]);
+    page();
+    await screen.findAllByTestId('memory-row');
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(reads()).toBe(0);
+  });
+
+  it('studio#1095: a listed memory scoped to a repository names it, without opening Add a memory', async () => {
+    wire([{ ...M2, id: 'm-r', facets: { repo: 'r-web' } }]);
+    page();
+    const row = (await screen.findAllByTestId('memory-row'))[0]!;
+    await waitFor(() => expect(row).toHaveTextContent('Repository northwind-web'));
   });
 
   it('an approve that fails after the file says the proposal waits and nothing was remembered', async () => {

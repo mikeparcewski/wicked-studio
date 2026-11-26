@@ -115,8 +115,9 @@ function itemStateOf(v: unknown): PublicationItemState | null {
   const url = v.url === null ? null : typeof v.url === 'string' ? v.url : undefined;
   const readBack = v.readBack === null ? null : typeof v.readBack === 'string' && READ_BACK.has(v.readBack) ? (v.readBack as 'ok' | 'differs' | 'unreadable') : undefined;
   if (number === undefined || url === undefined || readBack === undefined) return null;
-  // A created issue has its number, its page and a read-back; anything else has none of them (crew's `stateOf`).
-  if (v.state === 'created' ? number === null || url === null || readBack === null : number !== null || url !== null || readBack !== null) return null;
+  // A created issue has its number and its page, and a read-back unless crew has not checked it yet (null, wicked-crew#1919);
+  // anything else has none of them (crew's `stateOf`).
+  if (v.state === 'created' ? number === null || url === null : number !== null || url !== null || readBack !== null) return null;
   if (v.why !== undefined && typeof v.why !== 'string') return null;
   return {
     key: v.key, kind: v.kind as PublishKind, title: v.title, state: v.state as PublicationItemStateWord, number, url, readBack,

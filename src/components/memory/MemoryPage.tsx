@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { askPage, PageAskButton, pageTextLines, usePageChatHostPage } from '../chat/PageChat.js';
 import {
-  addMemory, AddMemoryApproveError, editMemory, isEraseByIdUnsupported, isMemoryEditUnsupported, isMemoryUnsupported,
+  addMemory, AddMemoryApproveError, AddMemoryScopeUnsupported, editMemory, isEraseByIdUnsupported, isMemoryEditUnsupported, isMemoryUnsupported,
   eraseMemoryItem, listMemories, listRetiredMemories, memoryCoverage, memoryPath, readMemoryView, retireMemory, retireMemoryItem,
   type MemoryCoverage, type MemoryItem, type MemoryView,
 } from '../../api/memory.js';
-import { isProposalsUnsupported, listProposals, proposalKind } from '../../api/proposals.js';
-import { readErrorKind } from '../../api/errors.js';
+import { FILE_PROPOSAL_TIERS, isProposalsUnsupported, listProposals, proposalKind, type FileProposalTier } from '../../api/proposals.js';
+import type { RepoEntry } from '../../api/types.js';
+import { fetchReposCached, getCachedRepos, invalidateRepoCache } from '../../store/repoCache.js';
+import { ApiError, readErrorKind } from '../../api/errors.js';
+import { api } from '../../api/client.js';
 import { relTime } from '../../board/relTime.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useNeedsSources } from '../../store/needsSources.js';
@@ -40,6 +43,11 @@ import { MemoryCaptureAdd, MemoryRetired, MemoryTable } from './MemoryAdd.js';
  */
 
 type Failure = { kind: 'offline' | 'error'; message: string };
+/** The `code` of crew's refusal body, when it has one. */
+const codeOf = (e: ApiError): string | undefined => {
+  const c = typeof e.body === 'object' && e.body !== null ? (e.body as { code?: unknown }).code : undefined;
+  return typeof c === 'string' ? c : undefined;
+};
 function failure(e: unknown): Failure {
   return { kind: readErrorKind(e), message: e instanceof Error ? e.message : String(e) };
 }
@@ -57,10 +65,29 @@ function tierWord(tier: string): string {
   return TIER_WORDS[tier] ?? tier.charAt(0).toUpperCase() + tier.slice(1);
 }
 
-/** Where a memory applies, in words: its project facet, else its scope, else everywhere. */
-function whereWords(m: MemoryItem, projectName: (id: string) => string | null): string {
+/** (studio#1095) What a person may file a memory as, in the Add a memory dialog's words. */
+export const ADD_TIER_WORDS: Record<FileProposalTier, string> = {
+  semantic: 'A fact or decision',
+  procedural: 'How something is done',
+  episodic: 'Something that happened',
+};
+
+/** What to do when an older crew refused the kind and/or the repository (crew#1878 adds them). */
+export function scopeRefusedWords(refused: ReadonlyArray<'tier' | 'repo'>): string {
+  const what = [refused.includes('tier') ? 'a kind other than a fact' : null, refused.includes('repo') ? 'a repository' : null].filter((x) => x !== null).join(' or ');
+  const instead = refused.includes('tier') && refused.includes('repo') ? 'save it as a fact on any repository'
+    : refused.includes('tier') ? 'save it as a fact' : 'save it for any repository';
+  return `This crew can’t save ${what} yet, so nothing was saved. Update wicked-crew, or ${instead}.`;
+}
+
+/** Where a memory applies, in words: its project and repository facets, else its scope, else everywhere. */
+function whereWords(m: MemoryItem, projectName: (id: string) => string | null, repoName: (id: string) => string | null = () => null): string {
   const project = m.facets.project;
-  if (project !== undefined && project !== '') return projectName(project) ?? `Project ${project}`;
+  const repo = m.facets['repo'];
+  const parts: string[] = [];
+  if (project !== undefined && project !== '') parts.push(projectName(project) ?? `Project ${project}`);
+  if (repo !== undefined && repo !== '') parts.push(`repository ${repoName(repo) ?? repo}`);
+  if (parts.length > 0) { const w = parts.join(', '); return w.charAt(0).toUpperCase() + w.slice(1); }
   return m.scope === '' ? 'Everywhere' : m.scope;
 }
 
@@ -82,6 +109,11 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
 
   // ── Reads ────────────────────────────────────────────────────────────────────────────────────
   const [memories, setMemories] = useState<MemoryItem[]>([]);
+  // (studio#1095) A memory scoped to one repository names it: the list is read once a listed memory has one (the one
+  // session cache; no read for a list with none).
+  const [repoList, setRepoList] = useState<RepoEntry[] | null>(getCachedRepos());
+  /** Bumped by Refresh: a repository list that could not be read is read again (a warm one is not). */
+  const [repoTry, setRepoTry] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Failure | null>(null);
   const [unsupported, setUnsupported] = useState(false);
@@ -203,7 +235,18 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
     { id: 'table', label: 'Edit as a table', testId: 'memory-add-table', onSelect: () => setPanel('table') },
     { id: 'retired', label: 'Show retired', testId: 'memory-add-retired', onSelect: () => setPanel('retired') },
   ];
-  const refresh = (): void => { reread(); setReviewTick((t) => t + 1); setRejectedRev((r) => r + 1); setProposalsRev((r) => r + 1); setRetiredRev((r) => r + 1); };
+  // Only rows on screen that name a repository ask for the list (never the queue, the table or the retired list).
+  const namesWanted = view === 'memories' && panel !== 'table' && panel !== 'retired'
+    && visible.some((m) => typeof m.facets['repo'] === 'string' && m.facets['repo'] !== '');
+  useEffect(() => {
+    if (!namesWanted) return undefined;
+    const warm = getCachedRepos();
+    if (warm !== null) { setRepoList(warm); return undefined; }
+    let live = true;
+    Promise.resolve().then(fetchReposCached).then((r) => { if (live) setRepoList(r); }, () => { /* the id stands in until Refresh */ });
+    return () => { live = false; };
+  }, [namesWanted, repoTry]);
+  const refresh = (): void => { setRepoTry((t) => t + 1); reread(); setReviewTick((t) => t + 1); setRejectedRev((r) => r + 1); setProposalsRev((r) => r + 1); setRetiredRev((r) => r + 1); };
   // Operator 2026-11-01: no header button; Add a memory is the ⋯ menu's first item, the pills switch the list.
   const action = (
     <CalmMenu menuLabel="More for memory" menuTestId={/* testid */ 'memory-more'}
@@ -211,8 +254,9 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
   );
 
   const memoryRow = (m: MemoryItem): React.ReactElement => {
-    const where = whereWords(m, projectName);
-    const tags = Object.entries(m.facets).filter(([k]) => k !== 'project');
+    // (studio#1095) The repository a memory is scoped to is part of where it applies, not a tag.
+    const where = whereWords(m, projectName, (id) => repoList?.find((r) => r.id === id)?.name ?? null);
+    const tags = Object.entries(m.facets).filter(([k]) => k !== 'project' && k !== 'repo');
     const origin = memoryOrigin(m);
     const added = typeof m.created_at === 'number' ? shortDate(m.created_at * 1000) : null;
     return (
@@ -347,7 +391,7 @@ export function MemoryPage({ search, navigate, address = (p) => p, project = nul
         </div>
       </div>
       {adding !== null && (
-        <AddMemoryDialog key={adding} background={scrollRef} project={project} projects={projects} onClose={() => setAdding(null)}
+        <AddMemoryDialog key={adding} background={scrollRef} project={project} projects={projects} onClose={() => setAdding(null)} onRepos={setRepoList}
           onDone={(text, tone) => { const mine = adding; setAdding((cur) => (cur === mine ? null : cur)); setNote({ tone, text }); reread(); setReviewTick((t) => t + 1); setProposalsRev((r) => r + 1); }} />
       )}
       {editing !== null && (
@@ -382,45 +426,150 @@ function Dialog({ title, sub, testId, background, onClose, children }: {
 }
 
 /** Add a memory: filed as a proposal and approved in one step (crew has no direct memory write). */
-function AddMemoryDialog({ background, project, projects, onClose, onDone }: {
+function AddMemoryDialog({ background, project, projects, onClose, onDone, onRepos }: {
   background: React.RefObject<HTMLElement | null>; project: string | null; projects: readonly { id: string; name: string }[]; onClose: () => void; onDone: Done;
+  /** The repository list this dialog read: the page's rows name their repositories with it too. */
+  onRepos?: (repos: RepoEntry[]) => void;
 }): React.ReactElement {
   const [text, setText] = useState('');
   const [where, setWhere] = useState<string>(project !== null && project !== 'default' ? project : '');
+  // (studio#1095) The kind it is filed as (a fact unless the person says otherwise), and the one repository it is
+  // recalled on (crew's `repo` facet: the repository's id, as a run on it names it).
+  const [tier, setTier] = useState<FileProposalTier>('semantic');
+  const [repo, setRepo] = useState<string>('');
+  const [repos, setRepos] = useState<RepoEntry[] | null>(getCachedRepos());
+  /** The repository list could not be read: said beside the picker, with a retry that keeps the form. */
+  const [reposFailed, setReposFailed] = useState(false);
+  const [reposTry, setReposTry] = useState(0);
+  useEffect(() => {
+    let live = true;
+    setReposFailed(false);
+    Promise.resolve().then(fetchReposCached).then((r) => { onRepos?.(r); if (live) setRepos(r); }, () => { if (live) setReposFailed(true); });
+    return () => { live = false; };
+  }, [reposTry, onRepos]);
+  // (studio#1433) crew recalls a memory only where BOTH its facets match (crew learnings/recall.ts), so a project offers
+  // only its own repositories: its `crew.repo` members, read when the project is chosen (a gesture), never on mount.
+  const [members, setMembers] = useState<{ project: string; ids: ReadonlySet<string> } | { project: string; failed: true } | null>(null);
+  const [membersTry, setMembersTry] = useState(0);
+  /** A repository picked before the project, and not one of its repositories: said once, then forgotten. */
+  const [dropped, setDropped] = useState<string | null>(null);
+  useEffect(() => {
+    setMembers(null);
+    if (where === '') return;
+    let live = true;
+    api.getProject(where).then(
+      (d) => { if (live) setMembers({ project: where, ids: new Set(d.members.filter((m) => m.member_kind === 'crew.repo').map((m) => m.member_ref)) }); },
+      () => { if (live) setMembers({ project: where, failed: true }); },
+    );
+    return () => { live = false; };
+  }, [where, membersTry]);
+  const own = members !== null && members.project === where && 'ids' in members ? members.ids : null;
+  /** The chosen project's repositories could not be read: nothing is dropped on a guess, and Save waits for a read. */
+  const membersFailed = members !== null && members.project === where && 'failed' in members;
+  useEffect(() => {
+    // A repository the chosen project's read shows is outside it is dropped: no run would recall it there.
+    if (own === null || repo === '' || own.has(repo)) return;
+    setDropped((repos ?? []).find((r) => r.id === repo)?.name ?? repo);
+    setRepo('');
+  }, [own, repo, repos]);
+  // Unread members offer only the repository already picked (kept, and said to be unchecked), so Any repository stays
+  // a choice and nothing unverified can be newly picked.
+  const offered = where === '' ? (repos ?? []) : own !== null ? (repos ?? []).filter((r) => own.has(r.id)) : (repos ?? []).filter((r) => r.id === repo);
+  const projectName = (projects.find((p) => p.id === where)?.name) ?? where;
+  const repoName = (repos ?? []).find((r) => r.id === repo)?.name ?? repo;
+  /** Save waits for the chosen project's repositories: a repository is never sent with a project it is not in. */
+  const checking = where !== '' && (members === null || members.project !== where || (membersFailed && repo !== ''));
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<Failure | null>(null);
+  const [error, setError] = useState<(Failure & { said?: string }) | null>(null);
+  /** An older crew refused the kind or the repository (nothing was filed): what to change, said plainly. */
+  const [refused, setRefused] = useState<{ text: string; raw: string } | null>(null);
   const words = text.trim();
   const save = async (): Promise<void> => {
-    if (words === '' || busy) return;
-    setBusy(true); setError(null);
+    if (words === '' || busy || checking) return;
+    // The scope fields are locked while this is sent (below), so `repo` is the one crew answers about.
+    const sent = repo;
+    setBusy(true); setError(null); setRefused(null);
     try {
-      await addMemory(where === '' ? { content: words } : { content: words, project: where });
+      await addMemory({ content: words, tier, ...(where === '' ? {} : { project: where }), ...(repo === '' ? {} : { repo }) });
       onDone(`Added: ${shortContent(words)}`, 'ok');
     } catch (e) {
       if (e instanceof AddMemoryApproveError) onDone(`Filed as a proposal, but approving it failed (${e.message}). It waits under Proposals; nothing was remembered yet.`, 'fail');
-      else { setError(failure(e)); setBusy(false); }
+      else if (e instanceof AddMemoryScopeUnsupported) {
+        // Nothing was filed: the dialog stays open with the words, and says what to change.
+        setRefused({ text: scopeRefusedWords(e.refused), raw: e.message });
+        setBusy(false);
+      } else if (e instanceof ApiError && e.status === 400 && codeOf(e) === 'repo_unknown') {
+        // (studio#1433, crew#1913) The repository was removed elsewhere: nothing was filed. The list is read again, so
+        // the picker no longer offers it, and the words stay.
+        setRefused({ text: `${repoName} is no longer registered, so nothing was saved. Pick another repository, or Any repository.`, raw: e.message });
+        // It leaves the picker now, whether or not the list can be read again.
+        setRepos((rs) => (rs === null ? rs : rs.filter((r) => r.id !== sent)));
+        invalidateRepoCache();
+        setRepo('');
+        setReposTry((n) => n + 1);
+        setBusy(false);
+      } else if (e instanceof ApiError && e.status === 503 && /repository list could not be read/.test(e.wire)) {
+        // crew could not read its registry to check the repository: nothing was filed, and sending again may work.
+        setError({ ...failure(e), said: 'crew couldn’t read its repository list, so nothing was saved.' });
+        setBusy(false);
+      } else { setError(failure(e)); setBusy(false); }
     }
   };
   const choices = projects.filter((p) => p.id !== 'default');
   return (
     <Dialog title="Add a memory" testId="memory-add-dialog" background={background} onClose={onClose}
-      sub="Something helpers should know and recall. It is saved as a fact: crew files it as a memory proposal and you approve it in the same step, so it is on the record like any approved proposal.">
+      sub="Something helpers should know and recall. crew files it as a memory proposal and you approve it in the same step, so it is on the record like any approved proposal.">
       <label className="wk-se-field">
         <span>What should helpers remember?</span>
         <textarea data-testid="memory-add-text" className="wk-field" rows={4} maxLength={4000} value={text} onChange={(e) => setText(e.target.value)}
           placeholder="e.g. The billing service is deployed by hand on Fridays; never schedule it." />
       </label>
       <label className="wk-se-field">
+        <span>Save it as</span>
+        <select data-testid="memory-add-tier" className="wk-field" disabled={busy} value={tier} onChange={(e) => setTier(e.target.value as FileProposalTier)}>
+          {FILE_PROPOSAL_TIERS.map((t) => <option key={t} value={t}>{ADD_TIER_WORDS[t]}</option>)}
+        </select>
+      </label>
+      <label className="wk-se-field">
         <span>Recall it on</span>
-        <select data-testid="memory-add-project" className="wk-field" value={where} onChange={(e) => setWhere(e.target.value)}>
+        <select data-testid="memory-add-project" className="wk-field" disabled={busy} value={where} onChange={(e) => { setWhere(e.target.value); setDropped(null); }}>
           <option value="">Every project</option>
           {choices.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </label>
-      {error !== null && <StateBanner kind={error.kind} what="the new memory" error={error.message} onRetry={() => void save()} />}
+      <label className="wk-se-field">
+        <span>Only on this repository</span>
+        <select data-testid="memory-add-repo" className="wk-field" disabled={busy} value={repo} onChange={(e) => { setRepo(e.target.value); setDropped(null); }}>
+          <option value="">Any repository</option>
+          {offered.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+        </select>
+        {reposFailed ? (
+          <span className="wk-field-note" data-testid="memory-add-repo-failed" role="status">
+            Couldn’t read your repositories.{' '}
+            <button type="button" className="wk-link" data-testid="memory-add-repo-retry" onClick={() => setReposTry((n) => n + 1)}>Try again</button>
+          </span>
+        ) : membersFailed ? (
+          <span className="wk-field-note" data-testid="memory-add-repo-failed" role="status">
+            {repo === '' ? `Couldn’t read ${projectName}’s repositories.` : `Couldn’t read ${projectName}’s repositories, so ${repoName} can’t be checked against it.`}{' '}
+            <button type="button" className="wk-link" data-testid="memory-add-repo-retry" onClick={() => setMembersTry((n) => n + 1)}>Try again</button>
+            {repo === '' ? null : ', or pick Any repository.'}
+          </span>
+        ) : dropped !== null ? (
+          <span className="wk-field-note" data-testid="memory-add-repo-note" role="status">{dropped} isn’t one of {projectName}’s repositories, so it was dropped.</span>
+        ) : own !== null && own.size === 0 ? (
+          <span className="wk-field-note" data-testid="memory-add-repo-note" role="status">{projectName} has no repositories yet, so this memory is recalled on any of its runs.</span>
+        ) : null}
+      </label>
+      {refused !== null && (
+        <div className="wk-state-banner wk-state-banner--fail" role="alert" data-testid="memory-add-refused">
+          <p className="wk-state-banner-text">{refused.text}</p>
+          <TechDetails text={refused.raw} />
+        </div>
+      )}
+      {error !== null && <StateBanner kind={error.kind} what="the new memory" said={error.said ?? null} error={error.message} onRetry={() => void save()} />}
       <div className="wk-se-dialog-actions">
         <button type="button" className="wk-btn wk-btn--secondary" data-testid="memory-add-cancel" onClick={onClose}>Cancel</button>
-        <button type="button" className="wk-btn wk-btn--primary" data-testid="memory-add-save" disabled={words === '' || busy} onClick={() => void save()}>{busy ? 'Adding…' : 'Add and approve'}</button>
+        <button type="button" className="wk-btn wk-btn--primary" data-testid="memory-add-save" disabled={words === '' || busy || checking} onClick={() => void save()}>{busy ? 'Adding…' : 'Add and approve'}</button>
       </div>
     </Dialog>
   );

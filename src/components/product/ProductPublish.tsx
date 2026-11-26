@@ -45,7 +45,8 @@ export function itemStateWords(i: PublicationItemState): { words: string; tone: 
     case 'created':
       return i.readBack === 'ok' ? { words: 'Created, and checked on GitHub', tone: 'ok' }
         : i.readBack === 'differs' ? { words: 'Created, but GitHub now shows a different title or text', tone: 'warn' }
-          : { words: 'Created, but it couldn’t be read back from GitHub (it may have been deleted)', tone: 'warn' };
+          : i.readBack === null ? { words: 'Created; not checked on GitHub yet', tone: 'muted' }
+            : { words: 'Created, but it couldn’t be read back from GitHub (it may have been deleted)', tone: 'warn' };
     case 'sending': return { words: 'Being sent now', tone: 'muted' };
     case 'not_sent': return { words: `Not sent${i.why !== undefined ? `: ${i.why}` : ''}`, tone: 'fail' };
     case 'unsure': return { words: `Not known whether GitHub created it${i.why !== undefined ? `: ${i.why.replace(/[.\s]+$/, '')}` : ''}. Look in the repository, then say below.`, tone: 'warn' };
@@ -151,7 +152,8 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
   }, [key]);
 
   // While crew says an issue is being sent (this daemon, maybe another person's click), look again every few seconds.
-  const sendingNow = read.phase === 'ok' && read.body.publications.some((p) => p.items.some((i) => i.state === 'sending'));
+  // Sending, or created and not checked yet (crew checks it once nothing is being sent): look again until settled.
+  const sendingNow = read.phase === 'ok' && read.body.publications.some((p) => p.items.some((i) => i.state === 'sending' || (i.state === 'created' && i.readBack === null)));
   useEffect(() => {
     if (!sendingNow) return undefined;
     const mine = gen.current;

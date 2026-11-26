@@ -10,7 +10,7 @@
     "Forwarded ids count: a literal handed to a component through a testId-like prop or key (`testId`, `testid`, `tid`, `triggerTestId`), a parameter typed as a union of id literals, or a string literal marked `/* testid */` is listed as static/dynamic at the call site — the component renders it — so static + dynamic is the whole denominator of ids a surface can show."
   ],
   "version": 1,
-  "studioVersion": "0.16.17",
+  "studioVersion": "0.16.18",
   "static": [
     {
       "testId": "accent-lgt",
@@ -12532,6 +12532,36 @@
       ]
     },
     {
+      "testId": "memory-add-refused",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-repo",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-repo-failed",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-repo-note",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-repo-retry",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
+      ]
+    },
+    {
       "testId": "memory-add-retired",
       "files": [
         "src/components/memory/MemoryPage.tsx"
@@ -12566,6 +12596,12 @@
       "testId": "memory-add-thread",
       "files": [
         "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "testId": "memory-add-tier",
+      "files": [
+        "src/components/memory/MemoryPage.tsx"
       ]
     },
     {
@@ -13805,6 +13841,24 @@
       ]
     },
     {
+      "testId": "needs-item-snooze",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-item-snooze-cancel",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-item-snooze-failed",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
       "testId": "needs-ranked",
       "files": [
         "src/components/desk/NeedsRanked.tsx"
@@ -13926,6 +13980,36 @@
     },
     {
       "testId": "needs-single",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-snoozed",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-snoozed-item",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-snoozed-summary",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-snoozed-until",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
+      ]
+    },
+    {
+      "testId": "needs-snoozed-wake",
       "files": [
         "src/components/desk/NeedsRanked.tsx"
       ]
@@ -28973,6 +29057,12 @@
       "pattern": "memory-*",
       "files": [
         "src/components/memory/MemoryAdd.tsx"
+      ]
+    },
+    {
+      "pattern": "needs-item-snooze-*",
+      "files": [
+        "src/components/desk/NeedsRanked.tsx"
       ]
     },
     {

@@ -26,7 +26,7 @@
 
 import { apiFetch } from './client.js';
 import { ApiError, isRouteAbsent } from './errors.js';
-import { approveProposal, fileProposal } from './proposals.js';
+import { approveProposal, fileProposal, type FileProposalScopedBody, type FileProposalTier } from './proposals.js';
 
 // ── The page's addresses ─────────────────────────────────────────────────────────────────────
 
@@ -179,19 +179,60 @@ export function isEraseByIdUnsupported(e: unknown): boolean {
 
 /**
  * Add a memory. crew has no direct memory write, so this is two calls: `POST /proposals` files the
- * words as a pending memory proposal (crew makes it a `semantic` memory; `project` becomes its
- * `project` facet, so it is recalled on that project only), then `POST /proposals/:id/approve`
- * approves it, which writes the memory. When the approve fails the proposal stays pending —
- * {@link AddMemoryApproveError} names it, so the page can say it waits under Proposals.
+ * words as a pending memory proposal (`tier` is its kind, a fact when unsaid; `project` and `repo`
+ * become those facets, so it is recalled on that project or repository only), then
+ * `POST /proposals/:id/approve` approves it, which writes the memory. When the approve fails the
+ * proposal stays pending — {@link AddMemoryApproveError} names it, so the page can say it waits under
+ * Proposals.
+ *
+ * (studio#1095) A fact on no repository sends exactly what it always did, so an older crew takes it. Any other kind,
+ * or a repository, needs crew#1878: an older crew refuses the body with a 400 before anything is filed, which is
+ * {@link AddMemoryScopeUnsupported}.
  */
-export async function addMemory(body: { content: string; project?: string }): Promise<{ proposalId: string; memoryId: string | null }> {
-  const { id } = await fileProposal(body.project !== undefined ? { content: body.content, project: body.project } : { content: body.content });
+export async function addMemory(body: { content: string; project?: string; repo?: string; tier?: FileProposalTier }): Promise<{ proposalId: string; memoryId: string | null }> {
+  const wire: FileProposalScopedBody = { content: body.content };
+  if (body.project !== undefined) wire.project = body.project;
+  if (body.repo !== undefined) wire.repo = body.repo;
+  if (body.tier !== undefined && body.tier !== 'semantic') wire.tier = body.tier;
+  let id: string;
+  try {
+    ({ id } = await fileProposal(wire));
+  } catch (e) {
+    const refused = scopeFieldsRefused(e);
+    if (refused.length > 0) throw new AddMemoryScopeUnsupported(e as ApiError, refused);
+    throw e;
+  }
   try {
     const out = await approveProposal(id);
     const active = (out as { active_id?: unknown }).active_id;
     return { proposalId: id, memoryId: typeof active === 'string' ? active : null };
   } catch (e) {
     throw new AddMemoryApproveError(id, e);
+  }
+}
+
+/**
+ * The fields an older crew refused as unknown (its strict schema, before crew#1878): `tier` and/or `repo`, read from
+ * crew's `invalidBody` answer (`details[].code === 'unrecognized_keys'`, routes.ts `invalidBody`). Any other 400 (too
+ * long, a bad value) is not this, and stays the error it was.
+ */
+export function scopeFieldsRefused(e: unknown): Array<'tier' | 'repo'> {
+  if (!(e instanceof ApiError) || e.status !== 400) return [];
+  const details = (e.body as { details?: unknown } | undefined)?.details;
+  if (!Array.isArray(details)) return [];
+  const keys = new Set<string>();
+  for (const d of details) {
+    const issue = d as { code?: unknown; keys?: unknown };
+    if (issue.code === 'unrecognized_keys' && Array.isArray(issue.keys)) for (const k of issue.keys) if (typeof k === 'string') keys.add(k);
+  }
+  return (['tier', 'repo'] as const).filter((k) => keys.has(k));
+}
+
+/** crew refused a kind or a repository as a field it does not know (an older crew): nothing was filed. */
+export class AddMemoryScopeUnsupported extends Error {
+  constructor(readonly reason: ApiError, readonly refused: Array<'tier' | 'repo'>) {
+    super(reason.message);
+    this.name = 'AddMemoryScopeUnsupported';
   }
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Check } from 'lucide-react';
+import { Check, CircleDashed, CirclePause } from 'lucide-react';
 import type { Ask, AskAnswer, AskOption } from '../../api/ask.js';
 import { initialOption, initialPicks, pickBounds } from '../../board/askModel.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
@@ -315,11 +315,12 @@ function ChooseBody({ ask, onAnswer, busy = false, start, reasonFor, consequence
       </div>
       {/* What will be sent, for the SELECTED option: reserved height, so hovering never moves a card. */}
       <p id={consId} data-testid={tid(testIds, 'consequence', /* testid */ 'ask-consequence')} {...(current !== null ? { 'data-option': current.id } : {})} aria-live="polite" className="wk-ask-cons">
-        {current?.consequence !== undefined ? <><b>If you choose this:</b> <span data-testid={reasonCfg?.consequenceTestId}>{consequenceText(current.consequence, consequenceIds, showText)}</span></> : null}
+        {/* A disabled option (refused after the person picked it) has no consequence: it can't be chosen now; its card says why. */}
+        {current?.consequence !== undefined && current.disabled === undefined ? <><b>If you choose this:</b> <span data-testid={reasonCfg?.consequenceTestId}>{consequenceText(current.consequence, consequenceIds, showText)}</span></> : null}
       </p>
       {/* A hovered other option, visibly a preview and never the confirmation; its own reserved line. */}
       <p data-testid={`${tid(testIds, 'consequence', /* testid */ 'ask-consequence')}-preview`} {...(preview !== null ? { 'data-preview': 'true', 'data-option': preview.id } : {})} className="wk-ask-preview">
-        {preview?.consequence !== undefined ? <><b>Preview:</b> {showText(preview.label)}: {showText(preview.consequence)}</> : null}
+        {preview?.consequence !== undefined && preview.disabled === undefined ? <><b>Preview:</b> {showText(preview.label)}: {showText(preview.consequence)}</> : null}
       </p>
       {reasonCfg !== null && current !== null && (
         <div className="wk-ask-reason" data-testid="ask-reason">
@@ -494,15 +495,21 @@ function TextBody({ ask, onAnswer, busy = false, testIds, aside }: AskCardProps)
   );
 }
 
+/** Where an answered ask stands: done (the check), still in progress, or stopped before it was done (studio#1417). */
+export type AskRecordState = 'done' | 'progress' | 'stopped';
+
 /**
  * The answered ask, collapsed to one plain line ("You chose: Split into two lanes"), with its meta at the end: a gate's
- * undo countdown ("Sends in 8 s · Undo"), "sent" and the time, or "just now".
+ * undo countdown ("Sends in 8 s · Undo"), "sent" and the time, or "just now". Only a `done` row shows the check; a row
+ * still in progress ("Making the new version…") shows a neutral mark, and one that stopped short a pause mark.
  */
-export function AskRecord({ line, meta, testId = 'ask-record', className }: { line: string; meta?: React.ReactNode; testId?: string; className?: string }): React.ReactElement {
+export function AskRecord({ line, meta, testId = 'ask-record', className, state = 'done' }: { line: string; meta?: React.ReactNode; testId?: string; className?: string; state?: AskRecordState }): React.ReactElement {
   const showText = useDisplayText();
   return (
-    <div data-testid="ask-record-row" role="status" className={`wk-ask-record${className !== undefined ? ` ${className}` : ''}`}>
-      <Check size={16} aria-hidden className="wk-ask-record-ok" />
+    <div data-testid="ask-record-row" data-state={state} role="status" className={`wk-ask-record${className !== undefined ? ` ${className}` : ''}`}>
+      {state === 'done' ? <Check size={16} aria-hidden className="wk-ask-record-ok" />
+        : state === 'progress' ? <CircleDashed size={16} aria-hidden className="wk-ask-record-progress" />
+          : <CirclePause size={16} aria-hidden className="wk-ask-record-stopped" />}
       <span data-testid={testId}>{showText(line)}</span>
       {meta !== undefined && meta !== null && <span className="wk-ask-record-meta">{meta}</span>}
     </div>
