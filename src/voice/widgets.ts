@@ -205,6 +205,12 @@ export function formatMetric(v: number): string {
 /** How many running jobs the voice dashboard's jobs tile names; the rest it counts ("and N more"). */
 export const JOBS_SHOWN = 4;
 
+/** The jobs the Running jobs tile lists, in its order: ONE function for the tile and for what the voice pack calls
+ *  on screen (codex-check on studio#1450), so the two never disagree about which job a person can see. */
+export function jobsOnTile<R extends { liveness: string }>(runs: readonly R[]): R[] {
+  return runs.filter(isRunningJob).slice(0, JOBS_SHOWN);
+}
+
 /**
  * A job the Running jobs widget lists and the narration counts — ONE predicate for both (artifact-runs-fix: the
  * widget listed 13 chats parked at their turn while the narration said "no jobs running"). Running = working, quiet

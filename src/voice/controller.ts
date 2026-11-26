@@ -44,7 +44,7 @@ import { INITIAL_VOICE, lineId, useVoiceStore, type ListenMode, type VoiceAskCon
 import { isLeave, parseConfirm, parseEntry, parseGateAnswer, parseMode } from './intent.js';
 import { BrowserMic, BrowserSpeaker, crewStt, type MicSource, type Speaker, type SttEngine } from './io.js';
 import { Vad } from './vad.js';
-import { dashboardWidgets, isRunningJob, loadWord } from './widgets.js';
+import { dashboardWidgets, isRunningJob, jobsOnTile, loadWord } from './widgets.js';
 import { voiceGround } from './ground.js';
 import { needsSource } from '../board/attention.js';
 import { STALE_MS } from '../board/nerveCenter.js';
@@ -870,9 +870,10 @@ function groundNow(): string {
   // (VoiceFullScreen); anywhere else no tile shows (codex delta on studio#1450).
   const d = useDashStore.getState();
   const tiles = useVoiceStore.getState().phase === 'full' && d.loaded ? dashboardWidgets(d.layout, d.widgets).map((w) => w.id) : [];
-  // The jobs tile renders the dashboard's own read; the pack's may be the app-wide one when that read's poll failed.
-  const snapshot = freshSnapshot(now);
-  return voiceGround({ snapshot, needs, needsPhase: phase, count, now, tiles, sameRead: snapshot !== null && snapshot === d.system });
+  // The jobs the tile lists, off the read the tile renders (the dashboard's own, even when its latest poll failed and
+  // the pack reads the app-wide one): a job is called shown only when it is one of them (codex-check on studio#1450).
+  const onTile = jobsOnTile(d.system?.runs ?? []).map((r) => r.runId);
+  return voiceGround({ snapshot: freshSnapshot(now), needs, needsPhase: phase, count, now, tiles, onTile });
 }
 
 async function askChat(question: string): Promise<void> {

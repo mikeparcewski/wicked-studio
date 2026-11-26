@@ -24,10 +24,8 @@ function named(items: readonly string[]): string[] {
 }
 
 /** What the voice screen shows of these lines, from the tiles on it. */
-function screenWords(jobsTile: boolean, sameRead: boolean, needsTile: boolean): string {
-  const jobs = !jobsTile ? 'shows no running jobs'
-    : sameRead ? `names the first ${JOBS_SHOWN} running jobs`
-      : 'shows an earlier read of the running jobs, so none below is on it';
+function screenWords(jobsTile: boolean, needsTile: boolean): string {
+  const jobs = jobsTile ? `lists up to ${JOBS_SHOWN} running jobs` : 'shows no running jobs';
   const needs = needsTile ? 'shows the needs count' : 'shows no needs count';
   return `The voice screen ${jobs} and ${needs}.`;
 }
@@ -44,19 +42,19 @@ function rowWords(rows: readonly NeedRow[]): string[] {
  * read says so, and while the list has moved on from a held number the number is said without names (never a list the
  * number does not count).
  */
-export function voiceGround(a: { snapshot: SystemSnapshot | null; needs: NeedsSource; needsPhase: 'loading' | 'complete' | 'partial'; count: number | null; now: number; tiles: readonly string[]; sameRead: boolean }): string {
-  // `tiles`: the dashboard tiles on the person's screen now. The jobs tile names the first JOBS_SHOWN; a job past
-  // them, or every job when that tile is not on screen, is read for the answer but marked, so the pack never says the
-  // person can see it (codex-check and delta on studio#1450). The mark is added after the clip, so a long title
-  // never loses it. `sameRead`: the jobs tile renders this very read; when its own poll failed it keeps an earlier
-  // one while the pack reads a fresher one, so no job here is on it (codex-check r2 on studio#1450).
+export function voiceGround(a: { snapshot: SystemSnapshot | null; needs: NeedsSource; needsPhase: 'loading' | 'complete' | 'partial'; count: number | null; now: number; tiles: readonly string[]; onTile: readonly string[] }): string {
+  // `tiles`: the dashboard tiles on the person's screen now; `onTile`: the run ids the jobs tile lists now
+  // (`jobsOnTile` of the read the tile renders, which can be an earlier read than this one when its own poll failed).
+  // A job is on screen only when its id is on the tile; every other job is read for the answer but marked, so the pack
+  // never says the person can see it (codex-check rounds on studio#1450). The mark is added after the clip, so a long
+  // title never loses it.
   const jobsTile = a.tiles.includes('builtin.jobs');
   const needsTile = a.tiles.includes('builtin.gates');
-  const onScreen = jobsTile && a.sameRead ? JOBS_SHOWN : 0;
-  const jobs = a.snapshot === null ? null : a.snapshot.runs.filter(isRunningJob).map((r, i) => {
+  const shown = new Set(jobsTile ? a.onTile : []);
+  const jobs = a.snapshot === null ? null : a.snapshot.runs.filter(isRunningJob).map((r) => {
     const step = stepWords(r.phase);
     const line = `${r.title}${step !== null ? ` · on ${step}` : ''}${r.liveness !== 'working' ? ` (${r.liveness})` : ''}`;
-    return i >= onScreen ? `${clip(line, LINE_MAX - OFF_SCREEN.length)}${OFF_SCREEN}` : line;
+    return shown.has(r.runId) ? line : `${clip(line, LINE_MAX - OFF_SCREEN.length)}${OFF_SCREEN}`;
   });
   const needs = a.needs.phase === 'loading' || a.needsPhase === 'loading' ? null
     : a.needs.from === 'crew' ? a.needs.items.map((i) => (i.reason !== null && i.reason !== '' ? `${i.text}: ${i.reason}` : i.text))
@@ -69,7 +67,7 @@ export function voiceGround(a: { snapshot: SystemSnapshot | null; needs: NeedsSo
   const load = a.snapshot?.infra.find((i) => i.key === 'load');
   return [
     `${PACK_OPENING}${new Date(a.now).toISOString()}]`,
-    `where: voice mode. These lines are what studio reads around this question right now. ${screenWords(jobsTile, a.sameRead, needsTile)} A line marked (not on screen) is read, not shown.`,
+    `where: voice mode. These lines are what studio reads around this question right now. ${screenWords(jobsTile, needsTile)} A line marked (not on screen) is read, not shown.`,
     jobs === null ? 'jobs running: not read yet' : jobs.length === 0 ? 'jobs running: none' : `jobs running: ${jobs.length}`,
     ...named(jobs ?? []),
     needsLine,
