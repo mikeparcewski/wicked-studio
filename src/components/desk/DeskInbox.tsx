@@ -303,11 +303,12 @@ function SnoozeAct({ target, now, onSnoozed }: { target: { key: string; rank: nu
           onClick={() => {
             setState({ kind: 'sending' });
             // Done: the item leaves the list (and this pane with it); were it still shown, the controls settle back.
-            void snooze(target.key, c.until, target.rank).then(async (why) => {
+            void snooze(target.key, c.until, target.rank).then((why) => {
               setState(why === null ? { kind: 'idle' } : { kind: 'failed', words: why });
               if (why !== null) return;
-              if (target.crew) await reread();
+              // Focus first, not after the re-read: a slow /system read must not leave focus nowhere meanwhile.
               onSnoozed();
+              if (target.crew) void reread();
             });
           }}>
           {c.label}

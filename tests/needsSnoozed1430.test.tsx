@@ -241,6 +241,18 @@ describe('studio#1430 F4: a gate snoozed in the inbox uses crew\'s key, so crew 
     await waitFor(() => expect(listed()).toEqual([]));
     expect(screen.getByTestId('desk-inbox-count')).toHaveTextContent('1 snoozed');
   });
+
+  it('focus reaches the All tab while the re-read after a crew-key snooze is still out (codex r2)', async () => {
+    refresh.mockImplementation(() => new Promise<undefined>(() => undefined));
+    render(<DeskInbox rows={rowsOf().filter((r) => r.key === awakeKey())} {...props} />);
+    await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
+    await act(async () => { fireEvent.click(screen.getAllByTestId('desk-inbox-row').find((b) => b.getAttribute('data-key') === awakeKey())!); });
+    const pane = screen.getByTestId('desk-inbox-read');
+    await act(async () => { fireEvent.click(within(pane).getByTestId('desk-inbox-snooze')); });
+    await act(async () => { fireEvent.click(within(pane).getByTestId('desk-inbox-snooze-hour')); });
+    await waitFor(() => expect(refresh).toHaveBeenCalledWith({ force: true }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('desk-inbox-folder-all')));
+  });
 });
 
 describe('studio#1430 F5: on a phone each row carries its own Snooze', () => {
