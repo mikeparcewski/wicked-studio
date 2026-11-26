@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -17,7 +17,8 @@ const { useSessionDrafts } = await import('../src/store/sessionDrafts.js');
 const { setCachedRoster } = await import('../src/store/rosterCache.js');
 const { jobTitle } = await import('../src/board/deskWords.js');
 const { RunTab } = await import('../src/components/session/RunTab.js');
-const { composerScopeNote, MESSAGE_STEP_LABEL } = await import('../src/board/sessionModel.js');
+const { composerScopeNote, MESSAGE_STEP_LABEL, SEPARATE_ASK_NOTE } = await import('../src/board/sessionModel.js');
+const { useSheets } = await import('../src/store/sheets.js');
 const { makeUnit, makeView } = await import('./factories.js');
 
 const T0 = Date.now() - 600_000;
@@ -91,21 +92,50 @@ describe('Details opens on the job, not the ask', () => {
 });
 
 describe('the job page\'s box says where a message for the job goes', () => {
-  it('in a live chat that holds a live job, the note says Send asks beside it and names the step\'s message', () => {
-    const note = composerScopeNote([JOB, ASK], true);
-    expect(note).not.toBeNull();
-    expect(note!).toContain(MESSAGE_STEP_LABEL);
+  it('in a live chat that holds a live job, the note says Send asks a separate question', () => {
+    expect(composerScopeNote([JOB, ASK], true)).toBe(SEPARATE_ASK_NOTE);
   });
 
-  it('the page shows that note under its box', async () => {
+  it('round 1 (codex P2): the note carries its own way to message the job\'s working step, never a menu that may not be drawn', async () => {
+    useSheets.setState({ open: null } as never);
     render(<SessionPage sessionId={CHAT} runs={[JOB, ASK]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
     const note = await screen.findByTestId('session-composer-scope');
-    expect(note.textContent).toContain(MESSAGE_STEP_LABEL);
+    expect(note.textContent).not.toContain(MESSAGE_STEP_LABEL);
+    fireEvent.click(await screen.findByTestId('session-composer-message-job'));
+    expect(useSheets.getState().open).toMatchObject({ ref: { kind: 'step', runId: 'r-job', ord: 2 }, compose: expect.any(Number) });
+  });
+
+  it('round 1 (codex P2): a job with no working step (planning) offers no message button', async () => {
+    const planning = makeView({ ...JOB.session, status: 'planning', unit_ix: 0 } as never, JOB.units.map((u) => ({ ...u, status: 'pending' })));
+    render(<SessionPage sessionId={CHAT} runs={[planning, ASK]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await screen.findByTestId('session-title');
+    expect(screen.queryByTestId('session-composer-message-job')).toBeNull();
   });
 
   it('a chat of asks only, or a job that ended, gets no note', () => {
     expect(composerScopeNote([ASK], true)).toBeNull();
     const done = { ...JOB, session: { ...JOB.session, status: 'completed' as const } };
     expect(composerScopeNote([done, ASK], true)).toBeNull();
+  });
+});
+
+describe('round 1 (codex P1, pi P2): an ask at a real gate still waits on the person', () => {
+  /** An ask run at a gate a person must answer (no `ask_turn`): Continue in Build, a creator step. */
+  const GATED = { ...ASK, session: { ...ASK.session, ask_turn: undefined } } as typeof ASK;
+
+  it('the header says Waiting, beside a working job', async () => {
+    render(<SessionPage sessionId={CHAT} runs={[JOB, GATED]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await waitFor(() => expect(screen.getByTestId('session-status').textContent).toMatch(/Waiting/));
+  });
+
+  it('Details opens on the waiting ask', async () => {
+    render(<RunTab runs={[JOB, GATED]} sessionId={CHAT} title="t" navigate={() => {}} />);
+    const progress = await screen.findByTestId('run-tab-glance-progress');
+    expect(progress.textContent).toMatch(/1 of 1/);
+  });
+
+  it('round 1 (codex P3): a chat of answered asks only still says Answered', async () => {
+    render(<SessionPage sessionId={CHAT} runs={[ASK]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await waitFor(() => expect(screen.getByTestId('session-status').textContent).toBe('Answered'));
   });
 });
