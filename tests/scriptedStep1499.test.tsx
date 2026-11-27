@@ -26,6 +26,7 @@ import { useGateStore } from '../src/store/gates.js';
 import { usePlanCatalog } from '../src/store/planCatalog.js';
 import { useTeamPlanStore } from '../src/store/teamPlan.js';
 import { useRunEventStore } from '../src/store/events.js';
+import { useRuntimeStore } from '../src/store/runtime.js';
 import { useRunAcceptanceStore } from '../src/store/runAcceptance.js';
 import { setCachedRoster } from '../src/store/rosterCache.js';
 import * as sheets from '../src/store/sheets.js';
@@ -130,6 +131,26 @@ describe('studio#1499 design classes', () => {
     }
     // An earlier step's gate frames are not another step working: the claim stands.
     expect(scriptedStep(viewB({ on: 2 }), [frame(1752), frame(1745), frame(1746)], AT_31)?.ord).toBe(2);
+  });
+
+  it('STALE READS (studio#1507): a page whose log holds only the next step\'s output deltas still lists its stall', async () => {
+    // The page loaded after domain-graph's dispatch: the only frames it saw are that step's live output deltas, which the
+    // event store drops (events.ts IGNORED) and the runtime store keeps as its delta clock. Fed as App feeds both.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const at = frame(1752).ts as number;
+      vi.setSystemTime(at);
+      useRuntimeStore.getState().clear(RUN);
+      const live: Record<string, unknown> = { ...frame(1752) };
+      delete live['ts']; delete live['seq']; // a live /ws frame carries neither
+      useRuntimeStore.getState().ingest(live as unknown as CoreEvent);
+      useRunEventStore.getState().ingest(live as unknown as CoreEvent);
+      expect(useRunEventStore.getState().byRun[RUN] ?? []).toEqual([]);
+      expect(stalledRuns([viewB()], () => at, at + 31 * MIN)).toEqual({ [RUN]: at });
+    } finally {
+      vi.useRealTimers();
+      useRuntimeStore.getState().clear(RUN);
+    }
   });
 
   it('IDENTITY REUSE (coord ruling on the DES): a run that ended and was resumed is read from its resumed dispatch', () => {
