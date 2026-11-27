@@ -180,10 +180,9 @@ export const OLD_GARDEN_WORDS = 'this wicked-garden is too old to map a domain: 
  * studio#1473: crew's scope failure in words. Crew relays garden's last stderr line (`the scope failed: <line>`); a garden
  * older than the scope script answers with its launcher's JSON and the absolute plugin root. That garden is said the way
  * core's run step says it; any other answer keeps crew's words, garden's JSON read down to its `reason`, and no absolute
- * path (the last segment stays).
+ * path, POSIX or Windows (the last segment stays).
  */
 export function scopeErrorWords(error: string): string {
-  if (/scripts\/domain\/scope\.py: not found under the plugin root/.test(error)) return OLD_GARDEN_WORDS;
   const brace = error.indexOf('{');
   let words = error;
   if (brace >= 0) {
@@ -193,7 +192,11 @@ export function scopeErrorWords(error: string): string {
       if (typeof reason === 'string' && reason.trim() !== '') words = `${error.slice(0, brace)}${reason}`;
     } catch { /* not JSON: kept as said */ }
   }
-  return words.replace(/(^|[\s"'(=])\/(?:[^\s"'/]+\/)+([^\s"'/,;)]+)/g, '$1…/$2');
+  // Garden's launcher, missing the scope script (JSON-escaped or read down to its reason; POSIX or Windows separators).
+  if (/scripts(?:\\+|\/)domain(?:\\+|\/)scope\.py: not found under the plugin root/.test(words)) return OLD_GARDEN_WORDS;
+  return words
+    .replace(/(^|[\s"'(=:])\/(?:[^\s"'/]+\/)*([^\s"'/,;)]+)/g, '$1…/$2')
+    .replace(/(^|[\s"'(=:])[A-Za-z]:\\(?:[^\s"'\\]+\\)*([^\s"'\\,;)]+)/g, '$1…\\$2');
 }
 
 /** What holds a domain map's Start while its scope is not ready (the launch wizard and the chat job say the same). */

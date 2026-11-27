@@ -268,10 +268,12 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   const chatScope = useDomainScope({ enabled: domainJob && preStart && v.phase !== 'interrupted', repoRef: v.proposal.repoRefs?.[0] ?? null, intent: domainWords, phrases: null });
   // studio#1473: Start maps the scope, so it is held (with the wizard's words) until one resolves.
   const scopeHeld = domainJob ? domainScopeHeld(chatScope.status) : null;
-  const shownReplies = scopeHeld === null ? v.replies : v.replies.map((r) => (r.id === 'start' ? { ...r, enabled: false, held: scopeHeld } : r));
+  const shownReplies = scopeHeld === null ? v.replies : v.replies.map((r) => (r.id === 'start' && r.enabled ? { ...r, enabled: false, held: scopeHeld } : r));
 
   // ── the routes ────────────────────────────────────────────────────────────────────────────────────────────────────
   const decide = (decision: 'go' | 'not_now', reduced = false): void => {
+    // studio#1473: no Go (Start, or its reduced-assurance retry) while a domain job's scope is not ready.
+    if (decision === 'go' && scopeHeld !== null && v.phase !== 'interrupted') return;
     setError(null);
     setGoRefusal(null);
     setReducedRetry(null);
@@ -487,7 +489,6 @@ export function JobPassage({ chatId, lineage, runs, sessionId, settled = false, 
   };
 
   const act = (r: JobReply): void => {
-    if (r.id === 'start' && scopeHeld !== null) return;
     if (r.id === 'start' || r.id === 'go_again') decide('go');
     else if (r.id === 'not_now') decide('not_now');
     else if (r.id.startsWith('suggestion:')) {

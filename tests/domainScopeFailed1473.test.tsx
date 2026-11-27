@@ -67,6 +67,12 @@ describe('studio#1473: a failed domain scope', () => {
     const w = scopeErrorWords('the scope failed: {"ok":false,"reason":"the store at /home/someone/x/estate.db is locked"}');
     expect(w).toBe('the scope failed: the store at …/estate.db is locked');
     expect(scopeErrorWords('the scope failed: Traceback in /opt/homebrew/lib/node_modules/wicked-garden/scripts/domain/scope.py')).toBe('the scope failed: Traceback in …/scope.py');
+    // pi r1: a path after a colon, a one-segment root path, and Windows paths are reduced too; a Windows old garden is said in words.
+    expect(scopeErrorWords('the scope failed: not found:/opt/x/scope.py')).toBe('the scope failed: not found:…/scope.py');
+    expect(scopeErrorWords('the scope failed: cannot open /scope.db')).toBe('the scope failed: cannot open …/scope.db');
+    expect(scopeErrorWords('the scope failed: cannot open C:\\npm\\wicked\\estate.db')).toBe('the scope failed: cannot open …\\estate.db');
+    expect(scopeErrorWords('see https://example.org/a/b for help')).toBe('see https://example.org/a/b for help');
+    expect(scopeErrorWords('the scope failed: {"ok":false,"reason":"scripts\\\\domain\\\\scope.py: not found under the plugin root C:\\\\npm\\\\wicked-garden"}')).toBe(OLD_GARDEN);
   });
 
   it('the chat job\'s card says it in words, and Start is held with the reason until a scope resolves', async () => {
