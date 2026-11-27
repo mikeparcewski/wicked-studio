@@ -22,8 +22,9 @@ import {
  * daemon answers 409 `gate_changed` when it is no longer the open gate and 409 `gate_unknown` when
  * it cannot tell. Crew bundles this dist, so the two ship together: the key is always sent when
  * the gate is known. Local until studio pins api-types ≥ 0.44.0 — then this is plain `GateDecision`.
+ * (studio#1493, api-types 0.231.0 `GateDecision.gateSeq`) and the OPENING it answers, when the daemon named one.
  */
-type GateDecisionWire = GateAnswer & { ord?: number };
+type GateDecisionWire = GateAnswer & { ord?: number; gateSeq?: number };
 
 /**
  * A gate decision as studio composes it: the pinned `GateDecision`, plus `plan` — approve a
@@ -110,10 +111,12 @@ function patch(runId: string, part: Partial<GateActionState>): void {
   }));
 }
 
-export interface GateInstance { ord: number; receivedAt?: number }
+export interface GateInstance { ord: number; receivedAt?: number; gateSeq?: number }
 
 const sameInstance = (a: GateInstance, b: GateInstance): boolean =>
-  a.ord === b.ord && (a.receivedAt === undefined || b.receivedAt === undefined || a.receivedAt === b.receivedAt);
+  a.ord === b.ord && (a.receivedAt === undefined || b.receivedAt === undefined || a.receivedAt === b.receivedAt)
+  // studio#1493: two openings of one gate are two instances.
+  && (a.gateSeq === undefined || b.gateSeq === undefined || a.gateSeq === b.gateSeq);
 
 function differentOpenGate(runId: string, instance: GateInstance | undefined): boolean {
   const open = useGateStore.getState().gates[runId];
@@ -297,7 +300,10 @@ export function commitGateDecision(
   const gateNow = useGateStore.getState().gates[runId];
   const ord = opts.expect?.ord ?? decision.ord ?? gateNow?.ord;
   const at = opts.expect?.receivedAt ?? (gateNow?.ord === ord ? gateNow?.receivedAt : undefined);
-  const instance = ord === undefined ? undefined : { ord, ...(at !== undefined ? { receivedAt: at } : {}) };
+  // studio#1493: the opening of the gate the person decided on, bound now (before the undo window): the store's gate
+  // when it is that instance. crew refuses the answer (409 gate_changed) once that opening has closed.
+  const seq = gateNow !== undefined && ord !== undefined && gateNow.ord === ord && (at === undefined || gateNow.receivedAt === at) ? gateNow.gateSeq : undefined;
+  const instance = ord === undefined ? undefined : { ord, ...(at !== undefined ? { receivedAt: at } : {}), ...(seq !== undefined ? { gateSeq: seq } : {}) };
   if ((opts.expect !== undefined || decision.ord !== undefined) && refuseMovedGate(runId, instance)) return Promise.resolve('cancelled');
   // DES-CATALOG-002: a run launched from a chat proposal takes a plan answer only with the revision the person was
   // shown, bound here at the moment they decided (never the newest one at send time).
@@ -342,7 +348,7 @@ export function commitGateDecision(
         watched.delete(runId);
         patch(runId, { queued: false });
         const decidedAt = Date.now();
-        const error = await sendGateDecision(runId, ord === undefined ? decision : { ...decision, ord }, instance);
+        const error = await sendGateDecision(runId, ord === undefined ? decision : { ...decision, ord, ...(seq !== undefined ? { gateSeq: seq } : {}) }, instance);
         if (error === null) {
           // studio#244: the diff this gate showed is now the operator's last review of the run.
           recordShown(runId, ord, at, decidedAt);
@@ -391,6 +397,8 @@ export function commitGateReassign(runId: string, cli: string, seatLabel: string
   const label = gateLabel(runId);
   const gateNow = useGateStore.getState().gates[runId];
   const ord = expect?.ord ?? gateNow?.ord;
+  // studio#1493: the opening the move answers (the store's gate, when it is the one the card showed).
+  const seq = gateNow !== undefined && ord !== undefined && !differentOpenGate(runId, expect ?? gateNow) && gateNow.ord === ord ? gateNow.gateSeq : undefined;
   return new Promise<DecisionOutcome>((resolve, reject) => {
     const id = queueDecision({
       verb: 'approve',
@@ -402,7 +410,7 @@ export function commitGateReassign(runId: string, cli: string, seatLabel: string
         watched.delete(runId);
         patch(runId, { queued: false, busy: true });
         try {
-          await api.reassignRun(runId, cli, note, ord);
+          await api.reassignRun(runId, cli, note, ord, seq);
           patch(runId, { busy: false });
           // studio#1121: a newer gate that opened while the move was on its way is not the one it answered.
           if (!differentOpenGate(runId, gateNow)) {

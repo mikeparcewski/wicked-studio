@@ -95,7 +95,8 @@ describe('commitGateDecision with an expected gate instance', () => {
     const post = vi.spyOn(client.api, 'reassignRun').mockResolvedValue({ status: 'ok' } as never);
     useGateStore.setState({ gates: { [RUN]: review } });
     await expect(commitGateReassign(RUN, 'codex', 'Codex', 'try again', review)).resolves.toBe('sent');
-    expect(post).toHaveBeenCalledWith(RUN, 'codex', 'try again', 2);
+    // studio#1493: and the opening it showed, which this gate (no gateSeq on its wire) does not name.
+    expect(post).toHaveBeenCalledWith(RUN, 'codex', 'try again', 2, undefined);
   });
 
   it('D: crew\'s 409 gate_changed on a reassign re-reads the gate and shows the card again with crew\'s words', async () => {
