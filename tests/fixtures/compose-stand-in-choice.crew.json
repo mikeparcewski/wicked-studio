@@ -1,0 +1,165 @@
+{
+  "$comment": "WRITER'S OUTPUT. crew's 409 body for a person's Draft (POST /api/v1/projects/:id/product/compose) on a one-helper roster: the route at wicked-crew#1968 (fix/1884-compose-asks, 4c35984e) through crew's real registerRoutes launcher, with the engine's one-helper preflight fixture (packages/crew/tests/fixtures/stand-in-preflight-one-helper.json), then crew's preflightRefusal (packages/crew/src/core/stand-in.ts). Captured with app.inject. Unedited.",
+  "status": 409,
+  "body": {
+    "code": "stand_in_choice",
+    "error": "This job's helpers can't check it independently: it needs a reviewer, a judge and a QE reviewer that did not build the work, and, if the job calls for them, a rules checker, a rules council, a council and a monitor. wicked can fill those roles with stand-ins (a fresh session that sees the work but none of the builder's reasoning), labelled on the job, every gate, the delivery and the pull request. They are not independent reviews. Use stand-ins for this job or for every job, or add another helper to the job.",
+    "preflight": {
+      "benched": [],
+      "diversity": {
+        "needed": 2,
+        "neededWithFailover": 3,
+        "note": "This job has 1 independent provider; its reviews need 2, plus 1 to survive one failover.",
+        "outsideHelper": null,
+        "providers": 1,
+        "sharing": []
+      },
+      "judges": [
+        {
+          "judges": [],
+          "notJudges": [],
+          "seat": "tr2-claude",
+          "soleJudge": null
+        }
+      ],
+      "primary": null,
+      "reason": "only Claude Code was signed in",
+      "reasonData": {
+        "cli": "Claude Code",
+        "kind": "only_one_helper"
+      },
+      "roles": [
+        {
+          "canStandIn": true,
+          "conditional": false,
+          "needed": 1,
+          "real": [],
+          "role": "evaluator",
+          "shortBy": 1,
+          "standInFrom": {
+            "cli": "tr2-claude",
+            "models": [
+              null
+            ]
+          },
+          "why": "no signed-in helper that did not build the work can be the evaluator"
+        },
+        {
+          "canStandIn": true,
+          "conditional": false,
+          "needed": 1,
+          "real": [],
+          "role": "judge",
+          "shortBy": 1,
+          "standInFrom": {
+            "cli": "tr2-claude",
+            "models": [
+              null
+            ]
+          },
+          "why": "no signed-in helper that did not build the work can be the judge"
+        },
+        {
+          "canStandIn": true,
+          "conditional": false,
+          "needed": 1,
+          "real": [],
+          "role": "qe_reviewer",
+          "shortBy": 1,
+          "standInFrom": {
+            "cli": "tr2-claude",
+            "models": [
+              null
+            ]
+          },
+          "why": "no signed-in helper that did not build the work can be the qe reviewer"
+        },
+        {
+          "canStandIn": true,
+          "conditional": true,
+          "needed": 1,
+          "real": [],
+          "role": "rule_judge",
+          "shortBy": 1,
+          "standInFrom": {
+            "cli": "tr2-claude",
+            "models": [
+              null
+            ]
+          },
+          "why": "no signed-in helper that did not build the work can be the rule judge"
+        },
+        {
+          "canStandIn": true,
+          "conditional": true,
+          "needed": 3,
+          "real": [],
+          "role": "rule_council",
+          "shortBy": 3,
+          "standInFrom": {
+            "cli": "tr2-claude",
+            "models": [
+              null
+            ]
+          },
+          "why": "no signed-in helper that did not build the work can be the rule council"
+        },
+        {
+          "canStandIn": true,
+          "conditional": true,
+          "needed": 3,
+          "real": [],
+          "role": "council",
+          "shortBy": 3,
+          "standInFrom": {
+            "cli": "tr2-claude",
+            "models": [
+              null
+            ]
+          },
+          "why": "no signed-in helper that did not build the work can be the council"
+        },
+        {
+          "canStandIn": true,
+          "conditional": true,
+          "needed": 3,
+          "real": [],
+          "role": "monitor",
+          "shortBy": 3,
+          "standInFrom": {
+            "cli": "tr2-claude",
+            "models": [
+              null
+            ]
+          },
+          "why": "no signed-in helper that did not build the work can be the monitor"
+        }
+      ],
+      "short": true,
+      "signedIn": [
+        "tr2-claude"
+      ]
+    },
+    "choices": [
+      {
+        "id": "job",
+        "label": "Use stand-ins for this job"
+      },
+      {
+        "id": "always",
+        "label": "Use stand-ins for every job"
+      },
+      {
+        "id": "sign_in",
+        "label": "Add or sign in another helper"
+      },
+      {
+        "id": "cancel",
+        "label": "Cancel"
+      }
+    ],
+    "retryWith": {
+      "standIns": true
+    }
+  }
+}

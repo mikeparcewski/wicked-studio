@@ -43,6 +43,7 @@ import { launchDemo } from '../../api/demo.js';
 import { DEMO_AUDIENCES, DEMO_AUDIENCE_MAX, DEMO_SHOW_MAX, DEMO_URL_MAX, demoBlocker } from '../../board/demoLaunch.js';
 import { UNFILED_MOUNT } from '../../api/interactive.js';
 import { composeProduct } from '../../api/product.js';
+import type { ProductComposeBody } from 'wicked-crew-api-types';
 import { COMPOSE_MAX, RequirementsBrowser, reqKey, type ChosenRequirement } from '../product/RequirementsBrowser.js';
 import { aboutMinutes, jobCatalogView, needsLine, needsRepo, startsInline, type CatalogEntry, type CatalogView } from '../../board/workflowCatalog.js';
 import { startInNewChat, workflowChipFor } from '../../store/inlineStart.js';
@@ -541,16 +542,30 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
       setLaunching(true);
       setError(null);
       setQeRefused(null);
+      // studio#1468: as a job's Launch, the card stays up while its own choice is carried out.
+      if (standInChoice === undefined) { setStandIn(null); setStandInError(null); }
       try {
         const steer = draft.intent.trim();
-        const out = await composeProduct(draft.projectId!, {
+        // `standIns` is crew's compose field (crew#1884, api-types after 0.216.0): this job's stand-in answer, as
+        // `retryWith` names it. "Every job" saved the setting first, so it sends nothing more.
+        const body: ProductComposeBody & { standIns?: true } = {
           requirements: draft.requirements.map(({ repoId, key }) => ({ repoId, key })),
           ...(steer !== '' ? { instructions: steer.slice(0, INSTRUCTIONS_MAX) } : {}),
-        });
+          ...(standInChoice?.scope === 'job' ? standInChoice.refusal.retryWith : {}),
+        };
+        const out = await composeProduct(draft.projectId!, body);
         useProvenanceStore.getState().markLaunchedHere(out.runId);
+        setStandIn(null);
+        setStandInError(null);
         finish();
         navigate?.(sessionPath(`run:${out.runId}`));
       } catch (err) {
+        // studio#1468: a short roster with no consent is crew's stand-in choice (`409 stand_in_choice`), the card a
+        // job's Launch shows, not an error; nothing was launched.
+        const choice = standInChoiceOf(err);
+        setStandInError(null);
+        if (choice !== null) { setStandIn(choice); setStandInSent(sentSeats); return; }
+        setStandIn(null);
         setError(err instanceof Error ? err.message : String(err));
       } finally {
         launchingRef.current = false;
