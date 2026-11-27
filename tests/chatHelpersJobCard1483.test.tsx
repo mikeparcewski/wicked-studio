@@ -18,6 +18,11 @@ let messages: unknown[];
 let chatSeats: string[];
 let revisionStatus: number;
 let calls: Array<{ path: string; method: string; body: Record<string, unknown> }>;
+// A chat read made while `holdReads` is on answers later, with what crew held when it was made (a slow read).
+let holdReads: boolean;
+// The revision POST takes effect on crew, then the answer is lost (the network drops).
+let revisionLost: boolean;
+let heldReads: Array<() => void>;
 const chip = (key: string): HTMLElement => screen.getAllByTestId('composer-seat').find((b) => b.dataset.key === key)!;
 
 beforeEach(() => {
@@ -25,6 +30,9 @@ beforeEach(() => {
   chatSeats = ['claude', 'codex', 'pi', 'copilot'];
   revisionStatus = 201;
   calls = [];
+  holdReads = false;
+  heldReads = [];
+  revisionLost = false;
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
     const method = init?.method ?? 'GET';
@@ -40,14 +48,21 @@ beforeEach(() => {
     if (path === '/chats/seeded/proposals') {
       status = revisionStatus;
       if (status === 201) {
-        // Crew answers with card v2, and the transcript gains it (the open card of the lineage).
-        const keys = RECORD.proposal.seats.keys.filter((k) => !((body['edits'] as { removeSeats?: string[] }).removeSeats ?? []).includes(k));
-        const v2 = { ...RECORD, turnId: 'person:v2', proposal: { ...RECORD.proposal, pid: `${RECORD.proposal.pid}:v2`, revises: RECORD.proposal.pid, seats: { lead: keys[0], keys, label: keys.join(', ') } } };
-        messages = [...messages, v2];
-        answer = { view: { state: 'open', proposal: v2.proposal } };
+        // Crew answers with the card's next version, built on the head it revises; the transcript gains it.
+        const head = (messages as Array<typeof RECORD>).filter((m) => m.proposal?.pid !== undefined).at(-1)!.proposal;
+        const edits = body['edits'] as { removeSeats?: string[]; addSeats?: string[] };
+        const keys = [...head.seats.keys.filter((k) => !(edits.removeSeats ?? []).includes(k)), ...(edits.addSeats ?? []).filter((k) => !head.seats.keys.includes(k))];
+        const n = messages.length + 1;
+        const next = { ...RECORD, turnId: `person:v${n}`, proposal: { ...RECORD.proposal, pid: `${RECORD.proposal.pid}:v${n}`, revises: head.pid, seats: { lead: keys[0], keys, label: keys.join(', ') } } };
+        messages = [...messages, next];
+        answer = { view: { state: 'open', proposal: next.proposal } };
       } else answer = { code: 'proposal_stale', error: 'this card was changed in another tab' };
     }
-    return Promise.resolve(new Response(JSON.stringify(answer), { status, headers: { 'content-type': 'application/json' } }));
+    // Crew took the revision (above); its answer never arrives.
+    if (revisionLost && path === '/chats/seeded/proposals') return Promise.reject(new TypeError('Failed to fetch'));
+    const respond = (): Response => new Response(JSON.stringify(answer), { status, headers: { 'content-type': 'application/json' } });
+    if (holdReads && method === 'GET') return new Promise<Response>((resolve) => heldReads.push(() => resolve(respond())));
+    return Promise.resolve(respond());
   }));
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -112,6 +127,68 @@ it('the row reads again when the transcript does (a card drawn after it read)', 
   messages = [fixture.record];
   rerender(<ChatHelpers chatId="seeded" roster={roster} rev={1} />);
   await waitFor(() => expect(screen.getByTestId('composer-seats').dataset.target).toBe('job'));
+});
+
+it('a slow older read never paints a dropped helper back on (codex-check r2 W20)', async () => {
+  const { rerender } = render(<ChatHelpers chatId="seeded" roster={roster} rev={0} />);
+  await waitFor(() => expect(chip('codex').getAttribute('aria-pressed')).toBe('true'));
+  // The transcript reads again (rev 1); that read is slow and holds card v1.
+  holdReads = true;
+  rerender(<ChatHelpers chatId="seeded" roster={roster} rev={1} />);
+  await waitFor(() => expect(heldReads).toHaveLength(1));
+  holdReads = false;
+  fireEvent.click(chip('codex'));
+  await waitFor(() => expect(calls.filter((c) => c.path === '/chats/seeded/proposals')).toHaveLength(1));
+  await waitFor(() => expect(chip('codex').getAttribute('aria-pressed')).toBe('false'));
+  // The slow read lands last: it is older than the revision's re-read, so it is dropped.
+  heldReads.forEach((release) => release());
+  await new Promise((r) => setTimeout(r, 50));
+  expect(chip('codex').getAttribute('aria-pressed')).toBe('false');
+});
+
+it('a press carries what the person asked for: a chip drawn before the card changed never reverses it (codex-check r2 W20)', async () => {
+  render(<ChatHelpers chatId="seeded" roster={roster} />);
+  await waitFor(() => expect(chip('codex').getAttribute('aria-pressed')).toBe('true'));
+  // Card v2 already left Codex out (another tab), and this row has not read it yet: Codex still shows on.
+  const v2 = { ...RECORD, turnId: 'person:v2', proposal: { ...RECORD.proposal, pid: `${RECORD.proposal.pid}:v2`, revises: RECORD.proposal.pid, seats: { lead: 'claude', keys: ['claude', 'pi', 'copilot'], label: 'x' } } };
+  messages = [...messages, v2];
+  fireEvent.click(chip('codex')); // the person means: leave Codex out
+  await waitFor(() => expect(chip('codex').getAttribute('aria-pressed')).toBe('false'));
+  expect(calls.some((c) => c.method === 'POST')).toBe(false);
+});
+
+it('a card drawn since the row read is the one a press changes, not the chat (codex-check r2 W10)', async () => {
+  messages = [];
+  render(<ChatHelpers chatId="seeded" roster={roster} />);
+  await waitFor(() => expect(screen.getByTestId('composer-seats').dataset.target).toBe('chat'));
+  messages = [fixture.record]; // the card is drawn; this row has not read it yet
+  fireEvent.click(chip('pi'));
+  await waitFor(() => expect(calls.some((c) => c.path === '/chats/seeded/proposals')).toBe(true));
+  expect(calls.find((c) => c.path === '/chats/seeded/proposals')!.body).toMatchObject({ edits: { removeSeats: ['pi'] } });
+  expect(calls.some((c) => c.path === '/chats/seeded/seats')).toBe(false);
+});
+
+it('a revision whose answer is lost is not called refused: the chips show what crew holds (partial failure)', async () => {
+  revisionLost = true;
+  render(<ChatHelpers chatId="seeded" roster={roster} />);
+  await waitFor(() => expect(chip('codex').getAttribute('aria-pressed')).toBe('true'));
+  fireEvent.click(chip('codex'));
+  await screen.findByText(/Crew did not answer/);
+  expect(screen.queryByText(/were not changed/)).toBeNull();
+  // Crew took it (card v2 without Codex): the re-read shows so, and a second press asking the same is a no-op.
+  expect(chip('codex').getAttribute('aria-pressed')).toBe('false');
+});
+
+it('each press names its own revision: the card version, the seat and the intent (identity)', async () => {
+  render(<ChatHelpers chatId="seeded" roster={roster} />);
+  await waitFor(() => expect(chip('codex').getAttribute('aria-pressed')).toBe('true'));
+  fireEvent.click(chip('codex'));
+  await waitFor(() => expect(chip('codex').getAttribute('aria-pressed')).toBe('false'));
+  fireEvent.click(chip('pi'));
+  await waitFor(() => expect(chip('pi').getAttribute('aria-pressed')).toBe('false'));
+  const revs = calls.filter((c) => c.path === '/chats/seeded/proposals').map((c) => c.body);
+  expect(revs.map((b) => b['revises'])).toEqual([RECORD.proposal.pid, `${RECORD.proposal.pid}:v2`]);
+  expect(new Set(revs.map((b) => b['requestId'])).size).toBe(2);
 });
 
 it('with no job card yet, the chips still re-seat the chat', async () => {

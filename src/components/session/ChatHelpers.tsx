@@ -22,8 +22,8 @@ export function openJobCard(messages: readonly unknown[] | undefined): { pid: st
  * (studio#1483) While the chat holds an open job card, the chips are THAT job's helpers: crew draws a job's seats
  * from the seats new work may use, never from the chat's (`chat-jobs.ts` drawOrder), so re-seating the chat would
  * change nothing the job runs. A press re-versions the card instead (a revision that adds or removes the seat).
- * A press under a card decides on what crew holds at that moment (the chat read again), never on what this row last
- * read: the card may have been dismissed (Not now), started or replaced since. The row also reads again whenever the
+ * A press decides on what crew holds at that moment (the chat read again), never on what this row last read: a card
+ * may have been drawn, dismissed (Not now), started or replaced since. The row also reads again whenever the
  * transcript does (`rev`), so a card drawn after it read shows here.
  */
 export function ChatHelpers({ chatId, roster, onJobChanged, rev = 0 }: {
@@ -41,14 +41,25 @@ export function ChatHelpers({ chatId, roster, onJobChanged, rev = 0 }: {
   const [noSeats, setNoSeats] = useState(false);
   const busy = useRef(false);
   const live = useRef(true);
+  // Every chat read is numbered; only the newest one's answer is drawn, so a slow older read never paints over a newer
+  // one (codex-check r2 on #1487: an old read had put a dropped helper back "on").
+  const readSeq = useRef(0);
+  type Held = { card: { pid: string; seats: string[] } | null; seats: string[] | null };
+  /** Read the chat and draw it, unless a newer read started meanwhile; answers what crew holds (`null`: superseded). */
+  const read = async (): Promise<Held | null> => {
+    const seq = ++readSeq.current;
+    const r = await api.getChat(chatId);
+    if (!live.current || seq !== readSeq.current) return null;
+    const held: Held = { card: openJobCard(r.messages), seats: Array.isArray(r.seats) ? r.seats : null };
+    setCard(held.card);
+    if (held.seats !== null) setSeats(held.seats); else setNoSeats(true);
+    return held;
+  };
   useEffect(() => {
     live.current = true;
-    void api.getChat(chatId).then((r) => {
-      if (!live.current) return;
-      setCard(openJobCard(r.messages));
-      if (Array.isArray(r.seats)) setSeats(r.seats); else setNoSeats(true);
-    }).catch((e: unknown) => { if (live.current) setNote(words(e)); });
+    read().catch((e: unknown) => { if (live.current) setNote(words(e)); });
     return () => { live.current = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- read() closes over chatId only
   }, [chatId, rev]);
 
   // The seats the chips show: the open job card's, else the chat's.
@@ -56,25 +67,26 @@ export function ChatHelpers({ chatId, roster, onJobChanged, rev = 0 }: {
   const keys = userSeats(roster).map((s) => s.key);
   // Keep seats the chat (or its card) still has even if they have since left the roster.
   for (const key of shown ?? []) if (!keys.includes(key)) keys.push(key);
-  const reread = async (): Promise<void> => {
-    const r = await api.getChat(chatId);
-    if (!live.current) return;
-    setCard(openJobCard(r.messages));
-    if (Array.isArray(r.seats)) setSeats(r.seats); else setNoSeats(true);
-  };
-  /** Inside a press (`busy` held): change the open card's helpers by a revision. */
-  const toggleCard = async (key: string, open: { pid: string; seats: string[] }): Promise<void> => {
-    const off = open.seats.includes(key);
+  const reread = async (): Promise<void> => { await read(); };
+  /** Inside a press (`busy` held): set the open card's helper `key` to `want` by a revision. */
+  const reviseCard = async (key: string, want: boolean, open: { pid: string; seats: string[] }): Promise<void> => {
     try {
       await api.reviseChatProposal(chatId, {
         revises: open.pid,
-        edits: off ? { removeSeats: [key] } : { addSeats: [key] },
+        edits: want ? { addSeats: [key] } : { removeSeats: [key] },
         source: 'question',
         // One request per card version and press: a retry of the same press answers the same revision.
-        requestId: `${open.pid}:helpers:${off ? 'off' : 'on'}:${key}`,
+        requestId: `${open.pid}:helpers:${want ? 'on' : 'off'}:${key}`,
       });
     } catch (e: unknown) {
-      if (live.current) setNote(`The job's helpers were not changed (${words(e)}).`);
+      // No answer (the network, a restart) is not a refusal: crew may have taken the change. The re-read below shows
+      // what it holds; a press again is safe, since it carries the person's intent.
+      const status = apiStatus(e);
+      if (live.current) {
+        setNote(status === null || status === 0
+          ? 'Crew did not answer, so this change may or may not have reached the job. The helpers above are what it holds now.'
+          : `The job's helpers were not changed (${words(e)}).`);
+      }
     } finally {
       // The transcript draws the card: it reads the new version (or crew's unchanged one) as the card's own edits do.
       onJobChanged?.();
@@ -83,43 +95,47 @@ export function ChatHelpers({ chatId, roster, onJobChanged, rev = 0 }: {
       if (live.current) setSaving(false);
     }
   };
-  const toggle = async (key: string): Promise<void> => {
+  /**
+   * A press carries the person's intent as the chip showed it (`want`: include, or leave out) and applies it to what
+   * crew holds NOW (the chat read again): under an open card it revises that card, else it re-seats the chat. If crew
+   * already holds what the person asked for, nothing is sent. It never toggles against the fresh read, so a chip
+   * drawn from an older read cannot reverse a change (codex-check r2 on #1487).
+   */
+  const press = async (key: string, want: boolean): Promise<void> => {
     if (seats === null || roster === null || busy.current) return;
     busy.current = true;
     setSaving(true);
     setNote(null);
-    let held = seats;
-    if (card !== null) {
-      // What crew holds now: is the card still open (and which version), and the chat's seats.
-      let open: { pid: string; seats: string[] } | null;
-      try {
-        const r = await api.getChat(chatId);
-        if (!live.current) return;
-        open = openJobCard(r.messages);
-        setCard(open);
-        if (!Array.isArray(r.seats)) {
-          setNoSeats(true);
-          busy.current = false;
-          setSaving(false);
-          return;
-        }
-        held = r.seats;
-        setSeats(held);
-      } catch (e: unknown) {
-        if (live.current) { setNote(words(e)); setSaving(false); }
-        busy.current = false;
-        return;
-      }
-      if (open !== null) return toggleCard(key, open);
+    let held: Held | null;
+    try {
+      held = await read();
+    } catch (e: unknown) {
+      if (live.current) { setNote(words(e)); setSaving(false); }
+      busy.current = false;
+      return;
     }
-    const next = new Set(held);
-    if (next.has(key)) next.delete(key); else next.add(key);
+    if (held === null || held.seats === null) {
+      busy.current = false;
+      if (live.current) setSaving(false);
+      return;
+    }
+    if (held.card !== null) {
+      if (held.card.seats.includes(key) === want) { busy.current = false; setSaving(false); return; }
+      return reviseCard(key, want, held.card);
+    }
+    if (held.seats.includes(key) === want) { busy.current = false; setSaving(false); return; }
+    const next = new Set(held.seats);
+    if (want) next.add(key); else next.delete(key);
     try {
       const r = await api.reseatChat(chatId, keys.filter((k) => next.has(k))) as Awaited<ReturnType<typeof api.reseatChat>> & { reseated?: false; note?: string };
       if (!live.current) return;
       setNote(r.note ?? (r.refused.length > 0 ? r.refused.map((s) => s.reason).join(' ') : null));
       if (r.reseated === false) await reread();
-      else setSeats(r.seats.filter((s) => s.ok).map((s) => s.cliKey));
+      else {
+        // This answer is newer than any read started before the press: an older read must not paint over it.
+        readSeq.current += 1;
+        setSeats(r.seats.filter((s) => s.ok).map((s) => s.cliKey));
+      }
     } catch (e: unknown) {
       if (!live.current) return;
       setNote(words(e));
@@ -146,7 +162,7 @@ export function ChatHelpers({ chatId, roster, onJobChanged, rev = 0 }: {
           <button key={key} type="button" data-testid="composer-seat" data-key={key} aria-pressed={on}
             disabled={roster === null || saving || last}
             title={last ? (card !== null ? 'A job needs at least one helper' : 'A chat needs at least one helper') : on ? `${name} takes part — click to leave it out` : `${name} is left out — click to include it`}
-            onClick={() => { void toggle(key); }}
+            onClick={() => { void press(key, !on); }}
             className={`wk-composer-chip wk-composer-seat${on ? '' : ' wk-composer-seat--off'}`}>
             {name}
           </button>
