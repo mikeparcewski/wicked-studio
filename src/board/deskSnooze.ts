@@ -107,14 +107,31 @@ export function splitSnoozed(rows: readonly NeedRow[], byKey: Readonly<Record<st
   return { awake, snoozed };
 }
 
-/** (studio#1430 F4) How the inbox snoozes a row: with crew's own key and rank when crew has an item for its run (so
- *  crew holds it back from /needs and every count too), else studio's own key for a row it may snooze; null: none. */
-export function snoozeTargetOf(row: NeedRow, snapshot: SystemSnapshot | null): { key: string; rank: number; crew: boolean } | null {
-  const id = needRunId(row);
-  if (row.members === undefined && id !== null && snapshot !== null && snapshot.ranked === true) {
-    const item = snapshot.attention.find((a) => a.runId === id && a.snooze != null);
-    if (item?.snooze != null) return { key: item.snooze.key, rank: item.snooze.rank, crew: true };
+/** (studio#1430 F4) The runs whose open gate a person may snooze with crew's own key and rank, from crew's last /system
+ *  read and judged as the holds are ({@link crewHeldRuns}): only while that read SUCCEEDED and was asked after this page
+ *  saw the run's gate (`seenAt`; `undefined`, no gate here, offers nothing). An item of an older read may name the run's
+ *  previous gate (codex r1 on the #1475 port): its key would snooze nothing that shows. */
+export function crewSnoozeItems(read: HoldRead, seenAt: (runId: string) => number | undefined): ReadonlyMap<string, { key: string; rank: number }> {
+  const out = new Map<string, { key: string; rank: number }>();
+  const { snapshot, askedAt } = read;
+  if (read.failed || askedAt === null || snapshot === null || snapshot.ranked !== true) return out;
+  for (const a of snapshot.attention) {
+    if (a.runId == null || a.snooze == null || out.has(a.runId)) continue;
+    const seen = seenAt(a.runId);
+    if (seen === undefined || seen >= askedAt) continue;
+    out.set(a.runId, a.snooze);
   }
+  return out;
+}
+
+/** (studio#1430 F4) How the inbox snoozes a row: a gate row with crew's own key and rank when crew's fresh read has an
+ *  item for that gate ({@link crewSnoozeItems}; so crew holds it back from /needs and every count too), else studio's
+ *  own key for a row it may snooze; null: none. Only a gate row: crew's run item is the run's gate (a hold holds nothing
+ *  else, {@link crewHeldOf}), so a failed or stalled row of the same run keeps studio's key. */
+export function snoozeTargetOf(row: NeedRow, crewItems: ReadonlyMap<string, { key: string; rank: number }>): { key: string; rank: number; crew: boolean } | null {
+  const id = needRunId(row);
+  const item = row.kind === 'gate' && row.members === undefined && id !== null ? crewItems.get(id) : undefined;
+  if (item !== undefined) return { key: item.key, rank: item.rank, crew: true };
   return snoozable(row) ? { key: snoozeKey(row), rank: snoozeRank(row), crew: false } : null;
 }
 

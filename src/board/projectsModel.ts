@@ -104,6 +104,15 @@ export function projectAttention(snapshot: SystemSnapshot | null, runIds: Iterab
   return snapshot.attention.filter((a) => (a.runId != null && mine.has(a.runId)) || (a.blockedRunIds ?? []).some((id) => mine.has(id)));
 }
 
+/** (studio#1430) How many of a project's runs crew's ranked list leaves out for a snooze (`snoozed[]`, its end still
+ *  ahead): what {@link projectAttention} does not count, from the same read, so a home that reads crew's list says what
+ *  it holds back whatever this page has read of the run's gate (codex r1 on the #1475 port). */
+export function projectSnoozed(snapshot: SystemSnapshot | null, runIds: Iterable<string>, now: number): number {
+  if (snapshot === null || snapshot.ranked !== true) return 0;
+  const mine = new Set(runIds);
+  return new Set((snapshot.snoozed ?? []).filter((h) => h.runId != null && mine.has(h.runId) && (h.until === null || h.until > now)).map((h) => h.runId)).size;
+}
+
 /** The work nobody resolved that is a project's (failed, superseded, parked), from a ranked snapshot. */
 export function projectUnresolved(snapshot: SystemSnapshot | null, runIds: Iterable<string>): SystemUnresolved[] {
   if (snapshot === null || snapshot.ranked !== true) return [];

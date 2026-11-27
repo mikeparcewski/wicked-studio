@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { SystemSnoozed } from '../api/system.js';
-import { crewHeldRuns } from '../board/deskSnooze.js';
+import { crewHeldRuns, crewSnoozeItems } from '../board/deskSnooze.js';
 import { useDeskSnoozes } from '../store/deskSnoozes.js';
 import { useGateStore } from '../store/gates.js';
 import { useSystemStore } from '../store/systemSnapshot.js';
@@ -22,4 +22,14 @@ export function useCrewHolds(now: number): ReadonlyMap<string, SystemSnoozed> {
     const woke = wakeKey === null ? undefined : wokeAt[wakeKey];
     return woke === undefined ? gate : Math.max(gate, woke);
   }), [snapshot, askedAt, failed, now, wokeAt, gates]);
+}
+
+/** (studio#1430 F4) The runs whose gate the inbox snoozes with crew's own key: crew's last read, judged as the holds
+ *  are (it succeeded, and was asked after this page saw the gate) — {@link crewSnoozeItems}. */
+export function useCrewSnoozeItems(): ReadonlyMap<string, { key: string; rank: number }> {
+  const snapshot = useSystemStore((s) => (s.mode === 'system' ? s.snapshot : null));
+  const askedAt = useSystemStore((s) => s.snapshotAskedAt);
+  const failed = useSystemStore((s) => s.snapshotError !== null || s.healthError !== null);
+  const gates = useGateStore((s) => s.gates);
+  return useMemo(() => crewSnoozeItems({ snapshot, askedAt, failed }, (runId) => gates[runId]?.seenAt), [snapshot, askedAt, failed, gates]);
 }

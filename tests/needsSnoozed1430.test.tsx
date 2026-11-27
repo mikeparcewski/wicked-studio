@@ -349,6 +349,8 @@ describe('studio#1430 F4: a gate snoozed in the inbox uses crew\'s key, so crew 
 
   it('focus reaches the All tab while the re-read after a crew-key snooze is still out (codex r2)', async () => {
     refresh.mockImplementation(() => new Promise<undefined>(() => undefined));
+    // This page saw the gate before the read was asked, so the read's key is that gate's (codex r1 on the #1475 port).
+    useGateStore.setState({ gates });
     render(<DeskInbox rows={rowsOf().filter((r) => r.key === awakeKey())} {...props} />);
     await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
     await act(async () => { fireEvent.click(screen.getAllByTestId('desk-inbox-row').find((b) => b.getAttribute('data-key') === awakeKey())!); });
@@ -431,5 +433,68 @@ describe('studio#1430 F5: on a phone each row carries its own Snooze', () => {
     await act(async () => { fireEvent.click(screen.getAllByTestId('desk-inbox-row')[0]!); });
     expect(within(screen.getByTestId('desk-inbox-read')).getByTestId('desk-inbox-snooze')).toBeInTheDocument();
     expect(screen.queryByTestId('desk-inbox-row-snooze')).toBeNull();
+  });
+});
+
+/**
+ * codex r1 on the #1475 port (STALE READS, W12): the inbox took crew's key for ANY row of a run crew had an item for. A run
+ * that failed before /system caught up still had its previous gate's item there, so Snooze on the failed row wrote that
+ * gate's key: crew held nothing that shows, and the failed row stayed. Crew's key now goes only on a gate row, and only
+ * when the read was asked after this page saw that gate (the holds' own rule); otherwise studio's own key, or none.
+ */
+describe('codex r1 (#1475 port): crew\'s key snoozes only the gate crew\'s read saw', () => {
+  const OLD_GATE_AT = iso(NOW - 2 * H);
+  const STALE = { ...GATE, id: 'run:run-1', blockedRunIds: ['run-1'], waitedSince: OLD_GATE_AT,
+    target: { kind: 'run', runId: 'run-1', gateOrd: 2, interactionId: 'ir_2' }, snooze: { key: `attention:run:run-1@ir_2@${OLD_GATE_AT}`, rank: 101 } };
+
+  it('a run that failed before /system caught up: its failed row snoozes with studio\'s key and leaves', async () => {
+    phoneWidth(true);
+    useSystemStore.setState({ snapshot: snap({ attention: [STALE], snoozed: [] }) } as never);
+    render(<DeskInbox rows={[failed(1)]} {...props} runs={[]} />);
+    await waitFor(() => expect(screen.getByTestId('desk-inbox-row-snooze')).toBeInTheDocument());
+    const own = screen.getByTestId('desk-inbox-row-snooze');
+    await act(async () => { fireEvent.click(within(own).getByTestId('desk-inbox-snooze')); });
+    await act(async () => { fireEvent.click(within(own).getByTestId('desk-inbox-snooze-hour')); });
+    await waitFor(() => expect(calls.some((c) => c.method === 'PUT')).toBe(true));
+    expect(calls.find((c) => c.method === 'PUT')!.url.endsWith(`/desk/snoozes/${encodeURIComponent(snoozeKey(failed(1)))}`)).toBe(true);
+    await waitFor(() => expect(listed()).toEqual([]));
+  });
+
+  it('a gate that arrived after the read was asked never takes the read\'s key (it may be the run\'s earlier gate)', async () => {
+    phoneWidth(true);
+    const asked = useSystemStore.getState().snapshotAskedAt!;
+    useGateStore.setState({ gates: { ...gates, '68c26704': { ...gates['68c26704'], seenAt: asked + 500 } } });
+    render(<DeskInbox rows={rowsOf().filter((r) => r.key === awakeKey())} {...props} />);
+    await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
+    await waitFor(() => expect(listed()).toEqual([awakeKey()]));
+    // A gate row carries no occurrence of its own (needsYou.ts `instance`), so with no fresh crew item it offers no Snooze.
+    expect(screen.queryByTestId('desk-inbox-row-snooze')).toBeNull();
+  });
+
+  it('the same gate, seen before the read was asked, takes crew\'s key', async () => {
+    phoneWidth(true);
+    useGateStore.setState({ gates });
+    render(<DeskInbox rows={rowsOf().filter((r) => r.key === awakeKey())} {...props} />);
+    await waitFor(() => expect(screen.getByTestId('desk-inbox-row-snooze')).toBeInTheDocument());
+    const own = screen.getByTestId('desk-inbox-row-snooze');
+    await act(async () => { fireEvent.click(within(own).getByTestId('desk-inbox-snooze')); });
+    await act(async () => { fireEvent.click(within(own).getByTestId('desk-inbox-snooze-hour')); });
+    await waitFor(() => expect(calls.some((c) => c.method === 'PUT')).toBe(true));
+    expect(calls.find((c) => c.method === 'PUT')!.url.endsWith(`/desk/snoozes/${encodeURIComponent(GATE.snooze.key)}`)).toBe(true);
+  });
+});
+
+/**
+ * codex r1 on the #1475 port (W8): the project home counted its "N snoozed" line from this page's judged holds, which
+ * need the run's gate in this page's store. While that gate read was still out, crew's list (which leaves the held item
+ * out) said nothing waits AND the line was gone. The home reads crew's list, so it says what that same read holds.
+ */
+describe('codex r1 (#1475 port): the project home says what crew\'s list leaves out, gate read or not', () => {
+  it('with this page\'s gate read still out, the home still says 1 snoozed', () => {
+    useGateStore.setState({ gates: {} });
+    const PROJECT = { id: 'p1', name: 'Core', description: null, status: 'active', scope: 'project:p1', created_at: 0, updated_at: 0 } as unknown as Project;
+    const views = [makeView({ id: '290a7fee', status: 'awaiting_human', problem: 'wicked-core#840' } as never, [])];
+    render(<ProjectHome project={PROJECT} projectId="p1" runs={views} allRuns={views} needRows={[]} repos={[]} now={NOW} known loading={false} navigate={vi.fn()} isDefault={false} />);
+    expect(screen.getByTestId('project-needs-snoozed')).toHaveTextContent('1 snoozed, not counted until it comes back');
   });
 });

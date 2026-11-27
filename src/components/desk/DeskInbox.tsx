@@ -22,9 +22,8 @@ import { InlineUndo } from '../InlineUndo.js';
 import { gateKeyOf } from '../../board/gateActions.js';
 import { batchFailedResult } from './BatchFailures.js';
 import { useDeskSnoozes } from '../../store/deskSnoozes.js';
-import { useCrewHolds } from '../../hooks/useCrewHolds.js';
+import { useCrewHolds, useCrewSnoozeItems } from '../../hooks/useCrewHolds.js';
 import { snoozeChoices, snoozeEndWords, snoozeTargetOf, splitSnoozed, type SnoozedRow } from '../../board/deskSnooze.js';
-import type { SystemSnapshot } from '../../api/system.js';
 import { useSystemStore } from '../../store/systemSnapshot.js';
 
 /**
@@ -92,7 +91,7 @@ export function DeskInbox({ rows: allRows, runs, navigate, now, settled, agentNa
   const retrySnoozesAt = snoozes.phase === 'failed' ? now : null;
   useEffect(() => { if (retrySnoozesAt !== null) void loadSnoozes(); }, [retrySnoozesAt, loadSnoozes]);
   // studio#1430: a run a ranked crew holds back for a snooze is snoozed here too, so the inbox counts what /needs counts.
-  const snapshot = useSystemStore((st) => (st.mode === 'system' ? st.snapshot : null));
+  const crewItems = useCrewSnoozeItems();
   const held = useCrewHolds(now);
   const phone = usePhone();
   const { awake: rows, snoozed } = useMemo(() => splitSnoozed(allRows, snoozes.byKey, now, held), [allRows, snoozes.byKey, now, held]);
@@ -151,7 +150,7 @@ export function DeskInbox({ rows: allRows, runs, navigate, now, settled, agentNa
     ageWords: (t) => (t === null ? '' : relTime(t, now)),
     // studio#1430 F5: on a phone the reading pane is hidden, so the row carries its own Snooze (and the pane none).
     extra: (row) => {
-      const target = canSnooze && phone ? snoozeTargetOf(row, snapshot) : null;
+      const target = canSnooze && phone ? snoozeTargetOf(row, crewItems) : null;
       return target === null ? null : <span className="wk-inbox-row-snooze" data-testid="desk-inbox-row-snooze"><SnoozeAct key={target.key} target={target} now={now} onSnoozed={afterSnooze} /></span>;
     },
   };
@@ -199,7 +198,7 @@ export function DeskInbox({ rows: allRows, runs, navigate, now, settled, agentNa
           {queue.rows.length > 0 && (
             <div className="wk-inbox-pane" data-testid="desk-inbox-pane" aria-live="polite">
               {current === null ? <p className="wk-viz-state">Pick an item to read it here.</p> : (
-                <ReadingPane row={current} view={runOf(current)} queueAct={queue.act} navigate={navigate} now={now} agentName={agentName} canSnooze={canSnooze && !phone} snapshot={snapshot} onSnoozed={afterSnooze} />
+                <ReadingPane row={current} view={runOf(current)} queueAct={queue.act} navigate={navigate} now={now} agentName={agentName} canSnooze={canSnooze && !phone} crewItems={crewItems} onSnoozed={afterSnooze} />
               )}
             </div>
           )}
@@ -338,8 +337,9 @@ function snippetOf(row: NeedRow, v: SessionView | null): string {
   return v !== null ? jobTitle(v.session) : plainRunTitle(row.subject);
 }
 
-function ReadingPane({ row, view, queueAct, navigate, now, agentName, canSnooze, snapshot, onSnoozed }: {
-  snapshot: SystemSnapshot | null;
+function ReadingPane({ row, view, queueAct, navigate, now, agentName, canSnooze, crewItems, onSnoozed }: {
+  /** The runs whose gate snoozes with crew's key (`useCrewSnoozeItems`). */
+  crewItems: ReadonlyMap<string, { key: string; rank: number }>;
   onSnoozed: (from: HTMLElement | null) => void;
   row: NeedRow;
   view: SessionView | null;
@@ -435,7 +435,7 @@ function ReadingPane({ row, view, queueAct, navigate, now, agentName, canSnooze,
               : <button type="button" className="wk-btn wk-btn--primary wk-btn--sm" onClick={() => queueAct(a, row.key)}>{deskVerb(a.label)}</button>}
           </div>
         )}
-        {canSnooze && ((t) => t !== null && <div className="wk-inbox-read-acts" data-testid="desk-inbox-snooze-row"><SnoozeAct key={t.key} target={t} now={now} onSnoozed={onSnoozed} /></div>)(snoozeTargetOf(row, snapshot))}
+        {canSnooze && ((t) => t !== null && <div className="wk-inbox-read-acts" data-testid="desk-inbox-snooze-row"><SnoozeAct key={t.key} target={t} now={now} onSnoozed={onSnoozed} /></div>)(snoozeTargetOf(row, crewItems))}
       </div>
     </article>
   );
