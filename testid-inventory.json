@@ -21659,6 +21659,12 @@
       ]
     },
     {
+      "testId": "session-gate-standin-relaunch",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-tool-check-override-consequence",
       "files": [
         "src/components/session/GateRow.tsx"
