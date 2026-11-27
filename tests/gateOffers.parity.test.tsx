@@ -413,7 +413,8 @@ describe('GateRow submits, for each action it draws, the decision the gate lists
         await submitted(c, ch.key);
         // studio#1177: the listed note policy decides whether the typed words ride the move.
         expect(reassign, `${name}: ${ch.key}`).toHaveBeenCalledTimes(1);
-        expect(reassign.mock.calls[0], `${name}: ${ch.key}`).toEqual([RUN, ch.reassignCli, ch.note === 'none' ? undefined : 'because the evidence says so', gate.ord]);
+        // studio#1493: and the opening of the gate it showed (none on these frame-less shapes).
+        expect(reassign.mock.calls[0], `${name}: ${ch.key}`).toEqual([RUN, ch.reassignCli, ch.note === 'none' ? undefined : 'because the evidence says so', gate.ord, gate.gateSeq]);
         reassign.mockRestore();
       }
     });
