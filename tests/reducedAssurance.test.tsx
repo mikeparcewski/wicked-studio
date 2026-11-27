@@ -5,7 +5,7 @@
  * one-seat launch, sending `reducedAssurance: true` only when ticked and only to a daemon that takes it.
  */
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -236,8 +236,12 @@ describe('the launch form', () => {
   it('wicked-core#1843 P3: a job that takes stand-ins is never offered it, and a reduced prefill is not sent', async () => {
     health(true); roster(['claude']); prefill(true, null);
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
-    const body = await launch();
+    // agy r2: judge the form before Send (Send resets it), once the health and roster reads have landed.
+    await waitFor(() => expect(client.api.getHealth).toHaveBeenCalled());
+    await waitFor(() => expect(client.api.getRoster).toHaveBeenCalled());
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(screen.queryByTestId('launch-reduced-assurance')).toBeNull();
+    const body = await launch();
     expect('reducedAssurance' in body).toBe(false);
   });
 
