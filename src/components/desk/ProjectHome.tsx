@@ -10,7 +10,7 @@ import { PROJECTS_PATH } from '../../board/navModel.js';
 import type { NeedAction, NeedRow } from '../../board/needsYou.js';
 import type { RepoUse } from '../../board/projectModel.js';
 import { homeProgress, projectHomeSentence, weekWords } from '../../board/projectHome.js';
-import { projectAttention, projectUnresolved } from '../../board/projectsModel.js';
+import { projectAttention, projectSnoozed, projectUnresolved } from '../../board/projectsModel.js';
 import { needTone } from '../../board/needTone.js';
 import { QE_REFUSED_DELIVER } from '../../board/gateHeadline.js';
 import { tidyWords } from '../../board/nerveOverview.js';
@@ -113,15 +113,17 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
   // not there: they are crew's `unresolved[]`, folded into one "to tidy up" line with their spend.
   // An older crew: the board's fold, without failures older than a week. Until crew first answers, the
   // section is held (no number from the fold flashing before crew's).
-  const snapshot = useSystemStore((s) => (s.mode === 'system' ? s.snapshot : null));
+  // A failed /system read's retained list is not crew's word now (useRankedNeeds' rule): the fold stands in, so nothing
+  // waits unseen. A failed /health read alone is not seen here yet (studio#1471).
+  const snapshot = useSystemStore((s) => (s.mode === 'system' && s.snapshotError === null ? s.snapshot : null));
   const crewPending = useSystemStore((s) => s.mode === 'unknown' && s.healthError === null);
   const items = useMemo(() => projectAttention(snapshot, ids), [snapshot, ids]);
   // Each gate row says what the dock says (its plain cause); the job's title moves to the line.
   const causes = useRowHeadlines(items ?? NO_ITEMS, runs);
   const tidy = useMemo(() => projectUnresolved(snapshot, ids), [snapshot, ids]);
-  // studio#1430: what a ranked crew holds back for a snooze (`snoozed[]`, out of the list above) is said, so "Nothing here
-  // is waiting" never hides it.
-  const snoozedHere = useMemo(() => (snapshot?.ranked === true ? (snapshot.snoozed ?? []).filter((h) => h.runId != null && ids.has(h.runId)).length : 0), [snapshot, ids]);
+  // studio#1430: what crew's list leaves out for a snooze is said, from that same read, so "Nothing here is waiting"
+  // never hides it (not this page's judged holds: they wait on its own gate read, codex r1 on the #1475 port).
+  const snoozedHere = useMemo(() => projectSnoozed(snapshot, ids), [snapshot, ids]);
   const tidySpend = tidy.some((u) => u.costUsd !== null) ? tidy.reduce((n, u) => n + (u.costUsd ?? 0), 0) : null;
   const folded = useMemo(() => attentionRows(needRows.filter((r) => {
     const id = needRunId(r);
@@ -228,7 +230,7 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
             )}
             {snoozedHere > 0 && (
               <p className="wk-calm-foot" data-testid="project-needs-snoozed" data-count={snoozedHere}>
-                {snoozedHere} snoozed, not counted until {snoozedHere === 1 ? 'it comes' : 'they come'} back · <a href={NEEDS_PATH} onClick={go(navigate, NEEDS_PATH)} className="wk-link" data-testid="project-needs-snoozed-open">See them in Needs you</a>
+                {snoozedHere} snoozed, not counted until {snoozedHere === 1 ? 'it comes' : 'they come'} back · <a href={deskTabPath('work', undefined, base)} onClick={go(navigate, deskTabPath('work', undefined, base))} className="wk-link" data-testid="project-needs-snoozed-open">See snoozed</a>
               </p>
             )}
           </CalmSection>

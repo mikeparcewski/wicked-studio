@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { choicesOf, isSimpleGate, useGateStore, type OpenGate } from '../src/store/gates.js';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { beginGateRead, choicesOf, isSimpleGate, useGateStore, type OpenGate } from '../src/store/gates.js';
 import type { CoreEvent } from '../src/api/types.js';
 
 const gate = (over: Partial<OpenGate> = {}): OpenGate =>
@@ -157,5 +157,53 @@ describe('studio#1023 read bookkeeping pruning', () => {
     expect(useGateStore.getState().applyGateRead(second, gate({ runId: 'pruned-first', ord: 3 }))).toBe(true);
     useGateStore.getState().reconcile([]);
     expect(store.gateBookkeepingSizeForTest()).toEqual({ generations: 0, readSeq: 0, appliedSeq: 0 });
+  });
+});
+
+/** studio#1430 (DES-S-NEEDS-HOLDS): `seenAt` is when this page saw a gate occurrence, on the browser clock. A crew hold is
+ *  trusted only from a /system read asked after it, so a new occurrence must get a new one and a re-read of the same one
+ *  must keep it (or every poll would drop every hold). */
+describe('studio#1430 seenAt: when this page saw the gate occurrence', () => {
+  beforeEach(() => { reset(); vi.useFakeTimers({ now: 10_000, toFake: ['Date'] }); });
+  afterEach(() => { vi.useRealTimers(); });
+  const read = (runId: string, g: OpenGate): void => {
+    expect(useGateStore.getState().applyGateRead(beginGateRead(runId), g)).toBe(true);
+  };
+  const seen = (runId: string): number | undefined => useGateStore.getState().gates[runId]?.seenAt;
+
+  it('a live frame stamps it; a read of a gate the store did not hold stamps it', () => {
+    useGateStore.getState().ingest({ type: 'awaitingHuman', session: 'seen-live', ord: 2, prompt: 'Proceed?' } as CoreEvent);
+    expect(seen('seen-live')).toBe(10_000);
+    vi.setSystemTime(11_000);
+    read('seen-read', gate({ runId: 'seen-read', ord: 1, receivedAt: 500 }));
+    expect(seen('seen-read')).toBe(11_000);
+  });
+
+  it('a re-read crew\'s own time proves is the same occurrence keeps it; a new occurrence (same ord) gets a new one', () => {
+    read('seen-same', gate({ runId: 'seen-same', ord: 1, prompt: 'Ship?', receivedAt: 500 }));
+    vi.setSystemTime(40_000);
+    read('seen-same', gate({ runId: 'seen-same', ord: 1, prompt: 'Ship?', receivedAt: 500 }));
+    expect(seen('seen-same')).toBe(10_000);
+    vi.setSystemTime(70_000);
+    read('seen-same', gate({ runId: 'seen-same', ord: 1, prompt: 'Ship?', receivedAt: 900 }));
+    expect(seen('seen-same')).toBe(70_000);
+  });
+
+  it('the first read after a live frame counts as a new sighting (a frame may have been missed), then holds steady', () => {
+    useGateStore.getState().ingest({ type: 'awaitingHuman', session: 'seen-gap', ord: 3, prompt: 'Proceed?' } as CoreEvent);
+    vi.setSystemTime(20_000);
+    read('seen-gap', gate({ runId: 'seen-gap', ord: 3, prompt: 'Proceed?', receivedAt: 800 }));
+    expect(seen('seen-gap')).toBe(20_000);
+    vi.setSystemTime(50_000);
+    read('seen-gap', gate({ runId: 'seen-gap', ord: 3, prompt: 'Proceed?', receivedAt: 800 }));
+    expect(seen('seen-gap')).toBe(20_000);
+  });
+
+  it('setGate drops a sighting the gate carried, so no crew hold can hide it; the next read stamps one', () => {
+    useGateStore.getState().setGate(gate({ runId: 'seen-set', seenAt: 1 }));
+    expect(seen('seen-set')).toBeUndefined();
+    vi.setSystemTime(12_000);
+    read('seen-set', gate({ runId: 'seen-set', receivedAt: 0 }));
+    expect(seen('seen-set')).toBe(12_000);
   });
 });
