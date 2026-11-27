@@ -29,6 +29,9 @@ type Ev = CoreEvent & Record<string, unknown>;
 /** Frames that end a unit's attempt (its turn or command is over). */
 const UNIT_ENDED: ReadonlySet<string> = new Set(['unitDone', 'stepFailed', 'unitDenied', 'unitOutputCaptured']);
 const RUN_ENDED: ReadonlySet<string> = new Set(['sessionCompleted', 'sessionFailed', 'runCancelled']);
+/** Frames that mean a step is being worked (a gate's frames for an earlier step are not): the newest one names the step
+ *  the run is on, whatever window of the log this page holds (coord ruling on the #1499 DES). */
+const UNIT_ACTIVE: ReadonlySet<string> = new Set(['unitDispatched', 'unitExecuting', 'toolExecutorDispatched', 'unitOutputDelta', 'unitOutputCaptured', 'powerTurnStarted']);
 
 /** The unit the run is on: the cursor (`unit_ix`, an index into the units in order), else the first handed out and not
  *  finished. The same pick as {@link silentStep}'s. */
@@ -39,9 +42,9 @@ function runningUnit(view: SessionView): WorkUnit | null {
 }
 
 /** The Tool unit under the run's cursor, read against the log when the caller holds one: null when the run is not
- *  executing, the cursor's unit is a seat's (no `tool_cmd`), or the log shows another step dispatched after it (the
- *  view lags the log). `ended`: the log shows that unit's newest attempt over (a closing frame, even with no dispatch in
- *  the log's window). */
+ *  executing, the cursor's unit is a seat's (no `tool_cmd`), the log's newest step activity is another step's (the view
+ *  lags the log), or the log's newest word is the run's end. `ended`: the log shows that unit's newest attempt over (a
+ *  closing frame, even with no dispatch in the log's window). */
 function toolCursor(view: SessionView, events: readonly CoreEvent[] | null | undefined): { unit: WorkUnit; dispatchedAt: number | null; ended: boolean } | null {
   if (view.session.status !== 'executing') return null;
   const unit = runningUnit(view);
@@ -49,15 +52,16 @@ function toolCursor(view: SessionView, events: readonly CoreEvent[] | null | und
   let dispatchedAt: number | null = null;
   let ended = false;
   let attempt = -1;
-  let newestOrd: number | null = null;
+  let activeOrd: number | null = null;
+  let runEnded = false;
   for (const e of (events ?? []) as readonly Ev[]) {
-    if (RUN_ENDED.has(e.type)) return null;
-    if (e.ord !== unit.ord) {
-      if (e.type === 'unitDispatched' && typeof e.ord === 'number') newestOrd = e.ord;
-      continue;
-    }
+    // A run's end closes the claim; a later dispatch (a resumed run) opens it again.
+    if (RUN_ENDED.has(e.type)) { runEnded = true; continue; }
+    if (typeof e.ord !== 'number') continue;
+    if (e.type === 'unitDispatched') runEnded = false;
+    if (UNIT_ACTIVE.has(e.type)) activeOrd = e.ord;
+    if (e.ord !== unit.ord) continue;
     if (e.type === 'unitDispatched') {
-      newestOrd = unit.ord;
       attempt = typeof e.attempt === 'number' ? e.attempt : attempt + 1;
       ended = false;
       dispatchedAt = typeof e.ts === 'number' ? e.ts : arrivedAt(e);
@@ -66,7 +70,7 @@ function toolCursor(view: SessionView, events: readonly CoreEvent[] | null | und
       ended = true;
     }
   }
-  if (newestOrd !== null && newestOrd !== unit.ord) return null;
+  if (runEnded || (activeOrd !== null && activeOrd !== unit.ord)) return null;
   return { unit, dispatchedAt, ended };
 }
 

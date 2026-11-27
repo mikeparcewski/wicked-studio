@@ -120,6 +120,30 @@ describe('studio#1499 design classes', () => {
     expect(stalledRuns([viewB()], () => DISPATCHED, AT_31)).toEqual({});
   });
 
+  it('STALE READS (coord ruling on the DES): a window holding only the next step\'s working frames ends the claim', () => {
+    // Codex r2: no unitDispatched for either step in the window, only domain-graph working (1749) or captured (1753).
+    for (const seq of [1749, 1753]) {
+      const log = [frame(seq)];
+      expect(scriptedStep(viewB(), log, AT_31)).toBeNull();
+      expect(silentStep(viewB(), log, (frame(seq).ts as number) + 31 * MIN)).not.toBeNull();
+      expect(stalledRuns([viewB()], () => frame(seq).ts as number, (frame(seq).ts as number) + 31 * MIN, () => log)).toEqual({ [RUN]: frame(seq).ts });
+    }
+    // An earlier step's gate frames are not another step working: the claim stands.
+    expect(scriptedStep(viewB({ on: 2 }), [frame(1752), frame(1745), frame(1746)], AT_31)?.ord).toBe(2);
+  });
+
+  it('IDENTITY REUSE (coord ruling on the DES): a run that ended and was resumed is read from its resumed dispatch', () => {
+    const resumed = [
+      ...upTo(1484),
+      { ...frame(1757), type: 'sessionFailed', seq: 1600, ts: DISPATCHED + 10 * MIN },
+      { ...frame(1482), attempt: 1, seq: 1601, ts: DISPATCHED + 12 * MIN },
+    ] as CoreEvent[];
+    expect(scriptedStep(viewB(), resumed, AT_31)).toEqual({ ord: 1, label: 'Domain run', minutes: 19 });
+    expect(silentStep(viewB(), resumed, AT_31)).toBeNull();
+    // Ended and not resumed: no claim.
+    expect(scriptedStep(viewB(), resumed.slice(0, -1), AT_31)).toBeNull();
+  });
+
   it('a Tool step whose output is captured (its gate running) offers no seat levers either (codex r1, W4)', () => {
     // The view lags at ord 1; the log has its capture and gate, not the next dispatch. No "is working" claim, and no
     // silent-seat card ("Ask Bash", "Move it to another helper"): no seat runs it.
