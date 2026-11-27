@@ -4,6 +4,8 @@
  * strip sent for the same choices (EXPECTED was recorded from the strip on main 7cf54b7).
  */
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RepoEntry, RosterSeat, WorkflowDef } from '../src/api/types.js';
@@ -302,6 +304,77 @@ describe('Draft epics — a launch-wizard job (operator 2026-10-12: the Product 
     expect(await screen.findByTestId('launch-wizard-error')).toBeInTheDocument();
     expect(useLaunchWizard.getState().draft?.requirements).toHaveLength(1);
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  // studio#1468: crew asks a person's Draft the stand-in choice (crew#1884). Its 409 is the card a job's Launch shows,
+  // not an error, and each answer is carried out. The body is crew's own route output (the fixture's $comment).
+  describe('a short roster: the stand-in choice (studio#1468)', () => {
+    const CHOICE = JSON.parse(readFileSync(resolve(process.cwd(), 'tests/fixtures/compose-stand-in-choice.crew.json'), 'utf8')) as { status: number; body: Record<string, unknown> };
+    let calls: Array<{ method: string; path: string; body: Record<string, unknown> }> = [];
+    let composeAnswers: Array<{ status: number; body: unknown }> = [];
+    function wireChoice(): void {
+      calls = [];
+      vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+        const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+        const method = init?.method ?? 'GET';
+        const json = (status: number, body: unknown): Promise<Response> => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }));
+        if (method !== 'GET') calls.push({ method, path, body: JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown> });
+        if (method === 'POST' && path === '/projects/shop/product/compose') {
+          const a = composeAnswers.shift() ?? { status: 202, body: { runId: 'r-draft', requirements: 1 } };
+          return json(a.status, a.body);
+        }
+        if (method === 'PUT' && path === '/settings') return json(200, { settings: { standInReview: 'always' } });
+        return json(200, path === '/projects/shop/requirements' ? REQS : path === '/roster' ? { roster: ROSTER } : {});
+      }));
+    }
+    async function launchDraft(navigate: (p: string) => void): Promise<void> {
+      render(<LaunchWizard navigate={navigate} />);
+      act(() => openLaunchWizard({ workflowId: 'draft-epics', projectId: 'shop', requirements: [{ repoId: 'r-api', key: 'k1', title: 'Refund rule 1' }] }));
+      await screen.findByTestId('launch-wizard-requirements');
+      next();
+      fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+      await screen.findByTestId('launch-wizard-standin');
+    }
+    const composes = () => calls.filter((c) => c.path === '/projects/shop/product/compose');
+    beforeEach(() => { composeAnswers = [{ status: CHOICE.status, body: CHOICE.body }]; wireChoice(); });
+
+    it('shows the card, not an error, and nothing navigates', async () => {
+      const navigate = vi.fn();
+      await launchDraft(navigate);
+      expect(screen.queryByTestId('launch-wizard-error')).toBeNull();
+      for (const id of ['job', 'always', 'sign_in', 'cancel']) expect(screen.getByTestId(`launch-wizard-standin-${id}`)).toBeInTheDocument();
+      expect(navigate).not.toHaveBeenCalled();
+      expect(composes()).toHaveLength(1);
+    });
+
+    it('"this job" sends the same draft again with crew\'s retryWith (standIns: true) and opens the run', async () => {
+      const navigate = vi.fn();
+      await launchDraft(navigate);
+      fireEvent.click(screen.getByTestId('launch-wizard-standin-job'));
+      await waitFor(() => expect(navigate).toHaveBeenCalledWith('/s/run%3Ar-draft'));
+      expect(composes().map((c) => c.body)).toEqual([
+        { requirements: [{ repoId: 'r-api', key: 'k1' }] },
+        { requirements: [{ repoId: 'r-api', key: 'k1' }], standIns: true },
+      ]);
+    });
+
+    it('"every job" saves the setting, then sends the draft with no standIns of its own', async () => {
+      const navigate = vi.fn();
+      await launchDraft(navigate);
+      fireEvent.click(screen.getByTestId('launch-wizard-standin-always'));
+      await waitFor(() => expect(navigate).toHaveBeenCalledWith('/s/run%3Ar-draft'));
+      expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual(['POST /projects/shop/product/compose', 'PUT /settings', 'POST /projects/shop/product/compose']);
+      expect(composes()[1]!.body).not.toHaveProperty('standIns');
+    });
+
+    it('Cancel closes the card and sends nothing more', async () => {
+      const navigate = vi.fn();
+      await launchDraft(navigate);
+      fireEvent.click(screen.getByTestId('launch-wizard-standin-cancel'));
+      expect(screen.queryByTestId('launch-wizard-standin')).toBeNull();
+      expect(composes()).toHaveLength(1);
+      expect(navigate).not.toHaveBeenCalled();
+    });
   });
 });
 
