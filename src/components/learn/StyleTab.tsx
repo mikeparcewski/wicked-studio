@@ -336,7 +336,8 @@ function StylePipeline({ record, launching, sourceCount, onLearn, onReset, launc
         const rulesJob = jobs.find((j) => j.kind === 'rules');
         if (rulesJob !== undefined && draftRules.length > 0) {
           const ids = draftRules.filter((r) => keep.has(`draft:${r.id}`)).map((r) => r.id);
-          const res = await keepDraftedRules(rulesJob.runId, ids);
+          // wicked-crew#1982: the answer names the gate these drafts were read at (this render's draft, the rules shown).
+          const res = await keepDraftedRules(rulesJob.runId, ids, draft ?? undefined);
           if (res.landing?.outcome === 'failed') throw new Error(res.landing.error ?? 'the rules could not be landed');
           kept += ids.length;
         }

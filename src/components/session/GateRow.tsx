@@ -31,6 +31,7 @@ import { GateDepthDetails, RuleOfferBlock, useFullVerdict, useSeatTrust, type Se
 import { WatchGateLine } from '../WatchLines.js';
 import { REDUCED_OPT_IN_LABEL, gatePassedFor, gateReceiptFor, rulesHoldAt, isReduced, sessionAssurance, sessionQe, waitsForJudge } from '../../board/assuranceModel.js';
 import { retryPrefillOf } from '../../board/needsYou.js';
+import { takesStandIns } from '../../board/standIn.js';
 import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { AGENTS_PATH, type Navigate } from '../../hooks/useRoute.js';
@@ -412,6 +413,8 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
  */
 export function CreatorSeatRefusal({ view, navigate, noneInJob = false }: { view: RunView; navigate?: Navigate; noneInJob?: boolean }): React.ReactElement {
   const can = useCapabilities((s) => s.reducedAssurance);
+  // (wicked-core#1843 P3) A job that takes stand-ins starts again with one (crew asks), never with reduced assurance.
+  const standIns = takesStandIns(view.session.workflow_id);
   // (mockup ui-v2-gate) The headline already says it ("No second helper is free to review this"): no bold lead-in
   // here, and the reduced-assurance relaunch is one of the Other options ({@link ReducedRelaunchItem}).
   void view; void navigate;
@@ -422,7 +425,7 @@ export function CreatorSeatRefusal({ view, navigate, noneInJob = false }: { view
       <div data-testid="session-gate-creator-seat" role="status" className="wk-gate-consequence">
         <p className="wk-assurance-lead">
           This job requires an independent check, and the engine ruled out every one of its helpers for this step.
-          Start the job again with another helper{can ? ', or with reduced assurance' : ''}.
+          Start the job again with another helper{standIns ? ', or with a stand-in' : can ? ', or with reduced assurance' : ''}.
         </p>
       </div>
     );
@@ -431,22 +434,44 @@ export function CreatorSeatRefusal({ view, navigate, noneInJob = false }: { view
     <div data-testid="session-gate-creator-seat" role="status" className="wk-gate-consequence">
       <p className="wk-assurance-lead">
         This job requires an independent check, and the only helper that could review the work is the one that
-        built it. Give the review to a second signed-in helper, or start the job again with reduced assurance.
+        built it. Give the review to a second signed-in helper, or start the job again {standIns ? 'with a stand-in' : 'with reduced assurance'}.
       </p>
-      {!can && <p data-testid="session-gate-creator-seat-nocap" className="wk-assurance-optin-why">Studio's service does not support reduced assurance; sign a second helper in.</p>}
+      {!standIns && !can && <p data-testid="session-gate-creator-seat-nocap" className="wk-assurance-optin-why">Studio's service does not support reduced assurance; sign a second helper in.</p>}
     </div>
   );
 }
 
+/** (wicked-core#1843 P3) The stand-in relaunch's consequence, in plain words. */
+export const STAND_IN_RELAUNCH_WORDS = 'Opens the launch form with this job\'s brief. If no other helper can check it, Launch asks whether a stand-in may, labelled as one on the job, every check and the delivery. This job stays here until you stop it.';
+
 /** The relaunch's consequence, in plain words. */
 export const REDUCED_RELAUNCH_WORDS = 'Starts this job again where the creator\'s seat reviews its own work; it is labelled “Reduced assurance” on the job, every gate and the delivery. This job stays here until you stop it.';
 
-/** The creator-seat refusal's other way on, under the gate's choices: start the job again with reduced assurance.
- *  It opens the launch form with this job's brief and the opt-in ticked; nothing starts until Launch, and this job
- *  stays at its gate. `null` when crew does not offer reduced assurance. */
+/** The creator-seat refusal's other way on, under the gate's choices. A job that takes stand-ins starts again with a
+ *  stand-in: the launch form opens with this job's brief and no opt-in, and Launch gets crew's stand-in question, whether
+ *  or not crew offers reduced assurance. A job that takes none (a review, the evals, a demo) starts again with reduced
+ *  assurance, the opt-in ticked; `null` for it when crew does not offer reduced assurance. Nothing starts until Launch,
+ *  and this job stays at its gate. */
 export function ReducedRelaunchItem({ view, navigate, onPick }: { view: RunView; navigate?: Navigate; onPick?: () => void }): React.ReactElement | null {
   const can = useCapabilities((s) => s.reducedAssurance);
-  if (!can || navigate === undefined) return null;
+  if (navigate === undefined) return null;
+  // (wicked-core#1843 P3) A job that takes stand-ins starts again without reduced assurance: Launch then asks the
+  // stand-in question (crew's 409), drawn as StandInChoice.
+  if (takesStandIns(view.session.workflow_id)) {
+    return (
+      <button
+        type="button"
+        data-testid="session-gate-standin-relaunch"
+        title="Open the launch form with this run's brief; nothing starts until you launch, and this run stays at its gate."
+        onClick={() => { onPick?.(); setRetryPrefill(retryPrefillOf(view)); navigate('/runs/new'); }}
+        className="wk-ask-alt"
+      >
+        <span className="wk-ask-alt-label">Start it again with a stand-in…</span>
+        <span data-testid="session-gate-creator-seat-disclosure" className="wk-ask-alt-sub">{STAND_IN_RELAUNCH_WORDS}</span>
+      </button>
+    );
+  }
+  if (!can) return null;
   return (
     <button
       type="button"

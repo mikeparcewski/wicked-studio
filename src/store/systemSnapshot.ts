@@ -52,6 +52,9 @@ export interface SystemStore {
   snapshot: SystemSnapshot | null;
   /** When the newest SUCCESSFUL `/system` read landed. */
   snapshotAt: number | null;
+  /** When that read was ASKED (this browser's clock): its answer can say nothing about what this page saw after it
+   *  (studio#1430's crew holds are trusted only against it). */
+  snapshotAskedAt: number | null;
   snapshotError: string | null;
   /** The fallback's governance read (older crews). */
   governance: GovernanceSignal;
@@ -76,7 +79,7 @@ function bounded<T>(p: Promise<T>): Promise<T> {
   });
 }
 
-type Answer = Partial<Pick<SystemStore, 'mode' | 'health' | 'healthAt' | 'healthError' | 'slow' | 'snapshot' | 'snapshotAt' | 'snapshotError' | 'governance' | 'governanceAt'>>;
+type Answer = Partial<Pick<SystemStore, 'mode' | 'health' | 'healthAt' | 'healthError' | 'slow' | 'snapshot' | 'snapshotAt' | 'snapshotAskedAt' | 'snapshotError' | 'governance' | 'governanceAt'>>;
 
 /**
  * One tick's reads, folded into ONE answer that is published at once when the tick settles — never a
@@ -98,16 +101,17 @@ async function readTick(): Promise<Answer> {
   const health: Answer = { health: h, healthAt: Date.now(), healthError: null, slow: null };
   if (h.capabilities?.['system'] === true) {
     try {
+      const askedAt = Date.now();
       const read = await bounded(getSystem());
       // The one needs-you rule needs both: the capability, and the contract's own fields.
       const snapshot = { ...read, ranked: read.ranked === true && h.capabilities?.['attentionRanked'] === true };
-      return { ...health, mode: 'system', snapshot, snapshotAt: Date.now(), snapshotError: null };
+      return { ...health, mode: 'system', snapshot, snapshotAt: Date.now(), snapshotAskedAt: askedAt, snapshotError: null };
     } catch (e) {
       // A crew that claims the capability but has no route is an older crew after all.
       if (!isSystemUnsupported(e)) return { ...health, mode: 'system', snapshotError: message(e), slow: slowly(e) ? message(e) : null };
     }
   }
-  const older: Answer = { ...health, mode: 'fallback', snapshot: null, snapshotAt: null, snapshotError: null };
+  const older: Answer = { ...health, mode: 'fallback', snapshot: null, snapshotAt: null, snapshotAskedAt: null, snapshotError: null };
   try {
     const d = await bounded(Promise.resolve().then(() => getDiagnostics()));
     return { ...older, governance: d.governance === undefined ? { kind: 'absent' } : { kind: 'ok', governance: d.governance }, governanceAt: Date.now() };
@@ -130,6 +134,7 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
   slow: null,
   snapshot: null,
   snapshotAt: null,
+  snapshotAskedAt: null,
   snapshotError: null,
   governance: { kind: 'unread' },
   governanceAt: null,
@@ -202,7 +207,7 @@ export function resetSystemStore(): void {
   generation = 0;
   resetCrewHeard();
   useSystemStore.setState({
-    mode: 'unknown', health: null, healthAt: null, healthError: null, slow: null, snapshot: null, snapshotAt: null,
+    mode: 'unknown', health: null, healthAt: null, healthError: null, slow: null, snapshot: null, snapshotAt: null, snapshotAskedAt: null,
     snapshotError: null, governance: { kind: 'unread' }, governanceAt: null, reading: false,
   });
 }

@@ -22,7 +22,7 @@ import { REDUCED_RELAUNCH_WORDS } from '../session/GateRow.js';
 import { Switch } from '../ui/Switch.js';
 import { TechDetails } from '../ui/TechDetails.js';
 import { StandInChoice } from '../StandInChoice.js';
-import { helperNamer, saveStandInsEveryJob, standInChoiceOf, standInRelaunchBody, type StandInChoiceId, type StandInChoiceLineId, type StandInChoiceRefusal } from '../../board/standIn.js';
+import { helperNamer, saveStandInsEveryJob, standInChoiceOf, standInRelaunchBody, takesStandIns, type StandInChoiceId, type StandInChoiceLineId, type StandInChoiceRefusal } from '../../board/standIn.js';
 import { AGENTS_PATH } from '../../hooks/useRoute.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { useSignInHere } from '../agents/useSignInHere.js';
@@ -303,7 +303,9 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
   // card is not shown (its "not picked" words would be stale); Launch asks crew again. Back and Next alone keep it.
   // The card shows only while the form would send the helpers the refused launch sent (`standInSent`).
   const seatKeys = seats.map((s) => s.key).sort().join('\n');
-  const offerReduced = reducedCap && seats.length === 1;
+  // (wicked-core#1843 P3) Only a launch that takes no stand-ins (a demo, a review, the evals) offers reduced assurance; crew
+  // asks any other the stand-in question, drawn as StandInChoice.
+  const offerReduced = reducedCap && seats.length === 1 && (demoing || !takesStandIns(draft.workflowId));
   // J6 S1: a domain model run writes with Claude Code and checks with Codex, whichever helpers are picked here
   // (DES-j6-build §2, the calibrated pair); either signed out stops the run, so Launch says so first.
   const scopeWriter = domainScopeSeat(roster, 'claude', 'Claude Code');

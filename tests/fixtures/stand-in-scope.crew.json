@@ -1,0 +1,32 @@
+{
+  "_source": "wicked-crew main a748d155: packages/crew/src/api/stand-in-scope.ts:10-16 noStandInsKind, and the constants it reads",
+  "_refresh": "Copy these again from crew when its classifier changes; tests/standInScope.crewParity.test.ts fails until studio's list matches.",
+  "kinds": {
+    "review": [
+      {
+        "id": "review-change",
+        "from": "packages/crew/src/api/review-change.ts:5 REVIEW_CHANGE_WORKFLOW"
+      },
+      {
+        "id": "review-recent-work",
+        "from": "packages/crew/src/insights/workflow.ts:12 REVIEW_WORKFLOW"
+      }
+    ],
+    "evals": [
+      {
+        "id": "run-evals",
+        "from": "packages/crew/src/evals/workflow.ts:24 RUN_EVALS_WORKFLOW"
+      }
+    ],
+    "demo": [
+      {
+        "id": "demo",
+        "from": "packages/crew/src/api/recording.ts:101 DEMO_PRESET"
+      },
+      {
+        "id": "demo-human-review",
+        "from": "packages/crew/src/api/recording.ts:104 DEMO_HUMAN_REVIEW_PRESET"
+      }
+    ]
+  }
+}
