@@ -5,6 +5,8 @@ import { retryBadge } from '../../board/stepRetry.js';
 import { silentWords } from '../../board/silentStep.js';
 import { useRunningFloor } from '../../hooks/useRunningFloor.js';
 import { floorBadge, floorWords } from '../../board/floorRun.js';
+import { scriptedWords } from '../../board/scriptedStep.js';
+import { useScriptedStep } from '../../hooks/useScriptedStep.js';
 import { beginChatOpen, chatOpened, useChatFlow, usePageSendFailure } from '../../store/chatFlow.js';
 import { moveOf, useJobMoves } from '../../store/jobMoves.js';
 import { useProjectsStore } from '../../store/projects.js';
@@ -589,6 +591,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // The engine's checks floor is running: the seat is idle on purpose; the page says what runs (retime 0.16.11).
   const floor = useRunningFloor(head.length > 0 ? head[head.length - 1] : undefined);
   const floorRunId = floor !== null ? head[head.length - 1]!.session.id : null;
+  // studio#1499: a scripted (Tool) step is working, not silent: the header says "Domain run is working · 31 min".
+  const scripted = useScriptedStep(head.length > 0 ? head[head.length - 1] : undefined);
+  const scriptedRunId = scripted !== null ? head[head.length - 1]!.session.id : null;
   // A running checks floor is the engine's work now: it keeps its own words over a retry (codex r1).
   const retry = floor === null ? retryRead : null;
   // Power mode (DES-POWER-MODE §2): the switch beside a run's name and its rigor chip — on a session of one run.
@@ -611,7 +616,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     : installed === 'failed' && settledHere ? { word: 'Install failed', tone: 'danger' as const }
     // While the install's record is read, Finished claims no success colour (codex r1).
     : installed === 'loading' && settledHere ? { word: 'Finished', tone: 'quiet' as const }
-    : head.length > 0 ? (headState === 'working' && (headGated || (powerRun !== null && power?.pause != null)) ? { word: 'Waiting', tone: 'gate' as const } : headState === 'working' && retry !== null ? { word: retryBadge(retry, silent?.minutes ?? null), tone: 'gate' as const } : headState === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : headState === 'working' && floor !== null ? { word: floorBadge(floor), tone: 'run' as const } : headerBadge(head, answeredOnly ? 'done' : headState)) : null;
+    : head.length > 0 ? (headState === 'working' && (headGated || (powerRun !== null && power?.pause != null)) ? { word: 'Waiting', tone: 'gate' as const } : headState === 'working' && retry !== null ? { word: retryBadge(retry, silent?.minutes ?? null), tone: 'gate' as const } : headState === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : headState === 'working' && floor !== null ? { word: floorBadge(floor), tone: 'run' as const } : headState === 'working' && scripted !== null ? { word: scriptedWords(scripted), tone: 'run' as const } : headerBadge(head, answeredOnly ? 'done' : headState)) : null;
   // The banner takes this session's slice of the same source as the brand badge.
   const gates = useGateStore((s) => s.gates);
   useSystemPoll();
@@ -1528,7 +1533,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
                 <div data-testid="session-working" data-run-id={e.runId} data-object={`step:${e.runId}:${e.ord}`} className="wk-chat-working">
                   <span aria-hidden className="wk-chat-working-dots"><i /><i /><i /></span>
                   {/* rig 0.15.8: the step in the chain's own word ("Check", never "Verify" beside it). */}
-                  <span data-testid="session-working-text" data-silent={e.runId === silentRunId ? 'true' : 'false'} aria-live="polite"><span className="wk-chat-working-who">{who.role === 'crew' || (e.runId === floorRunId && floor !== null && floor.ord === e.ord) ? 'studio' : who.name}</span> {e.runId === floorRunId && floor !== null && floor.ord === e.ord ? <span data-testid="session-working-floor">· {floorWords(floor)}</span> : e.runId === silentRunId && silent !== null ? `· ${silentWords(silent)} on ${workingStepWord(e.step)}` : `Working on ${workingStepWord(e.step)}…`}</span>
+                  <span data-testid="session-working-text" data-silent={e.runId === silentRunId ? 'true' : 'false'} aria-live="polite"><span className="wk-chat-working-who">{who.role === 'crew' || (e.runId === floorRunId && floor !== null && floor.ord === e.ord) || (e.runId === scriptedRunId && scripted !== null && scripted.ord === e.ord) ? 'studio' : who.name}</span> {e.runId === floorRunId && floor !== null && floor.ord === e.ord ? <span data-testid="session-working-floor">· {floorWords(floor)}</span> : e.runId === scriptedRunId && scripted !== null && scripted.ord === e.ord ? <span data-testid="session-working-scripted">· {scriptedWords(scripted)}</span> : e.runId === silentRunId && silent !== null ? `· ${silentWords(silent)} on ${workingStepWord(e.step)}` : `Working on ${workingStepWord(e.step)}…`}</span>
                   {/* rig 0.15.8: the composer says "message a working step from its ⋯" — this is that ⋯. */}
                   <OverflowMenu label={`More for ${workingStepWord(e.step)}`} data-testid="session-working-menu"
                     items={[{ id: 'message', label: MESSAGE_STEP_LABEL, onSelect: () => openSheet({ kind: 'step', runId: e.runId, ord: e.ord }, undefined, { compose: true }) }]} />

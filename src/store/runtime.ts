@@ -271,6 +271,9 @@ interface RuntimeStore {
    * without any structured frame (`useSilentStep`).
    */
   deltaAt: Record<string, number>;
+  /** studio#1507: the step (`ord`) the newest live output delta of a run came from. Deltas are not logged, so this is the
+   *  one place a page that saw only a step's output knows which step is working (`scriptedStep.ts`). */
+  deltaOrd: Record<string, number>;
   /** Newest relayed interactive doc status per project id (§5.4). */
   docActivity: Record<string, DocActivity>;
   /** Live council deliberation per unit, keyed `<session>:<ord>`. */
@@ -309,6 +312,7 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
   outputs: {},
   deltaSeq: {},
   deltaAt: {},
+  deltaOrd: {},
   docActivity: {},
   councilStatus: {},
   assumptions: {},
@@ -346,6 +350,7 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
           outputs: { ...s.outputs, [key]: combined },
           deltaSeq: { ...s.deltaSeq, [session]: seq },
           deltaAt: { ...s.deltaAt, [session]: Date.now() },
+          deltaOrd: { ...s.deltaOrd, [session]: event.ord },
         };
       }
 
@@ -512,18 +517,20 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
       // replayed text but can never double-count, mirroring FINDING-013's guard).
       const folded: Record<string, string> = {};
       let newest = s.deltaAt[session] ?? 0;
+      let newestOrd: number | undefined;
       for (const event of events) {
         if (event.session !== session) continue;
         const deltaText = deltaTextOf(event);
         if (deltaText === null || typeof event.ord !== 'number') continue;
-        if (typeof event.ts === 'number' && event.ts > newest) newest = event.ts;
+        if (typeof event.ts === 'number' && event.ts > newest) { newest = event.ts; newestOrd = event.ord; }
         const key = outputKey(session, event.ord);
         if (s.outputs[key] !== undefined) continue; // live buffer already started
         let combined = (folded[key] ?? '') + deltaText;
         if (combined.length > OUTPUT_CAP) combined = combined.slice(combined.length - OUTPUT_CAP);
         folded[key] = combined;
       }
-      const deltaAt = newest > (s.deltaAt[session] ?? 0) ? { deltaAt: { ...s.deltaAt, [session]: newest } } : {};
+      const deltaAt = newest > (s.deltaAt[session] ?? 0) && newestOrd !== undefined
+        ? { deltaAt: { ...s.deltaAt, [session]: newest }, deltaOrd: { ...s.deltaOrd, [session]: newestOrd } } : {};
       if (Object.keys(folded).length === 0) return Object.keys(deltaAt).length === 0 ? s : deltaAt;
       // Spread order matters: existing (live) buffers win over the replayed fold.
       return { outputs: { ...folded, ...s.outputs }, ...deltaAt };
@@ -555,6 +562,8 @@ export const useRuntimeStore = create<RuntimeStore>((set) => ({
       delete deltaSeq[session];
       const deltaAt = { ...s.deltaAt };
       delete deltaAt[session];
-      return { outputs, deltaSeq, deltaAt, councilStatus, assumptions, executorTypes, terminalIds, logs };
+      const deltaOrd = { ...s.deltaOrd };
+      delete deltaOrd[session];
+      return { outputs, deltaSeq, deltaAt, deltaOrd, councilStatus, assumptions, executorTypes, terminalIds, logs };
     }),
 }));
