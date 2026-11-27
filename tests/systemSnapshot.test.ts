@@ -141,3 +141,30 @@ it('studio#931: a failure after a success publishes without retry', async () => 
   expect(healthQ).toHaveLength(1);
   expect(useSystemStore.getState().healthError).toBe('offline');
 });
+
+/** studio#1430: a crew hold is trusted only from a read ASKED after what the page saw, so the store keeps when the
+ *  successful /system read was asked (not when it landed), and a failed read never moves it. */
+describe('snapshotAskedAt: when the successful /system read was asked', () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('is the ask time, though the answer lands later; a failed read leaves it and says it failed', async () => {
+    vi.useFakeTimers({ now: 1_000, toFake: ['Date'] });
+    let p = useSystemStore.getState().refresh();
+    await flush();
+    healthQ[0]!.resolve({ status: 'ok', capabilities: { system: true } });
+    await flush();
+    vi.setSystemTime(5_000);
+    systemQ[0]!.resolve(SNAP([]));
+    await p;
+    expect(useSystemStore.getState()).toMatchObject({ snapshotAskedAt: 1_000, snapshotAt: 5_000, snapshotError: null });
+    vi.setSystemTime(9_000);
+    p = useSystemStore.getState().refresh();
+    await flush();
+    healthQ[1]!.resolve({ status: 'ok', capabilities: { system: true } });
+    await flush();
+    systemQ[1]!.reject(new Error('no answer after 10 s'));
+    await p;
+    expect(useSystemStore.getState().snapshotAskedAt).toBe(1_000);
+    expect(useSystemStore.getState().snapshotError).not.toBeNull();
+  });
+});
