@@ -81,6 +81,41 @@ describe('studio#1489: the page says it', () => {
     expect(screen.getByTestId('run-tab-status').textContent).not.toContain('trying it again');
   });
 
+  it('studio#1497: an open gate wins over the retry words while the run view still says executing (header and Now)', async () => {
+    // The gate arrives the way the socket delivers it: the engine's awaitingHuman frame, in the cert log's own shape
+    // (seq 1361), folded by the gate store's ingest. The run view has not caught up (still executing).
+    const frame = CERT.events.find((e) => e['seq'] === 1361)!;
+    const gate = Object.fromEntries(Object.entries(frame).filter(([k]) => k !== 'seq'));
+    act(() => { useGateStore.getState().ingest({ ...gate, gateKind: 'human_confirm', gateSeq: 2, ts: Date.now(), prompt: 'Confirm step 1 before it runs again' } as never); });
+    expect(useGateStore.getState().gates[RUN]).toBeDefined();
+    await act(async () => { render(<RunTab runs={[run()]} sessionId="chat-1" title="Extract the rules" />); });
+    expect(screen.getByTestId('run-tab-pill').textContent).not.toContain('Trying again');
+    expect(screen.getByTestId('run-tab-status').textContent).not.toContain('trying it again');
+    expect(document.body.textContent).not.toContain('Trying again');
+    cleanup();
+    await act(async () => { render(<SessionPage sessionId={`run:${RUN}`} runs={[run()]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />); });
+    expect(screen.getAllByTestId('session-status')[0]!.textContent).not.toContain('Trying again');
+  });
+
+  it('studio#1500: with that open gate and the executing view, the pill, the Now word and the header say waiting, never Working', async () => {
+    useRunEventStore.setState({ byRun: { [RUN]: [] as never } });
+    const frame = CERT.events.find((e) => e['seq'] === 1361)!;
+    const gate = Object.fromEntries(Object.entries(frame).filter(([k]) => k !== 'seq'));
+    act(() => { useGateStore.getState().ingest({ ...gate, gateKind: 'human_confirm', gateSeq: 2, ts: Date.now(), prompt: 'Confirm step 1 before it runs' } as never); });
+    await act(async () => { render(<RunTab runs={[run()]} sessionId="chat-1" title="Extract the rules" />); });
+    expect(screen.getByTestId('run-tab-pill').textContent).toBe('Waiting on you');
+    expect(screen.getByTestId('run-tab-status').textContent).toMatch(/^Waiting on you/u);
+    expect(document.body.textContent).not.toContain('Working');
+    cleanup();
+    await act(async () => { render(<SessionPage sessionId={`run:${RUN}`} runs={[run()]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />); });
+    expect(screen.getAllByTestId('session-status')[0]!.textContent).toBe('Waiting');
+    // No gate: the same executing view says Working, as before.
+    cleanup();
+    act(() => { useGateStore.setState({ gates: {}, approaching: {} }); });
+    await act(async () => { render(<SessionPage sessionId={`run:${RUN}`} runs={[run()]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />); });
+    expect(screen.getAllByTestId('session-status')[0]!.textContent).toBe('Working');
+  });
+
   it('once the retry finished (the run view says the step is done), the page says no retry', async () => {
     await act(async () => { render(<RunTab runs={[run('executing', 'done')]} sessionId="chat-1" title="Extract the rules" />); });
     expect(screen.getByTestId('run-tab-pill').textContent).not.toContain('Trying again');

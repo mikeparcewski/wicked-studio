@@ -603,12 +603,15 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // An archived run keeps its Archived badge (statusWord's archived-first precedence, codex r2).
   const installed = useInstallOutcome(lastRun !== null && lastRun.session.status === 'completed' && statusWord(lastRun).word !== 'Archived' ? lastRun : null).standing;
   const settledHere = headState !== 'waiting' && headState !== 'working';
+  // studio#1500: a head run's gate is open while its view still says executing: the header says Waiting (the gate store's
+  // word, as the Now sentence says it), never Working.
+  const headGated = useGateStore((s) => head.some((v) => s.gates[v.session.id] !== undefined));
   const badge = declined !== null && settledHere ? { word: declined.install ? 'Not installed' : 'Declined', tone: 'quiet' as const }
     : installed === 'not-registered' && settledHere ? { word: 'Not registered', tone: 'gate' as const }
     : installed === 'failed' && settledHere ? { word: 'Install failed', tone: 'danger' as const }
     // While the install's record is read, Finished claims no success colour (codex r1).
     : installed === 'loading' && settledHere ? { word: 'Finished', tone: 'quiet' as const }
-    : head.length > 0 ? (headState === 'working' && powerRun !== null && power?.pause != null ? { word: 'Waiting', tone: 'gate' as const } : headState === 'working' && retry !== null ? { word: retryBadge(retry, silent?.minutes ?? null), tone: 'gate' as const } : headState === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : headState === 'working' && floor !== null ? { word: floorBadge(floor), tone: 'run' as const } : headerBadge(head, answeredOnly ? 'done' : headState)) : null;
+    : head.length > 0 ? (headState === 'working' && (headGated || (powerRun !== null && power?.pause != null)) ? { word: 'Waiting', tone: 'gate' as const } : headState === 'working' && retry !== null ? { word: retryBadge(retry, silent?.minutes ?? null), tone: 'gate' as const } : headState === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : headState === 'working' && floor !== null ? { word: floorBadge(floor), tone: 'run' as const } : headerBadge(head, answeredOnly ? 'done' : headState)) : null;
   // The banner takes this session's slice of the same source as the brand badge.
   const gates = useGateStore((s) => s.gates);
   useSystemPoll();

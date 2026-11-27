@@ -326,7 +326,10 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   // the wrong word on screen (codex r1).
   const declinedWord = declined !== null ? consentDeclineWord(declined) : !endedKnown ? 'Ended' : null;
   const installWord = installed === 'not-registered' ? 'Not registered' : installed === 'failed' ? 'Install failed' : null;
-  const nowWord = declinedWord ?? installWord ?? (held ? chatStatusWord([shown]).word : retryWord ?? (silent !== null ? silentWords(silent) : floor !== null ? floorWords(floor) : chatStatusWord([view]).word));
+  // studio#1500: a gate is open while the run view still says executing (it lags the gate store): the word says waiting,
+  // as the status sentence does (statusSentence's open-gate branch), never "Working" beside "Waiting on you".
+  const gatedWord = gate !== undefined && shown.session.status === 'executing' ? 'Waiting on you' : null;
+  const nowWord = declinedWord ?? installWord ?? gatedWord ?? (held ? chatStatusWord([shown]).word : retryWord ?? (silent !== null ? silentWords(silent) : floor !== null ? floorWords(floor) : chatStatusWord([view]).word));
   const statusLine = statusSentence(shown, chain, gate, action, silent?.minutes ?? null, { retry });
   const shownStatus = declinedWord !== null ? statusLine.replace(/^Cancelled\b/, declinedWord)
     : installWord !== null ? statusLine.replace(/^Finished\b/, installWord) : statusLine;
@@ -346,7 +349,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         </div>
         <div data-testid="run-tab-workflow" className="wk-run-tab-block">
           <p className="wk-run-tab-line">{workflowLabel(session.workflow_id)}{' '}
-            <span className="wk-run-tab-pill" data-testid="run-tab-pill">{declinedWord ?? installWord ?? retryWord ?? (silent !== null && !held ? silentWords(silent) : chatStatusWord([shown]).word)}</span>
+            <span className="wk-run-tab-pill" data-testid="run-tab-pill">{declinedWord ?? installWord ?? gatedWord ?? retryWord ?? (silent !== null && !held ? silentWords(silent) : chatStatusWord([shown]).word)}</span>
           </p>
           {typeof session.repo_ref === 'string' && session.repo_ref.trim() !== '' && (
             <p data-testid="run-tab-repo" className="wk-run-tab-line"><code>{session.repo_ref}</code></p>
