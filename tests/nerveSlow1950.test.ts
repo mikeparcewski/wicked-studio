@@ -23,11 +23,13 @@ const take = (path: string): Deferred => {
   if (i < 0) throw new Error(`no request in flight for ${path}: ${pending.map((p) => p.path).join(', ')}`);
   return pending.splice(i, 1)[0]!.d;
 };
-const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+const json = (body: unknown, status = 200): Response => status === 304 ? new Response(null, { status }) : new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 const { resetSystemStore, useSystemStore, READ_TIMEOUT_MS } = await import('../src/store/systemSnapshot.js');
 const { nerveState, CANT_REACH } = await import('../src/board/nerveCenter.js');
 const { overviewSentence } = await import('../src/board/nerveOverview.js');
+const { headline } = await import('../src/components/nerve/NerveCenterPage.js');
+const { STALE_MS } = await import('../src/board/nerveCenter.js');
 const { apiFetch } = await import('../src/api/client.js');
 
 const flush = async (): Promise<void> => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
@@ -76,8 +78,9 @@ describe('crew#1950: a read that only ran out of studio\'s time while crew answe
     expect(v.words).not.toBe(CANT_REACH);
     expect(v).toMatchObject({ tone: 'yellow', read: 'slow', words: 'crew is slow to answer' });
     expect(v.attention[0]).toMatchObject({ id: 'crew-slow', action: { kind: 'recheck' } });
-    // Nothing is published from the evidence: no health answer, no snapshot, never fresh.
-    expect(useSystemStore.getState()).toMatchObject({ health: null, healthAt: null, snapshot: null });
+    // Nothing is published from the evidence: no health answer, no snapshot, never fresh. The failure stays recorded as
+    // one, so every other reader of the store (voice, the ranked needs, the report) treats it as a failed read.
+    expect(useSystemStore.getState()).toMatchObject({ health: null, healthAt: null, snapshot: null, healthError: 'no answer after 10 s' });
   });
 
   it('/system queued past 10 s after this tick\'s /health answered: slow, and the old snapshot is not passed off as fresh', async () => {
@@ -97,6 +100,29 @@ describe('crew#1950: a read that only ran out of studio\'s time while crew answe
     await settle(p);
     expect(verdict()).toMatchObject({ tone: 'yellow', read: 'slow', words: 'crew is slow to answer' });
     expect(useSystemStore.getState().snapshotAt).toBe(before);
+    // The failed snapshot read stays a failed read for every other reader.
+    expect(useSystemStore.getState().snapshotError).toBe('no answer after 10 s');
+  });
+
+  it('a slow spell past what the Nerve Center trusts says how old the last full answer is, and is still never fresh', async () => {
+    let p = useSystemStore.getState().refresh();
+    await flush();
+    take('/health').resolve(json(SYSTEM_HEALTH));
+    await flush();
+    take('/system').resolve(json(SNAP));
+    await p;
+    await vi.advanceTimersByTimeAsync(STALE_MS + 60_000);
+    p = useSystemStore.getState().refresh();
+    await flush();
+    take('/health').resolve(json(SYSTEM_HEALTH));
+    await settle(p);
+    const v = verdict();
+    expect(v).toMatchObject({ tone: 'yellow', read: 'slow' });
+    expect(v.attention[0]!.reason).toMatch(/Its last full answer is 2 min old\./);
+  });
+
+  it('the Nerve Center page headline says slow, not unreachable', () => {
+    expect(headline({ tone: 'yellow', read: 'slow', words: 'crew is slow to answer', attention: [] })).toBe('Crew is slow to answer — what you see below may be out of date.');
   });
 
   it('the overview sentence says crew is slow, not that it cannot be reached', () => {
@@ -152,10 +178,10 @@ describe('crew#1950: what still says "can\'t reach crew"', () => {
     expect(verdict()).toMatchObject({ read: 'failed', words: CANT_REACH });
   });
 
-  it('a gateway error (502) is not crew answering', async () => {
+  it.each([502, 401, 304])('a %s (a gateway, an auth proxy, a cache) is not crew answering', async (status) => {
     const p = useSystemStore.getState().refresh();
     await flush();
-    await otherReadAnswers(502);
+    await otherReadAnswers(status);
     await settle(p);
     expect(verdict()).toMatchObject({ read: 'failed', words: CANT_REACH });
   });

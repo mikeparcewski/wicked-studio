@@ -38,8 +38,10 @@ const STATE_GLYPH = { ok: '✓', degraded: '!', down: '✕', unknown: '?', off: 
 const STATE_WORD = { ok: 'ok', degraded: 'degraded', down: 'down', unknown: 'unknown', off: 'off' } as const;
 
 /** The page's one sentence: the tile's verdict (the same derivation), said in full. */
-function headline(state: NerveState): string {
+export function headline(state: NerveState): string {
   if (state.read === 'checking') return 'Checking crew…';
+  // wicked-crew#1950: crew answers, slowly; it is not unreachable.
+  if (state.read === 'slow') return 'Crew is slow to answer — what you see below may be out of date.';
   if (state.read !== 'fresh') return "Can't reach crew — what you see below may be out of date.";
   if (state.tone === 'green') return 'All clear — nothing is stopping work.';
   if (state.tone === 'red') return `Work is stopped: ${healthText(state.words)}.`;

@@ -21,7 +21,7 @@ export const STALE_MS = 75_000;
 export type NerveTone = 'green' | 'yellow' | 'red';
 
 /** Why the tile reads what it reads: `fresh` is the only state that can be green. */
-export type NerveRead = 'fresh' | 'checking' | 'failed' | 'stale';
+export type NerveRead = 'fresh' | 'checking' | 'failed' | 'stale' | 'slow';
 
 export interface NerveState {
   tone: NerveTone;
@@ -37,8 +37,11 @@ export interface NerveState {
 export const CANT_REACH = "can't reach crew";
 export const ALL_CLEAR = 'all clear';
 export const CHECKING = 'checking crew';
+/** wicked-crew#1950: crew answers, but a Nerve Center read ran out of studio's time. Yellow, never green. */
+export const SLOW = 'crew is slow to answer';
 
-type Signals = Pick<SystemStore, 'mode' | 'health' | 'healthAt' | 'healthError' | 'snapshot' | 'snapshotAt' | 'snapshotError' | 'governance' | 'governanceAt'>;
+type Signals = Pick<SystemStore, 'mode' | 'health' | 'healthAt' | 'healthError' | 'snapshot' | 'snapshotAt' | 'snapshotError' | 'governance' | 'governanceAt'>
+  & Partial<Pick<SystemStore, 'slow'>>;
 
 const item = (id: string, level: SystemAttention['level'], panel: SystemAttention['panel'], text: string, reason: string | null, remedy: string | null, action: SystemAttention['action'] = null): SystemAttention =>
   ({ id, level, panel, text, reason, remedy, action });
@@ -153,12 +156,24 @@ export function nerveState(s: Signals, ws: 'connecting' | 'connected' | 'disconn
   };
   const checking = (): NerveState => ({ tone: 'yellow', read: 'checking', words: CHECKING, attention: [] });
 
+  // wicked-crew#1950: the failed read only ran out of studio's time while crew answered other reads: the same failed
+  // read (never green, never fresh, nothing served from it), said as slow rather than "can't reach". The age of the
+  // last full answer is said once it is past what the Nerve Center trusts.
+  const slow = (lastAt: number | null): NerveState => {
+    const age = lastAt === null ? null : now - lastAt;
+    const old = lastAt === null ? ' It has not given a full answer yet.'
+      : age !== null && age > STALE_MS ? ` Its last full answer is ${Math.max(1, Math.round(age / 60_000))} min old.` : '';
+    const it = item('crew-slow', 'yellow', 'infra', SLOW, `Crew is answering, but a read got no answer in time (${s.slow ?? ''}). The host may be busy.${old}`, 'Wait a moment, then Re-check.', { kind: 'recheck', target: 'crew' });
+    return { tone: 'yellow', read: 'slow', words: SLOW, attention: [it, ...socketItems(ws)] };
+  };
+  if (s.healthError !== null && s.slow != null) return slow(s.mode === 'system' ? s.snapshotAt : s.healthAt);
   if (s.healthError !== null) return unreachable('failed', `Crew's health check failed: ${s.healthError}`);
   if (s.healthAt === null) return checking();
   if (now - s.healthAt > STALE_MS) return unreachable('stale', 'Crew has not answered for a while; the last answer is too old to trust.');
 
   let attention: SystemAttention[];
   if (s.mode === 'system') {
+    if (s.snapshotError !== null && s.slow != null) return slow(s.snapshotAt);
     if (s.snapshotError !== null) return unreachable('failed', `Crew's system snapshot could not be read: ${s.snapshotError}`);
     if (s.snapshotAt === null || s.snapshot === null) return checking();
     if (now - s.snapshotAt > STALE_MS) return unreachable('stale', "Crew's system snapshot is too old to trust.");
