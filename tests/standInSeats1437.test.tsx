@@ -146,6 +146,18 @@ describe('studio#1437: a seated stand-in is named as one (run b0ade71f)', () => 
     expect(passedWord(none)).toBe('Nothing verified');
   });
 
+  it('(studio#1484) a reservation let go before it ran is not a stand-in on the run; a failed stand-in still is', () => {
+    // The engine's own binding from the recorded run, then as wicked-core abandon_team leaves a monitor reservation
+    // (src/actor/stand_in_gate.rs: state "failed", abandoned true; src/standin.rs StandInBinding.abandoned is written
+    // only when true).
+    const real = (FIXTURE.run.session as unknown as { assurance: { standIns: Array<Record<string, unknown>> } }).assurance.standIns[0]!;
+    const abandoned = { ...real, key: 'claude~3', slot: 3, role: 'monitor', lens: 'correctness', invocation: '7d1c2b9e-0f4a-4c55-9a51-3be0c1f2d6a8', state: 'failed', abandoned: true };
+    const failed = { ...real, key: 'claude~4', slot: 4, role: 'judge', invocation: '0b8e6f31-5d2c-4a97-8e14-6c3a9d70f2b5', state: 'failed' };
+    const seats = seatedStandIns({ session: { assurance: { standIns: [real, abandoned, failed] } }, units: [] }, ROSTER);
+    expect([...seats.keys()]).toEqual(['claude~1', 'claude~4']);
+    expect(seats.get('claude~4')).toMatchObject({ name: 'Claude Code (stand-in)', role: 'judge' });
+  });
+
   it('an unlabelled stand-in still shows, by its name and role', () => {
     const seats = seatedStandIns({ session: { assurance: { standIns: [{ key: 'claude~2', display: 'Claude Code', role: 'judge' }] } }, units: [] }, ROSTER);
     expect(standInLine(seats.get('claude~2')!)).toBe('Claude Code (stand-in) stood in for the judge');
