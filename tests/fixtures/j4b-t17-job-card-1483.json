@@ -1,0 +1,242 @@
+{
+ "_source": "studio#1483: train-17 cert J4b chat 86437521 on crew 0.20.0. The chat's first transcript record (the job card v1, as GET /api/v1/chats/:id served it to the cert's browser), verbatim. That read was taken after the chips had narrowed the chat to ['claude'] (its `seats`), while every card still named all four.",
+ "chatSeatsAfterChips": [
+  "claude"
+ ],
+ "record": {
+  "at": 1795759787424,
+  "turnId": "person:0bd1750b815687159bdd",
+  "kind": "proposal",
+  "proposal": {
+   "pid": "86437521-ce98-5d51-b5a0-34740c26b23c:p:0bd1750b815687159bdd",
+   "chatId": "86437521-ce98-5d51-b5a0-34740c26b23c",
+   "turnId": null,
+   "kind": "job",
+   "seat": "person",
+   "what": {
+    "entry": "feature",
+    "title": "Build a feature",
+    "label": "Build a feature",
+    "outcome": "A pull request with the change, checked by tests and a review, after QE acceptance."
+   },
+   "brief": "In tiny-math-t15, add a one-line JSDoc @example to clamp() in src/math.js showing that clamp(5, 0, 3) returns 3. Change nothing else.",
+   "reason": null,
+   "sources": [],
+   "repos": [
+    "tiny-math-t15"
+   ],
+   "repoRefs": [
+    "tiny-math-t15"
+   ],
+   "helpers": null,
+   "time": {
+    "minutes": [
+     60,
+     240
+    ],
+    "cost": "high",
+    "steps": 6,
+    "median": null,
+    "label": "About 1 h–4 h"
+   },
+   "stops": null,
+   "powerChoice": true,
+   "filedIn": {
+    "projectId": null,
+    "label": "Not in a project · this chat"
+   },
+   "blocked": null,
+   "shape": {
+    "card": "feature",
+    "option": null,
+    "depth": null,
+    "by": "person",
+    "source": "pick"
+   },
+   "catalogRev": "8da9a8649d881728",
+   "resolution": "15621451d3c1ea59",
+   "launch": "run",
+   "command": "/feature",
+   "needs": [
+    {
+     "id": "intent",
+     "label": "What should it do?",
+     "kind": "text",
+     "required": true,
+     "status": "met",
+     "value": "In tiny-math-t15, add a one-line JSDoc @example to clamp() in src/math.js showing that clamp(5, 0, 3) returns 3. Change nothing else."
+    },
+    {
+     "id": "documents",
+     "label": "Documents",
+     "kind": "documents",
+     "required": false,
+     "status": "missing",
+     "value": "0 documents"
+    },
+    {
+     "id": "repo",
+     "label": "Repository",
+     "kind": "repo",
+     "required": true,
+     "status": "met",
+     "value": "tiny-math-t15",
+     "choices": [
+      {
+       "label": "tiny-math-t15",
+       "value": "tiny-math-t15"
+      }
+     ]
+    },
+    {
+     "id": "project",
+     "label": "Project",
+     "kind": "project",
+     "required": false,
+     "status": "missing"
+    }
+   ],
+   "gate": [
+    "qe-acceptance"
+   ],
+   "seats": {
+    "lead": "claude",
+    "keys": [
+     "claude",
+     "codex",
+     "pi",
+     "copilot"
+    ],
+    "label": "Claude Code, Codex, Pi CLI and GitHub Copilot CLI"
+   },
+   "seatRules": [
+    "distinctEvaluator",
+    "distinctJudge"
+   ],
+   "words": "In tiny-math-t15, add a one-line JSDoc @example to clamp() in src/math.js showing that clamp(5, 0, 3) returns 3. Change nothing else.",
+   "details": [],
+   "inputs": {
+    "documents": {
+     "kind": "documents",
+     "tokens": []
+    }
+   },
+   "skipQe": null,
+   "sentence": {
+    "text": "I'll run this as {kind} of {repo}, with {seats}, checked by {checks}. About 1 h–4 h.",
+    "tokens": [
+     {
+      "id": "kind",
+      "kind": "card",
+      "label": "a feature",
+      "swap": {
+       "choices": [
+        {
+         "label": "a bug fix",
+         "edit": {
+          "card": "bug"
+         }
+        },
+        {
+         "label": "an in-place migration",
+         "edit": {
+          "card": "migrate"
+         }
+        },
+        {
+         "label": "a refactor",
+         "edit": {
+          "card": "refactor"
+         }
+        },
+        {
+         "label": "a release",
+         "edit": {
+          "card": "release"
+         }
+        }
+       ]
+      }
+     },
+     {
+      "id": "repo",
+      "kind": "repo",
+      "label": "tiny-math-t15",
+      "swap": null
+     },
+     {
+      "id": "seats",
+      "kind": "seats",
+      "label": "Claude Code, Codex, Pi CLI and GitHub Copilot CLI",
+      "swap": {
+       "choices": [
+        {
+         "label": "Codex leads",
+         "edit": {
+          "lead": "codex"
+         }
+        },
+        {
+         "label": "Pi CLI leads",
+         "edit": {
+          "lead": "pi"
+         }
+        },
+        {
+         "label": "GitHub Copilot CLI leads",
+         "edit": {
+          "lead": "copilot"
+         }
+        }
+       ]
+      }
+     },
+     {
+      "id": "checks",
+      "kind": "checks",
+      "label": "QE acceptance",
+      "swap": null
+     }
+    ],
+    "notes": [],
+    "ask": "Start?"
+   },
+   "suggestions": [],
+   "question": null,
+   "sketch": {
+    "steps": [
+     {
+      "label": "Clarify",
+      "asks": false
+     },
+     {
+      "label": "Design",
+      "asks": false
+     },
+     {
+      "label": "Build",
+      "asks": false
+     },
+     {
+      "label": "Adversarial review",
+      "asks": false
+     },
+     {
+      "label": "Test",
+      "asks": false
+     },
+     {
+      "label": "Review",
+      "asks": false
+     }
+    ]
+   },
+   "revises": null,
+   "lineage": "86437521-ce98-5d51-b5a0-34740c26b23c:p:0bd1750b815687159bdd",
+   "request": {
+    "id": "612e97da-c94e-45fb-9c7a-1e3088554868",
+    "digest": "fe03e72b7fb819770fd7b754"
+   }
+  }
+ }
+}

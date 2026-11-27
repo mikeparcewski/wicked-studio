@@ -103,12 +103,15 @@ it.each([409, 200])('B1: a refused seat replacement (%s) says crew words and re-
   reseatAnswer = status === 409 ? { error: words } : { chatId: 'seeded', seats: [], refused: [], reseated: false, note: words };
   render(composer());
   await waitFor(() => expect(seatButton('claude')).toHaveAttribute('aria-pressed', 'true'));
-  seats = ['pi'];
+  // Crew's seats changed meanwhile (pi in, claude out), Codex still among them, so the press (leave Codex out) is sent.
+  // studio#1483: a press carries the person's intent; had crew already left Codex out, nothing would be sent.
+  seats = ['pi', 'codex'];
   fireEvent.click(seatButton('codex'));
   await waitFor(() => expect(screen.getByText(words)).toBeInTheDocument());
   await waitFor(() => expect(seatButton('pi')).toHaveAttribute('aria-pressed', 'true'));
   expect(seatButton('claude')).toHaveAttribute('aria-pressed', 'false');
-  expect(calls.filter((c) => c.path === '/chats/seeded')).toHaveLength(2);
+  // studio#1483: the first read, the press's own read of what crew holds, then the read after the refusal.
+  expect(calls.filter((c) => c.path === '/chats/seeded')).toHaveLength(3);
 });
 
 it('B1: the helper row disappears after the seeded chat first person message', async () => {

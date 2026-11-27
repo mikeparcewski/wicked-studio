@@ -189,13 +189,17 @@ const SEAT_REFUSAL = /no seat in the roster|every seat is signed out|signed out 
 
 export function Composer({
   composerKey, text, setText: saveText, onSend, runs = [], started = false, placeholder, ariaLabel, variant, className = '',
-  inputRef, hint = false, footer = null, suggestions = [], navigate, contextProjectId = null, answerOnly = false, answerOptional = false, jobChatId = null, chatHasPersonMessage,
+  inputRef, hint = false, footer = null, suggestions = [], navigate, contextProjectId = null, answerOnly = false, answerOptional = false, jobChatId = null, chatHasPersonMessage, onJobChanged, jobRev,
 }: {
   /** DES-CATALOG-002 §4.6 (Lane E2): the chat this composer stands in, live on the daemon. A job picked here is posted
    *  into it (`POST /chats/:id/proposals`); with none (the Desk, a fresh chat's page) it seeds a new chat. */
   jobChatId?: string | null;
   /** A proposal can start the thread before the first person message fixes the chat's seats. */
   chatHasPersonMessage?: boolean;
+  /** studio#1483: the helper chips re-versioned the chat's job card; the transcript reads the new version. */
+  onJobChanged?: () => void;
+  /** studio#1483: the transcript's read generation; the helper chips read the chat again when it changes. */
+  jobRev?: number;
   /** The box answers one thing (a job's bound reply, DES-CATALOG-002 §2.4): Send hands over the typed words alone —
    *  no workflow chip, `/` command or about-chip context starts or decorates anything. */
   answerOnly?: boolean;
@@ -834,7 +838,7 @@ export function Composer({
         </div>
       )}
       {chatHelpers && !atMenuOpen && !v2Line && jobChatId !== null && (
-        <ChatHelpers key={jobChatId} chatId={jobChatId} roster={roster} />
+        <ChatHelpers key={jobChatId} chatId={jobChatId} roster={roster} onJobChanged={onJobChanged} rev={jobRev} />
       )}
       {showSeats && (
         <div ref={seatsRow} data-testid="composer-seats" role="group" aria-label="Helpers this send uses" className="wk-composer-chips">
