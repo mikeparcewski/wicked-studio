@@ -52,7 +52,7 @@ import { useWorkflowCatalog } from '../../store/workflowCatalog.js';
 import { WorkflowCatalog } from './WorkflowCatalog.js';
 import { DomainScopeCard, domainScopeSeat } from './DomainScopeCard.js';
 import { useDomainScope } from '../../hooks/useDomainScope.js';
-import { editPhrases } from '../../board/domainModel.js';
+import { editPhrases, domainScopeHeld } from '../../board/domainModel.js';
 import type { DomainScope } from '../../api/domainModel-wire.js';
 import { DOMAIN_EXTRACTION_ID } from '../../board/requirementsState.js';
 import { offersRestApi, REST_API_HINT, REST_API_LABEL, withRestApi } from '../../board/mcpRest.js';
@@ -314,8 +314,7 @@ function WizardDialog({ draft, navigate, cardsStartInChat }: { draft: LaunchDraf
     : scopeWriter.signedOut === true ? 'Sign in Claude Code to write the rules.'
     : scopeChecker.signedOut === true ? 'Sign in Codex to check the rules.'
     : scopePhrasesNow !== null && scopePhrasesNow.length === 0 ? 'Keep at least one phrase, or add one.'
-    : domainScope.status === 'loading' ? 'Reading the code for the scope…'
-    : domainScope.status === 'failed' ? 'There is no scope to start from yet: see the card.' : null;
+    : domainScopeHeld(domainScope.status);
   // The Lead agent (DES-TEAMING-002 §8.1): offered when the daemon takes it and there is a choice to
   // make; a pick whose helper was turned off reads as Random again (never a stale seat sent).
   // Only a seat that can take work may lead: crew refuses a signed-out, benched or not-work-eligible lead by name.

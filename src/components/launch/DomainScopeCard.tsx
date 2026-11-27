@@ -5,7 +5,7 @@
  */
 import { useState } from 'react';
 import type { DomainScopeCard as Card } from '../../api/domainModel-wire.js';
-import { cardPhrases, matchedLine, SCOPE_PHRASES_MAX, scopeSizeLine } from '../../board/domainModel.js';
+import { cardPhrases, matchedLine, SCOPE_PHRASES_MAX, scopeErrorWords, scopeSizeLine } from '../../board/domainModel.js';
 import type { RosterSeat } from '../../api/types.js';
 import type { DomainScopeState } from '../../hooks/useDomainScope.js';
 import { seatSignedOut } from '../gateVerdictModel.js';
@@ -38,7 +38,7 @@ export function DomainScopeCard({ scope, writer, checker, onDrop, onAdd }: {
       {scope.status === 'loading' && <p data-testid="domain-scope-loading">Reading the code for these words… (no model is called)</p>}
       {scope.status === 'failed' && (
         <p data-testid="domain-scope-error" className="wk-domain-error">
-          No scope yet: {scope.error} <Refresh refresh={scope.refresh} />
+          No scope yet: {scopeErrorWords(scope.error)} <Refresh refresh={scope.refresh} />
         </p>
       )}
       {scope.status === 'ready' && <Ready card={scope.card} onDrop={onDrop} onAdd={onAdd} refresh={scope.refresh} />}
