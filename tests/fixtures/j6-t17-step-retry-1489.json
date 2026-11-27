@@ -1,0 +1,464 @@
+{
+ "_source": "studio#1489: train-17 cert J6 v3 run B (run 0f260e49, crew 0.20.0). The run's whole log as GET /api/v1/runs/:id/events served it (36 events), verbatim; home paths are written as ~. Step 1 failed at attempt 0 (stepFailed seq 1590, failureKind workerError), the triage judge said retry (failureTriaged 1592), attempt 1 was dispatched (1593) and finished (unitDone 1679); step 2 then ran and the run completed (1689).",
+ "runId": "0f260e49-be64-5bd7-a324-05e339017d3d",
+ "events": [
+  {
+   "assurance": {
+    "mode": "full",
+    "required": [
+     "distinct_evaluator",
+     "judge"
+    ],
+    "roles": [],
+    "standInAware": true
+   },
+   "cliCount": 3,
+   "entityMode": "shared",
+   "governed": true,
+   "problem": "In carddemo-t17, extract the business rules and requirements of these CardDemo programs: the transaction add screen (COTRN02C), the statement file reader (CBSTM03B), the pending authorization summary screen (COPAUS0C), the account inquiry MQ service (COACCT01), the date MQ service (CODATE01) and the account update screen (COACTUPC). Tie each rule to the program, paragraph and copybook field it comes from.\n\n<!-- wicked-crew:rules -->\nSteering rules for this job: 70 in force, 53 to check (0 apply, 53 may apply), 17 not applicable. Each is listed by id (severity): the start of its statement.\nThe review and QE steps check the work against each rule to check (kept, broken or not applicable, with evidence);\na broken rule fails review, but a shipped process rule (RVWL-*) is only reported. The step that builds does not mark its own compliance.\nPull a rule's whole statement before you judge it (several ids at once; no \"ids\" lists every rule in force): wicked-garden run scripts/_estate_client.py --readonly call '{\"tool\":\"rules.recall\",\"arguments\":{\"ids\":[\"<id>\"]}}'\nMay apply:\n- POL-2101 (error): The user and steering policies choose the framework or library; agents do not substitute another. B…\n- RVWL-1002 (error): A worker turn ends only after every check it started has finished; the record carries each command…\n- proposal:01a07bc7-1e55-7912-a06f-ccaf8277426b (error)\n- proposal:01a07c36-5be4-7fc1-b5af-000870396103 (error)\n- proposal:01a07c56-e5df-7ed1-8e05-a65130152099 (error)\n- proposal:01a07c56-f241-7b41-b7d4-86178e729a9a (error)\n- proposal:01a07cd0-fabf-7403-b7ab-ed1f898455a9 (error)\n- proposal:01a07cd5-df93-73b2-a84d-820432495ba0 (error)\n- proposal:01a07cdb-cc78-7352-a50a-4365c65f605e (error)\n- proposal:01a07cdb-d4ac-7932-b608-c605344361ed (error)\n- proposal:01a07ce3-6723-7a52-852c-b95b1d47abe3 (error)\n- proposal:01a07bbd-98a2-7040-b464-e84791886cfe (warn)\n- proposal:01a07bc7-56a1-71e1-9753-f639616e72f9 (warn)\n- proposal:01a07ccc-adc7-7422-b7b4-e63971d32f42 (warn)\n- proposal:01a07cdb-dc66-7361-a09b-97f46e55779e (warn)\n- proposal:01a07cdf-dcbc-7f02-b004-0702a2adb011 (warn)\n- proposal:01a07ce3-85bb-7a92-b7e6-9cb540a26e16 (warn)\n- proposal:01a07bbd-887f-7110-9edc-7fb627d35820 (critical)\n- proposal:01a07bc6-fedc-71b0-b2ba-cd554a95c73b (critical)\n- proposal:01a07bc7-0d50-70f0-b9b9-a94222268c60 (critical)\n- proposal:01a07bc7-2f63-79b2-9aef-2bdc705808fe (critical)\n- proposal:01a07cdb-e555-70e0-bdc1-675ec1149bf7 (critical)\n- proposal:01a07ce3-6fcb-7a63-b60b-4dee98dbed38 (critical)\n- RVWL-1001 (error)\n- RVWL-1003 (error)\n- proposal:01a07b85-e09f-77e0-93fa-df59c0525b06 (error)\n- proposal:01a07bb2-ee1f-7a21-a759-3520a2a2213a (error)\n- proposal:01a07bb2-fc20-7dc3-8b6a-c02420eab60a (error)\n- proposal:01a07bb3-0ac2-7f10-af4c-67db2da4f49f (error)\n- proposal:01a07bbd-4224-7eb2-9978-670ddff3a768 (error)\n- proposal:01a07bbd-4efa-7021-9e3c-0a9260630c89 (error)\n- proposal:01a07bbd-64a3-77a1-9c14-d5ab3a9987fa (error)\n- proposal:01a07bbd-7105-7210-b2bc-c45014eb89dd (error)\n- proposal:01a07bbd-8ee5-77d2-8f50-b0eb0e6aa653 (error)\n- proposal:01a07bc7-46fd-7133-8e1e-4c9a004a5f05 (error)\n- proposal:01a07bf9-93a8-7c63-8c05-e4f6bdbd6bcb (error)\n- proposal:01a07c36-4cfb-76e0-9f5a-7f6d507d18b0 (error)\n- proposal:01a07c36-558b-7391-9beb-968e72cc9f9d (error)\n- proposal:01a07c36-6235-7802-95be-2d38d037444a (error)\n- proposal:01a07c36-68d2-7c42-9638-8c67e451de8c (error)\n- proposal:01a07c36-6e51-7850-9f5e-6e53caf44196 (error)\n- proposal:01a07c52-139b-7260-9412-f8e58febf7b6 (error)\n- proposal:01a07ccc-a5ed-7061-8e97-976c0ca44ce6 (error)\n- proposal:01a07cd5-f75d-7e63-9082-ac1b43c2c2df (error)\n- proposal:01a07cd5-ff1f-77a2-9334-028397601011 (error)\n- proposal:01a07cdb-bc19-7351-adcb-61585e03c9ec (error)\n- proposal:01a07cdb-c3c9-7a31-8dd6-40aa5f58fa3d (error)\n- proposal:01a07ce3-7750-7771-b517-b111353c6314 (error)\n- RVWL-1004 (warn)\n- proposal:01a07bf9-8d37-7691-b13f-2da22e97ec0c (warn)\n- proposal:01a07c52-1ba0-7662-81ee-a2014ba927f0 (warn)\n- proposal:01a07c57-130e-75d3-8b25-1adf423ad3e8 (warn)\n- proposal:01a07cd5-ea2a-7a72-ba77-d5cfffd109a1 (warn)\nNot applicable to this job (a fact of the rule's own scope rules it out):\n- MCPS-1004\n- EDITOR-GRANTS\n- MCP-FIRST-USE\n- MCP-MODE-ASK-WRITE\n- MCP-POSTURE-WRITE\n- MCPS-1001\n- MCPS-1002\n- MCPS-1003\n- MCPS-1005\n- MCPS-1006\n- MCPS-1007\n- EDITOR-BUILTIN\n- EDITOR-BUILTIN-DOC-MEDIA\n- EDITOR-BUILTIN-PAGE-MEDIA\n- EDITOR-BUILTIN-THEME\n- EDITOR-OPEN-DEFAULTS\n- MCP-POSTURE-READ\n<!-- /wicked-crew:rules -->",
+   "seq": 1354,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795763940120,
+   "type": "sessionStarted",
+   "workflowId": "domain-extraction"
+  },
+  {
+   "baseCommit": "a8c1a58a07d311da272977c233ac68511792d305",
+   "baseRef": null,
+   "behind": 0,
+   "fetched": false,
+   "lifted": false,
+   "localHead": "a8c1a58a07d311da272977c233ac68511792d305",
+   "note": "no `origin` remote — the run starts from the clone's HEAD",
+   "runBranch": "wicked/0f260e49-be64-5bd7-a324-05e339017d3d",
+   "seq": 1355,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795763952335,
+   "type": "runBaseResolved"
+  },
+  {
+   "seq": 1356,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795763954766,
+   "type": "workflowSelected",
+   "unitCount": 2,
+   "workflowId": "0f260e49-be64-5bd7-a324-05e339017d3d:plan-1"
+  },
+  {
+   "description": "domain-run — In carddemo-t17, extract the business rules and requirements of these CardDemo programs: the transaction add screen (COTRN02C), the statement file reader (CBSTM03B), the pending authorization summary screen (COPAUS0C), the account inquiry MQ service (COACCT01), the date MQ service (CODATE01) and the account update screen (COACTUPC). Tie each rule to the program, paragraph and copybook field it comes from.\n\n<!-- wicked-crew:rules -->\nSteering rules for this job: 70 in force, 53 to check (0 apply, 53 may apply), 17 not applicable. Each is listed by id (severity): the start of its statement.\nThe review and QE steps check the work against each rule to check (kept, broken or not applicable, with evidence);\na broken rule fails review, but a shipped process rule (RVWL-*) is only reported. The step that builds does not mark its own compliance.\nPull a rule's whole statement before you judge it (several ids at once; no \"ids\" lists every rule in force): wicked-garden run scripts/_estate_client.py --readonly call '{\"tool\":\"rules.recall\",\"arguments\":{\"ids\":[\"<id>\"]}}'\nMay apply:\n- POL-2101 (error): The user and steering policies choose the framework or library; agents do not substitute another. B…\n- RVWL-1002 (error): A worker turn ends only after every check it started has finished; the record carries each command…\n- proposal:01a07bc7-1e55-7912-a06f-ccaf8277426b (error)\n- proposal:01a07c36-5be4-7fc1-b5af-000870396103 (error)\n- proposal:01a07c56-e5df-7ed1-8e05-a65130152099 (error)\n- proposal:01a07c56-f241-7b41-b7d4-86178e729a9a (error)\n- proposal:01a07cd0-fabf-7403-b7ab-ed1f898455a9 (error)\n- proposal:01a07cd5-df93-73b2-a84d-820432495ba0 (error)\n- proposal:01a07cdb-cc78-7352-a50a-4365c65f605e (error)\n- proposal:01a07cdb-d4ac-7932-b608-c605344361ed (error)\n- proposal:01a07ce3-6723-7a52-852c-b95b1d47abe3 (error)\n- proposal:01a07bbd-98a2-7040-b464-e84791886cfe (warn)\n- proposal:01a07bc7-56a1-71e1-9753-f639616e72f9 (warn)\n- proposal:01a07ccc-adc7-7422-b7b4-e63971d32f42 (warn)\n- proposal:01a07cdb-dc66-7361-a09b-97f46e55779e (warn)\n- proposal:01a07cdf-dcbc-7f02-b004-0702a2adb011 (warn)\n- proposal:01a07ce3-85bb-7a92-b7e6-9cb540a26e16 (warn)\n- proposal:01a07bbd-887f-7110-9edc-7fb627d35820 (critical)\n- proposal:01a07bc6-fedc-71b0-b2ba-cd554a95c73b (critical)\n- proposal:01a07bc7-0d50-70f0-b9b9-a94222268c60 (critical)\n- proposal:01a07bc7-2f63-79b2-9aef-2bdc705808fe (critical)\n- proposal:01a07cdb-e555-70e0-bdc1-675ec1149bf7 (critical)\n- proposal:01a07ce3-6fcb-7a63-b60b-4dee98dbed38 (critical)\n- RVWL-1001 (error)\n- RVWL-1003 (error)\n- proposal:01a07b85-e09f-77e0-93fa-df59c0525b06 (error)\n- proposal:01a07bb2-ee1f-7a21-a759-3520a2a2213a (error)\n- proposal:01a07bb2-fc20-7dc3-8b6a-c02420eab60a (error)\n- proposal:01a07bb3-0ac2-7f10-af4c-67db2da4f49f (error)\n- proposal:01a07bbd-4224-7eb2-9978-670ddff3a768 (error)\n- proposal:01a07bbd-4efa-7021-9e3c-0a9260630c89 (error)\n- proposal:01a07bbd-64a3-77a1-9c14-d5ab3a9987fa (error)\n- proposal:01a07bbd-7105-7210-b2bc-c45014eb89dd (error)\n- proposal:01a07bbd-8ee5-77d2-8f50-b0eb0e6aa653 (error)\n- proposal:01a07bc7-46fd-7133-8e1e-4c9a004a5f05 (error)\n- proposal:01a07bf9-93a8-7c63-8c05-e4f6bdbd6bcb (error)\n- proposal:01a07c36-4cfb-76e0-9f5a-7f6d507d18b0 (error)\n- proposal:01a07c36-558b-7391-9beb-968e72cc9f9d (error)\n- proposal:01a07c36-6235-7802-95be-2d38d037444a (error)\n- proposal:01a07c36-68d2-7c42-9638-8c67e451de8c (error)\n- proposal:01a07c36-6e51-7850-9f5e-6e53caf44196 (error)\n- proposal:01a07c52-139b-7260-9412-f8e58febf7b6 (error)\n- proposal:01a07ccc-a5ed-7061-8e97-976c0ca44ce6 (error)\n- proposal:01a07cd5-f75d-7e63-9082-ac1b43c2c2df (error)\n- proposal:01a07cd5-ff1f-77a2-9334-028397601011 (error)\n- proposal:01a07cdb-bc19-7351-adcb-61585e03c9ec (error)\n- proposal:01a07cdb-c3c9-7a31-8dd6-40aa5f58fa3d (error)\n- proposal:01a07ce3-7750-7771-b517-b111353c6314 (error)\n- RVWL-1004 (warn)\n- proposal:01a07bf9-8d37-7691-b13f-2da22e97ec0c (warn)\n- proposal:01a07c52-1ba0-7662-81ee-a2014ba927f0 (warn)\n- proposal:01a07c57-130e-75d3-8b25-1adf423ad3e8 (warn)\n- proposal:01a07cd5-ea2a-7a72-ba77-d5cfffd109a1 (warn)\nNot applicable to this job (a fact of the rule's own scope rules it out):\n- MCPS-1004\n- EDITOR-GRANTS\n- MCP-FIRST-USE\n- MCP-MODE-ASK-WRITE\n- MCP-POSTURE-WRITE\n- MCPS-1001\n- MCPS-1002\n- MCPS-1003\n- MCPS-1005\n- MCPS-1006\n- MCPS-1007\n- EDITOR-BUILTIN\n- EDITOR-BUILTIN-DOC-MEDIA\n- EDITOR-BUILTIN-PAGE-MEDIA\n- EDITOR-BUILTIN-THEME\n- EDITOR-OPEN-DEFAULTS\n- MCP-POSTURE-READ\n<!-- /wicked-crew:rules -->",
+   "executorType": "tool",
+   "gate": "auto",
+   "hasValidatorPin": false,
+   "ord": 1,
+   "role": "neutral",
+   "seq": 1357,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "skillRef": null,
+   "stage": "recon",
+   "ts": 1795763954766,
+   "type": "unitPlanned"
+  },
+  {
+   "description": "domain-graph — In carddemo-t17, extract the business rules and requirements of these CardDemo programs: the transaction add screen (COTRN02C), the statement file reader (CBSTM03B), the pending authorization summary screen (COPAUS0C), the account inquiry MQ service (COACCT01), the date MQ service (CODATE01) and the account update screen (COACTUPC). Tie each rule to the program, paragraph and copybook field it comes from.\n\n<!-- wicked-crew:rules -->\nSteering rules for this job: 70 in force, 53 to check (0 apply, 53 may apply), 17 not applicable. Each is listed by id (severity): the start of its statement.\nThe review and QE steps check the work against each rule to check (kept, broken or not applicable, with evidence);\na broken rule fails review, but a shipped process rule (RVWL-*) is only reported. The step that builds does not mark its own compliance.\nPull a rule's whole statement before you judge it (several ids at once; no \"ids\" lists every rule in force): wicked-garden run scripts/_estate_client.py --readonly call '{\"tool\":\"rules.recall\",\"arguments\":{\"ids\":[\"<id>\"]}}'\nMay apply:\n- POL-2101 (error): The user and steering policies choose the framework or library; agents do not substitute another. B…\n- RVWL-1002 (error): A worker turn ends only after every check it started has finished; the record carries each command…\n- proposal:01a07bc7-1e55-7912-a06f-ccaf8277426b (error)\n- proposal:01a07c36-5be4-7fc1-b5af-000870396103 (error)\n- proposal:01a07c56-e5df-7ed1-8e05-a65130152099 (error)\n- proposal:01a07c56-f241-7b41-b7d4-86178e729a9a (error)\n- proposal:01a07cd0-fabf-7403-b7ab-ed1f898455a9 (error)\n- proposal:01a07cd5-df93-73b2-a84d-820432495ba0 (error)\n- proposal:01a07cdb-cc78-7352-a50a-4365c65f605e (error)\n- proposal:01a07cdb-d4ac-7932-b608-c605344361ed (error)\n- proposal:01a07ce3-6723-7a52-852c-b95b1d47abe3 (error)\n- proposal:01a07bbd-98a2-7040-b464-e84791886cfe (warn)\n- proposal:01a07bc7-56a1-71e1-9753-f639616e72f9 (warn)\n- proposal:01a07ccc-adc7-7422-b7b4-e63971d32f42 (warn)\n- proposal:01a07cdb-dc66-7361-a09b-97f46e55779e (warn)\n- proposal:01a07cdf-dcbc-7f02-b004-0702a2adb011 (warn)\n- proposal:01a07ce3-85bb-7a92-b7e6-9cb540a26e16 (warn)\n- proposal:01a07bbd-887f-7110-9edc-7fb627d35820 (critical)\n- proposal:01a07bc6-fedc-71b0-b2ba-cd554a95c73b (critical)\n- proposal:01a07bc7-0d50-70f0-b9b9-a94222268c60 (critical)\n- proposal:01a07bc7-2f63-79b2-9aef-2bdc705808fe (critical)\n- proposal:01a07cdb-e555-70e0-bdc1-675ec1149bf7 (critical)\n- proposal:01a07ce3-6fcb-7a63-b60b-4dee98dbed38 (critical)\n- RVWL-1001 (error)\n- RVWL-1003 (error)\n- proposal:01a07b85-e09f-77e0-93fa-df59c0525b06 (error)\n- proposal:01a07bb2-ee1f-7a21-a759-3520a2a2213a (error)\n- proposal:01a07bb2-fc20-7dc3-8b6a-c02420eab60a (error)\n- proposal:01a07bb3-0ac2-7f10-af4c-67db2da4f49f (error)\n- proposal:01a07bbd-4224-7eb2-9978-670ddff3a768 (error)\n- proposal:01a07bbd-4efa-7021-9e3c-0a9260630c89 (error)\n- proposal:01a07bbd-64a3-77a1-9c14-d5ab3a9987fa (error)\n- proposal:01a07bbd-7105-7210-b2bc-c45014eb89dd (error)\n- proposal:01a07bbd-8ee5-77d2-8f50-b0eb0e6aa653 (error)\n- proposal:01a07bc7-46fd-7133-8e1e-4c9a004a5f05 (error)\n- proposal:01a07bf9-93a8-7c63-8c05-e4f6bdbd6bcb (error)\n- proposal:01a07c36-4cfb-76e0-9f5a-7f6d507d18b0 (error)\n- proposal:01a07c36-558b-7391-9beb-968e72cc9f9d (error)\n- proposal:01a07c36-6235-7802-95be-2d38d037444a (error)\n- proposal:01a07c36-68d2-7c42-9638-8c67e451de8c (error)\n- proposal:01a07c36-6e51-7850-9f5e-6e53caf44196 (error)\n- proposal:01a07c52-139b-7260-9412-f8e58febf7b6 (error)\n- proposal:01a07ccc-a5ed-7061-8e97-976c0ca44ce6 (error)\n- proposal:01a07cd5-f75d-7e63-9082-ac1b43c2c2df (error)\n- proposal:01a07cd5-ff1f-77a2-9334-028397601011 (error)\n- proposal:01a07cdb-bc19-7351-adcb-61585e03c9ec (error)\n- proposal:01a07cdb-c3c9-7a31-8dd6-40aa5f58fa3d (error)\n- proposal:01a07ce3-7750-7771-b517-b111353c6314 (error)\n- RVWL-1004 (warn)\n- proposal:01a07bf9-8d37-7691-b13f-2da22e97ec0c (warn)\n- proposal:01a07c52-1ba0-7662-81ee-a2014ba927f0 (warn)\n- proposal:01a07c57-130e-75d3-8b25-1adf423ad3e8 (warn)\n- proposal:01a07cd5-ea2a-7a72-ba77-d5cfffd109a1 (warn)\nNot applicable to this job (a fact of the rule's own scope rules it out):\n- MCPS-1004\n- EDITOR-GRANTS\n- MCP-FIRST-USE\n- MCP-MODE-ASK-WRITE\n- MCP-POSTURE-WRITE\n- MCPS-1001\n- MCPS-1002\n- MCPS-1003\n- MCPS-1005\n- MCPS-1006\n- MCPS-1007\n- EDITOR-BUILTIN\n- EDITOR-BUILTIN-DOC-MEDIA\n- EDITOR-BUILTIN-PAGE-MEDIA\n- EDITOR-BUILTIN-THEME\n- EDITOR-OPEN-DEFAULTS\n- MCP-POSTURE-READ\n<!-- /wicked-crew:rules -->",
+   "executorType": "tool",
+   "gate": "auto",
+   "hasValidatorPin": false,
+   "ord": 2,
+   "role": "neutral",
+   "seq": 1358,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "skillRef": null,
+   "stage": "build",
+   "ts": 1795763954766,
+   "type": "unitPlanned"
+  },
+  {
+   "agreementPct": null,
+   "cli": "bash",
+   "degradedReason": null,
+   "dissent": null,
+   "distinctnessFallback": null,
+   "ord": 1,
+   "pool": null,
+   "returned": null,
+   "routingMethod": "tool",
+   "seatConstraint": null,
+   "seated": null,
+   "seq": 1359,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795763954768,
+   "type": "unitDistributed"
+  },
+  {
+   "agreementPct": null,
+   "cli": "wicked-core",
+   "degradedReason": null,
+   "dissent": null,
+   "distinctnessFallback": null,
+   "ord": 2,
+   "pool": null,
+   "returned": null,
+   "routingMethod": "tool",
+   "seatConstraint": null,
+   "seated": null,
+   "seq": 1360,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795763954768,
+   "type": "unitDistributed"
+  },
+  {
+   "gateKind": "plan_approval",
+   "gateSeq": 1,
+   "ord": 1,
+   "prompt": "Approve plan rev 1 before unit 1 runs (manual mode; band 0-19; manual mode): domain-run → domain-graph. Band 0-19 from: score 0; no creator step and no declared scope. Approve, approve with an edited plan, or reject.",
+   "reviewingOrd": null,
+   "seq": 1361,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795763954782,
+   "type": "awaitingHuman"
+  },
+  {
+   "ord": 1,
+   "seq": 1362,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795763995136,
+   "type": "resumed"
+  },
+  {
+   "attempt": 0,
+   "baseSkill": null,
+   "ord": 1,
+   "seq": 1363,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795763995139,
+   "type": "unitDispatched"
+  },
+  {
+   "ord": 1,
+   "seq": 1364,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795763995139,
+   "type": "unitExecuting"
+  },
+  {
+   "cmd": [
+    "bash",
+    "-c",
+    "[ -f \"${WICKED_GARDEN_ROOT:?the engine handed this Tool phase no garden root; refusing to resolve wicked-garden from PATH}/scripts/domain/run.py\" ] || { echo 'this wicked-garden is too old to map a domain: upgrade it' >&2; exit 1; }; exec \"${WICKED_GARDEN_ROOT:?the engine handed this Tool phase no garden root; refusing to resolve wicked-garden from PATH}/scripts/wicked-garden\" run scripts/domain/run.py --db \"$1\" --repo-root \"$2\" --scope \"${WICKED_DOMAIN_SCOPE:?the engine handed this step no scope; launch domain-extraction with one}\"",
+    "domain-run",
+    "~/.wicked-crew/repo-graphs/carddemo-t17-2ee66d72a8ed/estate.db",
+    "~/Projects/wicked/program-2026-09/lanes/release/t17/j6/carddemo-t17"
+   ],
+   "ord": 1,
+   "seq": 1365,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795763995179,
+   "type": "toolExecutorDispatched",
+   "workdir": "~/Projects/wicked/program-2026-09/lanes/release/t17/j6/carddemo-t17.wicked/wicked-worktrees/0f260e49-be64-5bd7-a324-05e339017d3d"
+  },
+  {
+   "attempt": 0,
+   "ord": 1,
+   "seq": 1587,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "text": "scope · 6 files · 210 targets\nreuse · 0 carried · 0 re-validated · 210 to extract\nCBSTM03B.CBL-c0 · read ✓\nCOACCT01.cbl-c0 · read ✓\nCOACCT01.cbl-c1 · read ✓\nCOACCT01.cbl-c2 · read ✓\nCOACTUPC.cbl-c0 · read ✓\nCOACTUPC.cbl-c1 · read ✓\nCOACTUPC.cbl-c2 · read ✓\nCOACTUPC.cbl-c3 · read ✓\nCOACTUPC.cbl-c4 · read ✓\nCOACTUPC.cbl-c5 · read ✓\nCODATE01.cbl-c0 · read ✓\n",
+   "ts": 1795765839144,
+   "type": "unitOutputDelta"
+  },
+  {
+   "attempt": 0,
+   "ord": 1,
+   "seq": 1588,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "text": "CODATE01.cbl-c1 · read ✓\nCODATE01.cbl-c2 · read ✓\nCOPAUS0C.cbl-c0 · read ✓\nCOPAUS0C.cbl-c1 · read ✓\nCOTRN02C.cbl-c0 · read ✓\nCOTRN02C.cbl-c1 · read ✓\n\ndomain-run: the checker answered none of the recheck-b calls; nothing was stored\n\n[exit 4]",
+   "ts": 1795765845209,
+   "type": "unitOutputDelta"
+  },
+  {
+   "attempt": 0,
+   "governed": false,
+   "ord": 1,
+   "outputBytes": 654,
+   "seq": 1589,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "stepStatus": "failed",
+   "ts": 1795765845209,
+   "type": "unitOutputCaptured"
+  },
+  {
+   "attempt": 0,
+   "detail": "scope · 6 files · 210 targets\nreuse · 0 carried · 0 re-validated · 210 to extract\nCBSTM03B.CBL-c0 · read ✓\nCOACCT01.cbl-c0 · read ✓\nCOACCT01.cbl-c1 · \n[… 198 chars elided …]\n· read ✓\nCODATE01.cbl-c1 · read ✓\nCODATE01.cbl-c2 · read ✓\nCOPAUS0C.cbl-c0 · read ✓\nCOPAUS0C.cbl-c1 · read ✓\nCOTRN02C.cbl-c0 · read ✓\nCOTRN02C.cbl-c1 · read ✓\n\ndomain-run: the checker answered none of the recheck-b calls; nothing was stored\n\n[exit 4]",
+   "failureKind": "workerError",
+   "ord": 1,
+   "seq": 1590,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795765845211,
+   "type": "stepFailed"
+  },
+  {
+   "analysis": "The extraction itself worked: all 17 chunks were read and the scope covers 210 targets. The failure came later. The checker (the recheck-b step) answered none of its calls, so nothing was stored and the run exited with code 4. The output shows no trust prompt, no sandbox or directory refusal, and no content-level failure, so no environment flag applies. Because the checker gave no answer at all, t",
+   "decision": "retry",
+   "ord": 1,
+   "seq": 1592,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795765913957,
+   "type": "failureTriaged"
+  },
+  {
+   "attempt": 1,
+   "baseSkill": null,
+   "ord": 1,
+   "seq": 1593,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795765913961,
+   "type": "unitDispatched"
+  },
+  {
+   "ord": 1,
+   "seq": 1594,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795765913962,
+   "type": "unitExecuting"
+  },
+  {
+   "cmd": [
+    "bash",
+    "-c",
+    "[ -f \"${WICKED_GARDEN_ROOT:?the engine handed this Tool phase no garden root; refusing to resolve wicked-garden from PATH}/scripts/domain/run.py\" ] || { echo 'this wicked-garden is too old to map a domain: upgrade it' >&2; exit 1; }; exec \"${WICKED_GARDEN_ROOT:?the engine handed this Tool phase no garden root; refusing to resolve wicked-garden from PATH}/scripts/wicked-garden\" run scripts/domain/run.py --db \"$1\" --repo-root \"$2\" --scope \"${WICKED_DOMAIN_SCOPE:?the engine handed this step no scope; launch domain-extraction with one}\"",
+    "domain-run",
+    "~/.wicked-crew/repo-graphs/carddemo-t17-2ee66d72a8ed/estate.db",
+    "~/Projects/wicked/program-2026-09/lanes/release/t17/j6/carddemo-t17"
+   ],
+   "ord": 1,
+   "seq": 1595,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795765914002,
+   "type": "toolExecutorDispatched",
+   "workdir": "~/Projects/wicked/program-2026-09/lanes/release/t17/j6/carddemo-t17.wicked/wicked-worktrees/0f260e49-be64-5bd7-a324-05e339017d3d"
+  },
+  {
+   "type": "workerStalled",
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ord": 1,
+   "quietForMs": 901338,
+   "ts": 1795768207921,
+   "daemon": true,
+   "seq": 1595
+  },
+  {
+   "attempt": 1,
+   "ord": 1,
+   "seq": 1675,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "text": "scope · 6 files · 210 targets\nreuse · 0 carried · 0 re-validated · 210 to extract\nCBSTM03B.CBL-c0 · read ✓\nCOACCT01.cbl-c0 · read ✓\nCOACCT01.cbl-c1 · read ✓\nCOACCT01.cbl-c2 · read ✓\nCOACTUPC.cbl-c0 · read ✓\nCOACTUPC.cbl-c1 · read ✓\nCOACTUPC.cbl-c2 · read ✓\nCOACTUPC.cbl-c3 · read ✓\nCOACTUPC.cbl-c4 · read ✓\nCOACTUPC.cbl-c5 · read ✓\nCODATE01.cbl-c0 · read ✓\nCODATE01.cbl-c1 · read ✓\nCODATE01.cbl-c2 · read ✓\nCOPAUS0C.cbl-c0 · read ✓\nCOPAUS0C.cbl-c1 · read ✓\nCOTRN02C.cbl-c0 · read ✓\nCOTRN02C.cbl-c1 · read ✓\nCBSTM03B.CBL-c0 · checked 5/5 · 0 open · 14/14 targets accounted\nCOACCT01.cbl-c0 · checked 0/0 · 0 open · 15/15 targets accounted\nCOACCT01.cbl-c1 · checked 7/8 · 1 open · 15/15 targets accounted\nCOACCT01.cbl-c2 · checked 3/4 · 1 open · 5/5 targets accounted\nCOACTUPC.cbl-c0 · checked 30/30 · 0 open · 15/15 targets accounted\nCOACTUPC.cbl-c1 · checked 7/7 · 0 open · 15/15 targets accounted\nCOACTUPC.cbl-c2 · checked 9/9 · 0 open · 15/15 targets accounted\nCOACTUPC.cbl-c3 · checked 4/4 · 0 open · 15/15 targets accounted\nCOACTUPC.cbl-c4 · checked 8/8 · 0 open · 15/15 targets accounted\nCOACTUPC.cbl-c5 · checked 7/7 · 0 open · 14/15 targets accounted\nCODATE01.cbl-c0 · checked 0/0 · 0 open · 15/15 targets accounted\nCODATE01.cbl-c1 · checked 9/9 · 0 open · 15/15 targets accounted\nCODATE01.cbl-c2 · checked 2/2 · 0 open · 3/3 targets accounted\nCOPAUS0C.cbl-c0 · checked 13/13 · 0 open · 15/15 targets accounted\nCOPAUS0C.cbl-c1 · checked 5/5 · 0 open · 5/5 targets accounted\nCOTRN02C.cbl-c0 · checked 7/11 · 4 open · 15/15 targets accounted\nCOTRN02C.cbl-c1 · checked 2/2 · 0 open · 3/3 targets accounted\nprose · 41 groups · 12 withheld\nstored · 118 checked statements · 69 follow-ups · 209 of 210 targets accounted · 79 model calls\n",
+   "ts": 1795768317172,
+   "type": "unitOutputDelta"
+  },
+  {
+   "attempt": 1,
+   "governed": false,
+   "ord": 1,
+   "outputBytes": 1850,
+   "seq": 1676,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "stepStatus": "ok",
+   "ts": 1795768317851,
+   "type": "unitOutputCaptured"
+  },
+  {
+   "agentReasoning": null,
+   "agentVerdict": null,
+   "assurance": {
+    "attempt": 1,
+    "creator": "bash",
+    "evaluator": null,
+    "judge": null,
+    "mode": "full",
+    "ran": [],
+    "required": [
+     "distinct_evaluator",
+     "judge"
+    ],
+    "roles": [],
+    "skipped": [
+     {
+      "detail": "unit 1 is a scripted step: no seat's work for a judge to review",
+      "instrument": "judge",
+      "reason": "not_applicable"
+     }
+    ],
+    "tree": null
+   },
+   "combined": true,
+   "criterion": null,
+   "denial": null,
+   "denialReason": null,
+   "deterministicPass": true,
+   "evaluatorPass": true,
+   "evaluatorPolicies": [],
+   "evaluatorVerdict": null,
+   "floorNote": null,
+   "hasDeterministicFloor": false,
+   "judgeCli": null,
+   "judgeDistinct": null,
+   "judgeSkippedReason": null,
+   "ord": 1,
+   "seq": 1677,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795768318280,
+   "type": "gateEvaluated",
+   "ungated": false,
+   "ungatedReason": null
+  },
+  {
+   "allow": true,
+   "ord": 1,
+   "seq": 1678,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795768318280,
+   "type": "gateDecided"
+  },
+  {
+   "ord": 1,
+   "seq": 1679,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795768318280,
+   "type": "unitDone"
+  },
+  {
+   "attempt": 0,
+   "baseSkill": null,
+   "ord": 2,
+   "seq": 1680,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795768318282,
+   "type": "unitDispatched"
+  },
+  {
+   "ord": 2,
+   "seq": 1681,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795768318282,
+   "type": "unitExecuting"
+  },
+  {
+   "ord": 2,
+   "priorUnits": [
+    {
+     "clipped": false,
+     "deliveredBytes": 1850,
+     "label": "[bash — unit 1 — depends_on `domain-run`]",
+     "ord": 1,
+     "outputBytes": 1850
+    }
+   ],
+   "recipientCli": "wicked-core",
+   "seq": 1682,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795768318282,
+   "type": "unitContextInjected"
+  },
+  {
+   "cmd": [
+    "wicked-core",
+    "domain-graph",
+    "--db",
+    "~/.wicked-crew/repo-graphs/carddemo-t17-2ee66d72a8ed/estate.db",
+    "--repo-root",
+    "~/Projects/wicked/program-2026-09/lanes/release/t17/j6/carddemo-t17"
+   ],
+   "ord": 2,
+   "seq": 1683,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795768318323,
+   "type": "toolExecutorDispatched",
+   "workdir": "~/Projects/wicked/program-2026-09/lanes/release/t17/j6/carddemo-t17.wicked/wicked-worktrees/0f260e49-be64-5bd7-a324-05e339017d3d"
+  },
+  {
+   "attempt": 0,
+   "ord": 2,
+   "seq": 1684,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "text": "domain-graph: built the domain model into the estate store: 66 requirement(s); 203 of 210 target(s) accounted, 6 open statement(s), 0 stale target(s)\n",
+   "ts": 1795768375219,
+   "type": "unitOutputDelta"
+  },
+  {
+   "attempt": 0,
+   "governed": false,
+   "ord": 2,
+   "outputBytes": 150,
+   "seq": 1685,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "stepStatus": "ok",
+   "ts": 1795768375781,
+   "type": "unitOutputCaptured"
+  },
+  {
+   "agentReasoning": null,
+   "agentVerdict": null,
+   "assurance": {
+    "attempt": 0,
+    "creator": "wicked-core",
+    "evaluator": null,
+    "judge": null,
+    "mode": "full",
+    "ran": [],
+    "required": [
+     "distinct_evaluator",
+     "judge"
+    ],
+    "roles": [],
+    "skipped": [
+     {
+      "detail": "unit 2 is a scripted step: no seat's work for a judge to review",
+      "instrument": "judge",
+      "reason": "not_applicable"
+     }
+    ],
+    "tree": null
+   },
+   "combined": true,
+   "criterion": null,
+   "denial": null,
+   "denialReason": null,
+   "deterministicPass": true,
+   "evaluatorPass": true,
+   "evaluatorPolicies": [],
+   "evaluatorVerdict": null,
+   "floorNote": null,
+   "hasDeterministicFloor": false,
+   "judgeCli": null,
+   "judgeDistinct": null,
+   "judgeSkippedReason": null,
+   "ord": 2,
+   "seq": 1686,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795768376013,
+   "type": "gateEvaluated",
+   "ungated": false,
+   "ungatedReason": null
+  },
+  {
+   "allow": true,
+   "ord": 2,
+   "seq": 1687,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795768376013,
+   "type": "gateDecided"
+  },
+  {
+   "ord": 2,
+   "seq": 1688,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795768376013,
+   "type": "unitDone"
+  },
+  {
+   "seq": 1689,
+   "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
+   "ts": 1795768376089,
+   "type": "sessionCompleted"
+  }
+ ]
+}

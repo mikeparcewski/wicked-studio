@@ -33,6 +33,8 @@ import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js
 import { deliverySummary, outcomeLine, statusSentence } from '../../board/proposalCard.js';
 import { useSilentStep } from '../../hooks/useSilentStep.js';
 import { silentWords } from '../../board/silentStep.js';
+import { retryBadge } from '../../board/stepRetry.js';
+import { useStepRetry } from '../../hooks/useStepRetry.js';
 import { useRunningFloor } from '../../hooks/useRunningFloor.js';
 import { floorWords } from '../../board/floorRun.js';
 import { deliveryAssuranceOf, deliveryReceiptOf, passedWord, runRuleRows } from '../../board/assuranceModel.js';
@@ -159,6 +161,9 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   const held = isHeldRun(shown.session);
   // (J4 0.16.6) The step silent past crew's quiet mark: the Now section says so, as the header does.
   const silent = useSilentStep(view);
+  // studio#1489: a step that failed and is being tried again: the Now section says so, as the header does.
+  const retry = useStepRetry(view);
+  const retryWord = retry !== null && !held ? retryBadge(retry, silent?.minutes ?? null) : null;
   const floor = useRunningFloor(view);
   const coverage = useRunCoverage(view);
   const delivery = deliveryOf(view);
@@ -319,8 +324,8 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   // the wrong word on screen (codex r1).
   const declinedWord = declined !== null ? consentDeclineWord(declined) : !endedKnown ? 'Ended' : null;
   const installWord = installed === 'not-registered' ? 'Not registered' : installed === 'failed' ? 'Install failed' : null;
-  const nowWord = declinedWord ?? installWord ?? (held ? chatStatusWord([shown]).word : silent !== null ? silentWords(silent) : floor !== null ? floorWords(floor) : chatStatusWord([view]).word);
-  const statusLine = statusSentence(shown, chain, gate, action, silent?.minutes ?? null);
+  const nowWord = declinedWord ?? installWord ?? (held ? chatStatusWord([shown]).word : retryWord ?? (silent !== null ? silentWords(silent) : floor !== null ? floorWords(floor) : chatStatusWord([view]).word));
+  const statusLine = statusSentence(shown, chain, gate, action, silent?.minutes ?? null, { retry });
   const shownStatus = declinedWord !== null ? statusLine.replace(/^Cancelled\b/, declinedWord)
     : installWord !== null ? statusLine.replace(/^Finished\b/, installWord) : statusLine;
   const core: Record<PanelSectionId, React.ReactElement> = {
@@ -339,7 +344,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         </div>
         <div data-testid="run-tab-workflow" className="wk-run-tab-block">
           <p className="wk-run-tab-line">{workflowLabel(session.workflow_id)}{' '}
-            <span className="wk-run-tab-pill" data-testid="run-tab-pill">{declinedWord ?? installWord ?? (silent !== null && !held ? silentWords(silent) : chatStatusWord([shown]).word)}</span>
+            <span className="wk-run-tab-pill" data-testid="run-tab-pill">{declinedWord ?? installWord ?? retryWord ?? (silent !== null && !held ? silentWords(silent) : chatStatusWord([shown]).word)}</span>
           </p>
           {typeof session.repo_ref === 'string' && session.repo_ref.trim() !== '' && (
             <p data-testid="run-tab-repo" className="wk-run-tab-line"><code>{session.repo_ref}</code></p>
