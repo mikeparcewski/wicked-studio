@@ -12,6 +12,21 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.17.1] — 2026-11-27
+
+Release on the train-17 cut 1762d174, carrying 7 PRs since 0.17.0: #1466, #1450, #1476, #1467, #1477, #1478, #1479. The entries were written from each PR's changelog entry (the PR title where it had none).
+
+### Fixed
+
+- Launch and gates: the 390 launch composer, the install consent card's choices, Details' PR while a gate waits, and the stand-in audit rows (studio#1461, #1454, #1447; #1466).
+- Voice: a voice question carries what voice mode shows around it (studio#1438, #1450).
+- Requirements: **Generate it** asks what the model should cover before anything starts. The job waits in a new chat until you say it, and your words become its scope (studio#1472, #1476).
+- Needs you: when you snooze a job on the ranked Needs-you page, your project's home and the Nerve Center say how many are snoozed, with the way back to them. On a phone, every inbox row you can snooze has its own Snooze (studio#1430, #1467).
+- Nerve Center: when the system and your jobs both need a look, the chip gives the total, then the split: "3 need a look (machine busy, 2 jobs)" (studio#1429, #1467).
+- Jobs: a Start that crew refuses after accepting it leaves the card ready to start again, under crew's reason. For example: "press Start with Review plan on". Before, the card was stuck on "The job's run couldn't be read" (studio#1474, #1477).
+- Nerve Center: while live updates are paused, the chip says so beside crew's count instead of counting it, and the badge leaves it out. With one waiting job it reads "1 needs you · live updates paused" (studio#1469, #1478).
+- Domain map: when the scope can't be read because wicked-garden is too old, the card now says so in words ("upgrade it") instead of printing garden's raw output and host path. Other scope failures are read down to garden's reason, with absolute paths shortened. A chat domain job's Start waits until a scope is read (studio#1473, #1479).
+
 ## [0.17.0] — 2026-11-26
 
 Release on the train-16 cut a61c7864, carrying 10 PRs since 0.16.19: #1453, #1455, #1456, #1457, #1460, #1459, #1462, #1434, #1464, #1463. The entries were written from each PR's changelog entry (the PR title or body where it had none).
