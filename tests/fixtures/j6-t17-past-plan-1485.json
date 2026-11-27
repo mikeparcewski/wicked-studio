@@ -1,5 +1,5 @@
 {
- "_source": "studio#1485: train-17 cert J6 v3 run B (run 0f260e49, crew 0.20.0). The run's own events as GET /api/v1/runs/:id/events served them, verbatim, cut after attempt 1's dispatch (seq 1595 toolExecutorDispatched; the workerStalled recorded 38 min later is left out). That is the state the cert's shot saw, 10 min into attempt 1, when the card still read 'planning'. Home paths are written as ~. The plan gate (awaitingHuman plan_approval ord 1, seq 1361) was answered (resumed 1362) and unit 1 dispatched (1363); the team record held no plan decision.",
+ "_source": "studio#1485: train-17 cert J6 v3 run B (run 0f260e49, crew 0.20.0). The run's own events as GET /api/v1/runs/:id/events served them, verbatim, cut after attempt 1's dispatch (seq 1595 toolExecutorDispatched; the workerStalled recorded 38 min later is left out). That is the state the cert's shot saw, 10 min into attempt 1, when the card still read 'planning'. Home paths are written as ~ and the cert workspace as ~/work. The plan gate (awaitingHuman plan_approval ord 1, seq 1361) was answered (resumed 1362) and unit 1 dispatched (1363); the team record held no plan decision.",
  "runId": "0f260e49-be64-5bd7-a324-05e339017d3d",
  "events": [
   {
@@ -147,14 +147,14 @@
     "[ -f \"${WICKED_GARDEN_ROOT:?the engine handed this Tool phase no garden root; refusing to resolve wicked-garden from PATH}/scripts/domain/run.py\" ] || { echo 'this wicked-garden is too old to map a domain: upgrade it' >&2; exit 1; }; exec \"${WICKED_GARDEN_ROOT:?the engine handed this Tool phase no garden root; refusing to resolve wicked-garden from PATH}/scripts/wicked-garden\" run scripts/domain/run.py --db \"$1\" --repo-root \"$2\" --scope \"${WICKED_DOMAIN_SCOPE:?the engine handed this step no scope; launch domain-extraction with one}\"",
     "domain-run",
     "~/.wicked-crew/repo-graphs/carddemo-t17-2ee66d72a8ed/estate.db",
-    "~/Projects/wicked/program-2026-09/lanes/release/t17/j6/carddemo-t17"
+    "~/work/carddemo-t17"
    ],
    "ord": 1,
    "seq": 1365,
    "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
    "ts": 1795763995179,
    "type": "toolExecutorDispatched",
-   "workdir": "~/Projects/wicked/program-2026-09/lanes/release/t17/j6/carddemo-t17.wicked/wicked-worktrees/0f260e49-be64-5bd7-a324-05e339017d3d"
+   "workdir": "~/work/carddemo-t17.wicked/wicked-worktrees/0f260e49-be64-5bd7-a324-05e339017d3d"
   },
   {
    "attempt": 0,
@@ -227,14 +227,14 @@
     "[ -f \"${WICKED_GARDEN_ROOT:?the engine handed this Tool phase no garden root; refusing to resolve wicked-garden from PATH}/scripts/domain/run.py\" ] || { echo 'this wicked-garden is too old to map a domain: upgrade it' >&2; exit 1; }; exec \"${WICKED_GARDEN_ROOT:?the engine handed this Tool phase no garden root; refusing to resolve wicked-garden from PATH}/scripts/wicked-garden\" run scripts/domain/run.py --db \"$1\" --repo-root \"$2\" --scope \"${WICKED_DOMAIN_SCOPE:?the engine handed this step no scope; launch domain-extraction with one}\"",
     "domain-run",
     "~/.wicked-crew/repo-graphs/carddemo-t17-2ee66d72a8ed/estate.db",
-    "~/Projects/wicked/program-2026-09/lanes/release/t17/j6/carddemo-t17"
+    "~/work/carddemo-t17"
    ],
    "ord": 1,
    "seq": 1595,
    "session": "0f260e49-be64-5bd7-a324-05e339017d3d",
    "ts": 1795765914002,
    "type": "toolExecutorDispatched",
-   "workdir": "~/Projects/wicked/program-2026-09/lanes/release/t17/j6/carddemo-t17.wicked/wicked-worktrees/0f260e49-be64-5bd7-a324-05e339017d3d"
+   "workdir": "~/work/carddemo-t17.wicked/wicked-worktrees/0f260e49-be64-5bd7-a324-05e339017d3d"
   }
  ]
 }
