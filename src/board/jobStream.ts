@@ -458,8 +458,19 @@ export function enrichPlan(steps: ReadonlyArray<{ id: string | null; catalog: st
 export function pastPlanOnLog(events: readonly unknown[] | null | undefined): boolean {
   if (events == null) return false;
   const log = events as ReadonlyArray<Record<string, unknown>>;
+  // studio#1494: a live frame (no `seq`) that repeats a plan gate already logged is a lagging socket's copy, not a newer
+  // gate. A repeat has the same content once the clock fields are set aside, as the store's own merge reads it
+  // (store/events.ts `fingerprint`). A genuinely new gate differs (a new gateSeq; a new prompt for a new revision).
+  const print = (e: Record<string, unknown>): string => JSON.stringify(Object.keys(e).sort().filter((k) => k !== 'ts' && k !== 'seq' && k !== 'daemon').map((k) => [k, e[k]]));
+  const gates = new Set<string>();
   let at = -1;
-  log.forEach((e, i) => { if (e['type'] === 'awaitingHuman' && e['gateKind'] === 'plan_approval') at = i; });
+  log.forEach((e, i) => {
+    if (e['type'] !== 'awaitingHuman' || e['gateKind'] !== 'plan_approval') return;
+    const p = print(e);
+    if (typeof e['seq'] !== 'number' && gates.has(p)) return;
+    gates.add(p);
+    at = i;
+  });
   if (at < 0) return false;
   const gate = log[at]!;
   const ord = gate['ord'];
