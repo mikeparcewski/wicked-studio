@@ -1,5 +1,7 @@
 import { intentOf } from '../../board/problemIntent.js';
 import { useSilentStep } from '../../hooks/useSilentStep.js';
+import { useStepRetry } from '../../hooks/useStepRetry.js';
+import { retryBadge } from '../../board/stepRetry.js';
 import { silentWords } from '../../board/silentStep.js';
 import { useRunningFloor } from '../../hooks/useRunningFloor.js';
 import { floorBadge, floorWords } from '../../board/floorRun.js';
@@ -582,9 +584,13 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   // (J4 0.16.6) A step silent past crew's quiet mark is not "Working": the header says how long it has said nothing.
   const silent = useSilentStep(head.length > 0 ? head[head.length - 1] : undefined);
   const silentRunId = silent !== null ? head[head.length - 1]!.session.id : null;
+  // studio#1489: the newest run's step failed and is being tried again: the header says so (closed words).
+  const retryRead = useStepRetry(head.length > 0 ? head[head.length - 1] : undefined);
   // The engine's checks floor is running: the seat is idle on purpose; the page says what runs (retime 0.16.11).
   const floor = useRunningFloor(head.length > 0 ? head[head.length - 1] : undefined);
   const floorRunId = floor !== null ? head[head.length - 1]!.session.id : null;
+  // A running checks floor is the engine's work now: it keeps its own words over a retry (codex r1).
+  const retry = floor === null ? retryRead : null;
   // Power mode (DES-POWER-MODE §2): the switch beside a run's name and its rigor chip — on a session of one run.
   const powerRun = head.length === 1 ? head[0]! : null;
   const power = usePower(powerRun);
@@ -602,7 +608,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     : installed === 'failed' && settledHere ? { word: 'Install failed', tone: 'danger' as const }
     // While the install's record is read, Finished claims no success colour (codex r1).
     : installed === 'loading' && settledHere ? { word: 'Finished', tone: 'quiet' as const }
-    : head.length > 0 ? (headState === 'working' && powerRun !== null && power?.pause != null ? { word: 'Waiting', tone: 'gate' as const } : headState === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : headState === 'working' && floor !== null ? { word: floorBadge(floor), tone: 'run' as const } : headerBadge(head, answeredOnly ? 'done' : headState)) : null;
+    : head.length > 0 ? (headState === 'working' && powerRun !== null && power?.pause != null ? { word: 'Waiting', tone: 'gate' as const } : headState === 'working' && retry !== null ? { word: retryBadge(retry, silent?.minutes ?? null), tone: 'gate' as const } : headState === 'working' && silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : headState === 'working' && floor !== null ? { word: floorBadge(floor), tone: 'run' as const } : headerBadge(head, answeredOnly ? 'done' : headState)) : null;
   // The banner takes this session's slice of the same source as the brand badge.
   const gates = useGateStore((s) => s.gates);
   useSystemPoll();
