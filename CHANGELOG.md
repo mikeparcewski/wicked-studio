@@ -12,6 +12,21 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.17.2] — 2026-11-27
+
+Release on the train-18 cut d502b528, carrying 5 PRs since 0.17.1: #1480, #1482, #1486, #1488, #1487. The entries were written from each PR's changelog entry.
+
+### Fixed
+
+- Launch: Draft epics shows the stand-in choice when crew answers `409 stand_in_choice` (this job, every job, sign in another helper, or cancel), instead of showing that answer as an error (studio#1468, #1482).
+- Gates: when every judge seat fails (out of quota, signed out), the gate names the cause and each seat's reason, says which answers help, and says that Retry meets the same judges, instead of "The step was escalated" (crew#1974, #1486).
+- Run: run surfaces no longer name a stand-in reservation that was let go before it ran as a stand-in on the run (studio#1484, #1488).
+- Chat helpers: the helper chips under a chat's job card now change that job's helpers. Each press draws the card again without (or with) the helper, and Start runs the helpers the card names (studio#1483, #1487).
+
+### CI
+
+- The selftest pins wicked-ci main aea26cb9, so U04/U06 answer the stand-in choice (wicked-ci#97, #1480).
+
 ## [0.17.1] — 2026-11-27
 
 Release on the train-17 cut 1762d174, carrying 7 PRs since 0.17.0: #1466, #1450, #1476, #1467, #1477, #1478, #1479. The entries were written from each PR's changelog entry (the PR title where it had none).
