@@ -21,7 +21,7 @@ import { catalogProjectOf, readWorkflowCatalog, useWorkflowCatalog } from '../..
 import { useWorkflowDefs } from '../../store/workflowCache.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { useStandInChoice } from '../../hooks/useStandInChoice.js';
-import { standInChoiceOf } from '../../board/standIn.js';
+import { standInChoiceOf, takesStandIns } from '../../board/standIn.js';
 import type { LaunchBodyWithDeliver } from '../../api/types.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from '../composerDefaults.js';
 import { launchChatId } from '../launch/launchChatId.js';
@@ -208,7 +208,9 @@ export function InlineStart({
   // The helpers: exactly the row's (the composer applies New job's J4 rule to it).
   const seats: RosterSeat[] = seatKeys.flatMap((key) => (roster ?? []).filter((x) => x.key === key));
 
-  const offerReduced = reducedCap && entry !== null && entry.launchKind === 'run' && seats.length === 1;
+  // (wicked-core#1843 P3) Only a workflow that takes no stand-ins offers reduced assurance; crew asks any other the stand-in
+  // question, drawn as StandInChoice.
+  const offerReduced = reducedCap && entry !== null && entry.launchKind === 'run' && seats.length === 1 && !takesStandIns(entry.launchId);
   const offerQe = qeCap && entry !== null && entry.launchKind === 'run' && workflowRequiresQe(def);
   const skipReason = offerQe && !qeOff && skipQe ? skipQeReason : null;
   const forceAcceptance = offerQe && forceQe && (qeOff || !skipQe);

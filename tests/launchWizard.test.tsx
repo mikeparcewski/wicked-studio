@@ -806,3 +806,64 @@ describe('studio#1239: New job shows crew’s assurance notice', () => {
     expect(posts.filter((p) => p.path === '/runs')).toHaveLength(1);
   });
 });
+
+// (wicked-core#1843 P3) One helper: a workflow that takes stand-ins never offers reduced assurance (crew asks the
+// stand-in question instead); one that takes none (here the evals) still does.
+describe('the reduced-assurance tick on one helper', () => {
+  const ONE = [seat('claude')];
+  const WF_EVALS = [...WF, { id: 'fix-bug', phases: [{ id: 'build', executes_code: true }] }, { id: 'run-evals', phases: [{ id: 'evals', executes_code: true }] }] as unknown as WorkflowDef[];
+  beforeEach(() => {
+    posts = [];
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (init?.method === 'POST') {
+        posts.push({ path, body: JSON.parse(String(init.body ?? '{}')) as Record<string, unknown> });
+        return Promise.resolve(new Response(JSON.stringify({ runId: 'r-new' }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      }
+      // The capability is served too: the store re-reads /health, and a read without it would hide the tick everywhere.
+      const body = path === '/roster' ? { roster: ONE } : path === '/repos' ? { repos: [REPO] } : path === '/workflows' ? { workflows: WF_EVALS } : path === '/projects' ? { projects: [] }
+        : path === '/health' ? { status: 'ok', version: 'test', capabilities: { reducedAssurance: true } } : {};
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }));
+    }));
+    clearCachedRoster();
+    setCachedRoster(ONE);
+    clearCachedWorkflows();
+    setCachedWorkflows(WF_EVALS);
+    useCapabilities.setState({ reducedAssurance: true });
+  });
+  afterEach(() => { useCapabilities.setState({ reducedAssurance: false }); });
+
+  async function toOptions(workflowId: string): Promise<void> {
+    render(<Harness />);
+    act(() => { openLaunchWizard({ workflowId }); });
+    fireEvent.change(await screen.findByTestId('launch-wizard-intent'), { target: { value: 'the ledger service' } });
+    next();
+    await waitFor(() => expect((screen.getByTestId('launch-wizard-repo') as HTMLSelectElement).value).toBe('repo-1'));
+    next();
+  }
+
+  it('a workflow that takes stand-ins: not offered, and not sent', async () => {
+    await toOptions('fix-bug');
+    // The tick would show once the one-helper roster is drawn: wait for that seat, not for a timer (agy r1).
+    expect(await screen.findAllByTestId('launch-wizard-seat')).toHaveLength(1);
+    expect(useCapabilities.getState().reducedAssurance).toBe(true);
+    expect(screen.queryByTestId('launch-wizard-reduced')).toBeNull();
+    // A draft that already holds the tick (a resumed draft) still sends none for this job (agy r1: seed it, so "not
+    // sent" is not vacuous).
+    act(() => { useLaunchWizard.setState((st) => ({ draft: st.draft === null ? null : { ...st.draft, reduced: true } })); });
+    expect(useLaunchWizard.getState().draft?.reduced).toBe(true);
+    next();
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
+    expect(posts.find((p) => p.path === '/runs')!.body).not.toHaveProperty('reducedAssurance');
+  });
+
+  it('the evals (no stand-ins): offered, and sent once ticked', async () => {
+    await toOptions('run-evals');
+    fireEvent.click(await screen.findByTestId('launch-wizard-reduced-toggle'));
+    next();
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
+    expect(posts.find((p) => p.path === '/runs')!.body.reducedAssurance).toBe(true);
+  });
+});
