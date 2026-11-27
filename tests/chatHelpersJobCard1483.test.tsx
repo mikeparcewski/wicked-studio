@@ -58,7 +58,8 @@ it('reads the open job card from the transcript', () => {
 });
 
 it('under an open job card, a chip press re-versions the card without the seat, and never re-seats the chat', async () => {
-  render(<ChatHelpers chatId="seeded" roster={roster} />);
+  const onJobChanged = vi.fn();
+  render(<ChatHelpers chatId="seeded" roster={roster} onJobChanged={onJobChanged} />);
   await waitFor(() => expect(chip('codex').getAttribute('aria-pressed')).toBe('true'));
   expect(screen.getByTestId('composer-seats').dataset.target).toBe('job');
   fireEvent.click(chip('codex'));
@@ -69,6 +70,8 @@ it('under an open job card, a chip press re-versions the card without the seat, 
   // The chips now read card v2's helpers.
   expect(['claude', 'pi', 'copilot'].map((k) => chip(k).getAttribute('aria-pressed'))).toEqual(['true', 'true', 'true']);
   expect(screen.getByTestId('composer-seats').textContent).toContain('A change here draws the job card again with these helpers.');
+  // The transcript is told to read the card's new version.
+  expect(onJobChanged).toHaveBeenCalledTimes(1);
 });
 
 it('a seat the card does not name is added to the job through the same revision', async () => {

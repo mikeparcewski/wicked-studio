@@ -23,7 +23,7 @@ export function openJobCard(messages: readonly unknown[] | undefined): { pid: st
  * from the seats new work may use, never from the chat's (`chat-jobs.ts` drawOrder), so re-seating the chat would
  * change nothing the job runs. A press re-versions the card instead (a revision that adds or removes the seat).
  */
-export function ChatHelpers({ chatId, roster }: { chatId: string; roster: RosterSeat[] | null }): React.ReactElement | null {
+export function ChatHelpers({ chatId, roster, onJobChanged }: { chatId: string; roster: RosterSeat[] | null; onJobChanged?: (() => void) | undefined }): React.ReactElement | null {
   const [seats, setSeats] = useState<string[] | null>(null);
   const [card, setCard] = useState<{ pid: string; seats: string[] } | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -69,6 +69,8 @@ export function ChatHelpers({ chatId, roster }: { chatId: string; roster: Roster
     } catch (e: unknown) {
       if (live.current) setNote(`The job's helpers were not changed (${words(e)}).`);
     } finally {
+      // The transcript draws the card: it reads the new version (or crew's unchanged one) as the card's own edits do.
+      onJobChanged?.();
       try { await reread(); } catch (readError: unknown) { if (live.current) setNote(words(readError)); }
       busy.current = false;
       if (live.current) setSaving(false);
