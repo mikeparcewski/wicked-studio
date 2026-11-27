@@ -4,7 +4,7 @@ import { useRuntimeStore } from '../store/runtime.js';
 import { useSystemStore } from '../store/systemSnapshot.js';
 import { CREW_FRESH_MS, lastLoggedActivity } from './silentStep.js';
 import { isStalled } from './boardAttention.js';
-import { scriptedStep } from './scriptedStep.js';
+import { scriptedStep, type StepDelta } from './scriptedStep.js';
 
 /** Statuses that mean the run is moving under its own power (the board model's `ACTIVE`). */
 const ACTIVE: ReadonlySet<string> = new Set(['planning', 'distributing', 'executing']);
@@ -45,19 +45,28 @@ export function runLogOf(runId: string): readonly CoreEvent[] | undefined {
   return useRunEventStore.getState().byRun[runId];
 }
 
+/** studio#1507: a run's newest live output delta (its step and arrival), read NON-reactively: deltas are not logged. */
+export function runDeltaOf(runId: string): StepDelta | null {
+  const s = useRuntimeStore.getState();
+  const ord = s.deltaOrd[runId];
+  const at = s.deltaAt[runId];
+  return ord === undefined || at === undefined ? null : { ord, at };
+}
+
 /** Live runs gone silent past the stall threshold: run id → the last activity evidence. */
 export function stalledRuns(
   runs: readonly SessionView[],
   evidenceAt: (id: string) => number | undefined,
   now: number,
   logOf: (id: string) => readonly CoreEvent[] | undefined = runLogOf,
+  deltaOf: (id: string) => StepDelta | null = runDeltaOf,
 ): Record<string, number> {
   const out: Record<string, number> = {};
   for (const v of runs) {
     if (!ACTIVE.has(v.session.status)) continue;
     // studio#1499: a scripted (Tool) step is quiet until it ends: not a wedge, and not a need (`scriptedStep.ts`).
     // The run's log (every live frame since load, plus the trail of a run opened) says when the view lags it.
-    if (scriptedStep(v, logOf(v.session.id), now) !== null) continue;
+    if (scriptedStep(v, logOf(v.session.id), now, deltaOf(v.session.id)) !== null) continue;
     const ev = evidenceAt(v.session.id);
     if (isStalled(ev, now)) out[v.session.id] = ev!;
   }

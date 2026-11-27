@@ -18,7 +18,7 @@ import runB from './fixtures/run-d2941d80-domain-events.json';
 import type { CoreEvent, SessionView, WorkUnit } from '../src/api/types.js';
 import { scriptedStep, scriptedWords, runsScript } from '../src/board/scriptedStep.js';
 import { silentStep } from '../src/board/silentStep.js';
-import { stalledRuns } from '../src/board/stalls.js';
+import { runDeltaOf, stalledRuns } from '../src/board/stalls.js';
 import { RunQuestions } from '../src/components/session/ThreadQuestions.js';
 import { RunTab } from '../src/components/session/RunTab.js';
 import { teamPlanApi } from '../src/api/teamPlan.js';
@@ -147,6 +147,10 @@ describe('studio#1499 design classes', () => {
       useRunEventStore.getState().ingest(live as unknown as CoreEvent);
       expect(useRunEventStore.getState().byRun[RUN] ?? []).toEqual([]);
       expect(stalledRuns([viewB()], () => at, at + 31 * MIN)).toEqual({ [RUN]: at });
+      expect(runsScript(viewB(), useRunEventStore.getState().byRun[RUN], runDeltaOf(RUN))).toBe(false);
+      // The Tool step's own output is not another step working: the claim stands.
+      useRuntimeStore.getState().ingest({ ...live, ord: 1 } as unknown as CoreEvent);
+      expect(stalledRuns([viewB({ on: 1 })], () => at, at + 31 * MIN)).toEqual({});
     } finally {
       vi.useRealTimers();
       useRuntimeStore.getState().clear(RUN);
