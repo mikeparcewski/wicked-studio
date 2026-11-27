@@ -854,6 +854,8 @@ export interface RunBench {
   cli: string;
   reason: string;
   benched_until?: number;
+  /** (crew#1974) What benched it: `judge` when the seat failed as the run's judge. Absent when the engine did not say. */
+  source?: string;
 }
 
 /** The run's own benches off its session bag, tolerant of a malformed entry. */
@@ -866,7 +868,12 @@ export function runBenchesOf(session: unknown): RunBench[] {
     const o = b as Record<string, unknown>;
     if (typeof o['cli'] !== 'string') continue;
     const until = o['benched_until'];
-    out.push({ cli: o['cli'], reason: typeof o['reason'] === 'string' ? o['reason'] : '', ...(typeof until === 'number' && Number.isFinite(until) ? { benched_until: until } : {}) });
+    out.push({
+      cli: o['cli'],
+      reason: typeof o['reason'] === 'string' ? o['reason'] : '',
+      ...(typeof until === 'number' && Number.isFinite(until) ? { benched_until: until } : {}),
+      ...(typeof o['source'] === 'string' && o['source'] !== '' ? { source: o['source'] } : {}),
+    });
   }
   return out;
 }
@@ -878,7 +885,7 @@ export function liftClock(iso: string): string | null {
 }
 
 /** A bench's cause in plain words: the engine's token (`quota_exhausted`, `not_logged_in`, …) or its sentence. */
-function benchWords(kind: string): string {
+export function benchWords(kind: string): string {
   if (/quota|usage_limit|rate.?limit|429/i.test(kind)) return 'out of quota';
   if (/not_logged_in|not logged in|signed.?out|unauthori[sz]ed|401/i.test(kind)) return 'signed out';
   if (/not_installed|not installed/i.test(kind)) return 'not installed';

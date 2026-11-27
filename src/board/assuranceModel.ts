@@ -1031,6 +1031,21 @@ export function waitsForJudge(events: readonly CoreEvent[] | null, ord: number |
   return /could not be judged\b.*no eligible judge seat/i.test(prompt ?? '');
 }
 
+/** The engine's words when no eligible judge seat could run the check (core's judge selection: "agent judge could not
+ *  run — every eligible judge seat failed: <seat> (<why>); …"). */
+export const JUDGES_DOWN = /every eligible judge seat failed\b/i;
+
+/**
+ * (crew#1974) Whether THIS attempt's gate is held because every eligible judge seat failed (out of quota, signed out):
+ * the newest escalation since the unit's dispatch says so, whatever its denial source (`judge_unavailable`, or
+ * `stand_in_needed` when no stand-in was consented), else the prompt does (a gate read before its events).
+ */
+export function judgeSeatsFailed(events: readonly CoreEvent[] | null, ord: number | null | undefined, prompt: string | undefined): boolean {
+  const esc = escalationSinceDispatch(events, ord);
+  if (esc !== null) return JUDGES_DOWN.test(esc.summary);
+  return JUDGES_DOWN.test(prompt ?? '');
+}
+
 /** (DES-RULE-CHECK-001 S2) The engine's denial source of a gate held on steering rules no judge ruled on. */
 export const RULES_UNCHECKED_SOURCE = 'rules_unchecked';
 

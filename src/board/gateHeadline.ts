@@ -1,14 +1,14 @@
 import type { CoreEvent, RosterSeat, RunAcceptanceSummary, SessionView as RunView } from '../api/types.js';
-import { reassignCandidates, reassignRefusedOf, runBenchesOf, seatStanding, type ReassignCandidate } from '../components/gateVerdictModel.js';
+import { benchWords, reassignCandidates, reassignRefusedOf, runBenchesOf, seatStanding, type ReassignCandidate } from '../components/gateVerdictModel.js';
 import { isDeliverGate } from '../components/gateMoveModel.js';
 import { deliverAcceptance } from './checkState.js';
 import { choicesOf, type OpenGate } from '../store/gates.js';
-import { creatorSeatRefusal, escalationSinceDispatch, isReduced, noDistinctReviewer, ruleHolds, rulesHoldAt, sessionAssurance, sessionQe, waitsForJudge, type RuleRow } from './assuranceModel.js';
+import { creatorSeatRefusal, escalationSinceDispatch, isReduced, judgeSeatsFailed, noDistinctReviewer, ruleHolds, rulesHoldAt, sessionAssurance, sessionQe, waitsForJudge, type RuleRow } from './assuranceModel.js';
 import { sandboxOwner } from '../components/denialCopy.js';
 import { governanceDenialHeadline, plainGateQuestion, rulesHoldWords } from './deskWords.js';
 import type { GateRowModel } from './gateRowModel.js';
 import { isHelperSeat } from './responder.js';
-import { seatLabel, standInBase } from './seatNames.js';
+import { cliLabel, seatKeyName, seatLabel, standInBase } from './seatNames.js';
 
 /**
  * THE GATE'S PLAIN-CAUSE HEADLINE (mockup ui-v2-gate): what a decision is about, in a person's words —
@@ -131,6 +131,23 @@ export interface GateCause {
   fresh: string[] | null;
   /** The cause in plain words, or null when the gate's own question says it. */
   headline: string | null;
+  /** (crew#1974) Every eligible judge seat failed: the seats the run benched as its judge, each with its reason in words
+   *  (empty when the run names none). Null on every other gate. */
+  judgesDown: JudgeDown[] | null;
+}
+
+/** (crew#1974) One judge seat that could not run the check. */
+export interface JudgeDown {
+  cli: string;
+  name: string;
+  /** Its reason in words: `out of quota`, `signed out`, `not installed`, … */
+  words: string;
+}
+
+/** The headline of a gate no judge could check: the cause, then each seat's reason. */
+export function judgesDownHeadline(seats: readonly JudgeDown[]): string {
+  const why = seats.map((s) => `${s.name} is ${s.words}`).join(', ');
+  return `The check couldn’t run: no judge could check this step${why !== '' ? ` (${why})` : ''}`;
 }
 
 export function gateCause({ view, gate, events, model, roster, pool = runPoolOf(view), benched = runBenchesOf(view.session) }: {
@@ -144,6 +161,11 @@ export function gateCause({ view, gate, events, model, roster, pool = runPoolOf(
 }): GateCause {
   const reduced = isReduced(sessionAssurance(view, events));
   const judgeWait = gate !== undefined && model !== null && waitsForJudge(events, gate.ord, gate.prompt);
+  // crew#1974: every eligible judge seat failed (out of quota, signed out) and the gate is not the judge hold the
+  // judge-wait line already explains (a `stand_in_needed` hold says it only in its prompt): name each seat's reason.
+  const judgesDown: JudgeDown[] | null = gate !== undefined && !judgeWait && judgeSeatsFailed(events, gate.ord, gate.prompt)
+    ? benched.filter((b) => b.source === 'judge').map((b) => ({ cli: b.cli, name: seatKeyName(b.cli, roster, cliLabel), words: benchWords(b.reason) }))
+    : null;
   const seatRefusal = gate !== undefined && model !== null && !reduced && creatorSeatRefusal(events, gate.ord, gate.prompt);
   const split = model?.failingTests?.split;
   const fresh = split !== undefined ? split.fresh : null;
@@ -176,6 +198,7 @@ export function gateCause({ view, gate, events, model, roster, pool = runPoolOf(
         : deadEnd !== null ? 'None of this job’s helpers can review this independently' : 'No second helper is free to review this')
     : broke !== null ? broke
     : rulesHeld !== null ? rulesHeld
+    : judgesDown !== null ? judgesDownHeadline(judgesDown)
       : judgeWait && model?.qe === undefined ? (judges?.inJob !== undefined
         // (J4 0.16.6) The live roster has a helper of this job, not the builder, signed in: say so, never "sign one in".
         ? `${seatName(judges.inJob.cli, judges.inJob.label)} is signed in but wasn’t used to check this step`
@@ -183,7 +206,7 @@ export function gateCause({ view, gate, events, model, roster, pool = runPoolOf(
         // studio#1276: failures the base's re-run could not separate are not the base's: no "every" claim over them.
         : fresh !== null ? ((split?.unplaced?.length ?? 0) > 0 ? 'No failing test is known to be this change’s alone' : 'Every failing test fails on the base too')
           : gate !== undefined ? governanceDenialHeadline(gate.prompt) : null;
-  return { seatRefusal, judgeWait, judges, noneInJob: deadEnd !== null, fresh, headline };
+  return { seatRefusal, judgeWait, judges, noneInJob: deadEnd !== null, fresh, headline, judgesDown };
 }
 
 /** A governance denial as a plain cause (the words live in deskWords, beside the gate questions). */

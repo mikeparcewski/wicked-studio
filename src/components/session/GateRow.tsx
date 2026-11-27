@@ -45,7 +45,7 @@ import { missingSeatsLine, OPERATOR_JUDGMENT_LABEL, rejudgeOfferOf, type Rejudge
 import { baseCountOf, failureName, groupByFile, testPlace, testWords } from '../../board/failingChecks.js';
 import { useOfferReply } from './DecisionDock.js';
 import { builderResponder } from '../../board/responder.js';
-import { gateCause, gateQuestion, gateWithLogChoices, judgeSeats, runPoolOf, seatName } from '../../board/gateHeadline.js';
+import { gateCause, gateQuestion, gateWithLogChoices, judgeSeats, runPoolOf, seatName, type JudgeDown } from '../../board/gateHeadline.js';
 
 export { gateWithLogChoices, judgeSeats };
 import { FLOOR_OVERRIDE_CONSEQUENCE, FLOOR_OVERRIDE_KEY, FLOOR_OVERRIDE_PLACEHOLDER, FLOOR_OVERRIDE_SEND, TOOL_CHECK_OVERRIDE_CONSEQUENCE, TOOL_CHECK_OVERRIDE_KEY, TOOL_CHECK_OVERRIDE_PLACEHOLDER, TOOL_CHECK_OVERRIDE_SEND } from '../../board/floorOverride.js';
@@ -278,7 +278,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   // (board/gateHeadline.ts) with every row that names this gate.
   const builder = builderResponder(view, gate?.ord ?? null, roster);
   // evaluator ≠ creator: who may judge this step is read off the live roster, never a seat that built the work.
-  const { seatRefusal, judgeWait, judges, noneInJob, fresh, headline } = useMemo(
+  const { seatRefusal, judgeWait, judges, noneInJob, fresh, headline, judgesDown } = useMemo(
     () => gateCause({ view, gate, events, model, roster, pool, benched }), [view, gate, events, model, roster, pool, benched]);
   // The action the gate's own words name is a button. Crew marked no suggestion: the gate describes the move.
   const derived = useMemo<DerivedLead | null>(() => {
@@ -345,6 +345,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
           {...(navigate !== undefined ? { navigate } : {})}
         />
       )}
+      {judgesDown !== null && <JudgesDownLine seats={judgesDown} />}
       {judgeWait && (
         <JudgeWaitLine
           offer={rejudge}
@@ -642,6 +643,25 @@ export function JudgeWaitLine({ offer, operatorJudgment = true, name = (s) => s,
         : <>No helper other than the ones that worked on this step can check it.</>}
       {' '}Sign another helper in, or fix the one that failed; then Re-run the judge appears here. {own}{' '}
       {signIn}
+    </p>
+  );
+}
+
+/**
+ * crew#1974: no eligible judge seat could run the check. Says which seats failed and why, which answers help (sign a
+ * signed-out seat in, reassign, a stand-in), and that Retry meets the same seats.
+ */
+export function JudgesDownLine({ seats }: { seats: readonly JudgeDown[] }): React.ReactElement {
+  const list = (names: readonly string[], last: string): string =>
+    names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} ${last} ${names[names.length - 1]!}`;
+  const why = list(seats.map((s) => `${s.name} is ${s.words}`), 'and');
+  const signedOut = seats.filter((s) => s.words === 'signed out').map((s) => s.name);
+  const signIn = signedOut.length > 0 ? `Sign ${list(signedOut, 'or')} back in` : 'Sign a judge in';
+  return (
+    <p data-testid="session-gate-judges-down" role="status" className="wk-gate-consequence">
+      <b>No judge could check this step.</b> {why !== '' ? `${why}. ` : ''}
+      {signIn}, reassign the step to another helper, or use a stand-in.
+      {' '}Retry this step meets the same judges, so it fails the same way until one of them is back.
     </p>
   );
 }

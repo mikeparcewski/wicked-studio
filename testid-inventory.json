@@ -21479,6 +21479,12 @@
       ]
     },
     {
+      "testId": "session-gate-judges-down",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-judgment-label",
       "files": [
         "src/components/session/GateRow.tsx"
