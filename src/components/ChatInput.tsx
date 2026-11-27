@@ -429,13 +429,17 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // The effective workflow and its kind, derived ONCE for the submit guard, the
   // wire body, the deliver notice and the pre-send summary below.
   const launchWorkflow = workflowOverride?.trim() || workflow;
-  // (wicked-core#1843 P3) Reduced assurance only for a launch that takes no stand-ins (a review, the evals, a demo): any
-  // other short-roster launch is asked the stand-in question by crew and draws StandInChoice instead.
-  const reducedOn = reducedAssurance && !takesStandIns(launchWorkflow);
   // The phase picker (DES-TEAMING-002 T9): a composed plan replaces the workflow on the wire
   // (`plan` and `workflow` are mutually exclusive) and is build work.
   const [pickerOpen, setPickerOpen] = useState(false);
   const selection = usePhaseSelection(pickerOpen);
+  // (wicked-core#1843 P3) Reduced assurance only for a launch that takes no stand-ins (a review, the evals, a demo): any
+  // other short-roster launch is asked the stand-in question by crew and draws StandInChoice instead. Judged on what
+  // the wire sends: a composed plan replaces the workflow, and crew takes a launch with no workflow as one that takes
+  // stand-ins (stand-in-scope.ts noStandInsKind), so a plan never carries the tick.
+  const reducedWorkflow = selection.plan === null ? launchWorkflow : null;
+  const offerReducedTick = !takesStandIns(reducedWorkflow);
+  const reducedOn = reducedAssurance && offerReducedTick;
   // QE-IN-APP-WORKFLOWS (codex r1): offered for the workflow this launch actually sends — the
   // override, else the picked one — and never for a composed plan, whose requirement the form
   // cannot know. A change of that target clears the word: a tick is never carried to another one.
@@ -1844,7 +1848,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           stops and asks for a second seat unless the launch opts into reduced assurance, said first.
           (wicked-core#1843 P3) Only a launch that takes no stand-ins offers it; crew asks any other the
           stand-in question. */}
-      {!takesStandIns(launchWorkflow) && ((daemonReduced === true && selectedClis.size === 1) || reducedAssurance) && (
+      {offerReducedTick && ((daemonReduced === true && selectedClis.size === 1) || reducedAssurance) && (
         <ReducedAssuranceOptIn checked={reducedAssurance} onChange={setReducedAssurance} />
       )}
 

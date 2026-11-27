@@ -10,11 +10,12 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as client from '../src/api/client.js';
+import { teamPlanApi } from '../src/api/teamPlan.js';
 import type { CoreEvent, LaunchBodyWithDeliver, RepoEntry, RosterSeat, WorkflowDef, WorkUnit } from '../src/api/types.js';
 import { useGateActionStore } from '../src/board/gateActions.js';
 import { creatorSeatRefusal } from '../src/board/assuranceModel.js';
 import { ChatInput } from '../src/components/ChatInput.js';
-import { GateRow } from '../src/components/session/GateRow.js';
+import { CreatorSeatRefusal, GateRow } from '../src/components/session/GateRow.js';
 import { Composer } from '../src/components/session/Composer.js';
 import { useCapabilities } from '../src/store/capabilities.js';
 import { useComposerChips } from '../src/store/composerChips.js';
@@ -122,6 +123,24 @@ describe('the dead-seat gate offers it', () => {
     expect(screen.queryByTestId('session-gate-creator-seat-nocap')).toBeNull();
   });
 
+  it('wicked-core#1843 P3: every helper ruled out: a job that takes stand-ins says a stand-in, a review says reduced only when crew offers it', () => {
+    const words = (): string => screen.getByTestId('session-gate-creator-seat').textContent ?? '';
+    for (const cap of [true, false]) {
+      useCapabilities.setState({ reducedAssurance: cap });
+      render(<CreatorSeatRefusal view={view('wf-build')} noneInJob />);
+      expect(words()).toMatch(/with another helper, or with a stand-in\./);
+      expect(words()).not.toMatch(/reduced assurance/);
+      cleanup();
+    }
+    useCapabilities.setState({ reducedAssurance: true });
+    render(<CreatorSeatRefusal view={view('review-recent-work')} noneInJob />);
+    expect(words()).toMatch(/with another helper, or with reduced assurance\./);
+    cleanup();
+    useCapabilities.setState({ reducedAssurance: false });
+    render(<CreatorSeatRefusal view={view('review-recent-work')} noneInJob />);
+    expect(words()).toMatch(/with another helper\.$/);
+  });
+
   it('a run already reduced is never offered it again', () => {
     useCapabilities.setState({ reducedAssurance: true });
     useRunEventStore.setState({ byRun: { [RUN]: [
@@ -183,6 +202,34 @@ describe('the launch form', () => {
     await waitFor(() => expect(screen.getByTestId('launch-reduced-assurance')).toBeTruthy());
     expect((screen.getByTestId('launch-reduced-assurance-toggle') as HTMLInputElement).checked).toBe(false);
     const body = await launch();
+    expect('reducedAssurance' in body).toBe(false);
+  });
+
+  it('wicked-core#1843 P3 (codex r1): a review ticked, then a composed plan: the plan replaces the workflow and takes stand-ins, so the tick goes and is not sent', async () => {
+    health(true); roster(['claude']);
+    prefill(true);
+    resetPlanCatalog();
+    const CATALOG = ['understand', 'build', 'review'].map((id) => ({
+      id, kind: 'build', role: id === 'build' ? 'creator' : 'neutral', gate: 'auto', gate_type: null, executes_code: id === 'build',
+      executor: 'agent', validator_pin: null, pinned: false, evidence_floor: false, skill_ref: null, description: null,
+    }));
+    vi.spyOn(teamPlanApi, 'catalog').mockResolvedValue({ entries: CATALOG as never });
+    vi.spyOn(teamPlanApi, 'presets').mockResolvedValue({ presets: [] });
+    // Send places a "pause before step N" from the plan preview: serve one (shape: tests/ChatInput.posture1150.test.tsx).
+    vi.spyOn(teamPlanApi, 'previewPlan').mockResolvedValue({
+      score: 1, deterministic: 1, reasons: [], destructive: false, band: 'low', high_risk: false, floor: [], floor_override: null,
+      steps: [{ catalog: 'build', id: 'build' }], def: { id: 'plan', phases: [] }, pauses: false, pause_reason: null, graph: 'not_needed',
+    } as never);
+    const user = userEvent.setup();
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    await waitFor(() => expect((screen.getByTestId('launch-reduced-assurance-toggle') as HTMLInputElement).checked).toBe(true));
+    await user.click(screen.getByTestId('phase-picker-toggle'));
+    await waitFor(() => expect(screen.getByTestId('phase-picker').dataset.catalogState).toBe('ready'));
+    await user.click(screen.getAllByTestId('phase-option').find((b) => b.dataset.catalog === 'build')!);
+    await waitFor(() => expect(screen.queryByTestId('launch-reduced-assurance')).toBeNull());
+    const body = await launch();
+    expect(body).toHaveProperty('plan');
+    expect('workflow' in body).toBe(false);
     expect('reducedAssurance' in body).toBe(false);
   });
 
@@ -250,7 +297,9 @@ describe('the composer\'s /workflow row', () => {
         posts.push({ path, body: JSON.parse(String(init.body ?? '{}')) as Record<string, unknown> });
         return Promise.resolve(new Response(JSON.stringify({ runId: 'r-new' }), { status: 200, headers: { 'content-type': 'application/json' } }));
       }
-      const body = path === '/roster' ? { roster } : path === '/repos' ? { repos: [REPO] } : path === '/workflows' ? { workflows: WF } : {};
+      // The capability is served too: Composer re-reads /health, and a stub without it would clear the store's flag and
+      // hide the tick for every workflow (codex r1: the not-offered test then passed without the fix).
+      const body = path === '/roster' ? { roster } : path === '/repos' ? { repos: [REPO] } : path === '/workflows' ? { workflows: WF } : path.endsWith('/health') ? { status: 'ok', capabilities: { reducedAssurance: true } } : {};
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }));
     }));
     clearCachedRoster();
@@ -313,6 +362,7 @@ describe('the composer\'s /workflow row', () => {
     stub([seat('claude')]);
     render(<Harness />);
     await nameWorkflow('mcp-server');
+    expect(useCapabilities.getState().reducedAssurance).toBe(true);
     expect(screen.queryByTestId('composer-start-reduced')).toBeNull();
     launch();
     await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));

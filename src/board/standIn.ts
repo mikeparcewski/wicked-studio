@@ -25,10 +25,10 @@ import { cliLabel, seatKeyName, standInBase, type SeatNameInput } from './seatNa
  *  question by crew (`409 stand_in_choice`) and never offers reduced assurance. */
 export const NO_STAND_IN_WORKFLOWS: readonly string[] = ['review-change', 'review-recent-work', 'run-evals', 'demo', 'demo-human-review'];
 
-/** Whether a launch of `workflow` takes stand-ins (no workflow: a free-text job, which does). */
+/** Whether a launch of `workflow` takes stand-ins (no workflow: a free-text job, which does). The id is compared as
+ *  sent, with no trimming, exactly as crew compares it: `' run-evals '` is an unknown workflow there, so it takes them. */
 export function takesStandIns(workflow: string | null | undefined): boolean {
-  const w = workflow?.trim() ?? '';
-  return w === '' || !NO_STAND_IN_WORKFLOWS.includes(w);
+  return workflow == null || !NO_STAND_IN_WORKFLOWS.includes(workflow);
 }
 
 /** The refusal's code (DES §4: `short && canStandIn && !consent` → `409 stand_in_choice`). */

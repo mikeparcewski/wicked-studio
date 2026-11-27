@@ -447,9 +447,11 @@ export const STAND_IN_RELAUNCH_WORDS = 'Opens the launch form with this job\'s b
 /** The relaunch's consequence, in plain words. */
 export const REDUCED_RELAUNCH_WORDS = 'Starts this job again where the creator\'s seat reviews its own work; it is labelled “Reduced assurance” on the job, every gate and the delivery. This job stays here until you stop it.';
 
-/** The creator-seat refusal's other way on, under the gate's choices: start the job again with reduced assurance.
- *  It opens the launch form with this job's brief and the opt-in ticked; nothing starts until Launch, and this job
- *  stays at its gate. `null` when crew does not offer reduced assurance. */
+/** The creator-seat refusal's other way on, under the gate's choices. A job that takes stand-ins starts again with a
+ *  stand-in: the launch form opens with this job's brief and no opt-in, and Launch gets crew's stand-in question, whether
+ *  or not crew offers reduced assurance. A job that takes none (a review, the evals, a demo) starts again with reduced
+ *  assurance, the opt-in ticked; `null` for it when crew does not offer reduced assurance. Nothing starts until Launch,
+ *  and this job stays at its gate. */
 export function ReducedRelaunchItem({ view, navigate, onPick }: { view: RunView; navigate?: Navigate; onPick?: () => void }): React.ReactElement | null {
   const can = useCapabilities((s) => s.reducedAssurance);
   if (navigate === undefined) return null;

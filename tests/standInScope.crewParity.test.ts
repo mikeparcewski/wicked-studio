@@ -23,5 +23,9 @@ describe('takesStandIns mirrors crew\'s noStandInsKind', () => {
     expect(takesStandIns('')).toBe(true);
     expect(takesStandIns('bug')).toBe(true);
     expect(takesStandIns('mcp-server')).toBe(true);
+    // Crew compares the id as sent: a padded id is an unknown workflow there, so it takes stand-ins here too.
+    expect(takesStandIns(' run-evals')).toBe(true);
+    expect(takesStandIns('run-evals ')).toBe(true);
+    expect(takesStandIns(' ')).toBe(true);
   });
 });

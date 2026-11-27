@@ -844,10 +844,14 @@ describe('the reduced-assurance tick on one helper', () => {
 
   it('a workflow that takes stand-ins: not offered, and not sent', async () => {
     await toOptions('fix-bug');
-    // The tick appears once the roster read lands (the evals case below finds it the same way): wait past that.
-    await new Promise((r) => setTimeout(r, 300));
+    // The tick would show once the one-helper roster is drawn: wait for that seat, not for a timer (agy r1).
+    expect(await screen.findAllByTestId('launch-wizard-seat')).toHaveLength(1);
     expect(useCapabilities.getState().reducedAssurance).toBe(true);
     expect(screen.queryByTestId('launch-wizard-reduced')).toBeNull();
+    // A draft that already holds the tick (a resumed draft) still sends none for this job (agy r1: seed it, so "not
+    // sent" is not vacuous).
+    act(() => { useLaunchWizard.setState((st) => ({ draft: st.draft === null ? null : { ...st.draft, reduced: true } })); });
+    expect(useLaunchWizard.getState().draft?.reduced).toBe(true);
     next();
     fireEvent.click(screen.getByTestId('launch-wizard-launch'));
     await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
