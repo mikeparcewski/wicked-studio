@@ -446,25 +446,32 @@ export function enrichPlan(steps: ReadonlyArray<{ id: string | null; catalog: st
  * studio#1485: whether the run's OWN log shows it past its plan. That is the engine's plan gate, which the team record
  * may never record as decided (train-17 J6 run B: `awaitingHuman` plan_approval, then `resumed`, then unit 1
  * dispatched, and no decision row). It is true when, after the LAST plan-approval `awaitingHuman` in the log, a
- * `unitDispatched` names the step that gate stood before (its `reviewingOrd`, else its `ord`). That is the rule
- * {@link replanningOnRecord} uses: the step has started. The log is in recorded order. A dispatch from before a newer
- * plan gate does not count, and a log with no plan gate, or one not read, is not proof.
+ * `unitDispatched` names the step that gate stands before: its `ord`. A re-plan gate's `reviewingOrd` is the done
+ * creator it reviewed, which is never dispatched again (wicked-core src/actor/replan_tests.rs: a gate with ord 2 and
+ * reviewing_ord 1, and approval dispatches the first new unit).
+ *
+ * A dispatch counts only as one emitted AFTER that gate. A recorded one must have a higher `seq` than the gate's. A
+ * live frame (no `seq`) that repeats a dispatch already logged at or before the gate (the same step and attempt: a
+ * lagging socket's copy of an old emission, appended after a newer read, store/events.ts ingest) does not count.
+ * A log with no plan gate, a gate with no step, or a log not read is not proof.
  */
 export function pastPlanOnLog(events: readonly unknown[] | null | undefined): boolean {
   if (events == null) return false;
+  const log = events as ReadonlyArray<Record<string, unknown>>;
   let at = -1;
-  let ord: number | null = null;
-  events.forEach((raw, i) => {
-    const e = raw as Record<string, unknown>;
-    if (e['type'] === 'awaitingHuman' && e['gateKind'] === 'plan_approval') {
-      at = i;
-      ord = typeof e['reviewingOrd'] === 'number' ? e['reviewingOrd'] : typeof e['ord'] === 'number' ? e['ord'] : null;
-    }
-  });
-  if (at < 0 || ord === null) return false;
-  return events.slice(at + 1).some((raw) => {
-    const e = raw as Record<string, unknown>;
-    return e['type'] === 'unitDispatched' && e['ord'] === ord;
+  log.forEach((e, i) => { if (e['type'] === 'awaitingHuman' && e['gateKind'] === 'plan_approval') at = i; });
+  if (at < 0) return false;
+  const gate = log[at]!;
+  const ord = gate['ord'];
+  if (typeof ord !== 'number') return false;
+  const seqOf = (e: Record<string, unknown>): number | null => (typeof e['seq'] === 'number' ? e['seq'] : null);
+  const before = new Set(log.slice(0, at).filter((e) => e['type'] === 'unitDispatched').map((e) => `${String(e['ord'])}:${String(e['attempt'])}`));
+  return log.slice(at + 1).some((e) => {
+    if (e['type'] !== 'unitDispatched' || e['ord'] !== ord) return false;
+    const s = seqOf(e);
+    const g = seqOf(gate);
+    if (s !== null) return g === null || s > g;
+    return !before.has(`${String(e['ord'])}:${String(e['attempt'])}`);
   });
 }
 

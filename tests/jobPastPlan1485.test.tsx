@@ -164,11 +164,35 @@ describe('studio#1485: pastPlanOnLog', () => {
     expect(pastPlanOnLog(later)).toBe(false);
     expect(pastPlanOnLog([...later, { type: 'unitDispatched', ord: 2, attempt: 0, seq: 1702 }])).toBe(true);
   });
-  it('the step the gate stood before must be the one dispatched (reviewingOrd, else ord); a gate with no step is not proof', () => {
-    const gate = { type: 'awaitingHuman', gateKind: 'plan_approval', ord: 1, reviewingOrd: 3 };
-    expect(pastPlanOnLog([gate, { type: 'unitDispatched', ord: 1 }])).toBe(false);
-    expect(pastPlanOnLog([gate, { type: 'unitDispatched', ord: 3 }])).toBe(true);
-    expect(pastPlanOnLog([{ type: 'awaitingHuman', gateKind: 'plan_approval', ord: null, reviewingOrd: null }, { type: 'unitDispatched', ord: 1 }])).toBe(false);
+  it('the step a gate stands before is its ord; a re-plan gate’s reviewingOrd is the done creator it reviewed (core replan_tests.rs)', () => {
+    // wicked-core src/actor/replan_tests.rs: the re-plan gate has ord 2 and reviewing_ord 1; approval dispatches the
+    // first new unit, and the done creator is never dispatched again.
+    const done = [{ type: 'unitDispatched', ord: 1, attempt: 0, seq: 10 }, { type: 'unitDone', ord: 1, seq: 11 }];
+    const gate = { type: 'awaitingHuman', gateKind: 'plan_approval', ord: 2, reviewingOrd: 1, seq: 12 };
+    expect(pastPlanOnLog([...done, gate, { type: 'resumed', ord: 2, seq: 13 }])).toBe(false);
+    expect(pastPlanOnLog([...done, gate, { type: 'resumed', ord: 2, seq: 13 }, { type: 'unitDispatched', ord: 2, attempt: 0, seq: 14 }])).toBe(true);
+    expect(pastPlanOnLog([{ type: 'awaitingHuman', gateKind: 'plan_approval', ord: null, reviewingOrd: 1 }, { type: 'unitDispatched', ord: 1 }])).toBe(false);
+  });
+  it('STALE READ (codex r1): a lagging live copy of an old dispatch, appended after a newer unapproved gate, is not proof', () => {
+    const recorded = [{ type: 'unitDispatched', session: 'r9', ord: 1, attempt: 0, seq: 10 },
+      { type: 'awaitingHuman', session: 'r9', gateKind: 'plan_approval', ord: 2, reviewingOrd: 1, prompt: 'p', seq: 12 }];
+    useRunEventStore.setState({ byRun: {} });
+    useRunEventStore.getState().hydrate('r9', recorded as never);
+    // The live socket's copy of a dispatch emitted before that gate lands after the read (no seq, no dedupe on ingest).
+    useRunEventStore.getState().ingest({ type: 'unitDispatched', session: 'r9', ord: 1, attempt: 0 } as never);
+    expect(pastPlanOnLog(useRunEventStore.getState().byRun['r9'] ?? null)).toBe(false);
+    useRunEventStore.getState().ingest({ type: 'unitDispatched', session: 'r9', ord: 2, attempt: 0, baseSkill: null } as never);
+    // Only a step-2 dispatch is evidence, and a live one counts only when that step and attempt were not logged before the gate.
+    expect(pastPlanOnLog(useRunEventStore.getState().byRun['r9'] ?? null)).toBe(true);
+    useRunEventStore.setState({ byRun: {} });
+    useRunEventStore.getState().hydrate('r9', [...recorded.slice(0, 1), { type: 'unitDispatched', session: 'r9', ord: 2, attempt: 0, seq: 11 }, recorded[1]!] as never);
+    useRunEventStore.getState().ingest({ type: 'unitDispatched', session: 'r9', ord: 2, attempt: 0 } as never);
+    expect(pastPlanOnLog(useRunEventStore.getState().byRun['r9'] ?? null)).toBe(false);
+  });
+  it('a recorded dispatch counts only with a seq after the gate’s, wherever it sits in the log', () => {
+    const gate = { type: 'awaitingHuman', gateKind: 'plan_approval', ord: 1, seq: 20 };
+    expect(pastPlanOnLog([gate, { type: 'unitDispatched', ord: 1, attempt: 0, seq: 19 }])).toBe(false);
+    expect(pastPlanOnLog([gate, { type: 'unitDispatched', ord: 1, attempt: 0, seq: 21 }])).toBe(true);
   });
   it('a non-plan gate is not a plan gate', () => {
     expect(pastPlanOnLog([{ type: 'awaitingHuman', gateKind: 'deliver', ord: 1 }, { type: 'unitDispatched', ord: 1 }])).toBe(false);
