@@ -36,6 +36,8 @@ import { silentWords } from '../../board/silentStep.js';
 import { retryBadge } from '../../board/stepRetry.js';
 import { useStepRetry } from '../../hooks/useStepRetry.js';
 import { useRunningFloor } from '../../hooks/useRunningFloor.js';
+import { useScriptedStep } from '../../hooks/useScriptedStep.js';
+import { scriptedWords } from '../../board/scriptedStep.js';
 import { floorWords } from '../../board/floorRun.js';
 import { deliveryAssuranceOf, deliveryReceiptOf, passedWord, runRuleRows } from '../../board/assuranceModel.js';
 import { deliveryOf, isPrUrl, prNumberOf } from '../delivery.js';
@@ -162,6 +164,8 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   // (J4 0.16.6) The step silent past crew's quiet mark: the Now section says so, as the header does.
   const silent = useSilentStep(view);
   const floor = useRunningFloor(view);
+  // studio#1499: a scripted (Tool) step is working, not silent: "Domain run is working · 31 min".
+  const scripted = useScriptedStep(view);
   // studio#1489: a step that failed and is being tried again: the Now section says so, as the header does. A running
   // checks floor is the engine's work now and keeps its own words (codex r1).
   const retryRead = useStepRetry(view);
@@ -329,7 +333,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   // studio#1500: a gate is open while the run view still says executing (it lags the gate store): the word says waiting,
   // as the status sentence does (statusSentence's open-gate branch), never "Working" beside "Waiting on you".
   const gatedWord = gate !== undefined && shown.session.status === 'executing' ? 'Waiting on you' : null;
-  const nowWord = declinedWord ?? installWord ?? gatedWord ?? (held ? chatStatusWord([shown]).word : retryWord ?? (silent !== null ? silentWords(silent) : floor !== null ? floorWords(floor) : chatStatusWord([view]).word));
+  const nowWord = declinedWord ?? installWord ?? gatedWord ?? (held ? chatStatusWord([shown]).word : retryWord ?? (silent !== null ? silentWords(silent) : floor !== null ? floorWords(floor) : scripted !== null ? scriptedWords(scripted) : chatStatusWord([view]).word));
   const statusLine = statusSentence(shown, chain, gate, action, silent?.minutes ?? null, { retry });
   const shownStatus = declinedWord !== null ? statusLine.replace(/^Cancelled\b/, declinedWord)
     : installWord !== null ? statusLine.replace(/^Finished\b/, installWord) : statusLine;
@@ -349,7 +353,7 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
         </div>
         <div data-testid="run-tab-workflow" className="wk-run-tab-block">
           <p className="wk-run-tab-line">{workflowLabel(session.workflow_id)}{' '}
-            <span className="wk-run-tab-pill" data-testid="run-tab-pill">{declinedWord ?? installWord ?? gatedWord ?? retryWord ?? (silent !== null && !held ? silentWords(silent) : chatStatusWord([shown]).word)}</span>
+            <span className="wk-run-tab-pill" data-testid="run-tab-pill">{declinedWord ?? installWord ?? gatedWord ?? retryWord ?? (silent !== null && !held ? silentWords(silent) : scripted !== null && !held ? scriptedWords(scripted) : chatStatusWord([shown]).word)}</span>
           </p>
           {typeof session.repo_ref === 'string' && session.repo_ref.trim() !== '' && (
             <p data-testid="run-tab-repo" className="wk-run-tab-line"><code>{session.repo_ref}</code></p>

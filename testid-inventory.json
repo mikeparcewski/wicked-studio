@@ -22510,6 +22510,12 @@
       ]
     },
     {
+      "testId": "session-working-scripted",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
       "testId": "session-working-text",
       "files": [
         "src/components/session/SessionView.tsx"
