@@ -22,8 +22,17 @@ export function openJobCard(messages: readonly unknown[] | undefined): { pid: st
  * (studio#1483) While the chat holds an open job card, the chips are THAT job's helpers: crew draws a job's seats
  * from the seats new work may use, never from the chat's (`chat-jobs.ts` drawOrder), so re-seating the chat would
  * change nothing the job runs. A press re-versions the card instead (a revision that adds or removes the seat).
+ * A press under a card decides on what crew holds at that moment (the chat read again), never on what this row last
+ * read: the card may have been dismissed (Not now), started or replaced since. The row also reads again whenever the
+ * transcript does (`rev`), so a card drawn after it read shows here.
  */
-export function ChatHelpers({ chatId, roster, onJobChanged }: { chatId: string; roster: RosterSeat[] | null; onJobChanged?: (() => void) | undefined }): React.ReactElement | null {
+export function ChatHelpers({ chatId, roster, onJobChanged, rev = 0 }: {
+  chatId: string;
+  roster: RosterSeat[] | null;
+  onJobChanged?: (() => void) | undefined;
+  /** The transcript's read generation: a change (a card drawn, decided or re-versioned) reads the chat again. */
+  rev?: number | undefined;
+}): React.ReactElement | null {
   const [seats, setSeats] = useState<string[] | null>(null);
   const [card, setCard] = useState<{ pid: string; seats: string[] } | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -40,7 +49,7 @@ export function ChatHelpers({ chatId, roster, onJobChanged }: { chatId: string; 
       if (Array.isArray(r.seats)) setSeats(r.seats); else setNoSeats(true);
     }).catch((e: unknown) => { if (live.current) setNote(words(e)); });
     return () => { live.current = false; };
-  }, [chatId]);
+  }, [chatId, rev]);
 
   // The seats the chips show: the open job card's, else the chat's.
   const shown = card !== null ? card.seats : seats;
@@ -53,11 +62,9 @@ export function ChatHelpers({ chatId, roster, onJobChanged }: { chatId: string; 
     setCard(openJobCard(r.messages));
     if (Array.isArray(r.seats)) setSeats(r.seats); else setNoSeats(true);
   };
+  /** Inside a press (`busy` held): change the open card's helpers by a revision. */
   const toggleCard = async (key: string, open: { pid: string; seats: string[] }): Promise<void> => {
     const off = open.seats.includes(key);
-    busy.current = true;
-    setSaving(true);
-    setNote(null);
     try {
       await api.reviseChatProposal(chatId, {
         revises: open.pid,
@@ -78,12 +85,35 @@ export function ChatHelpers({ chatId, roster, onJobChanged }: { chatId: string; 
   };
   const toggle = async (key: string): Promise<void> => {
     if (seats === null || roster === null || busy.current) return;
-    if (card !== null) return toggleCard(key, card);
-    const next = new Set(seats);
-    if (next.has(key)) next.delete(key); else next.add(key);
     busy.current = true;
     setSaving(true);
     setNote(null);
+    let held = seats;
+    if (card !== null) {
+      // What crew holds now: is the card still open (and which version), and the chat's seats.
+      let open: { pid: string; seats: string[] } | null;
+      try {
+        const r = await api.getChat(chatId);
+        if (!live.current) return;
+        open = openJobCard(r.messages);
+        setCard(open);
+        if (!Array.isArray(r.seats)) {
+          setNoSeats(true);
+          busy.current = false;
+          setSaving(false);
+          return;
+        }
+        held = r.seats;
+        setSeats(held);
+      } catch (e: unknown) {
+        if (live.current) { setNote(words(e)); setSaving(false); }
+        busy.current = false;
+        return;
+      }
+      if (open !== null) return toggleCard(key, open);
+    }
+    const next = new Set(held);
+    if (next.has(key)) next.delete(key); else next.add(key);
     try {
       const r = await api.reseatChat(chatId, keys.filter((k) => next.has(k))) as Awaited<ReturnType<typeof api.reseatChat>> & { reseated?: false; note?: string };
       if (!live.current) return;

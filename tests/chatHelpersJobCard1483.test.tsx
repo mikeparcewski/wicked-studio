@@ -93,6 +93,27 @@ it('a refused revision says the job was not changed and shows the card as crew h
   expect(calls.some((c) => c.path === '/chats/seeded/seats')).toBe(false);
 });
 
+it('a card dismissed since the row read it (Not now) is not revised: the press re-seats the chat (codex-check W12)', async () => {
+  render(<ChatHelpers chatId="seeded" roster={roster} />);
+  await waitFor(() => expect(screen.getByTestId('composer-seats').dataset.target).toBe('job'));
+  // The person pressed Not now on the card; crew wrote its decision (chat-proposals.ts decided()).
+  messages = [...messages, { at: Date.now(), turnId: 'person:2', kind: 'proposal_decided', pid: RECORD.proposal.pid, actor: 'local', decision: 'not_now', result: null }];
+  fireEvent.click(chip('pi'));
+  await waitFor(() => expect(calls.some((c) => c.path === '/chats/seeded/seats')).toBe(true));
+  expect(calls.some((c) => c.path === '/chats/seeded/proposals')).toBe(false);
+  expect(calls.find((c) => c.path === '/chats/seeded/seats')!.body).toEqual({ clis: ['claude', 'codex', 'copilot'] });
+  expect(screen.getByTestId('composer-seats').dataset.target).toBe('chat');
+});
+
+it('the row reads again when the transcript does (a card drawn after it read)', async () => {
+  messages = [];
+  const { rerender } = render(<ChatHelpers chatId="seeded" roster={roster} rev={0} />);
+  await waitFor(() => expect(screen.getByTestId('composer-seats').dataset.target).toBe('chat'));
+  messages = [fixture.record];
+  rerender(<ChatHelpers chatId="seeded" roster={roster} rev={1} />);
+  await waitFor(() => expect(screen.getByTestId('composer-seats').dataset.target).toBe('job'));
+});
+
 it('with no job card yet, the chips still re-seat the chat', async () => {
   messages = [];
   render(<ChatHelpers chatId="seeded" roster={roster} />);

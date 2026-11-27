@@ -1248,6 +1248,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
     jobChatId: ref.kind === 'chat' && (conversation === 'live' || awaitingOpenRead) ? ref.chatId : null,
     // studio#1483: a helper chip re-versioned the job card; read the transcript again, as the card's own edits do.
     onJobChanged: () => setChatTry((n) => n + 1),
+    jobRev: chatTry,
     // studio#606 (4): while a run here is live, Send starts a separate Ask — say so before Send.
     footer: scopeNote !== null ? (
       <p data-testid="session-composer-scope" role="note" className="wk-composer-hint">
