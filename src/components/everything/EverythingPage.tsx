@@ -2,6 +2,7 @@ import { useSystemPoll, useSystemStore } from '../../store/systemSnapshot.js';
 import type { SystemRun } from '../../api/system.js';
 import { snapshotSilence, silentWords } from '../../board/silentStep.js';
 import { runsScript } from '../../board/scriptedStep.js';
+import { runLogOf } from '../../board/stalls.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { Project } from '../../api/types.js';
@@ -302,7 +303,7 @@ function SessionsTab({ liveness, runs, runsLoaded, runsError, onRetryRuns, needR
             // A live session (one run still working or waiting) says so, whatever its newest run did.
             // studio#1499: a scripted (Tool) step's quiet is its normal state, not a silent seat.
             const newestId = s.runIds[s.runIds.length - 1]!;
-            const silent = runsScript(viewOf(newestId)) ? null : snapshotSilence(liveness.get(newestId));
+            const silent = runsScript(viewOf(newestId), runLogOf(newestId)) ? null : snapshotSilence(liveness.get(newestId));
             const word = s.state === 'waiting' ? { word: 'Waiting on you', tone: 'gate' as const }
               : s.state === 'working' ? silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : { word: 'Working', tone: 'run' as const }
               : views.length > 0 ? chatStatusWord(views) : null;
@@ -528,7 +529,7 @@ function RunsTable({ liveness, runs, runChatId, projects, q, runsLoaded, runsErr
             const path = sessionPath(archivedMode ? `run:${r.runId}` : r.sessionId);
             const view = archivedMode ? archivedViewOf(r.runId) : viewOf(r.runId);
             const status = view !== undefined ? statusWord(view) : { word: 'Unknown' as const, tone: 'quiet' as const };
-            const silent = status.word === 'Working' && !runsScript(view) ? snapshotSilence(liveness.get(r.runId)) : null;
+            const silent = status.word === 'Working' && !runsScript(view, runLogOf(r.runId)) ? snapshotSilence(liveness.get(r.runId)) : null;
             const word = silent !== null ? { word: silentWords(silent), tone: 'gate' as const } : status;
             const finished = !archivedMode && FINISHED.has(r.status) ? view : undefined;
             const title = showText(r.title);

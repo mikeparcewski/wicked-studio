@@ -1,4 +1,5 @@
-import type { SessionView } from '../api/types.js';
+import type { CoreEvent, SessionView } from '../api/types.js';
+import { useRunEventStore } from '../store/events.js';
 import { useRuntimeStore } from '../store/runtime.js';
 import { useSystemStore } from '../store/systemSnapshot.js';
 import { CREW_FRESH_MS, lastLoggedActivity } from './silentStep.js';
@@ -38,17 +39,25 @@ export function activityEvidence(lastEventAt: Record<string, number>): (id: stri
   };
 }
 
+/** A run's log as this page holds it (every live frame since load, and the durable trail once a surface read it), read
+ *  NON-reactively, as the evidence is. */
+export function runLogOf(runId: string): readonly CoreEvent[] | undefined {
+  return useRunEventStore.getState().byRun[runId];
+}
+
 /** Live runs gone silent past the stall threshold: run id → the last activity evidence. */
 export function stalledRuns(
   runs: readonly SessionView[],
   evidenceAt: (id: string) => number | undefined,
   now: number,
+  logOf: (id: string) => readonly CoreEvent[] | undefined = runLogOf,
 ): Record<string, number> {
   const out: Record<string, number> = {};
   for (const v of runs) {
     if (!ACTIVE.has(v.session.status)) continue;
     // studio#1499: a scripted (Tool) step is quiet until it ends: not a wedge, and not a need (`scriptedStep.ts`).
-    if (scriptedStep(v, null, now) !== null) continue;
+    // The run's log (every live frame since load, plus the trail of a run opened) says when the view lags it.
+    if (scriptedStep(v, logOf(v.session.id), now) !== null) continue;
     const ev = evidenceAt(v.session.id);
     if (isStalled(ev, now)) out[v.session.id] = ev!;
   }

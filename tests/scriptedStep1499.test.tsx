@@ -107,6 +107,27 @@ describe('studio#1499 design classes', () => {
     expect(scriptedStep(viewB({ on: 2 }), upTo(1752), (frame(1748).ts as number) + 2 * MIN)).toEqual({ ord: 2, label: 'Domain graph', minutes: 2 });
   });
 
+  it('STALE READS (codex r1): a lagging view\'s Tool cursor never hides the next step\'s stall', () => {
+    // The view still has domain-run under the cursor; the log has domain-graph dispatched and quiet for 31 min, as long as the cert saw it.
+    const log = upTo(1748);
+    const evidence = frame(1748).ts as number;
+    expect(stalledRuns([viewB()], () => evidence, evidence + 31 * MIN, () => log)).toEqual({ [RUN]: evidence });
+    expect(runsScript(viewB(), log)).toBe(false);
+    // The app's own read: the event store, which every live frame reaches.
+    useRunEventStore.setState({ byRun: { [RUN]: log } });
+    expect(stalledRuns([viewB()], () => evidence, evidence + 31 * MIN)).toEqual({ [RUN]: evidence });
+    useRunEventStore.setState({ byRun: { [RUN]: upTo(1484) } });
+    expect(stalledRuns([viewB()], () => DISPATCHED, AT_31)).toEqual({});
+  });
+
+  it('a Tool step whose output is captured (its gate running) offers no seat levers either (codex r1, W4)', () => {
+    // The view lags at ord 1; the log has its capture and gate, not the next dispatch. No "is working" claim, and no
+    // silent-seat card ("Ask Bash", "Move it to another helper"): no seat runs it.
+    const log = upTo(1746);
+    expect(scriptedStep(viewB(), log, AT_31)).toBeNull();
+    expect(silentStep(viewB(), log, AT_31 + 40 * MIN)).toBeNull();
+  });
+
   it('IDENTITY REUSE: an agent step goes back to the silence rules; the newest attempt is the one counted', () => {
     // The same ord run by a seat (no tool_cmd): not scripted, so "No output for 31 min" still speaks.
     expect(scriptedStep(viewB({ cmd1: null }), upTo(1484), AT_31)).toBeNull();
@@ -130,9 +151,16 @@ describe('studio#1499 design classes', () => {
     // A log that does not reach the dispatch yet (a partial read) claims the view's step without a clock.
     expect(scriptedStep(viewB(), upTo(1450), AT_31)).toEqual({ ord: 1, label: 'Domain run', minutes: null });
     // The Everything page has crew's verdict and the view, no log.
-    expect(runsScript(viewB())).toBe(true);
-    expect(runsScript(viewB({ cmd1: null }))).toBe(false);
-    expect(runsScript(undefined)).toBe(false);
+    expect(runsScript(viewB(), undefined)).toBe(true);
+    expect(runsScript(viewB({ cmd1: null }), undefined)).toBe(false);
+    expect(runsScript(undefined, undefined)).toBe(false);
+  });
+
+  it('PARTIAL FAILURE (codex r1): a log window holding only the step\'s end still ends it', () => {
+    // A live log since page load can miss the dispatch and hold only the closing frame.
+    expect(scriptedStep(viewB(), [frame(1744)], AT_31)).toBeNull(); // unitOutputCaptured alone
+    expect(scriptedStep(viewB(), [frame(1747)], AT_31)).toBeNull(); // unitDone alone
+    expect(runsScript(viewB(), [frame(1747)])).toBe(false);
   });
 
   it('UNTRUSTED TEXT OUT: the words come from the unit key, never the command or its output', () => {

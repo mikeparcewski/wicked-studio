@@ -2,7 +2,7 @@ import { orphanedOf } from './sessionModel.js';
 import type { SystemRun } from '../api/system.js';
 import { isPowerPaused } from './heldRuns.js';
 import { runningFloor } from './floorRun.js';
-import { scriptedStep } from './scriptedStep.js';
+import { toolStepOnCursor } from './scriptedStep.js';
 import { isHeartbeatFrame } from './heartbeatFrame.js';
 import type { CoreEvent, SessionView } from '../api/types.js';
 
@@ -52,8 +52,8 @@ export function silentStep(view: SessionView, events: readonly CoreEvent[] | nul
   // silence warning is about a seat's own turn only (the page says "Running checks" instead, `floorRun.ts`).
   if (runningFloor(events, now) !== null) return null;
   // studio#1499: a scripted (Tool) step writes its output when it ends; its quiet is its normal state, not a silent
-  // seat. The page says "<Step> is working · N min" instead (`scriptedStep.ts`), with no seat to ask or move.
-  if (scriptedStep(view, events, now) !== null) return null;
+  // seat, and no seat runs it to ask or move. The page says "<Step> is working · N min" instead (`scriptedStep.ts`).
+  if (toolStepOnCursor(view, events)) return null;
   // Crew's fresh verdict (`crewSilence`, studio#1368) decides when there is one; else this page's own clock.
   let minutes: number;
   if (opts.crew !== undefined) {
