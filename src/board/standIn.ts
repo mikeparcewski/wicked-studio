@@ -338,7 +338,9 @@ export function seatedStandIns(view: { session: unknown; units: readonly unknown
   const assurance = rec(rec(view.session)?.['assurance']);
   for (const s of list(assurance?.['standIns'])) {
     const r = rec(s);
-    if (r !== null) put(text(r['key']), text(r['display']), null, text(r['role']));
+    // (studio#1484) A reservation its asker let go before anything ran on it (wicked-core `abandon_team`: `state:
+    // "failed"`, `abandoned: true`) never seated anyone. A failed binding without the mark is a real stand-in and stays.
+    if (r !== null && r['abandoned'] !== true) put(text(r['key']), text(r['display']), null, text(r['role']));
   }
   for (const u of view.units) {
     const unit = rec(u);
