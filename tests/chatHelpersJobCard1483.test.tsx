@@ -191,6 +191,24 @@ it('each press names its own revision: the card version, the seat and the intent
   expect(new Set(revs.map((b) => b['requestId'])).size).toBe(2);
 });
 
+it.each([true, false])('a refresh that starts during a press never swallows the press (codex-check r3; card %s)', async (withCard) => {
+  if (!withCard) messages = [];
+  const { rerender } = render(<ChatHelpers chatId="seeded" roster={roster} rev={0} />);
+  await waitFor(() => expect(chip('pi').getAttribute('aria-pressed')).toBe('true'));
+  holdReads = true;
+  fireEvent.click(chip('pi')); // the press's own read is held
+  await waitFor(() => expect(heldReads).toHaveLength(1));
+  rerender(<ChatHelpers chatId="seeded" roster={roster} rev={1} />); // a refresh (a reconnect) starts meanwhile
+  await waitFor(() => expect(heldReads).toHaveLength(2));
+  holdReads = false;
+  heldReads[0]!(); // the press's read answers first
+  await waitFor(() => expect(calls.some((c) => c.method === 'POST')).toBe(true));
+  heldReads[1]!();
+  const post = calls.find((c) => c.method === 'POST')!;
+  if (withCard) expect(post).toMatchObject({ path: '/chats/seeded/proposals', body: { edits: { removeSeats: ['pi'] } } });
+  else expect(post).toMatchObject({ path: '/chats/seeded/seats', body: { clis: ['claude', 'codex', 'copilot'] } });
+});
+
 it('with no job card yet, the chips still re-seat the chat', async () => {
   messages = [];
   render(<ChatHelpers chatId="seeded" roster={roster} />);

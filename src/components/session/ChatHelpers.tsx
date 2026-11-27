@@ -45,14 +45,20 @@ export function ChatHelpers({ chatId, roster, onJobChanged, rev = 0 }: {
   // one (codex-check r2 on #1487: an old read had put a dropped helper back "on").
   const readSeq = useRef(0);
   type Held = { card: { pid: string; seats: string[] } | null; seats: string[] | null };
-  /** Read the chat and draw it, unless a newer read started meanwhile; answers what crew holds (`null`: superseded). */
+  /**
+   * Read the chat and answer what crew holds (`null` once unmounted). It is drawn only if no newer read started
+   * meanwhile; the answer is returned either way, so a press decides on its own read even when a refresh (a
+   * WebSocket reconnect, a transcript re-read) started during it (codex-check r3 on #1487).
+   */
   const read = async (): Promise<Held | null> => {
     const seq = ++readSeq.current;
     const r = await api.getChat(chatId);
-    if (!live.current || seq !== readSeq.current) return null;
+    if (!live.current) return null;
     const held: Held = { card: openJobCard(r.messages), seats: Array.isArray(r.seats) ? r.seats : null };
-    setCard(held.card);
-    if (held.seats !== null) setSeats(held.seats); else setNoSeats(true);
+    if (seq === readSeq.current) {
+      setCard(held.card);
+      if (held.seats !== null) setSeats(held.seats); else setNoSeats(true);
+    }
     return held;
   };
   useEffect(() => {
