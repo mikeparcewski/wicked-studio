@@ -1031,6 +1031,31 @@ export function waitsForJudge(events: readonly CoreEvent[] | null, ord: number |
   return /could not be judged\b.*no eligible judge seat/i.test(prompt ?? '');
 }
 
+/** The engine's own denial when no eligible judge seat could run the check (core's judge selection), as it LEADS the
+ *  denial: "agent judge could not run — every eligible judge seat failed: <seat> (<why>); …". Anchored at the start, so
+ *  a judge's verdict that quotes the words is never read as it. */
+const JUDGES_DOWN_SUMMARY = /^\s*agent judge could not run\b.*?\bevery eligible judge seat failed\b/is;
+
+/** The same denial as the engine's gate prompt leads with it: a judge hold ("Unit 3 could not be judged — no eligible
+ *  judge seat remained: agent judge could not run — …") or a stand-in hold ("Unit 5: its work is done and waits for its
+ *  check. agent judge could not run — …"). */
+export const JUDGES_DOWN_PROMPT = /^\s*Unit\s+\d+(?::\s*its work is done and waits for its check\.|\s+could not be judged\b[^:]{0,80}:)\s*agent judge could not run\b.*?\bevery eligible judge seat failed\b/is;
+
+/** The holds the engine opens when its judge could not run (no stand-in consented, or no judge at all). */
+const JUDGE_HOLD_SOURCES: ReadonlySet<string> = new Set(['stand_in_needed', 'judge_unavailable']);
+
+/**
+ * (crew#1974) Whether THIS attempt's gate is held because every eligible judge seat failed (out of quota, signed out):
+ * the newest escalation since the unit's dispatch is a judge hold (`judge_unavailable`, or `stand_in_needed` when no
+ * stand-in was consented) whose denial leads with the engine's words; else (a gate read before its events) the prompt
+ * leads with them. A judge that ran and rejected the work is another source, whatever its verdict quotes.
+ */
+export function judgeSeatsFailed(events: readonly CoreEvent[] | null, ord: number | null | undefined, prompt: string | undefined): boolean {
+  const esc = escalationSinceDispatch(events, ord);
+  if (esc !== null) return JUDGE_HOLD_SOURCES.has(esc.denialSource !== '' ? esc.denialSource : esc.condition) && JUDGES_DOWN_SUMMARY.test(esc.summary);
+  return JUDGES_DOWN_PROMPT.test(prompt ?? '');
+}
+
 /** (DES-RULE-CHECK-001 S2) The engine's denial source of a gate held on steering rules no judge ruled on. */
 export const RULES_UNCHECKED_SOURCE = 'rules_unchecked';
 

@@ -1,0 +1,205 @@
+{
+ "_source": "crew#1974: train-17 cert J4a run 01321337 on crew 0.20.0 (GET /api/v1/runs/:id and /events on the cert daemon, as the cert's browser kept them). Events are the review unit's (ord 5) from its dispatch to the gate, verbatim. The session is trimmed to the fields the gate reads; units are the run's own, set back to their state at the gate (review rejected on codex, verify and deliver pending).",
+ "session": {
+  "id": "01321337-6591-523c-917f-354637b3f1d1",
+  "status": "awaiting_human",
+  "clis": [
+   "claude",
+   "codex",
+   "pi",
+   "copilot"
+  ],
+  "benched_seats": [
+   {
+    "benched_until": 1795761564648,
+    "cli": "copilot",
+    "reason": "quota_exhausted (no success in the run)",
+    "source": "judge",
+    "strikes": 1
+   },
+   {
+    "benched_until": 1795761982741,
+    "cli": "agy",
+    "reason": "not_logged_in",
+    "source": "judge",
+    "strikes": 2
+   }
+  ],
+  "assurance": {
+   "mode": "full",
+   "qe": {
+    "basis": "operator",
+    "ord": null,
+    "reason": "QE acceptance forced by operator: no score waives it",
+    "reasons": [],
+    "score": null,
+    "status": "required",
+    "threshold": 20,
+    "tree": null
+   },
+   "required": [
+    "distinct_evaluator",
+    "judge",
+    "qe_acceptance"
+   ],
+   "roles": [],
+   "standInAware": true
+  },
+  "unit_ix": 6,
+  "attempt": 0,
+  "workflow_id": "bug",
+  "repo_ref": "tiny-math-t15",
+  "human_confirm": {
+   "before": 1
+  },
+  "entity_mode": "shared",
+  "archived_at": null,
+  "archive_note": null,
+  "created_at": 1795759542,
+  "title": "In tiny-math-t15, sum([1, 2, 3]) returns 5 instead of 6",
+  "delivery": "none",
+  "run_identity": {
+   "kind": "preset",
+   "name": "bug",
+   "user_plan": false,
+   "system": false
+  }
+ },
+ "units": [
+  {
+   "id": "01321337-6591-523c-917f-354637b3f1d1:pa-scope",
+   "ord": 1,
+   "status": "done",
+   "assigned_cli": "claude",
+   "catalog": "understand",
+   "stage": "recon",
+   "role": "neutral",
+   "phase_ref": "wf-01321337-6591-523c-917f-354637b3f1d1:unit-1",
+   "session_id": "01321337-6591-523c-917f-354637b3f1d1"
+  },
+  {
+   "id": "01321337-6591-523c-917f-354637b3f1d1:triage",
+   "ord": 2,
+   "status": "done",
+   "assigned_cli": "codex",
+   "catalog": "understand",
+   "stage": "recon",
+   "role": "neutral",
+   "phase_ref": "wf-01321337-6591-523c-917f-354637b3f1d1:unit-2",
+   "session_id": "01321337-6591-523c-917f-354637b3f1d1"
+  },
+  {
+   "id": "01321337-6591-523c-917f-354637b3f1d1:reproduce",
+   "ord": 3,
+   "status": "done",
+   "assigned_cli": "codex",
+   "catalog": "test_plan",
+   "stage": "test",
+   "role": "neutral",
+   "phase_ref": "wf-01321337-6591-523c-917f-354637b3f1d1:unit-3",
+   "session_id": "01321337-6591-523c-917f-354637b3f1d1"
+  },
+  {
+   "id": "01321337-6591-523c-917f-354637b3f1d1:fix",
+   "ord": 4,
+   "status": "done",
+   "assigned_cli": "claude",
+   "catalog": "build",
+   "stage": "build",
+   "role": "creator",
+   "phase_ref": "wf-01321337-6591-523c-917f-354637b3f1d1:unit-4",
+   "session_id": "01321337-6591-523c-917f-354637b3f1d1"
+  },
+  {
+   "id": "01321337-6591-523c-917f-354637b3f1d1:review",
+   "ord": 5,
+   "status": "rejected",
+   "assigned_cli": "codex",
+   "catalog": "review",
+   "stage": "review",
+   "role": "evaluator",
+   "phase_ref": "wf-01321337-6591-523c-917f-354637b3f1d1:unit-5:a1",
+   "session_id": "01321337-6591-523c-917f-354637b3f1d1"
+  },
+  {
+   "id": "01321337-6591-523c-917f-354637b3f1d1:verify",
+   "ord": 6,
+   "status": "pending",
+   "assigned_cli": "codex",
+   "catalog": "test",
+   "stage": "test",
+   "role": "evaluator",
+   "phase_ref": "wf-01321337-6591-523c-917f-354637b3f1d1:unit-6",
+   "session_id": "01321337-6591-523c-917f-354637b3f1d1"
+  },
+  {
+   "id": "01321337-6591-523c-917f-354637b3f1d1:deliver",
+   "ord": 7,
+   "status": "pending",
+   "assigned_cli": "bash",
+   "catalog": "deliver",
+   "stage": "build",
+   "role": "neutral",
+   "phase_ref": null,
+   "session_id": "01321337-6591-523c-917f-354637b3f1d1"
+  }
+ ],
+ "events": [
+  {
+   "attempt": 0,
+   "baseSkill": {
+    "handed": true,
+    "name": "wicked-garden-governed-worker",
+    "role": "evaluator"
+   },
+   "ord": 5,
+   "seq": 272,
+   "session": "01321337-6591-523c-917f-354637b3f1d1",
+   "ts": 1795760218942,
+   "type": "unitDispatched"
+  },
+  {
+   "allow": false,
+   "ord": 5,
+   "seq": 420,
+   "session": "01321337-6591-523c-917f-354637b3f1d1",
+   "ts": 1795760664681,
+   "type": "gateDecided"
+  },
+  {
+   "ord": 5,
+   "seq": 421,
+   "session": "01321337-6591-523c-917f-354637b3f1d1",
+   "ts": 1795760664681,
+   "type": "unitDenied"
+  },
+  {
+   "attempt": 0,
+   "condition": "stand_in_needed",
+   "defGate": false,
+   "denialSource": "stand_in_needed",
+   "discarded": [],
+   "ord": 5,
+   "outputCaptured": true,
+   "restored": false,
+   "seq": 422,
+   "session": "01321337-6591-523c-917f-354637b3f1d1",
+   "suggestionRef": null,
+   "ts": 1795760664682,
+   "type": "gateEscalated",
+   "verdictSummary": "agent judge could not run — every eligible judge seat failed: copilot ((cli `copilot` exited 1) wicked-seat-launch: floor canary passed\n\n429 Too Many Requests\n\n\nChanges    +0 -0\nDuration   0s\nResume     copilot --resume=3b53916f-917e-4996-89eb-84a927a78194\ncommand terminated with exit code 1); agy ((agy is signed out: sign it in (Agents → Sign in), then retry — its seat 'agy' could not run this unit: agent_signed_out: this agent is not signed in for container seats (signed out, expired, or a sign-in still finishing) — sign in from Agents → Sign in, which opens the agent's login container, then retry)) — fallback judge. A seat that refused (signed out, out of quota, not installed) is benched for this run, and a retry draws another of the run's seats if one is left; otherwise approve to judge the work yourself",
+   "verdictSummaryTrimmed": false
+  },
+  {
+   "gateKind": "escalation",
+   "gateSeq": 2,
+   "ord": 5,
+   "prompt": "Unit 5: its work is done and waits for its check. agent judge could not run — every eligible judge seat failed: copilot ((cli `copilot` exited 1) wicked-seat-launch: floor canary passed. Use a stand-in (for this job, or for every job), sign another helper in and approve to retry, or reject to stop the run",
+   "reviewingOrd": 5,
+   "seq": 423,
+   "session": "01321337-6591-523c-917f-354637b3f1d1",
+   "ts": 1795760664685,
+   "type": "awaitingHuman"
+  }
+ ]
+}

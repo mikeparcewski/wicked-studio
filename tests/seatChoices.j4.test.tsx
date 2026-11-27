@@ -60,7 +60,8 @@ describe('J4 — a reassign offers only helpers that can take work', () => {
 
   it("the run's own bench withholds a seat until its benched_until, and reads defensively", () => {
     const benched = runBenchesOf({ benched_seats: [{ cli: 'codex', reason: 'quota_exhausted', source: 'worker', benched_until: Date.parse(LIFT) }, { nope: 1 }, null] });
-    expect(benched).toEqual([{ cli: 'codex', reason: 'quota_exhausted', benched_until: Date.parse(LIFT) }]);
+    // crew#1974: the bench's source is kept (a judge seat's bench names the gate's cause).
+    expect(benched).toEqual([{ cli: 'codex', reason: 'quota_exhausted', benched_until: Date.parse(LIFT), source: 'worker' }]);
     const [c] = reassignCandidates(['claude', 'codex'], 'claude', [CODEX], [], benched, NOW);
     expect(c).toMatchObject({ cli: 'codex', state: 'inactive', until: new Date(Date.parse(LIFT)).toISOString() });
     expect(c!.note).toContain('out of quota in this job');
