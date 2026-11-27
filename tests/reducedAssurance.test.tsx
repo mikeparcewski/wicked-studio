@@ -76,26 +76,50 @@ describe('the dead-seat gate offers it', () => {
   afterEach(() => { cleanup(); useCapabilities.setState({ reducedAssurance: false }); });
 
   const gate: OpenGate = { runId: RUN, ord: 2, prompt: PROMPT, lifecycle: 'open', receivedAt: NOW, gateKind: 'escalation' };
-  const view = (): ReturnType<typeof makeView> => makeView({ id: RUN, status: 'awaiting_human', problem: 'fix the reader', clis: ['claude'], workflow_id: 'wf-build', repo_ref: 'repo-1' } as never, UNITS);
+  // (wicked-core#1843 P3) A review takes no stand-ins (crew's stand-in-scope.ts), so it keeps reduced assurance.
+  const view = (workflow = 'review-recent-work'): ReturnType<typeof makeView> => makeView({ id: RUN, status: 'awaiting_human', problem: 'fix the reader', clis: ['claude'], workflow_id: workflow, repo_ref: 'repo-1' } as never, UNITS);
 
-  it('explains, discloses, and opens the launch form with the opt-in ticked — no POST', () => {
+  it('a job that takes no stand-ins: explains, discloses, and opens the launch form with the opt-in ticked — no POST', () => {
     useCapabilities.setState({ reducedAssurance: true });
     const launch = vi.spyOn(client.api, 'launchRun');
     const navigate = vi.fn();
     render(<GateRow view={view()} gate={gate} navigate={navigate} />);
-    expect(screen.getByTestId('session-gate-creator-seat').textContent).toMatch(/^This job requires an independent check/);
+    expect(screen.getByTestId('session-gate-creator-seat').textContent).toMatch(/^This job requires an independent check.*with reduced assurance\.$/);
     expect(screen.getByTestId('session-gate-creator-seat-disclosure').textContent).toMatch(/creator's seat reviews its own work/);
     fireEvent.click(screen.getByTestId('session-gate-reduced-relaunch'));
     expect(navigate).toHaveBeenCalledWith('/runs/new');
-    expect(peekRetryPrefill()).toMatchObject({ retryOf: RUN, problem: 'fix the reader', clis: ['claude'], workflowId: 'wf-build', reducedAssurance: true });
+    expect(peekRetryPrefill()).toMatchObject({ retryOf: RUN, problem: 'fix the reader', clis: ['claude'], workflowId: 'review-recent-work', reducedAssurance: true });
     expect(launch).not.toHaveBeenCalled();
   });
 
-  it('a daemon that does not take the opt-in: the reason, no button', () => {
+  it('a job that takes no stand-ins, on a daemon that does not take the opt-in: the reason, no button', () => {
     render(<GateRow view={view()} gate={gate} navigate={vi.fn()} />);
     expect(screen.getByTestId('session-gate-creator-seat')).toBeTruthy();
     expect(screen.queryByTestId('session-gate-reduced-relaunch')).toBeNull();
     expect(screen.getByTestId('session-gate-creator-seat-nocap')).toBeTruthy();
+  });
+
+  it('wicked-core#1843 P3: a job that takes stand-ins starts again with a stand-in, never reduced — even when crew takes reduced', () => {
+    useCapabilities.setState({ reducedAssurance: true });
+    const launch = vi.spyOn(client.api, 'launchRun');
+    const navigate = vi.fn();
+    render(<GateRow view={view('wf-build')} gate={gate} navigate={navigate} />);
+    expect(screen.getByTestId('session-gate-creator-seat').textContent).toMatch(/or start the job again with a stand-in\.$/);
+    expect(screen.getByTestId('session-gate-creator-seat').textContent).not.toMatch(/reduced/);
+    expect(screen.queryByTestId('session-gate-reduced-relaunch')).toBeNull();
+    expect(screen.getByTestId('session-gate-creator-seat-disclosure').textContent).toMatch(/asks whether a stand-in may, labelled as one/);
+    fireEvent.click(screen.getByTestId('session-gate-standin-relaunch'));
+    expect(navigate).toHaveBeenCalledWith('/runs/new');
+    const pre = peekRetryPrefill();
+    expect(pre).toMatchObject({ retryOf: RUN, problem: 'fix the reader', clis: ['claude'], workflowId: 'wf-build' });
+    expect(pre !== null && 'reducedAssurance' in pre).toBe(false);
+    expect(launch).not.toHaveBeenCalled();
+  });
+
+  it('wicked-core#1843 P3: a job that takes stand-ins on a daemon without reduced: the stand-in relaunch, no "not supported" line', () => {
+    render(<GateRow view={view('wf-build')} gate={gate} navigate={vi.fn()} />);
+    expect(screen.getByTestId('session-gate-standin-relaunch')).toBeTruthy();
+    expect(screen.queryByTestId('session-gate-creator-seat-nocap')).toBeNull();
   });
 
   it('a run already reduced is never offered it again', () => {
@@ -121,7 +145,8 @@ describe('the launch form', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     takeRetryPrefill();
-    vi.spyOn(client.api, 'listRepos').mockResolvedValue({ repos: [] });
+    // A named workflow is code-shaped and launches only into a repository (ChatInput's EC43 preflight).
+    vi.spyOn(client.api, 'listRepos').mockResolvedValue({ repos: [{ id: 'repo-1', name: 'svc', root_path: '/srv/svc', default_branch: 'main', registered_at: 0 } as RepoEntry] });
     vi.spyOn(client.api, 'listWorkflows').mockResolvedValue({ workflows: [] });
     vi.spyOn(client.api, 'listProjects').mockResolvedValue({ projects: [] });
     vi.spyOn(client.api, 'launchRun').mockResolvedValue({ runId: 'r-new' });
@@ -136,8 +161,9 @@ describe('the launch form', () => {
     await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
     return vi.mocked(client.api.launchRun).mock.calls[0]![0];
   }
-  const prefill = (reducedAssurance?: boolean): void => setRetryPrefill({
-    retryOf: RUN, problem: 'write up the offsite agenda', clis: ['claude'], workflowId: null, repoRef: null,
+  // (wicked-core#1843 P3) The opt-in is a review's (it takes no stand-ins); a job that takes stand-ins never offers it.
+  const prefill = (reducedAssurance?: boolean, workflowId: string | null = 'review-recent-work'): void => setRetryPrefill({
+    retryOf: RUN, problem: 'write up the offsite agenda', clis: ['claude'], workflowId, repoRef: workflowId === null ? null : 'repo-1',
     entityMode: 'shared', humanConfirm: { before: 1 }, projectId: null, ...(reducedAssurance === undefined ? {} : { reducedAssurance }),
   });
 
@@ -160,6 +186,14 @@ describe('the launch form', () => {
     expect('reducedAssurance' in body).toBe(false);
   });
 
+  it('wicked-core#1843 P3: a job that takes stand-ins is never offered it, and a reduced prefill is not sent', async () => {
+    health(true); roster(['claude']); prefill(true, null);
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    const body = await launch();
+    expect(screen.queryByTestId('launch-reduced-assurance')).toBeNull();
+    expect('reducedAssurance' in body).toBe(false);
+  });
+
   it('a daemon that does not take it: one seat is not offered it, nothing is sent', async () => {
     health(false); roster(['claude']); prefill();
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
@@ -170,8 +204,10 @@ describe('the launch form', () => {
 
   it('codex r2: a launch waiting on the capability is busy — a second Send does not launch twice', async () => {
     let answer: (v: unknown) => void = () => undefined;
+    // The mount's read fails (the capability is not known; a review's delivery waits for a SETTLED read, so it must
+    // settle), and the Send's own read is still out when Send is pressed again.
     vi.spyOn(client.api, 'getHealth')
-      .mockReturnValueOnce(new Promise(() => undefined) as never)
+      .mockRejectedValueOnce(new Error('offline'))
       .mockReturnValueOnce(new Promise((r) => { answer = r; }) as never);
     roster(['claude']); prefill(true);
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
@@ -203,7 +239,7 @@ describe('the launch form', () => {
 describe('the composer\'s /workflow row', () => {
   const seat = (key: string): RosterSeat =>
     ({ key, display_name: key, binary: key, enabled_for_council: true, health: { status: 'active', since: 'x' }, signed_in: true }) as RosterSeat;
-  const WF = [{ id: 'mcp-server', phases: [{ id: 'build', executes_code: true }] }] as unknown as WorkflowDef[];
+  const WF = [{ id: 'mcp-server', phases: [{ id: 'build', executes_code: true }] }, { id: 'run-evals', phases: [{ id: 'evals', executes_code: true }] }] as unknown as WorkflowDef[];
   const REPO = { id: 'repo-1', name: 'svc', root_path: '/srv/svc', default_branch: 'main', registered_at: 0 } as RepoEntry;
   let posts: Array<{ path: string; body: Record<string, unknown> }> = [];
   function stub(roster: RosterSeat[]): void {
@@ -237,10 +273,10 @@ describe('the composer\'s /workflow row', () => {
   }
   const key = (k: string): void => { fireEvent.keyDown(screen.getByTestId('desk-composer-input'), { key: k }); };
   // ux-tonight: the pick puts the card on the composer; the words go in the box and the start row says where.
-  async function nameWorkflow(): Promise<void> {
-    type('/workflow-mcp-server');
+  async function nameWorkflow(id = 'run-evals'): Promise<void> {
+    type(`/workflow-${id}`);
     // slash-catalog: the row comes from the catalog read (an older daemon here: today's list).
-    await waitFor(() => expect(document.querySelector('[data-cmd="workflow-mcp-server"]')).not.toBeNull());
+    await waitFor(() => expect(document.querySelector(`[data-cmd="workflow-${id}"]`)).not.toBeNull());
     key('Enter');
     type('build an MCP server for the ledger');
     await waitFor(() => expect(screen.getByTestId('composer-start-line')).toHaveTextContent('in svc'));
@@ -271,6 +307,16 @@ describe('the composer\'s /workflow row', () => {
     // codex r1: the opt-in was THAT launch's — the next one starts unticked.
     await nameWorkflow();
     expect((screen.getByTestId('composer-start-reduced-toggle') as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('wicked-core#1843 P3: one seat on a workflow that takes stand-ins: not offered, not sent', async () => {
+    stub([seat('claude')]);
+    render(<Harness />);
+    await nameWorkflow('mcp-server');
+    expect(screen.queryByTestId('composer-start-reduced')).toBeNull();
+    launch();
+    await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
+    expect('reducedAssurance' in posts.find((p) => p.path === '/runs')!.body).toBe(false);
   });
 
   it('two seats: not offered, not sent', async () => {

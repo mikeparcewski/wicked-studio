@@ -8,7 +8,7 @@ import { api, ApiError, apiWire } from '../api/client.js';
 import { qeRefusalOf } from '../board/qeRefusal.js';
 import { QeRefusalWarning } from './QeRefusalWarning.js';
 import { StandInChoice } from './StandInChoice.js';
-import { helperNamer, saveStandInsEveryJob, standInChoiceOf, standInRelaunchBody, type StandInChoiceId, type StandInChoiceLineId, type StandInChoiceRefusal } from '../board/standIn.js';
+import { helperNamer, saveStandInsEveryJob, standInChoiceOf, standInRelaunchBody, takesStandIns, type StandInChoiceId, type StandInChoiceLineId, type StandInChoiceRefusal } from '../board/standIn.js';
 import type { BaseSkillPosture, BaseSkillRefusedResponse, DeliverTargetResponse, EntityMode, LaunchBodyWithDeliver, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from './composerDefaults.js';
 import { isShortcutsPaletteOpen } from '../hooks/useGlobalShortcuts.js';
@@ -429,6 +429,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // The effective workflow and its kind, derived ONCE for the submit guard, the
   // wire body, the deliver notice and the pre-send summary below.
   const launchWorkflow = workflowOverride?.trim() || workflow;
+  // (wicked-core#1843 P3) Reduced assurance only for a launch that takes no stand-ins (a review, the evals, a demo): any
+  // other short-roster launch is asked the stand-in question by crew and draws StandInChoice instead.
+  const reducedOn = reducedAssurance && !takesStandIns(launchWorkflow);
   // The phase picker (DES-TEAMING-002 T9): a composed plan replaces the workflow on the wire
   // (`plan` and `workflow` are mutually exclusive) and is build work.
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -858,7 +861,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // wicked-core#850: a ticked opt-in is never dropped in silence — a launch that asked for reduced
     // assurance waits for the daemon's answer (Send already busy, so it cannot launch twice), and one
     // the daemon cannot take is refused, never run with full assurance instead.
-    if (reducedAssurance) {
+    if (reducedOn) {
       const takes = daemonReduced ?? await api.getHealth().then((h) => h.capabilities?.reducedAssurance === true, () => false);
       if (!takes) {
         setSubmitting(false);
@@ -929,7 +932,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     if (groupAttach.campaignId !== undefined) body.campaignId = groupAttach.campaignId;
     if (groupAttach.groupLabel !== undefined) body.groupLabel = groupAttach.groupLabel;
     // wicked-core#850 EX-01: the explicit reduced-assurance opt-in, only to a daemon that takes it.
-    if (reducedAssurance) body.reducedAssurance = true;
+    if (reducedOn) body.reducedAssurance = true;
     // QE-IN-APP-WORKFLOWS: the operator's explicit skip (with its reason) or force — only when ticked,
     // only to a daemon that takes it, only for a workflow that requires QE acceptance.
     if (offerQe && !qeOff && skipQe) body.skipQeAcceptance = { reason: skipQeReason.trim() };
@@ -1838,8 +1841,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       )}
 
       {/* wicked-core#850 EX-01: one seat means the creator's seat is the only reviewer — a review step
-          stops and asks for a second seat unless the launch opts into reduced assurance, said first. */}
-      {((daemonReduced === true && selectedClis.size === 1) || reducedAssurance) && (
+          stops and asks for a second seat unless the launch opts into reduced assurance, said first.
+          (wicked-core#1843 P3) Only a launch that takes no stand-ins offers it; crew asks any other the
+          stand-in question. */}
+      {!takesStandIns(launchWorkflow) && ((daemonReduced === true && selectedClis.size === 1) || reducedAssurance) && (
         <ReducedAssuranceOptIn checked={reducedAssurance} onChange={setReducedAssurance} />
       )}
 
