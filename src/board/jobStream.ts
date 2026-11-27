@@ -443,6 +443,32 @@ export function enrichPlan(steps: ReadonlyArray<{ id: string | null; catalog: st
 }
 
 /**
+ * studio#1485: whether the run's OWN log shows it past its plan. That is the engine's plan gate, which the team record
+ * may never record as decided (train-17 J6 run B: `awaitingHuman` plan_approval, then `resumed`, then unit 1
+ * dispatched, and no decision row). It is true when, after the LAST plan-approval `awaitingHuman` in the log, a
+ * `unitDispatched` names the step that gate stood before (its `reviewingOrd`, else its `ord`). That is the rule
+ * {@link replanningOnRecord} uses: the step has started. The log is in recorded order. A dispatch from before a newer
+ * plan gate does not count, and a log with no plan gate, or one not read, is not proof.
+ */
+export function pastPlanOnLog(events: readonly unknown[] | null | undefined): boolean {
+  if (events == null) return false;
+  let at = -1;
+  let ord: number | null = null;
+  events.forEach((raw, i) => {
+    const e = raw as Record<string, unknown>;
+    if (e['type'] === 'awaitingHuman' && e['gateKind'] === 'plan_approval') {
+      at = i;
+      ord = typeof e['reviewingOrd'] === 'number' ? e['reviewingOrd'] : typeof e['ord'] === 'number' ? e['ord'] : null;
+    }
+  });
+  if (at < 0 || ord === null) return false;
+  return events.slice(at + 1).some((raw) => {
+    const e = raw as Record<string, unknown>;
+    return e['type'] === 'unitDispatched' && e['ord'] === ord;
+  });
+}
+
+/**
  * Whether the lead is re-planning on crew's record (a send-back answered in ANY tab): the newest plan decision on the
  * team record is an amended one, nothing was accepted or held since, and the step the gate stood before has not
  * started. Returns the revision sent back, or `null`.

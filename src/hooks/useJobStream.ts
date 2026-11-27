@@ -7,7 +7,7 @@ import { isAskTurnRun } from '../board/askTurn.js';
 import { useCapabilities } from '../store/capabilities.js';
 import { create } from 'zustand';
 import type { SessionView } from '../api/types.js';
-import { enrichPlan, jobView, replanningOnRecord, type JobLineage, type JobRunInputs, type JobView } from '../board/jobStream.js';
+import { enrichPlan, jobView, pastPlanOnLog, replanningOnRecord, type JobLineage, type JobRunInputs, type JobView } from '../board/jobStream.js';
 import { distinctLabels, planStepLabel, unitStepName } from '../board/chainModel.js';
 import { useUndoQueue } from '../board/undoQueue.js';
 import { useElicitationStore } from '../store/elicitations.js';
@@ -16,6 +16,7 @@ import { loadPlanGate, usePlanGate } from '../store/planGates.js';
 import { useTeamFold } from './useTeamFold.js';
 import { useGateActions } from './useGateActions.js';
 import { useOwnGateRead } from './useOwnGateRead.js';
+import { useRunEvents } from './useRunEvents.js';
 
 /**
  * The job stream's one hook (DES-CATALOG-002 rev 7 §2.8.3): a lineage plus its run's state from studio's existing
@@ -115,8 +116,14 @@ export function useJobView(lineage: JobLineage, runs: readonly SessionView[], no
   // Past its plan: a plan approval decided on the team record, a run that is not a team run (no plan gate to wait on),
   // or a power run on its own record (api-types 0.196.0: a Start that chose one has no plan gate).
   const powerRun = powerOf(run?.session)?.on === true;
-  const planDecided = useMemo(() => powerRun || fold?.snapshot?.teamed === false || (fold?.rows ?? []).some((r) => r.event_type === 'wicked.team.gate.decided'
+  const decidedOnRecord = useMemo(() => powerRun || fold?.snapshot?.teamed === false || (fold?.rows ?? []).some((r) => r.event_type === 'wicked.team.gate.decided'
     && r.payload['kind'] === 'plan_approval' && PLAN_DECIDED.has(String(r.payload['decision']))), [fold, powerRun]);
+  // studio#1485: or the engine's own log shows its plan gate answered and the step it stood before dispatched (the
+  // team record may hold no decision for the engine's gate). Read only while that is the open question: a live run
+  // the team record has not decided. A failed or pending read is not proof, so the card keeps saying "planning".
+  const live = run !== null && !['completed', 'cancelled', 'failed'].includes(run.session.status);
+  const log = useRunEvents(runId ?? '', runId !== null && live && !decidedOnRecord).events;
+  const planDecided = decidedOnRecord || (runId !== null && pastPlanOnLog(log));
   // The newest plan revision crew has opened a plan gate for, from the team record.
   const newestPlanRev = useMemo(() => Math.max(-1, ...(fold?.rows ?? []).filter((r) => r.event_type === 'wicked.team.gate.opened' && r.payload['kind'] === 'plan_approval')
     .map((r) => (typeof r.payload['plan_rev'] === 'number' ? r.payload['plan_rev'] : -1))), [fold]);
