@@ -61,6 +61,18 @@ describe('crew#1974: every judge seat failed', () => {
     expect(line.textContent).toContain('Retry this step meets the same judges, so it fails the same way until one of them is back.');
   });
 
+  it('a judge that ran and quotes the words in its verdict is not read as no judge (codex-check W6)', () => {
+    const { view, gate, pool, model } = atGate();
+    const quoted = 'Unit 5 verdict is NOT PASS: the log says "agent judge could not run — every eligible judge seat failed" but the fix is wrong';
+    const events = RUN.events.map((e) => (e.type === 'gateEscalated'
+      ? ({ ...e, condition: 'verdict_not_pass', denialSource: 'agent_validator', verdictSummary: quoted } as unknown as CoreEvent) : e));
+    expect(gateCause({ view, gate: { ...gate, prompt: quoted }, events, model, roster: ROSTER, pool }).judgesDown).toBeNull();
+    expect(plainGateQuestion(quoted, 'escalation')).not.toMatch(/no judge could check/);
+    // The judge hold's own prompt still reads as one.
+    expect(plainGateQuestion('Unit 3 could not be judged — no eligible judge seat remained: agent judge could not run — every eligible judge seat failed: pi (no_seat_image).', 'escalation'))
+      .toBe('The check couldn’t run: no judge could check this step — how should it go on?');
+  });
+
   it('a gate whose judge ran keeps its own headline (no judges-down line)', () => {
     const { view, gate, pool, model } = atGate();
     const events = RUN.events.map((e) => (e.type === 'gateEscalated' ? ({ ...e, verdictSummary: 'Unit 5 verdict is NOT PASS' } as unknown as CoreEvent) : e));

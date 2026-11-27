@@ -4,6 +4,7 @@ import { isFloorNotRun } from '../components/gateVerdictModel.js';
 import { humanTitle, onboardTitle } from '../components/runIdentity.js';
 import { refusalOffers } from './gateOffers.js';
 import { repeatQuestion } from './repeatProgress.js';
+import { JUDGES_DOWN_PROMPT } from './assuranceModel.js';
 
 /**
  * THE DESK'S WORDS (DES-STUDIO-REBUILD-001 §3; DESIGN-simple §3), from the live reel take of
@@ -170,7 +171,7 @@ function pausedStepQuestion(p: string, gateKind: string | undefined): string | n
   }
   // crew#1974: no eligible judge seat could run the check (core: "agent judge could not run — every eligible judge seat
   // failed: …"), on a judge hold or a stand-in hold alike. Never "escalated": the step's work was not judged at all.
-  if (/every eligible judge seat failed\b/i.test(p)) return 'The check couldn’t run: no judge could check this step — how should it go on?';
+  if (JUDGES_DOWN_PROMPT.test(p)) return 'The check couldn’t run: no judge could check this step — how should it go on?';
   if (gateKind === 'escalation') return 'The step was escalated — how should it go on?';
   return null;
 }
