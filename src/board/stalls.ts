@@ -3,6 +3,7 @@ import { useRuntimeStore } from '../store/runtime.js';
 import { useSystemStore } from '../store/systemSnapshot.js';
 import { CREW_FRESH_MS, lastLoggedActivity } from './silentStep.js';
 import { isStalled } from './boardAttention.js';
+import { scriptedStep } from './scriptedStep.js';
 
 /** Statuses that mean the run is moving under its own power (the board model's `ACTIVE`). */
 const ACTIVE: ReadonlySet<string> = new Set(['planning', 'distributing', 'executing']);
@@ -46,6 +47,8 @@ export function stalledRuns(
   const out: Record<string, number> = {};
   for (const v of runs) {
     if (!ACTIVE.has(v.session.status)) continue;
+    // studio#1499: a scripted (Tool) step is quiet until it ends: not a wedge, and not a need (`scriptedStep.ts`).
+    if (scriptedStep(v, null, now) !== null) continue;
     const ev = evidenceAt(v.session.id);
     if (isStalled(ev, now)) out[v.session.id] = ev!;
   }
