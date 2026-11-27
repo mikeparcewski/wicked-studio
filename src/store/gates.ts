@@ -54,7 +54,20 @@ export interface OpenGate {
   /** F31: set when the gate came from a `GET /runs/:id/gate` read (a page load, a late join), not a live frame. The
    *  toast strip orders read gates by their runs' age and queues live ones after them in arrival order. */
   fromRead?: true;
+  /** (studio#1493, core#1808, api-types 0.231.0 `GateInfo.gateSeq` / `awaitingHuman.gateSeq`) WHICH opening of the gate
+   *  this is: a gate that closed and opened again at the same ord is another opening. An answer made on a gate this
+   *  store holds sends that opening, and crew refuses it (409 `gate_changed`) once the opening has closed. Absent from a
+   *  daemon that names none (an older crew, a row from before the field: 0). */
+  gateSeq?: number;
 }
+
+/** (studio#1493) `gateSeq` off a frame or a gate read: a positive integer, else absent (a row from before the field
+ *  carries 0, an older crew none). */
+export function gateSeqOf(bag: Record<string, unknown>): { gateSeq?: number } {
+  const n = bag['gateSeq'];
+  return typeof n === 'number' && Number.isInteger(n) && n > 0 ? { gateSeq: n } : {};
+}
+
 
 /** `recommended` off a gate payload: a non-negative integer, else absent. */
 export function recommendedOf(bag: Record<string, unknown>): number | undefined {
@@ -113,6 +126,7 @@ export function gateFromInfo(g: GateInfo): OpenGate {
     ...(typeof bag['planRev'] === 'number' ? { planRev: bag['planRev'] as number } : {}),
     actionsRead: true,
     ...gateKindOf(g),
+    ...gateSeqOf(bag),
   };
 }
 
@@ -277,7 +291,9 @@ export const useGateStore = create<GateStore>((set) => {
       // studio#1023: a live frame stamps receivedAt with this browser's clock, a read with crew's, so the two never
       // compare: a read of the gate a live frame put here (same ord, prompt and kind) keeps its instance. Between reads
       // crew's own times compare (`crewAt`), so a same-ord gate asked again still reads as a new one.
-      const sameShape = prev !== undefined && prev.ord === gate.ord && prev.prompt === gate.prompt && prev.gateKind === gate.gateKind;
+      // studio#1493: a read naming another opening than the one held is another gate, whatever its words.
+      const sameShape = prev !== undefined && prev.ord === gate.ord && prev.prompt === gate.prompt && prev.gateKind === gate.gateKind
+        && (prev.gateSeq === undefined || gate.gateSeq === undefined || prev.gateSeq === gate.gateSeq);
       const same = sameShape && (prev.actionsRead !== true || crewAt[runId] === gate.receivedAt);
       crewAt[runId] = gate.receivedAt;
       const next = same ? { ...gate, receivedAt: prev.receivedAt } : gate;
@@ -347,6 +363,7 @@ export const useGateStore = create<GateStore>((set) => {
                   // Omitted rather than set to `undefined`: `exactOptionalPropertyTypes`.
                   ...(choices !== undefined ? { choices } : {}),
                   ...gateKindOf(event),
+                  ...gateSeqOf(event as unknown as Record<string, unknown>),
                   ...recommendedField(event as unknown as Record<string, unknown>),
                   // F31: the same gate (same ord) a read put here keeps its toast place.
                   ...(s.gates[session]?.fromRead === true && s.gates[session]?.ord === event.ord ? { fromRead: true as const } : {}),
@@ -407,6 +424,13 @@ export const useGateStore = create<GateStore>((set) => {
   },
   };
 });
+
+/** (studio#1493) The opening of the run's open gate in this store, when it is the gate at `ord` (any ord when none is
+ *  named): what an answer made on it names. */
+export function openingOf(runId: string, ord?: number): number | undefined {
+  const gate = useGateStore.getState().gates[runId];
+  return gate === undefined || (ord !== undefined && gate.ord !== ord) ? undefined : gate.gateSeq;
+}
 
 // F31: a drop or a reconnect makes every gate read begun before it obsolete.
 useConnectionStore.subscribe((now, before) => {

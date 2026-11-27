@@ -96,7 +96,9 @@ export function clearBatchSelection(): void {
 /** One decision for one id through the shared SEND path; returns the named error or null.
  *  (The undo window was the batch's, once, before the fan-out began.) */
 async function decideOne(runId: string, decision: GateDecision, ord?: number, instance?: GateInstance): Promise<string | null> {
-  return sendGateDecision(runId, ord === undefined ? decision : { ...decision, ord }, instance);
+  // studio#1493: the opening of the gate the batch was decided on, when the instance names one for that ord.
+  const seq = instance !== undefined && instance.ord === ord ? instance.gateSeq : undefined;
+  return sendGateDecision(runId, ord === undefined ? decision : { ...decision, ord, ...(seq !== undefined ? { gateSeq: seq } : {}) }, instance);
 }
 
 /**
@@ -147,7 +149,7 @@ export function runBatchDecision(decision: GateDecision): Promise<void> {
   const instances: Record<string, GateInstance> = {};
   for (const id of ids) {
     const gate = useGateStore.getState().gates[id];
-    if (gate !== undefined) instances[id] = { ord: gate.ord, receivedAt: gate.receivedAt };
+    if (gate !== undefined) instances[id] = { ord: gate.ord, receivedAt: gate.receivedAt, ...(gate.gateSeq !== undefined ? { gateSeq: gate.gateSeq } : {}) };
   }
   const release = (): void => {
     unwatchDecision(ids);

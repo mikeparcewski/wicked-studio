@@ -496,8 +496,11 @@ export function replanningOnRecord(rows: readonly Row[], units: ReadonlyArray<{ 
   const opened = new Map<string, { rev: number; ord: number }>();
   for (const r of sorted) {
     if (r.event_type === 'wicked.team.gate.opened' && r.payload['kind'] === 'plan_approval') {
-      // The work the plan gate stands before: its `reviewing_ord` (the envelope's `ord` is nullable), else the envelope's.
-      const ord = typeof r.payload['reviewing_ord'] === 'number' ? r.payload['reviewing_ord'] : typeof r.payload['ord'] === 'number' ? r.payload['ord'] : null;
+      // studio#1492: the work the plan gate stands before is the envelope's `ord`: the engine writes the unit it paused
+      // at (wicked-core plan_gate.rs `gate_opened`, `envelope(.., Some(ord), ..)`; actor.rs `ord = unit.ord`).
+      // `reviewing_ord` is the unit whose output produced the plan, a done creator on a mid-run re-plan (core
+      // replan_tests.rs: ord 2, reviewing_ord 1), so it never names the work. A gate with no ord claims nothing.
+      const ord = typeof r.payload['ord'] === 'number' ? r.payload['ord'] : null;
       opened.set(String(r.payload['gate_id']), { rev: typeof r.payload['plan_rev'] === 'number' ? r.payload['plan_rev'] : 0, ord: ord ?? -1 });
     }
   }
