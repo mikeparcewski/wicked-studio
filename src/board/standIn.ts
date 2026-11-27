@@ -23,7 +23,7 @@ import { cliLabel, seatKeyName, standInBase, type SeatNameInput } from './seatNa
  *  `noStandInsKind`). A review needs a reviewer who did none of the work, the evals are computed, and a demo keeps its
  *  own review, so on one helper these still run with reduced assurance. Every other launch is asked the stand-in
  *  question by crew (`409 stand_in_choice`) and never offers reduced assurance. */
-const NO_STAND_IN_WORKFLOWS: readonly string[] = ['review-change', 'review-recent-work', 'run-evals', 'demo', 'demo-human-review'];
+export const NO_STAND_IN_WORKFLOWS: readonly string[] = ['review-change', 'review-recent-work', 'run-evals', 'demo', 'demo-human-review'];
 
 /** Whether a launch of `workflow` takes stand-ins (no workflow: a free-text job, which does). */
 export function takesStandIns(workflow: string | null | undefined): boolean {
