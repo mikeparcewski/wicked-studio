@@ -92,7 +92,9 @@ export function DeskInbox({ rows: allRows, runs, navigate, now, settled, agentNa
   const tabPrefix = useId();
   const tabId = (f: Folder): string => `${tabPrefix}-tab-${f}`;
   // A snoozed item leaves the list with the control that had focus: focus goes to the All tab, unless it moved on.
-  const afterSnooze = (): void => { window.setTimeout(() => { if (focusLost(null)) document.getElementById(tabId('all'))?.focus(); }, 0); };
+  // `from` is that control's box: focus still inside it is focus that leaves with the row, whether or not React has
+  // removed the row by the time this runs (studio#1501: the timer can run first).
+  const afterSnooze = (from: HTMLElement | null): void => { window.setTimeout(() => { if (focusLost(from)) document.getElementById(tabId('all'))?.focus(); }, 0); };
   const panelId = (f: Folder): string => `${tabPrefix}-panel-${f}`;
   const [selected, setSelected] = useState<string | null>(null);
   const [seen, setSeen] = useState<Set<string>>(readSeen);
@@ -250,7 +252,7 @@ function SnoozedItem({ row, until, now, navigate }: { row: NeedRow; until: strin
 /** Snooze the item in the reading pane: the ends offered, then what happened. */
 /** Snooze in the reading pane (and on a phone's row). Mounted per item instance ({@link snoozeKey}), so a new occurrence
  *  starts fresh. */
-function SnoozeAct({ row, now, onSnoozed }: { row: NeedRow; now: number; onSnoozed: () => void }): React.ReactElement {
+function SnoozeAct({ row, now, onSnoozed }: { row: NeedRow; now: number; onSnoozed: (from: HTMLElement | null) => void }): React.ReactElement {
   const snooze = useDeskSnoozes((st) => st.snooze);
   const [state, setState] = useState<{ kind: 'idle' | 'choose' | 'sending' } | { kind: 'failed'; words: string }>({ kind: 'idle' });
   const box = useRef<HTMLSpanElement>(null);
@@ -285,7 +287,7 @@ function SnoozeAct({ row, now, onSnoozed }: { row: NeedRow; now: number; onSnooz
             // Done: the item leaves the list (and this pane with it); were it still shown, the controls settle back.
             void snooze(snoozeKey(row), c.until, snoozeRank(row)).then((why) => {
               setState(why === null ? { kind: 'idle' } : { kind: 'failed', words: why });
-              if (why === null) onSnoozed();
+              if (why === null) onSnoozed(box.current);
             });
           }}>
           {c.label}
@@ -318,7 +320,7 @@ function snippetOf(row: NeedRow, v: SessionView | null): string {
 }
 
 function ReadingPane({ row, view, queueAct, navigate, now, agentName, canSnooze, onSnoozed }: {
-  onSnoozed: () => void;
+  onSnoozed: (from: HTMLElement | null) => void;
   row: NeedRow;
   view: SessionView | null;
   queueAct: (a: NeedRow['action'], key?: string) => void;

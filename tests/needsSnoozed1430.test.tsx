@@ -151,6 +151,29 @@ describe('studio#1430 F5: on a phone each row carries its own Snooze', () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('desk-inbox-folder-all')));
   });
 
+  // studio#1501: the focus move ran on a timer and asked "is focus on <body>?". When that timer runs before React
+  // commits the row's removal, focus is still on the leaving row's Snooze choice, so nothing moves it, and the removal
+  // then drops it to <body> for good. One act scope holds the commit back until the timer has run, so this order is
+  // certain here. That the flaky CI runs hit this order is inferred (same assertion, same <body>), not traced.
+  it('the row leaves with focus even when the focus timer runs before the row is gone (studio#1501)', async () => {
+    phoneWidth(true);
+    render(<DeskInbox rows={[failed(1)]} {...props} runs={[]} />);
+    await waitFor(() => expect(screen.getByTestId('desk-inbox-row-snooze')).toBeInTheDocument());
+    const own = screen.getByTestId('desk-inbox-row-snooze');
+    await act(async () => { fireEvent.click(within(own).getByTestId('desk-inbox-snooze')); });
+    const hour = within(own).getByTestId('desk-inbox-snooze-hour');
+    expect(document.activeElement).toBe(hour);
+    await act(async () => {
+      fireEvent.click(hour);
+      // The snooze is sent and settles, and the 0 ms focus timer runs, all before this scope lets React commit.
+      for (let i = 0; i < 50 && !calls.some((c) => c.method === 'PUT'); i += 1) await new Promise((r) => { setTimeout(r, 1); });
+      await new Promise((r) => { setTimeout(r, 20); });
+      expect(document.body.contains(hour)).toBe(true);
+    });
+    expect(listed()).toEqual([]);
+    expect(document.activeElement).toBe(screen.getByTestId('desk-inbox-folder-all'));
+  });
+
   it('a refusal that lands after the person moved on leaves their focus where it is (codex r1)', async () => {
     phoneWidth(true);
     let refuse: (r: Response) => void = () => undefined;
