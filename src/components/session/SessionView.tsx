@@ -585,10 +585,12 @@ export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onR
   const silent = useSilentStep(head.length > 0 ? head[head.length - 1] : undefined);
   const silentRunId = silent !== null ? head[head.length - 1]!.session.id : null;
   // studio#1489: the newest run's step failed and is being tried again: the header says so (closed words).
-  const retry = useStepRetry(head.length > 0 ? head[head.length - 1] : undefined);
+  const retryRead = useStepRetry(head.length > 0 ? head[head.length - 1] : undefined);
   // The engine's checks floor is running: the seat is idle on purpose; the page says what runs (retime 0.16.11).
   const floor = useRunningFloor(head.length > 0 ? head[head.length - 1] : undefined);
   const floorRunId = floor !== null ? head[head.length - 1]!.session.id : null;
+  // A running checks floor is the engine's work now: it keeps its own words over a retry (codex r1).
+  const retry = floor === null ? retryRead : null;
   // Power mode (DES-POWER-MODE §2): the switch beside a run's name and its rigor chip — on a session of one run.
   const powerRun = head.length === 1 ? head[0]! : null;
   const power = usePower(powerRun);

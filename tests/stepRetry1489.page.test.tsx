@@ -69,6 +69,18 @@ describe('studio#1489: the page says it', () => {
     expect(screen.getAllByTestId('session-status')[0]!.textContent).toBe('Trying again · attempt 2 · no output for 10 min');
   });
 
+  it('codex r1: a running checks floor keeps its own words over a retry (header and Now)', async () => {
+    const floor = { type: 'unitOutputDelta', session: RUN, ord: 1, attempt: 1, ts: Date.now() - 2 * MIN,
+      text: "\nrepo checks floor (creator): running the repository's own checks — 5 min; now `test` on the change (pass 1 of `test`), 3 min in\n" };
+    useRunEventStore.setState({ byRun: { [RUN]: [...atShot(Date.now()), floor] as never } });
+    await act(async () => { render(<SessionPage sessionId={`run:${RUN}`} runs={[run()]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />); });
+    expect(screen.getAllByTestId('session-status')[0]!.textContent).toMatch(/^Running checks/u);
+    cleanup();
+    await act(async () => { render(<RunTab runs={[run()]} sessionId="chat-1" title="Extract the rules" />); });
+    expect(document.body.textContent).not.toContain('Trying again');
+    expect(screen.getByTestId('run-tab-status').textContent).not.toContain('trying it again');
+  });
+
   it('once the retry finished (the run view says the step is done), the page says no retry', async () => {
     await act(async () => { render(<RunTab runs={[run('executing', 'done')]} sessionId="chat-1" title="Extract the rules" />); });
     expect(screen.getByTestId('run-tab-pill').textContent).not.toContain('Trying again');

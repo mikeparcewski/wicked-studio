@@ -19,6 +19,30 @@ const run = (status = 'executing', u1: 'distributed' | 'done' = 'distributed') =
 ]);
 
 describe('studio#1489: stepRetry (the reader)', () => {
+  const e = (type: string, props: Record<string, unknown> = {}) => ({ type, session: RUN, ord: 1, ...props });
+  it('codex r1 STALE READS: a reassign, a crash re-drive or the run ending after the retry began ends the claim', () => {
+    const shot = upTo(1595);
+    expect(stepRetry(run(), [...shot, e('unitReassigned', { attempt: 2, previousCli: 'bash', newCli: null, previousAttemptReaped: true })])).toBeNull();
+    expect(stepRetry(run(), [...shot, e('crashRecoveryRedrive', { attempt: 1 })])).toBeNull();
+    expect(stepRetry(run(), [...shot, { type: 'sessionFailed', session: RUN }])).toBeNull();
+    expect(stepRetry(run(), [...shot, { type: 'runCancelled', session: RUN }])).toBeNull();
+  });
+  it('codex r1 IDENTITY/SHARED: an attempt a reassign or crash re-drive made is not the old failure’s retry, even with a replayed triage', () => {
+    const shot = upTo(1595);
+    const old = shot.find((x) => x['type'] === 'failureTriaged')!;
+    // Attempt 1 failed, the engine re-drove attempt 2 with no triage; a replayed copy of the OLD triage lands late.
+    expect(stepRetry(run(), [...shot, e('stepFailed', { attempt: 1, failureKind: 'timedOut', seq: 2000 }), e('crashRecoveryRedrive', { attempt: 2, seq: 2001 }),
+      e('unitDispatched', { attempt: 2, seq: 2002 }), { ...old, seq: undefined }])).toBeNull();
+    // The same replayed triage landing between the new failure and the new dispatch is a copy of one logged before.
+    expect(stepRetry(run(), [...shot, e('stepFailed', { attempt: 1, failureKind: 'timedOut' }), { ...old, seq: undefined }, e('unitDispatched', { attempt: 2 })])).toBeNull();
+    // A reassign moved the step to attempt 2: no failure of attempt 1, so no retry claim from attempt 0's failure.
+    expect(stepRetry(run(), [...shot, e('unitReassigned', { attempt: 2, previousCli: 'bash', newCli: 'claude', previousAttemptReaped: true }), e('unitDispatched', { attempt: 2 })])).toBeNull();
+    // A recorded triage outside the failure-to-dispatch window by seq is not this retry's.
+    expect(stepRetry(run(), shot.map((x) => (x['type'] === 'failureTriaged' ? { ...x, seq: 1600 } : x)))).toBeNull();
+  });
+  it('codex r1 PARTIAL FAILURE: a retry with a flag is a retry', () => {
+    expect(stepRetry(run(), upTo(1595).map((x) => (x['type'] === 'failureTriaged' ? { ...x, decision: 'retry_with_flag' } : x)))).toEqual({ ord: 1, attempt: 1, kind: 'workerError' });
+  });
   it('reads the cert log at the shot as step 1 on attempt 2 after a helper failure', () => {
     expect(stepRetry(run(), upTo(1595))).toEqual({ ord: 1, attempt: 1, kind: 'workerError' });
     expect(retryLine({ ord: 1, attempt: 1, kind: 'workerError' }, 'Research', null)).toBe('Research failed (a helper could not finish it); trying it again · attempt 2');

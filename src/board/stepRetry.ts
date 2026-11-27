@@ -27,15 +27,24 @@ const CAUSE = {
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
+/** The triage decisions that send the step round again (wicked-core `TriageDecision`: `retry_with_flag` / `retry` /
+ *  `escalate` / `fail`). */
+const RETRY_DECISIONS: ReadonlySet<string> = new Set(['retry', 'retry_with_flag']);
+/** Frames that end the run, wherever the step is. */
+const RUN_ENDS: ReadonlySet<string> = new Set(['sessionFailed', 'sessionCompleted', 'runCancelled']);
+
 /**
  * The step the run is trying again, or null. It is a retry only while the run is executing and the step's unit is not
- * done or rejected, when all of these hold for that step:
- *  - its newest dispatched attempt A is 1 or more. This is the highest attempt, not the last frame, so a lagging copy
- *    of an old dispatch never rolls it back;
- *  - a `stepFailed` for an earlier attempt is logged (the highest such attempt, at its first record), and a
- *    `failureTriaged` with decision `retry` for the step follows it;
- *  - nothing ended attempt A: a `unitDone` or `unitDenied` for the step, or a `stepFailed` for attempt A or later. A
- *    lagging copy of the old failure does not end it.
+ * done or rejected, when all of these hold for that step, whose newest dispatched attempt is A:
+ *  - A is 1 or more. It is the highest attempt, not the last frame, so a lagging copy of an old dispatch never rolls
+ *    it back. D is A's FIRST dispatch record;
+ *  - attempt A - 1 failed. F is its first `stepFailed` record;
+ *  - a retry triage for the step (`retry`, `retry_with_flag`) lies between F and D. With `seq` on all three it must sit
+ *    between them by `seq`. A triage that repeats one logged before F (same decision and analysis: a replayed copy)
+ *    does not count. So A came from THAT failure's retry, not from a reassign or a crash re-drive;
+ *  - nothing after D ended attempt A or the run: a `unitDone`, `unitDenied`, `unitReassigned` or
+ *    `crashRecoveryRedrive` for the step, a `stepFailed` for attempt A or later, or a frame that ends the run. A
+ *    lagging copy of the old failure (attempt A - 1) does not end it.
  * Several steps qualifying (not expected) picks the one dispatched last.
  */
 export function stepRetry(view: SessionView, events: readonly unknown[] | null | undefined): StepRetry | null {
@@ -49,29 +58,33 @@ export function stepRetry(view: SessionView, events: readonly unknown[] | null |
     const had = newest.get(ord);
     if (had === undefined || attempt > had.attempt) newest.set(ord, { attempt, at: i });
   });
+  const seqOf = (e: Record<string, unknown>): number | null => num(e['seq']);
   let best: (StepRetry & { at: number }) | null = null;
-  for (const [ord, { attempt, at }] of newest) {
+  for (const [ord, { attempt, at: d }] of newest) {
     if (attempt < 1) continue;
     const unit = view.units.find((u) => u.ord === ord);
     if (unit !== undefined && (unit.status === 'done' || unit.status === 'rejected')) continue;
-    const mine = log.filter((e) => num(e['ord']) === ord);
-    const ended = mine.some((e) => e['type'] === 'unitDone' || e['type'] === 'unitDenied'
-      || (e['type'] === 'stepFailed' && (num(e['attempt']) ?? -1) >= attempt));
+    const after = log.slice(d + 1);
+    const ended = after.some((e) => RUN_ENDS.has(String(e['type'])) || (num(e['ord']) === ord && (
+      e['type'] === 'unitDone' || e['type'] === 'unitDenied' || e['type'] === 'unitReassigned' || e['type'] === 'crashRecoveryRedrive'
+      || (e['type'] === 'stepFailed' && (num(e['attempt']) ?? -1) >= attempt))));
     if (ended) continue;
-    // The failure the retry answers: the highest earlier attempt that failed, at its FIRST record (a late copy of the
-    // same failure, appended after the retry began, is not a new failure).
-    let failedAt = -1;
-    let failedAttempt = -1;
-    mine.forEach((e, i) => {
-      const a = num(e['attempt']);
-      if (e['type'] === 'stepFailed' && a !== null && a < attempt && a > failedAttempt) { failedAt = i; failedAttempt = a; }
+    const f = log.findIndex((e) => e['type'] === 'stepFailed' && num(e['ord']) === ord && num(e['attempt']) === attempt - 1);
+    if (f < 0 || f > d) continue;
+    const failed = log[f]!;
+    const dispatched = log[d]!;
+    const seen = new Set(log.slice(0, f).filter((e) => e['type'] === 'failureTriaged' && num(e['ord']) === ord)
+      .map((e) => `${String(e['decision'])}\u0000${String(e['analysis'])}`));
+    const triaged = log.slice(f + 1, d).some((e) => {
+      if (e['type'] !== 'failureTriaged' || num(e['ord']) !== ord || !RETRY_DECISIONS.has(String(e['decision']))) return false;
+      if (seen.has(`${String(e['decision'])}\u0000${String(e['analysis'])}`)) return false;
+      const [sf, st, sd] = [seqOf(failed), seqOf(e), seqOf(dispatched)];
+      return sf === null || st === null || sd === null || (sf < st && st < sd);
     });
-    if (failedAt < 0) continue;
-    const triaged = mine.slice(failedAt + 1).some((e) => e['type'] === 'failureTriaged' && e['decision'] === 'retry');
     if (!triaged) continue;
-    const k = mine[failedAt]!['failureKind'];
+    const k = failed['failureKind'];
     const kind = typeof k === 'string' && Object.hasOwn(CAUSE, k) ? (k as keyof typeof CAUSE) : null;
-    if (best === null || at > best.at) best = { ord, attempt, kind, at };
+    if (best === null || d > best.at) best = { ord, attempt, kind, at: d };
   }
   return best === null ? null : { ord: best.ord, attempt: best.attempt, kind: best.kind };
 }

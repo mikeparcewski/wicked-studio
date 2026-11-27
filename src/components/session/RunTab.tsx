@@ -161,10 +161,12 @@ function RunTabDetails({ view, allRuns, sessionId, title, navigate }: { view: Se
   const held = isHeldRun(shown.session);
   // (J4 0.16.6) The step silent past crew's quiet mark: the Now section says so, as the header does.
   const silent = useSilentStep(view);
-  // studio#1489: a step that failed and is being tried again: the Now section says so, as the header does.
-  const retry = useStepRetry(view);
-  const retryWord = retry !== null && !held ? retryBadge(retry, silent?.minutes ?? null) : null;
   const floor = useRunningFloor(view);
+  // studio#1489: a step that failed and is being tried again: the Now section says so, as the header does. A running
+  // checks floor is the engine's work now and keeps its own words (codex r1).
+  const retryRead = useStepRetry(view);
+  const retry = floor === null ? retryRead : null;
+  const retryWord = retry !== null && !held ? retryBadge(retry, silent?.minutes ?? null) : null;
   const coverage = useRunCoverage(view);
   const delivery = deliveryOf(view);
   // studio#1454: crew records the PR url only once the run ends; a deliver step that is done already printed it, so a
