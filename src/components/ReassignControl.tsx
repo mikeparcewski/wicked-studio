@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { api } from '../api/client.js';
 import { useRoster } from '../hooks/useRoster.js';
 import { useSteeringStore } from '../store/steering.js';
+import { openingOf } from '../store/gates.js';
 import { isOfferable, reassignCandidates } from './gateVerdictModel.js';
 
 /**
@@ -111,7 +112,8 @@ export function ReassignControl({
     setError(null);
     try {
       // studio#1121: the step this control moves; crew refuses (409 gate_changed) if the run is on another one now.
-      await api.reassignRun(runId, cli, undefined, ord);
+      // studio#1493: on a gate at that step, the opening this tab holds.
+      await api.reassignRun(runId, cli, undefined, ord, typeof ord === 'number' ? openingOf(runId, ord) : undefined);
       recordSteering({ runId, action: 'reassign', cli, ...(typeof ord === 'number' ? { ord } : {}) });
       setPhase('done');
       onDone(cli);

@@ -10,6 +10,7 @@
 
 import { apiFetch } from './client.js';
 import { isRouteAbsent } from './errors.js';
+import { openingOf } from '../store/gates.js';
 import type { ConformanceRule } from './types.js';
 
 // ── Personality ───────────────────────────────────────────────────────────────────────────────
@@ -83,11 +84,15 @@ export function getSteeringDraft(runId: string): Promise<SteeringDraftResponse> 
   return apiFetch<SteeringDraftResponse>(`/governance/steering/author/${encodeURIComponent(runId)}/draft`);
 }
 
-/** Approve a steering-author run's propose gate, landing only the kept rule ids (crew 0.160.0). */
+/** Approve a steering-author run's propose gate, landing only the kept rule ids (crew 0.160.0). (studio#1493) It names
+ *  the opening of the run's gate when this tab's gate store holds it, so crew refuses it (409 gate_changed) once that
+ *  opening has closed. The Learn page reads its drafts, not the gate, so with no gate held here it names none (the draft
+ *  read carries no opening). */
 export function keepDraftedRules(runId: string, keepRules: readonly string[]): Promise<{ status: string; landing?: { outcome: string; ruleIds: string[]; declinedIds?: string[]; error?: string } }> {
+  const gateSeq = openingOf(runId);
   return apiFetch(`/runs/${encodeURIComponent(runId)}/gate`, {
     method: 'POST',
-    body: JSON.stringify({ approve: true, keepRules: [...keepRules] }),
+    body: JSON.stringify({ approve: true, keepRules: [...keepRules], ...(gateSeq === undefined ? {} : { gateSeq }) }),
   });
 }
 

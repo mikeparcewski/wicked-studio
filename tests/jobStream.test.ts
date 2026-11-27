@@ -459,13 +459,30 @@ describe('follow-up review folds (records)', () => {
 
 
 describe('follow-up round 2 folds (records)', () => {
-  it('a plan gate names its work by reviewing_ord; work on record and started is no re-plan', async () => {
+  it('a plan gate names its work by its ord (studio#1492: the engine always writes it; reviewing_ord is the done creator); work on record and started is no re-plan', async () => {
     const { replanningOnRecord } = await import('../src/board/jobStream.js');
-    const opened = { event_id: 2, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g1', ord: null, reviewing_ord: 2, plan_rev: 1 } };
-    const amended = { event_id: 3, event_type: 'wicked.team.gate.decided', payload: { kind: 'plan_approval', gate_id: 'g1', decision: 'human_amended' } };
+    // The shape wicked-core publishes: the envelope's ord is the unit the run paused at (plan_gate.rs gate_opened,
+    // actor.rs `ord = unit.ord`); reviewing_ord is the unit whose output produced the plan (core replan_tests.rs: a
+    // floor-raised re-plan gate has ord 2 and reviewing_ord 1, unit 1 done, and approval dispatches unit 2).
+    const opened = { event_id: 2, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g1', ord: 2, attempt: 0, reviewing_ord: 1, plan_rev: 2 } };
+    const amended = { event_id: 3, event_type: 'wicked.team.gate.decided', payload: { kind: 'plan_approval', gate_id: 'g1', ord: 2, decision: 'human_amended' } };
+    // Sent back at a mid-run gate: the creator is done, the step the gate stands before has not started: re-planning.
+    expect(replanningOnRecord([opened, amended], [{ ord: 1, status: 'done' }, { ord: 2, status: 'pending' }])).toBe(2);
+    // The step it stands before has started: not re-planning.
     expect(replanningOnRecord([opened, amended], [{ ord: 1, status: 'done' }, { ord: 2, status: 'distributed' }])).toBeNull();
-    expect(replanningOnRecord([opened, amended], [{ ord: 1, status: 'distributed' }, { ord: 2, status: 'pending' }])).toBe(1);
-    expect(replanningOnRecord([opened, amended], [{ ord: 1, status: 'distributed' }])).toBeNull();
+    // Not on record: no claim.
+    expect(replanningOnRecord([opened, amended], [{ ord: 1, status: 'done' }])).toBeNull();
+    // A gate with no ord claims nothing, whatever its reviewing_ord names (never the reviewed creator's ord).
+    const bare = { ...opened, payload: { ...opened.payload, ord: null } };
+    expect(replanningOnRecord([bare, amended], [{ ord: 1, status: 'pending' }, { ord: 2, status: 'pending' }])).toBeNull();
+  });
+  it('studio#1492 STALE READS: team rows read before the send-back, or with a newer gate since, are no re-plan', async () => {
+    const { replanningOnRecord } = await import('../src/board/jobStream.js');
+    const opened = { event_id: 2, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g1', ord: 2, reviewing_ord: 1, plan_rev: 2 } };
+    const amended = { event_id: 3, event_type: 'wicked.team.gate.decided', payload: { kind: 'plan_approval', gate_id: 'g1', ord: 2, decision: 'human_amended' } };
+    const units = [{ ord: 1, status: 'done' }, { ord: 2, status: 'pending' }];
+    expect(replanningOnRecord([opened], units)).toBeNull();
+    expect(replanningOnRecord([opened, amended, { event_id: 4, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g2', ord: 2, reviewing_ord: 1, plan_rev: 3 } }], units)).toBeNull();
   });
   it('a conditional human_confirm may ask; an unconditional one asks', async () => {
     const { enrichPlan } = await import('../src/board/jobStream.js');
