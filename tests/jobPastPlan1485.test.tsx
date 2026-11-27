@@ -198,3 +198,25 @@ describe('studio#1485: pastPlanOnLog', () => {
     expect(pastPlanOnLog([{ type: 'awaitingHuman', gateKind: 'deliver', ord: 1 }, { type: 'unitDispatched', ord: 1 }])).toBe(false);
   });
 });
+
+describe('studio#1494: a lagging live copy of the plan gate is not a newer gate', () => {
+  // A live /ws copy carries no ts or seq (store/events.ts fingerprint); ingest appends it with no dedupe.
+  const live = (seq: number) => Object.fromEntries(Object.entries(CERT.events.find((e) => e['seq'] === seq)!).filter(([k]) => k !== 'ts' && k !== 'seq'));
+  it('STALE / SHARED: the cert log plus late live copies of the gate (1361) and its dispatch (1363) still reads past the plan', () => {
+    useRunEventStore.setState({ byRun: {} });
+    useRunEventStore.getState().hydrate(RUN, CERT.events as never);
+    useRunEventStore.getState().ingest(live(1361) as never);
+    useRunEventStore.getState().ingest(live(1363) as never);
+    const log = useRunEventStore.getState().byRun[RUN] ?? null;
+    // The copies are in the shared log, after the recorded prefix, and stay there after another full read.
+    expect(log!.slice(-2).map((e) => e.type)).toEqual(['awaitingHuman', 'unitDispatched']);
+    useRunEventStore.getState().hydrate(RUN, CERT.events as never);
+    expect(pastPlanOnLog(useRunEventStore.getState().byRun[RUN] ?? null)).toBe(true);
+  });
+  it('IDENTITY: a genuinely new plan gate (a new gateSeq and prompt) after the dispatch still reads not past it', () => {
+    const next = { ...live(1361), gateSeq: 2, ord: 2, prompt: 'Approve plan rev 2 before unit 2 runs' };
+    expect(pastPlanOnLog([...CERT.events, next])).toBe(false);
+    // A recorded copy (with its own seq) of a gate is a gate: only seq-less repeats are set aside.
+    expect(pastPlanOnLog([...upTo(1363), { ...CERT.events.find((e) => e['seq'] === 1361)!, seq: 1400 }])).toBe(false);
+  });
+});
