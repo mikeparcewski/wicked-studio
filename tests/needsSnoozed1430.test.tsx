@@ -497,4 +497,13 @@ describe('codex r1 (#1475 port): the project home says what crew\'s list leaves 
     render(<ProjectHome project={PROJECT} projectId="p1" runs={views} allRuns={views} needRows={[]} repos={[]} now={NOW} known loading={false} navigate={vi.fn()} isDefault={false} />);
     expect(screen.getByTestId('project-needs-snoozed')).toHaveTextContent('1 snoozed, not counted until it comes back');
   });
+
+  // codex r2: a hold whose end passed before the next read is still out of that read's list, so the line still says it.
+  it('a hold whose end has passed, before the next read: the home still says 1 snoozed (the list still leaves it out)', () => {
+    useSystemStore.setState({ snapshot: snap({ snoozed: [{ ...HELD, until: iso(NOW - 60_000) }] }) } as never);
+    const PROJECT = { id: 'p1', name: 'Core', description: null, status: 'active', scope: 'project:p1', created_at: 0, updated_at: 0 } as unknown as Project;
+    const views = [makeView({ id: '290a7fee', status: 'awaiting_human', problem: 'wicked-core#840' } as never, [])];
+    render(<ProjectHome project={PROJECT} projectId="p1" runs={views} allRuns={views} needRows={[]} repos={[]} now={NOW} known loading={false} navigate={vi.fn()} isDefault={false} />);
+    expect(screen.getByTestId('project-needs-snoozed')).toHaveTextContent('1 snoozed, not counted until it comes back');
+  });
 });

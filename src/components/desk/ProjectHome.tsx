@@ -113,7 +113,8 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
   // not there: they are crew's `unresolved[]`, folded into one "to tidy up" line with their spend.
   // An older crew: the board's fold, without failures older than a week. Until crew first answers, the
   // section is held (no number from the fold flashing before crew's).
-  // A failed read's retained list is not crew's word now (useRankedNeeds' rule): the fold stands in, so nothing waits unseen.
+  // A failed /system read's retained list is not crew's word now (useRankedNeeds' rule): the fold stands in, so nothing
+  // waits unseen. A failed /health read alone is not seen here yet (studio#1471).
   const snapshot = useSystemStore((s) => (s.mode === 'system' && s.snapshotError === null ? s.snapshot : null));
   const crewPending = useSystemStore((s) => s.mode === 'unknown' && s.healthError === null);
   const items = useMemo(() => projectAttention(snapshot, ids), [snapshot, ids]);
@@ -122,7 +123,7 @@ export function ProjectHome({ project, projectId, runs, allRuns, needRows, repos
   const tidy = useMemo(() => projectUnresolved(snapshot, ids), [snapshot, ids]);
   // studio#1430: what crew's list leaves out for a snooze is said, from that same read, so "Nothing here is waiting"
   // never hides it (not this page's judged holds: they wait on its own gate read, codex r1 on the #1475 port).
-  const snoozedHere = useMemo(() => projectSnoozed(snapshot, ids, now), [snapshot, ids, now]);
+  const snoozedHere = useMemo(() => projectSnoozed(snapshot, ids), [snapshot, ids]);
   const tidySpend = tidy.some((u) => u.costUsd !== null) ? tidy.reduce((n, u) => n + (u.costUsd ?? 0), 0) : null;
   const folded = useMemo(() => attentionRows(needRows.filter((r) => {
     const id = needRunId(r);
