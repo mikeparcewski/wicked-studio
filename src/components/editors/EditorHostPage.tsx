@@ -4,7 +4,7 @@ import { listEditors, type RunPluginView } from '../../api/editors.js';
 import { parsePanels } from '../../board/runPluginPanels.js';
 import { RunEventFeed, type EventsBatch } from '../../editors/runEvents.js';
 import { runPattern } from '../../store/runPlugins.js';
-import { apiBase } from '../../api/client.js';
+import { api, apiBase } from '../../api/client.js';
 import { EditorHost, sizeOfSurface, type HostLogEntry, type Surface } from '../../editors/host.js';
 import type { FullMode } from '../../editors/surfaces.js';
 import { InsightsAdapter } from '../../editors/insightsAdapter.js';
@@ -16,6 +16,7 @@ import { PERMISSIONS, SIZES, type PermissionId, type Size } from '../../editors/
 import { readThemeTokens } from '../../editors/theme.js';
 import { EditorTestPagePicker } from './EditorPluginsSettings.js';
 import { EditorSurfacesView } from '../editorHost/EditorSurfacesView.js';
+import { FakeSurfaceAdapter } from '../../editors/adapters/fake.js';
 import { AppHostView } from '../editorHost/AppHostView.js';
 
 /**
@@ -50,6 +51,21 @@ interface Page {
   surface: Surface | null;
   tab: string | null;
   mode: FullMode | null;
+  /** studio#1516 (dev only): a job's file to open, read-only, in an editor whose kind has no sample (`?run=&path=`). */
+  file: { run: string; path: string } | null;
+}
+
+/** The test page's read of a job's file (studio#1516). */
+type FileRead =
+  | { state: 'loading' }
+  | { state: 'refused'; text: string }
+  | { state: 'ok'; adapter: FakeSurfaceAdapter; name: string };
+
+const FILE_LOADING: FileRead = { state: 'loading' };
+
+function sizeInWords(n: number): string {
+  if (n < 1024) return `${n} bytes`;
+  return n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KB` : `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function readPage(search: string, mode: 'dev' | 'conformance'): Page {
@@ -58,6 +74,9 @@ function readPage(search: string, mode: 'dev' | 'conformance'): Page {
   // crew for its decided set (codex).
   const grants = mode === 'conformance' ? q.get('grants') : null;
   const editor = q.get('editor') ?? '';
+  const run = q.get('run') ?? '';
+  const path = q.get('path') ?? '';
+  const kind = q.get('kind') ?? 'page';
   return {
     editor,
     version: q.get('version') ?? '',
@@ -65,13 +84,14 @@ function readPage(search: string, mode: 'dev' | 'conformance'): Page {
     title: q.get('title') ?? (editor === '' ? 'Editor' : editor),
     grants: grants === null ? null : grants.split(',').filter((g): g is PermissionId => PERMISSIONS.includes(g as PermissionId)),
     firstParty: editor.startsWith('wicked-'),
-    kind: q.get('kind') ?? 'page',
+    kind,
     app: q.get('app'),
     sample: q.get('sample'),
     surface: mode === 'conformance' && ['card', 'options', 'full'].includes(q.get('surface') ?? '') ? q.get('surface') as Surface : null,
     // A tab only for an options instance; the host checks it against the declared plugin tabs (codex h3-seam r1 P3).
     tab: mode === 'conformance' && q.get('surface') === 'options' ? q.get('tab') : null,
     mode: mode === 'conformance' && (q.get('mode') === 'simple' || q.get('mode') === 'advanced') ? q.get('mode') as FullMode : null,
+    file: mode === 'dev' && run !== '' && path !== '' && !hasEditorSample(kind) ? { run, path } : null,
   };
 }
 
@@ -127,14 +147,40 @@ function ArtifactHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'; nav
   const log = useRef<HostLogEntry[]>([]);
   const optionsSeen = useRef<Record<string, Record<string, unknown>>>({});
   const hostRef = useRef<EditorHost | null>(null);
-  const adapter = useMemo(() => (page.kind === 'run-insights' ? new InsightsAdapter(SAMPLE_INSIGHTS) : page.kind === 'deck'
+  // studio#1516: the job's file, read once per address through crew's contained file route; the editor gets it whole
+  // and read-only (no write route for a job's file: a change to it goes through a job).
+  const [fileRead, setFileRead] = useState<{ page: Page; read: FileRead } | null>(null);
+  useEffect(() => {
+    const f = page.file;
+    if (f === null) return;
+    let live = true;
+    setFileRead({ page, read: { state: 'loading' } });
+    const name = f.path.split(/[\\/]/u).filter((x) => x !== '').pop() ?? f.path;
+    api.getRunFile(f.run, f.path)
+      .then((r) => {
+        if (!live) return;
+        if (r.binary) setFileRead({ page, read: { state: 'refused', text: 'This is a binary file, so an editor cannot open it.' } });
+        else if (r.truncated) setFileRead({ page, read: { state: 'refused', text: `This file is too large to open in an editor here (${sizeInWords(r.size)}); only part of it could be read.` } });
+        else setFileRead({ page, read: { state: 'ok', name, adapter: FakeSurfaceAdapter.ofFile({ kind: page.kind, title: name }, r.content) } });
+      })
+      .catch((e: unknown) => {
+        if (live) setFileRead({ page, read: { state: 'refused', text: `Couldn’t read this file: ${e instanceof Error ? e.message : String(e)}` } });
+      });
+    return () => { live = false; };
+  }, [page]);
+  const file: FileRead | null = page.file === null ? null : fileRead?.page === page ? fileRead.read : FILE_LOADING;
+  const fileAdapter = file?.state === 'ok' ? file.adapter : null;
+  // One object per read (the surfaces view keys its binding on it): a re-render never remounts the card.
+  const surfaceFile = useMemo(() => (file?.state === 'ok' && page.file !== null
+    ? { adapter: file.adapter, name: file.name, key: `${page.file.run}:${page.file.path}` } : undefined), [file, page]);
+  const adapter = useMemo(() => (fileAdapter !== null ? fileAdapter : page.kind === 'run-insights' ? new InsightsAdapter(SAMPLE_INSIGHTS) : page.kind === 'deck'
     ? new FakeDocAdapter(SAMPLE_DECK, 'Library room booking (deck)', { kind: 'deck' })
-    : new FakeDocAdapter(SAMPLE_PAGE)), [page.kind]);
+    : new FakeDocAdapter(SAMPLE_PAGE)), [page.kind, fileAdapter]);
   const live = useRef({ text, chips, drafted, thread, status, notes });
   live.current = { text, chips, drafted, thread, status, notes };
 
   useEffect(() => {
-    if (!hasEditorSample(page.kind) || page.editor === '' || page.version === '' || page.sha === '' || frameBox.current === null) return;
+    if ((!hasEditorSample(page.kind) && fileAdapter === null) || page.editor === '' || page.version === '' || page.sha === '' || frameBox.current === null) return;
     let cancelled = false;
     setTorn(null);
     const start = async (): Promise<void> => {
@@ -224,8 +270,23 @@ function ArtifactHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'; nav
     );
   }
 
-  if (!hasEditorSample(page.kind)) {
-    return <div data-testid="editor-host-page" className="wk-editor-page"><p data-testid="editor-no-sample" className="wk-host-note">The test page has no sample of {page.kind.replace(/-/gu, ' ')} to open this editor on.</p></div>;
+  if (file !== null && file.state !== 'ok') {
+    return (
+      <div data-testid="editor-host-page" className="wk-editor-page">
+        {file.state === 'loading'
+          ? <p data-testid="editor-file-loading" className="wk-host-note">Loading the file…</p>
+          : <p data-testid="editor-file-refused" className="wk-host-note">{file.text}</p>}
+      </div>
+    );
+  }
+
+  if (!hasEditorSample(page.kind) && file === null) {
+    return (
+      <div data-testid="editor-host-page" className="wk-editor-page">
+        <p data-testid="editor-no-sample" className="wk-host-note">The test page has no sample of {page.kind.replace(/-/gu, ' ')} to open this editor on.</p>
+        <p data-testid="editor-no-sample-way-in" className="wk-host-note">To open a file in it, open the file from a job’s file list and choose Open in {page.title}.</p>
+      </div>
+    );
   }
 
   // DES-APPS-001 K4: an app opens in the app host (its own header, the card dock), on the dev page only. The
@@ -241,17 +302,25 @@ function ArtifactHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'; nav
   return (
     <div data-testid="editor-host-page" data-mode={mode} className="wk-editor-page">
       {page.kind === 'run-insights' && <p className="wk-host-note">This is a sample review with made-up runs.</p>}
+      {file?.state === 'ok' && (
+        <header data-testid="editor-file-head" className="wk-editor-file-head">
+          <h1 className="wk-editor-file-name">{file.name} <span className="wk-editor-file-ro">· Read-only, in {page.title}</span></h1>
+          <p data-testid="editor-file-note" className="wk-host-note">This is the file the job wrote. A change to it goes through a job.</p>
+        </header>
+      )}
       {/* H7: the three surfaces, drawn by the run page's own host components from the plugin's declaration. */}
       {mode === 'dev' && (
         <>
-          <EditorSurfacesView editor={page.editor} version={page.version} sha={page.sha} title={page.title} kind={page.kind} />
-          {/* The one-frame protocol view stays for debugging, folded away (operator: it sat below the surfaces). */}
-          <p className="wk-editor-protocol-toggle">
+          <EditorSurfacesView editor={page.editor} version={page.version} sha={page.sha} title={page.title} kind={page.kind}
+            {...(surfaceFile !== undefined ? { file: surfaceFile } : {})} />
+          {/* The one-frame protocol view stays for debugging, folded away (operator: it sat below the surfaces). A job's
+              file is not a debugging session: no toggle (studio#1516). */}
+          {file === null && <p className="wk-editor-protocol-toggle">
             <button type="button" data-testid="editor-protocol-toggle" aria-expanded={showProtocol} className="wk-since-toggle"
               onClick={() => { setShowProtocol((v) => !v); setMountKey((k) => k + 1); }}>
               {showProtocol ? 'Hide the one-frame protocol view' : 'Show the one-frame protocol view (sizes, log)'}
             </button>
-          </p>
+          </p>}
         </>
       )}
       {(mode === 'conformance' || showProtocol) && (<>
