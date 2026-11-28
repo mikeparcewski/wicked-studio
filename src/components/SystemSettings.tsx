@@ -94,6 +94,9 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   /** Where the daemon says its settings file lives (`GET /settings.path`, crew 0.7.36); `null` =
    *  the daemon predates the field — the page then says so instead of naming a path it made up. */
   const [settingsPath, setSettingsPath] = useState<string | null>(null);
+  /** (crew#2013, api-types next `SettingsResponse.environment`) The council size this computer's environment
+   *  sets, if it does: the control is then read-only. Absent on an older daemon. */
+  const [councilPin, setCouncilPin] = useState<{ env: string[]; value: string } | null>(null);
   /** studio#275: the discipline (base) skill posture (`GET /diagnostics.skills.baseSkill`); `undefined`
    *  until read, and when the daemon predates the field or has no diagnostics route. */
   const [baseSkill, setBaseSkill] = useState<BaseSkillPosture | null | undefined>(undefined);
@@ -139,6 +142,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
         setSettings(res.settings);
         // api-types 0.38.0 `SettingsResponse.path?` (crew 0.7.36); absent/empty on an older daemon.
         setSettingsPath(typeof res.path === 'string' && res.path !== '' ? res.path : null);
+        setCouncilPin((res as { environment?: { councilSize?: { env: string[]; value: string } } }).environment?.councilSize ?? null);
       })
       // EC33: the translated message, never `String(Error)`'s "Error: …" framing.
       .catch((e: unknown) => { setErrorSource((previous: unknown) => readErrorKind(previous) === 'offline' ? previous : e); setError(e instanceof Error ? e.message : String(e)); });
@@ -286,9 +290,10 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
             label="Council size"
             data-testid="settings-council-size"
             value={String(merged.councilSize ?? 3)}
-            options={councilSizeOptions.map((value) => ({ value, label: value }))}
+            options={councilSizeOptions.map((value) => ({ value, label: value, disabled: councilPin !== null }))}
             onChange={(value) => patch('councilSize', Number(value))}
           />
+          {councilPin !== null && <p className="wk-field-note" data-testid="settings-council-size-pinned">Set by this computer&apos;s environment ({councilPin.env.join(', ')}), so it can&apos;t be changed here: {councilPin.value}</p>}
         </SettingRow>
       </section>
 

@@ -264,14 +264,9 @@ export function issueCopy(issue: AgentIssue, row: AgentRow, rows: readonly Agent
         why: `Builds, fixes and tests in a repository go to the other helpers; ${name} still chats and reviews decisions.`,
         fix: [
           step('Leave it as it is (recommended).', qe === false ? 'Quality checks stay unavailable until a helper that can run them is signed in.' : ''),
-          { ...step('Or, if you run studio’s service on this computer, allow it in repositories.', 'It takes both of these steps; the account change alone doesn’t lift it.'),
-            subLabel: 'Show the two steps',
-            sub: [
-              containerSignIn ? { ...step(`Sign ${name} in again here, with an account whose commands don’t need approval.`), signIn: true }
-                : step(`Sign ${name} in with an account whose commands don’t need approval:`, '', [...cmd(row.logout, 'sign-out'), ...cmd(row.login, 'sign-in')]),
-              { ...step(`Restart the service with ${name} allowed in repositories.`),
-                tech: { summary: 'How to restart it that way', text: 'Start the service with WICKED_CODEX_WORKTREE_OK=1 set (the engine benches codex on runs bound to one repository, CODEX_WORKTREE_BENCH, unless the host opts out).' } },
-            ] },
+          // crew#2013 retired the host opt-out (WICKED_CODEX_WORKTREE_OK): the container floor is the one way back.
+          { ...step('Or run helpers in their own containers, where this doesn’t apply.', 'In a container each helper has its own account settings, so no command waits for an approval.'),
+            tech: { summary: 'How to run helpers in containers', text: 'Start the service with WICKED_SEAT_FLOOR=container (the default). The engine benches codex only on the host floor, on runs bound to one repository (CODEX_WORKTREE_BENCH).' } },
         ],
         tech: null,
       };
