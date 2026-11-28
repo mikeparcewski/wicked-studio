@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { RepoEntry, SessionView } from '../src/api/types.js';
+import { ApiError } from '../src/api/errors.js';
 import { makeView } from './factories.js';
 
 /**
@@ -64,7 +65,7 @@ afterEach(cleanup);
 const baseNow = (): string => screen.getByTestId('repo-seat-base-now').textContent ?? '';
 
 describe('repository page: a seat image save (crew#1984)', () => {
-  it('STALE READS / SHARED READS: shows the engine’s entry, keeps git_url, and an earlier re-read does not land over it', async () => {
+  it('STALE READS / SHARED READS: shows what crew holds after the save, keeps git_url, and an earlier re-read does not land over it', async () => {
     const { rerender } = render(ui([running]));
     await screen.findByTestId('repo-seat-image');
     expect(baseNow()).toMatch(/default/i);
@@ -75,6 +76,8 @@ describe('repository page: a seat image save (crew#1984)', () => {
     rerender(ui([done]));
     await waitFor(() => expect(listRepos).toHaveBeenCalledTimes(2));
 
+    // What crew holds once the write is in: the next GET /repos answers it.
+    listRepos.mockResolvedValue({ repos: [listed('acme/seat-base:go')] });
     fireEvent.change(screen.getByTestId('repo-seat-base-input'), { target: { value: 'acme/seat-base:go' } });
     fireEvent.click(screen.getByTestId('repo-seat-base-save'));
     await waitFor(() => expect(baseNow()).toBe('acme/seat-base:go'));
@@ -88,25 +91,82 @@ describe('repository page: a seat image save (crew#1984)', () => {
     expect(screen.getByText('View on the web').getAttribute('href')).toBe('https://github.com/acme/billing');
   });
 
-  it('STALE READS: an older card’s answer, landing after a newer save from the remounted tab, does not land over it', async () => {
-    const answers: Array<(e: RepoEntry) => void> = [];
-    setRepoSeatBase.mockImplementation(() => new Promise<RepoEntry>((r) => { answers.push(r); }));
+  // DES studio#1513 (codex-check on 1dc5d4e6, W20): a PUT's answer is not the page's to show; what crew holds is.
+  it('STALE READS: a delayed save answer does not land over a newer read of the repository', async () => {
+    let answerPut: (e: RepoEntry) => void = () => {};
+    setRepoSeatBase.mockImplementationOnce(() => new Promise<RepoEntry>((r) => { answerPut = r; }));
+    const { rerender } = render(ui([running]));
+    await screen.findByTestId('repo-seat-image');
+    fireEvent.change(screen.getByTestId('repo-seat-base-input'), { target: { value: 'acme/seat-base:a' } });
+    fireEvent.click(screen.getByTestId('repo-seat-base-save'));
+    // Crew took A, then another client set B; a run finishing re-reads the repository and sees B.
+    listRepos.mockResolvedValue({ repos: [listed('acme/seat-base:b')] });
+    rerender(ui([done]));
+    await waitFor(() => expect(baseNow()).toBe('acme/seat-base:b'));
+    // A's answer arrives last. Crew holds B.
+    answerPut(written('acme/seat-base:a'));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(baseNow()).toBe('acme/seat-base:b');
+  });
+
+  it('STALE READS / IDENTITY REUSE: a save answered while the repository is being opened again shows what crew holds', async () => {
+    const shipping = { ...listed(null), id: 'shipping', name: 'shipping', root_path: '/srv/shipping' } as RepoEntry;
+    listRepos.mockResolvedValue({ repos: [listed(null), shipping] });
+    let answerPut: (e: RepoEntry) => void = () => {};
+    setRepoSeatBase.mockImplementationOnce(() => new Promise<RepoEntry>((r) => { answerPut = r; }));
     const { rerender } = render(ui([]));
     await screen.findByTestId('repo-seat-image');
     fireEvent.change(screen.getByTestId('repo-seat-base-input'), { target: { value: 'acme/seat-base:a' } });
     fireEvent.click(screen.getByTestId('repo-seat-base-save'));
-    // Away to Overview and back: a fresh card, so a second save can start while the first is in flight.
+    rerender(ui([], { repoId: 'shipping' }));
+    await screen.findByRole('heading', { name: 'shipping' });
+    // Back to billing: its read was served before the write went in, and answers after the save does.
+    let staleRead: (v: { repos: RepoEntry[] }) => void = () => {};
+    listRepos.mockImplementationOnce(() => new Promise((r) => { staleRead = r; }));
+    rerender(ui([]));
+    await waitFor(() => expect(listRepos).toHaveBeenCalledTimes(3));
+    listRepos.mockResolvedValue({ repos: [listed('acme/seat-base:a'), shipping] });
+    answerPut(written('acme/seat-base:a'));
+    await new Promise((r) => setTimeout(r, 30));
+    staleRead({ repos: [listed(null), shipping] });
+    await waitFor(() => expect(baseNow()).toBe('acme/seat-base:a'));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(baseNow()).toBe('acme/seat-base:a');
+  });
+
+  it('PARTIAL FAILURE: a refused save after the tab came back does not hide an earlier save that went in', async () => {
+    let answerA: (e: RepoEntry) => void = () => {};
+    setRepoSeatBase
+      .mockImplementationOnce(() => new Promise<RepoEntry>((r) => { answerA = r; }))
+      .mockImplementationOnce(() => Promise.reject(new ApiError(400, 'refused by the engine', { code: 'seat_base_invalid', error: 'refused by the engine' })));
+    const { rerender } = render(ui([]));
+    await screen.findByTestId('repo-seat-image');
+    fireEvent.change(screen.getByTestId('repo-seat-base-input'), { target: { value: 'acme/seat-base:a' } });
+    fireEvent.click(screen.getByTestId('repo-seat-base-save'));
     rerender(ui([], { tab: 'overview' }));
     rerender(ui([]));
     await screen.findByTestId('repo-seat-image');
-    fireEvent.change(screen.getByTestId('repo-seat-base-input'), { target: { value: 'acme/seat-base:b' } });
+    fireEvent.change(screen.getByTestId('repo-seat-base-input'), { target: { value: 'Bad Ref' } });
     fireEvent.click(screen.getByTestId('repo-seat-base-save'));
-    expect(answers).toHaveLength(2);
-    answers[1]!(written('acme/seat-base:b'));
-    await waitFor(() => expect(baseNow()).toBe('acme/seat-base:b'));
-    answers[0]!(written('acme/seat-base:a'));
-    await new Promise((r) => setTimeout(r, 20));
-    expect(baseNow()).toBe('acme/seat-base:b');
+    listRepos.mockResolvedValue({ repos: [listed('acme/seat-base:a')] });
+    answerA(written('acme/seat-base:a'));
+    await waitFor(() => expect(baseNow()).toBe('acme/seat-base:a'));
+  });
+
+  it('a draft survives leaving the Settings tab and coming back', async () => {
+    const { rerender } = render(ui([]));
+    await screen.findByTestId('repo-seat-image');
+    fireEvent.change(screen.getByTestId('repo-seat-base-input'), { target: { value: 'acme/seat-base:draft' } });
+    rerender(ui([], { tab: 'overview' }));
+    rerender(ui([]));
+    const field = (await screen.findByTestId('repo-seat-base-input')) as HTMLInputElement;
+    expect(field.value).toBe('acme/seat-base:draft');
+  });
+
+  it('says a daemon’s own image for an agent comes first (WICKED_SEAT_IMAGE_<CLI>)', async () => {
+    render(ui([]));
+    const card = await screen.findByTestId('repo-seat-image');
+    expect(card.textContent).toContain('unless this daemon pins its own image for that agent');
   });
 
   it('IDENTITY REUSE: a draft typed on one repository is not shown on the next one opened', async () => {
