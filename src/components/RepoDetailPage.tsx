@@ -271,12 +271,19 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
       .catch((e: unknown) => { if (graphCurrent()) setGraphFailed(graphReadError(e)); });
   }, [rawRuns, loading, repoId]);
 
-  /** (crew#1984) A seat image save: the engine's post-write entry is shown (its `git_url` kept: crew adds that on
-   *  `GET /repos` only), and a repository re-read begun before the save no longer lands (it would be older). */
-  function seatSaved(entry: RepoEntry): void {
-    if (entry.id !== repoRef.current) return;
-    reReadSeq.current += 1;
-    setRepo((prev) => (prev !== null && prev.id === entry.id ? { ...entry, ...(prev.git_url !== undefined ? { git_url: prev.git_url } : {}) } : prev));
+  /** (crew#1984) The newest seat image save begun on this page. It lives here, not in the card, because the card
+   *  remounts with the Settings tab: an older card's answer arriving after a newer save must not land. */
+  const seatWrite = useRef(0);
+  /** (crew#1984) Begin a seat image save; the function returned lands its answer. The engine's post-write entry is
+   *  shown (its `git_url` kept: crew adds that on `GET /repos` only) only while it is the newest save begun, and a
+   *  repository re-read begun before it no longer lands (it would be older). */
+  function beginSeatSave(): (entry: RepoEntry) => void {
+    const mine = ++seatWrite.current;
+    return (entry) => {
+      if (seatWrite.current !== mine || entry.id !== repoRef.current) return;
+      reReadSeq.current += 1;
+      setRepo((prev) => (prev !== null && prev.id === entry.id ? { ...entry, ...(prev.git_url !== undefined ? { git_url: prev.git_url } : {}) } : prev));
+    };
   }
 
   /** "Try again" on a failed graph read: re-reads the graph alone, for the repo it was pressed on. */
@@ -708,7 +715,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                     {gitLink !== null && <a className="wk-link wk-rp-more" href={gitLink} target="_blank" rel="noopener noreferrer">View on the web</a>}
                   </section>
                   {/* crew#1984: keyed by repository, so a draft for one is never shown on another. */}
-                  <RepoSeatBase key={repo.id} repo={repo} onSaved={seatSaved} />
+                  <RepoSeatBase key={repo.id} repo={repo} beginSave={beginSeatSave} />
                 </div>
               </div>
             )}

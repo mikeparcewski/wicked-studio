@@ -7,8 +7,9 @@ import { SectionTitle } from './ui/index.js';
 
 interface Props {
   repo: RepoEntry;
-  /** The engine's entry after a save (its single writer's answer), for the page to show. */
-  onSaved: (entry: RepoEntry) => void;
+  /** Begin a save; the function returned hands the engine's entry (its single writer's answer) to the page, which
+   *  shows it only if no newer save was begun since (the card remounts with its tab, so the page keeps the order). */
+  beginSave: () => (entry: RepoEntry) => void;
 }
 
 /** What a failed save says: the engine's own words for a reference it refuses, else the plain sentence. */
@@ -24,10 +25,11 @@ function saveError(e: unknown): string {
  * already has; never pulled), set or cleared here, and the toolchain layers its seats get. The page keys this by
  * repository id, so a draft typed for one repository is never shown on another.
  */
-export function RepoSeatBase({ repo, onSaved }: Props): React.ReactElement {
+export function RepoSeatBase({ repo, beginSave }: Props): React.ReactElement {
   const base = seatBaseOf(repo);
   const layers = seatLayersOf(repo);
-  const [draft, setDraft] = useState(base ?? '');
+  // `null` until a person types: an untouched field follows the repository's base as the page re-reads it.
+  const [draft, setDraft] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Only the newest save lands its answer (a double click, or Save then Clear).
@@ -35,13 +37,15 @@ export function RepoSeatBase({ repo, onSaved }: Props): React.ReactElement {
 
   async function save(image: string | null): Promise<void> {
     const mine = ++seq.current;
+    const land = beginSave();
     setSaving(true);
     setError(null);
     try {
       const entry = await api.setRepoSeatBase(repo.id, image);
       if (seq.current !== mine) return;
-      onSaved(entry);
-      setDraft(seatBaseOf(entry) ?? '');
+      land(entry);
+      // The field follows the base again (it could not be edited while the save was in flight).
+      setDraft(null);
     } catch (e: unknown) {
       // Nothing was written: the draft stays as typed, with why.
       if (seq.current === mine) setError(saveError(e));
@@ -50,14 +54,15 @@ export function RepoSeatBase({ repo, onSaved }: Props): React.ReactElement {
     }
   }
 
-  const trimmed = draft.trim();
+  const shown = draft ?? base ?? '';
+  const trimmed = shown.trim();
   const changed = trimmed !== (base ?? '');
   return (
     <section className="wk-card" data-testid="repo-seat-image">
       <SectionTitle>Seat image</SectionTitle>
       <dl className="wk-rp-kv">
         <dt>Base image</dt>
-        <dd data-testid="repo-seat-base-now">{base ?? 'This daemon’s default'}</dd>
+        <dd className="wk-rp-seatbase-now" data-testid="repo-seat-base-now">{base ?? 'This daemon’s default'}</dd>
       </dl>
       <form
         className="wk-rp-seatform"
@@ -68,12 +73,13 @@ export function RepoSeatBase({ repo, onSaved }: Props): React.ReactElement {
           id={`seat-base-${repo.id}`}
           className="wk-field"
           data-testid="repo-seat-base-input"
-          value={draft}
+          value={shown}
+          readOnly={saving}
           placeholder="e.g. my-team/seat-base:go1.23"
           spellCheck={false}
           autoComplete="off"
           maxLength={255}
-          onChange={(ev) => setDraft(ev.target.value)}
+          onChange={(ev) => { if (!saving) setDraft(ev.target.value); }}
         />
         <div className="wk-rp-seatform-actions">
           <button type="submit" className="wk-btn wk-btn--secondary" data-testid="repo-seat-base-save" disabled={!changed || saving}>

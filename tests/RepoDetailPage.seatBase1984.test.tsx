@@ -48,8 +48,8 @@ const { RepoDetailPage } = await import('../src/components/RepoDetailPage.js');
 const { resetRepoLinks } = await import('../src/store/repoLinks.js');
 const { resetRepoKnowledge } = await import('../src/store/repoKnowledge.js');
 
-function ui(liveRuns: readonly SessionView[]): React.ReactElement {
-  return <RepoDetailPage repoId="billing" search="?tab=settings" onSelectRun={() => {}} navigate={() => {}} onOpenGraph={() => {}} liveRuns={liveRuns} />;
+function ui(liveRuns: readonly SessionView[], at: { repoId?: string; tab?: string } = {}): React.ReactElement {
+  return <RepoDetailPage repoId={at.repoId ?? 'billing'} search={`?tab=${at.tab ?? 'settings'}`} onSelectRun={() => {}} navigate={() => {}} onOpenGraph={() => {}} liveRuns={liveRuns} />;
 }
 
 beforeEach(() => {
@@ -86,5 +86,38 @@ describe('repository page: a seat image save (crew#1984)', () => {
     expect(baseNow()).toBe('acme/seat-base:go');
     // git_url is kept from the listed entry (the PUT's entry has none): the page's web link is still there.
     expect(screen.getByText('View on the web').getAttribute('href')).toBe('https://github.com/acme/billing');
+  });
+
+  it('STALE READS: an older card’s answer, landing after a newer save from the remounted tab, does not land over it', async () => {
+    const answers: Array<(e: RepoEntry) => void> = [];
+    setRepoSeatBase.mockImplementation(() => new Promise<RepoEntry>((r) => { answers.push(r); }));
+    const { rerender } = render(ui([]));
+    await screen.findByTestId('repo-seat-image');
+    fireEvent.change(screen.getByTestId('repo-seat-base-input'), { target: { value: 'acme/seat-base:a' } });
+    fireEvent.click(screen.getByTestId('repo-seat-base-save'));
+    // Away to Overview and back: a fresh card, so a second save can start while the first is in flight.
+    rerender(ui([], { tab: 'overview' }));
+    rerender(ui([]));
+    await screen.findByTestId('repo-seat-image');
+    fireEvent.change(screen.getByTestId('repo-seat-base-input'), { target: { value: 'acme/seat-base:b' } });
+    fireEvent.click(screen.getByTestId('repo-seat-base-save'));
+    expect(answers).toHaveLength(2);
+    answers[1]!(written('acme/seat-base:b'));
+    await waitFor(() => expect(baseNow()).toBe('acme/seat-base:b'));
+    answers[0]!(written('acme/seat-base:a'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(baseNow()).toBe('acme/seat-base:b');
+  });
+
+  it('IDENTITY REUSE: a draft typed on one repository is not shown on the next one opened', async () => {
+    const shipping = { ...listed(null), id: 'shipping', name: 'shipping', root_path: '/srv/shipping' } as RepoEntry;
+    listRepos.mockResolvedValue({ repos: [listed(null), shipping] });
+    const { rerender } = render(ui([]));
+    await screen.findByTestId('repo-seat-image');
+    fireEvent.change(screen.getByTestId('repo-seat-base-input'), { target: { value: 'acme/seat-base:typed' } });
+    rerender(ui([], { repoId: 'shipping' }));
+    await screen.findByRole('heading', { name: 'shipping' });
+    const field = (await screen.findByTestId('repo-seat-base-input')) as HTMLInputElement;
+    expect(field.value).toBe('');
   });
 });
