@@ -172,7 +172,7 @@ describe('the Publish block, to Jira', () => {
     expect(screen.getByTestId('product-publish-show')).toBeTruthy();
     expect(screen.queryByTestId('product-publish-blocked')).toBeNull();
     await act(async () => { fireEvent.change(pick, { target: { value: '1' } }); });
-    expect(screen.getByTestId('product-publish-blocked')).toHaveTextContent('The title of e1 is longer than the 255 characters a Jira summary holds.');
+    expect(screen.getByTestId('product-publish-blocked')).toHaveTextContent('For PROJA on acme.atlassian.net: the title of e1 is longer than the 255 characters a Jira summary holds.');
     expect(screen.queryByTestId('product-publish-show')).toBeNull();
     // The pick stays, so a person can go back to the repository.
     expect(screen.getByTestId('product-publish-pick')).toBeTruthy();
@@ -225,5 +225,162 @@ describe('the Publish block, to Jira', () => {
     await mount();
     await act(async () => { fireEvent.click(screen.getByTestId('product-publish-show')); });
     expect(screen.getByTestId('product-publish-refused')).toHaveTextContent(/^The Jira project has no issue type for one level of the plan/);
+  });
+});
+
+describe('review round 1 (codex and agy on #1514)', () => {
+  let read: ReturnType<typeof vi.spyOn>;
+  let post: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    read = vi.spyOn(productPublishApi, 'read');
+    post = vi.spyOn(productPublishApi, 'post');
+  });
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+  const mount = async (): Promise<void> => { await act(async () => { render(<ProductPublish projectId={PID} runId={RUN} />); }); };
+  const deferred = <T,>() => { let res!: (v: T) => void; const promise = new Promise<T>((a) => { res = a; }); return { promise, res }; };
+
+  it('CONTRACT: a Jira target without its own answer on the plan is unreadable (it never borrows GitHub’s)', () => {
+    const g = J('get-jira-not-publishable').body as { targets: Array<Record<string, unknown>> };
+    delete g.targets[0]!['publishable'];
+    expect(publicationsOf(g, RUN)).toBeNull();
+  });
+
+  it('SECURITY: a card’s site binds its issue pages: another host, a page on a hostless site, or a degenerate host is unreadable', () => {
+    const other = J('post-done').body as { publication: Pub };
+    for (const i of other.publication.items) i['url'] = String(i['url']).replace('acme.atlassian.net', 'elsewhere.example');
+    expect(publishResponseOf(other, RUN, PID)).toBeNull();
+    // A hostless card (its site is the target's cloud id): crew gives no page, so any page is not crew's.
+    const hostless = J('post-done').body as { card: Record<string, unknown>; publication: Pub };
+    hostless.card['site'] = 'c1';
+    expect(publishResponseOf(hostless, RUN, PID)).toBeNull();
+    for (const i of hostless.publication.items) i['url'] = null;
+    expect(publishResponseOf(hostless, RUN, PID)).not.toBeNull();
+    // A hosted card's created issues have their pages.
+    const pageless = J('post-done').body as { publication: Pub };
+    pageless.publication.items[0]!['url'] = null;
+    expect(publishResponseOf(pageless, RUN, PID)).toBeNull();
+    // One publication: all its pages on one site, or none at all.
+    const mixedPages = pubOf('post-done');
+    mixedPages.items[0]!['url'] = null;
+    expect(publicationOf(mixedPages)).toBeNull();
+    for (const site of ['..', '.atlassian.net', '-a.b']) {
+      const card = J('post-card').body as { card: Record<string, unknown> };
+      card.card['site'] = site;
+      expect(publishCardOf(card.card, RUN, PID), site).toBeNull();
+    }
+    const dots = pubOf('post-done');
+    for (const i of dots.items) i['url'] = String(i['url']).replace('acme.atlassian.net', '..');
+    expect(publicationOf(dots)).toBeNull();
+    // A site of one label is a host crew can name (crew jiraUrl); a hostless card names the target's own cloud id only.
+    const single = J('post-done').body as { card: Record<string, unknown>; publication: Pub };
+    single.card['site'] = 'jira';
+    for (const i of single.publication.items) i['url'] = String(i['url']).replace('acme.atlassian.net', 'jira');
+    expect(publishResponseOf(single, RUN, PID)).not.toBeNull();
+    const otherCloud = J('post-card-hostless').body as { card: Record<string, unknown> };
+    otherCloud.card['site'] = 'c2';
+    // `c2` reads as a one-label host now, which is still a site: the page check above is what binds it.
+    expect(publishCardOf(otherCloud.card, RUN, PID)!.site).toBe('c2');
+  });
+
+  it('CORRECTNESS: a Jira card shows each text as crew sends it ({{parent}} is literal there: the parent is a field)', async () => {
+    read.mockResolvedValue(J('get-before').body);
+    const c = J('post-card').body as { card: { items: Item[] } };
+    c.card.items[2]!['body'] = `Render {{parent}} literally${String(c.card.items[2]!['body']).slice(String(c.card.items[2]!['body']).indexOf('\n\nPublished'))}`;
+    post.mockResolvedValueOnce(c);
+    await mount();
+    await act(async () => { fireEvent.click(screen.getByTestId('product-publish-show')); });
+    expect(screen.getAllByTestId('product-publish-card-item')[2]!.querySelector('pre')!.textContent).toMatch(/^Render \{\{parent\}\} literally\n\nPublished by wicked-crew/);
+  });
+
+  it('CORRECTNESS: once its only target is published, a plan only Jira could take shows no GitHub refusal', async () => {
+    const after = J('get-after').body;
+    after['publishable'] = (J('get-jira-only-publishable').body as { publishable: unknown }).publishable;
+    read.mockResolvedValue(after);
+    await mount();
+    expect(screen.getByTestId('product-publish-verdict')).toHaveTextContent('Published: all 4 issues created and checked in Jira.');
+    expect(screen.queryByTestId('product-publish-blocked')).toBeNull();
+  });
+
+  it('CORRECTNESS: the pick follows the target, not its place: a refusal for one target is not shown for another', async () => {
+    // A repository and the same Jira key on two sites (crew's get-two-sites targets after GitHub's).
+    const three = { ...mixed(), targets: [...(GH.answers['get-before']!.body['targets'] as unknown[]), ...(J('get-two-sites').body['targets'] as unknown[])] };
+    // The repository holds a not-known issue from an earlier attempt (crew's GitHub get-unsure publication).
+    read.mockResolvedValueOnce({ ...three, publications: GH.answers['get-unsure']!.body['publications'] });
+    post.mockRejectedValueOnce(refusal(J('post-type-missing'))).mockResolvedValueOnce(GH.answers['post-resolve-absent']!.body);
+    await mount();
+    await act(async () => { fireEvent.change(screen.getByTestId('product-publish-pick'), { target: { value: '1' } }); });
+    await act(async () => { fireEvent.click(screen.getByTestId('product-publish-show')); });
+    expect(post).toHaveBeenLastCalledWith(PID, { runId: RUN, repo: 'PROJA@c1' });
+    expect(screen.getByTestId('product-publish-refused')).toHaveTextContent('The Jira project has no issue type');
+    // A person settles the repository's issue, and crew's next read says the repository is published: the list
+    // shrinks, and the pick stays on PROJA@c1 with its refusal.
+    read.mockResolvedValue({ ...three, publications: [GH.answers['post-done']!.body['publication']] });
+    await act(async () => { fireEvent.click(screen.getAllByTestId('product-publish-resolve-absent')[0]!); });
+    const pick = screen.getByTestId('product-publish-pick') as HTMLSelectElement;
+    expect(pick.options[pick.selectedIndex]!.textContent).toBe('PROJA on acme.atlassian.net (jira)');
+    expect(screen.getByTestId('product-publish-refused')).toHaveTextContent('The Jira project has no issue type');
+    // Picking the other site clears the refusal shown for the first.
+    await act(async () => { fireEvent.change(pick, { target: { value: '1' } }); });
+    expect(pick.options[pick.selectedIndex]!.textContent).toBe('PROJA on acme-two.atlassian.net (jira)');
+    expect(screen.queryByTestId('product-publish-refused')).toBeNull();
+  });
+
+  it('CORRECTNESS: a blocked Jira target left alone beside a published repository is named', async () => {
+    const both = mixed() as { targets: Array<Record<string, unknown>>; publications: unknown[] };
+    both.targets[1]!['publishable'] = (J('get-jira-not-publishable').body['targets'] as Array<Record<string, unknown>>)[0]!['publishable'];
+    both.publications = [GH.answers['post-done']!.body['publication']];
+    read.mockResolvedValue(both);
+    await mount();
+    expect(screen.getByTestId('product-publish-blocked')).toHaveTextContent('For PROJA on acme.atlassian.net: the title of e1 is longer than the 255 characters a Jira summary holds.');
+  });
+
+  it('TESTS: a confirm’s and a resolve’s own answers show before any refresh lands', async () => {
+    const g1 = deferred<unknown>();
+    read.mockResolvedValueOnce(J('get-before').body).mockReturnValueOnce(g1.promise);
+    post.mockResolvedValueOnce(J('post-card').body).mockResolvedValueOnce(J('post-done').body);
+    await mount();
+    await act(async () => { fireEvent.click(screen.getByTestId('product-publish-show')); });
+    await act(async () => { fireEvent.click(screen.getByTestId('product-publish-confirm')); });
+    expect(screen.queryByTestId('product-publish-refused')).toBeNull();
+    expect(screen.getByTestId('product-publish-verdict')).toHaveTextContent('Published: all 4 issues created and checked in Jira.');
+    expect(screen.getAllByTestId('product-publish-link').map((a) => a.textContent)).toEqual(['PROJA-100 ↗', 'PROJA-101 ↗', 'PROJA-102 ↗', 'PROJA-103 ↗']);
+    cleanup();
+    const g2 = deferred<unknown>();
+    read.mockReset().mockResolvedValueOnce(J('get-unsure').body).mockReturnValueOnce(g2.promise);
+    post.mockReset().mockResolvedValueOnce(J('post-resolve-exists').body);
+    await mount();
+    fireEvent.change(within(screen.getByTestId('product-publish-resolve')).getByRole('textbox'), { target: { value: 'PROJA-100' } });
+    await act(async () => { fireEvent.click(screen.getByTestId('product-publish-resolve-exists')); });
+    expect(screen.queryByTestId('product-publish-resolve-note')).toBeNull();
+    expect(screen.getAllByTestId('product-publish-link')[0]).toHaveTextContent('PROJA-100 ↗');
+  });
+
+  it('CONTRACT: a resolve answered with another target’s or no publication says it can’t be read', async () => {
+    read.mockResolvedValue(J('get-unsure').body);
+    post.mockResolvedValueOnce(J('post-card').body);
+    await mount();
+    fireEvent.change(within(screen.getByTestId('product-publish-resolve')).getByRole('textbox'), { target: { value: 'PROJA-100' } });
+    await act(async () => { fireEvent.click(screen.getByTestId('product-publish-resolve-exists')); });
+    expect(screen.getByTestId('product-publish-resolve-note')).toHaveTextContent('Look at the Jira project before trying again.');
+  });
+
+  it('TESTS: the card names its site (a host, or a cloud id for a site linked without one)', async () => {
+    read.mockResolvedValue(J('get-before').body);
+    post.mockResolvedValueOnce(J('post-card').body);
+    await mount();
+    await act(async () => { fireEvent.click(screen.getByTestId('product-publish-show')); });
+    expect(screen.getByTestId('product-publish-card-site')).toHaveTextContent('Site: acme.atlassian.net. Each issue gets the type shown beside it, under its parent.');
+    cleanup();
+    read.mockReset().mockResolvedValue(J('get-hostless').body);
+    post.mockReset().mockResolvedValueOnce(J('post-card-hostless').body);
+    await mount();
+    await act(async () => { fireEvent.click(screen.getByTestId('product-publish-show')); });
+    expect(screen.getByTestId('product-publish-card-what')).toHaveTextContent('in the Jira project PROJA on site c1 as the Atlassian account acct-1');
+    expect(screen.getByTestId('product-publish-card-site')).toHaveTextContent('Site: cloud id c1.');
+  });
+
+  it('WORDS: crew’s answer that says nothing names the Jira project to look at', () => {
+    expect(publishRefusal('not an error', 'jira')).toBe('crew’s answer didn’t say what happened. Look at the Jira project before trying again.');
+    expect(publishRefusal('not an error')).toBe('crew’s answer didn’t say what happened. Look at the repository before trying again.');
   });
 });

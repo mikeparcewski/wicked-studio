@@ -9,7 +9,8 @@
  * pin lags it: every answer is read defensively here, and one unreadable part makes the whole answer unreadable.
  *
  * The Jira fields (wicked-crew#1901: `system`, `site`, `issueType`, `ref`, a target's `label` and `publishable`) are
- * crew's `(api-types next)` additions, read here at runtime the same way.
+ * crew's `(api-types next)` additions in the crew release after 0.21.0, read here at runtime the same way; the TODO below
+ * then takes the version that carries them.
  *
  * TODO(api-types >= 0.229.0): once studio pins `wicked-crew-api-types` 0.229.0 or later, these types become
  * re-exports from the package.
@@ -91,8 +92,8 @@ const KEY = /^e\d+(?:\.f\d+(?:\.s\d+)?)?$/;
 const REPO = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
 /** (wicked-crew#1901) A Jira project as crew names it: `KEY@<cloudId>` (crew `trackers/set.ts` `parseJiraSelector`). */
 const JIRA_TARGET = /^([A-Z][A-Z0-9_]{0,19})@([A-Za-z0-9-]{1,64})$/;
-/** A Jira site as a card names it: a host, or a cloud id (crew `jiraSiteOf`). */
-const SITE = /^[a-z0-9.-]{1,253}$/i;
+/** A host name: dot-separated labels of letters, digits and inner hyphens (one label is a host crew can name too). */
+const HOSTNAME = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/i;
 /** The issue types crew puts on a card: Jira's standard names only (crew `jiraTypesOf`). */
 const JIRA_TYPE = /^(?:epic|story|task|sub-task|subtask)$/i;
 /** A label crew sends is shown as text, cut to this many characters. */
@@ -134,6 +135,12 @@ function targetOf(system: PublishSystem, v: unknown): string | null {
 /** (wicked-crew#1901) The Jira project key of a target `KEY@<cloudId>`, or `null`. Pure. */
 export const projectKeyOf = (target: string): string | null => JIRA_TARGET.exec(target)?.[1] ?? null;
 
+/** (wicked-crew#1901) The cloud id of a target `KEY@<cloudId>`, or `null`. Pure. */
+const cloudIdOf = (target: string): string | null => JIRA_TARGET.exec(target)?.[2] ?? null;
+
+/** (wicked-crew#1901) Whether a Jira card's site is its target's cloud id: crew has no host for it, so no page. Pure. */
+export const siteIsCloudId = (card: Pick<ProductPublishCard, 'repo' | 'site'>): boolean => card.site !== undefined && card.site === cloudIdOf(card.repo);
+
 /** The system a card, publication or target is: crew names only Jira. Pure. */
 export const publishSystemOf = (x: { system?: 'jira' }): PublishSystem => x.system ?? 'github';
 
@@ -156,7 +163,8 @@ export function publishCardOf(v: unknown, runId: string, projectId: string): Pro
   if (items === null || items.length === 0 || !distinct(items.map((i) => i.key))) return null;
   const card: ProductPublishCard = { runId, projectId, repo, source: v.source, identity: v.identity, items };
   if (system === 'github') return card;
-  return typeof v.site === 'string' && SITE.test(v.site) ? { ...card, system: 'jira', site: v.site } : null;
+  // The site's host, or (crew `jiraSiteOf`) the target's own cloud id when crew has no host for it.
+  return typeof v.site === 'string' && (v.site === cloudIdOf(repo) || HOSTNAME.test(v.site)) ? { ...card, system: 'jira', site: v.site } : null;
 }
 
 function itemStateOf(v: unknown, system: PublishSystem, repo: string): PublicationItemState | null {
@@ -201,7 +209,7 @@ function jiraItemStateOf(v: Record<string, unknown>, repo: string, number: numbe
 /** The site host of a Jira issue's page `https://<host>/browse/<key>`, lower-cased, or `null` when it is not that. */
 function hostOf(url: string, ref: string): string | null {
   const m = /^https:\/\/([a-z0-9.-]{1,253})\/browse\/([A-Z][A-Z0-9_]{0,19}-[1-9]\d{0,9})$/i.exec(url);
-  return m !== null && m[2] === ref && m[1]!.includes('.') ? m[1]!.toLowerCase() : null;
+  return m !== null && m[2] === ref && HOSTNAME.test(m[1]!) ? m[1]!.toLowerCase() : null;
 }
 
 /**
@@ -216,8 +224,8 @@ export function publicationOf(v: unknown): PublicationState | null {
   const items = allOf(v.items, (x) => itemStateOf(x, system, repo));
   if (items === null || items.length === 0 || !distinct(items.map((i) => i.key))) return null;
   if (system === 'github' && items.some((i) => i.url !== null && i.url.toLowerCase() !== `https://github.com/${repo}/issues/${i.number}`)) return null;
-  // (wicked-crew#1901) Every Jira page of one publication is on one site.
-  if (system === 'jira' && new Set(items.flatMap((i) => (i.url !== null && i.ref !== undefined ? [hostOf(i.url, i.ref)] : []))).size > 1) return null;
+  // (wicked-crew#1901) The Jira pages of one publication are all on one site, or there are none (no host for it).
+  if (system === 'jira' && new Set(items.filter((i) => i.state === 'created').map((i) => (i.url === null ? null : hostOf(i.url, i.ref!)))).size > 1) return null;
   if (v.published !== items.every((i) => i.state === 'created' && i.readBack === 'ok')) return null;
   const p: PublicationState = { repo, source: v.source, publishHash: v.publishHash, items, published: v.published };
   return system === 'jira' ? { ...p, system: 'jira' } : p;
@@ -245,8 +253,10 @@ export function publishResponseOf(raw: unknown, runId: string, projectId: string
  */
 function sameAs(p: PublicationState, card: ProductPublishCard): boolean {
   if (p.system !== card.system || p.repo !== card.repo || p.items.length !== card.items.length || !p.items.every((i, k) => i.key === card.items[k]!.key)) return false;
-  const host = card.site !== undefined && card.site.includes('.') ? card.site.toLowerCase() : null;
-  return host === null || p.items.every((i) => i.url === null || i.ref === undefined || hostOf(i.url, i.ref) === host);
+  if (card.system !== 'jira') return true;
+  // A site crew has a host for: every created issue's page is on it. A site named by its cloud id: no page at all.
+  const host = siteIsCloudId(card) ? null : card.site!.toLowerCase();
+  return p.items.every((i) => i.state !== 'created' || (i.url === null ? null : hostOf(i.url, i.ref!)) === host);
 }
 
 function publishableOf(p: unknown): ProductPublicationsResponse['publishable'] | null {
@@ -261,6 +271,9 @@ function publishableOf(p: unknown): ProductPublicationsResponse['publishable'] |
  * label is named by its selector (`targetName`).
  */
 function targetEntryOf(t: unknown): PublishTarget | null {
+  // A Jira target always carries crew's answer on the plan for Jira's rules: it never borrows GitHub's (crew
+  // product-publish.ts:1384).
+  if (isObj(t) && t.system === 'jira' && t.publishable === undefined) return null;
   if (!isObj(t) || !isText(t.source)) return null;
   const system = systemOf(t);
   const repo = system === null ? null : targetOf(system, t.repo);
@@ -315,8 +328,12 @@ export function repoSelector(target: { repo: string; source: string }, targets: 
  */
 const PUBLISH_MARKER = /\r?\n?<!-- wicked-publish run=[^\s>]+ key=[^\s>]+ -->\s*$/;
 
-/** A body as the card shows it: the parent's issue number is not known until it is sent, so `{{parent}}` reads as its key. */
-export function bodyShown(item: Pick<PublishItem, 'body' | 'parentKey'>): string {
+/**
+ * A body as the card shows it: the parent's issue number is not known until it is sent, so `{{parent}}` reads as its key.
+ * (wicked-crew#1901) A Jira body is shown as crew sends it: the parent is Jira's own field, and `{{parent}}` is literal.
+ */
+export function bodyShown(item: Pick<PublishItem, 'body' | 'parentKey'>, system: PublishSystem = 'github'): string {
+  if (system === 'jira') return item.body;
   return item.body
     .replace(PUBLISH_MARKER, '')
     .split('{{parent}}')
@@ -372,7 +389,7 @@ export function publishRefusal(e: unknown, system: PublishSystem = 'github'): st
     case 'source_unavailable': return `The GitHub source couldn’t be read just now${because}. Nothing was sent: try again.`;
     case 'journal_unavailable': return 'crew couldn’t record this, so nothing was sent. Try again.';
     case 'bad_request': return `crew refused the request${because}. Nothing was sent.`;
-    default: return e instanceof Error ? e.message : 'crew’s answer didn’t say what happened. Look at the repository before trying again.';
+    default: return e instanceof Error ? e.message : `crew’s answer didn’t say what happened. Look at the ${system === 'jira' ? 'Jira project' : 'repository'} before trying again.`;
   }
 }
 

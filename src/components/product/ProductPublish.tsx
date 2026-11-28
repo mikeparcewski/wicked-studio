@@ -13,6 +13,7 @@ import {
   publishResponseOf,
   publishSystemOf,
   repoSelector,
+  siteIsCloudId,
   targetName,
   type ProductPublicationsResponse,
   type ProductPublishCard,
@@ -104,7 +105,8 @@ export function jiraKeyOf(typed: string, target: string): string | null {
  */
 export function ProductPublish({ projectId, runId }: { projectId: string; runId: string }): React.ReactElement | null {
   const [read, setRead] = useState<Read>({ phase: 'loading' });
-  const [pick, setPick] = useState(0);
+  /** The picked target, by its source and selector: a place in the list moves when the list changes. */
+  const [pick, setPick] = useState<string | null>(null);
   const [ask, setAsk] = useState<Ask>({ phase: 'idle' });
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [resolving, setResolving] = useState<string | null>(null);
@@ -164,7 +166,7 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
     inFlight.current = null;
     setRead({ phase: 'loading' });
     setAsk({ phase: 'idle' });
-    setPick(0);
+    setPick(null);
     setAnswers({});
     setResolving(null);
     setResolveNote({});
@@ -204,9 +206,14 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
   // crew keeps ONE publication per run and repository, whichever source sent it: a repository is matched by its name only.
   const pubOf = (repo: string): PublicationState | undefined => publications.find((p) => p.repo === repo);
   const open = targets.filter((t) => pubOf(t.repo)?.published !== true);
-  const target = open[Math.min(pick, Math.max(0, open.length - 1))];
-  // (wicked-crew#1901) Whether the plan fits the picked target: crew's answer for it, else its answer for GitHub.
-  const can = target?.publishable ?? publishable;
+  const idOf = (t: { source: string; repo: string }): string => `${t.source}\u0000${t.repo}`;
+  const target = open.find((t) => idOf(t) === pick) ?? open[0];
+  // (wicked-crew#1901) Whether the plan fits the picked target: crew's answer for it (a Jira project), else its answer
+  // for GitHub. With nothing left to pick, GitHub's answer is said only where a GitHub repository is linked.
+  const can = target !== undefined ? (target.publishable ?? publishable)
+    : targets.length === 0 || targets.some((t) => t.publishable === undefined) ? publishable : null;
+  /** A target's own answer is named when there are others: which one it is about. */
+  const blockedFor = target !== undefined && target.publishable !== undefined && targets.length > 1 ? targetName(target) : null;
   /** What a publication's target is called: crew's label for it, else its selector. */
   const nameOf = (repo: string): string => { const t = targets.find((x) => x.repo === repo); return t === undefined ? repo : targetName(t); };
   // An earlier attempt at this repository that a person must settle first (crew refuses a confirm with `unresolved`),
@@ -283,7 +290,8 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
     try {
       const answer = publishResponseOf(await productPublishApi.post(projectId, { runId, repo: repoSelector({ repo: p.repo, source: p.source }, targets.some((t) => t.repo === p.repo) ? targets : [{ repo: p.repo, source: p.source }]), resolve: { key: item.key, issue } }), runId, projectId);
       if (!here(mine)) return;
-      if (answer === null) setResolveNote((m) => ({ ...m, [slot]: unreadable(publishSystemOf(p)) }));
+      // A resolve answers this publication, done: anything else is not crew's answer to it.
+      if (answer === null || !answer.done || answer.card.repo !== p.repo) setResolveNote((m) => ({ ...m, [slot]: unreadable(publishSystemOf(p)) }));
       else merge(answer.publication, p.repo);
     } catch (e) {
       if (!here(mine)) return;
@@ -305,10 +313,10 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
   return (
     <section className="wk-pub" aria-labelledby={titleId} data-testid="product-publish">
       {head}
-      {!can.ok && (
+      {can !== null && !can.ok && (
         <>
           <p className="wk-src-note wk-src-tone-warn" data-testid="product-publish-blocked" data-code={can.code}>
-            {`${can.error.charAt(0).toUpperCase()}${can.error.slice(1)}.`}
+            {blockedFor !== null ? `For ${blockedFor}: ${can.error}.` : `${can.error.charAt(0).toUpperCase()}${can.error.slice(1)}.`}
           </p>
           {COMPOSE_AGAIN.has(can.code) && (
             <div className="wk-src-row-btns">
@@ -374,10 +382,10 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
         <p className="wk-src-note" data-testid="product-publish-no-target">To publish its {publishable.items} issues, link a GitHub repository to this project as a tracker, or a Jira project.</p>
       )}
 
-      {target !== undefined && card === null && (can.ok || open.length > 1) && (
+      {target !== undefined && can !== null && card === null && (can.ok || open.length > 1) && (
         <div className="wk-src-row-btns">
           {open.length > 1 && (
-            <select className="wk-pub-pick" aria-label="The repository to publish to" data-testid="product-publish-pick" value={Math.min(pick, open.length - 1)} disabled={busy} onChange={(e) => { setPick(Number(e.target.value)); setAsk({ phase: 'idle' }); }}>
+            <select className="wk-pub-pick" aria-label="Where to publish the plan" data-testid="product-publish-pick" value={open.indexOf(target)} disabled={busy} onChange={(e) => { const t = open[Number(e.target.value)]; setPick(t === undefined ? null : idOf(t)); setAsk({ phase: 'idle' }); }}>
               {open.map((t, k) => <option key={`${t.source}\u0000${t.repo}`} value={k}>{targetName(t)} ({t.source})</option>)}
             </select>
           )}
@@ -389,7 +397,7 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
         </div>
       )}
 
-      {can.ok && held !== undefined && card === null && (
+      {can !== null && can.ok && held !== undefined && card === null && (
         <p className="wk-src-note wk-src-tone-warn" data-testid="product-publish-held">
           {held.items.some((i) => i.state === 'unsure')
             ? `Before anything more is sent to ${nameOf(held.repo)}, say for each issue marked “not known” whether it exists.`
@@ -405,7 +413,7 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
               ? <>All {card.items.length} issues already exist in <b>{nameOf(card.repo)}</b>: nothing is created; crew reads each back again.</>
               : <>Nothing is created until you confirm. crew creates {toCreate === card.items.length ? `these ${toCreate} issues` : `the ${toCreate} issues not created yet (${card.items.length - toCreate} already exist and are not sent again)`} in {card.system === 'jira' ? 'the Jira project ' : ''}<b>{nameOf(card.repo)}</b> as {card.system === 'jira' ? 'the Atlassian account ' : ''}<b>{card.identity}</b> on {card.source}, one at a time, then reads each back.</>}
           </p>
-          {card.system === 'jira' && card.site !== undefined && <p className="wk-src-cap" data-testid="product-publish-card-site">{card.site.includes('.') ? `Site: ${card.site}` : `Site: cloud id ${card.site}`}. Each issue gets the type shown beside it, under its parent.</p>}
+          {card.system === 'jira' && card.site !== undefined && <p className="wk-src-cap" data-testid="product-publish-card-site">{siteIsCloudId(card) ? `Site: cloud id ${card.site}` : `Site: ${card.site}`}. Each issue gets the type shown beside it, under its parent.</p>}
           {ask.phase === 'card' && ask.note !== undefined && <p className="wk-src-note wk-src-tone-warn" data-testid="product-publish-note">{ask.note}</p>}
           <ul className="wk-pub-list">
             {card.items.map((i) => {
@@ -420,7 +428,7 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
                   </span>
                   <details>
                     <summary>Text</summary>
-                    <pre className="wk-pub-body">{bodyShown(i)}</pre>
+                    <pre className="wk-pub-body">{bodyShown(i, publishSystemOf(card))}</pre>
                   </details>
                 </li>
               );
