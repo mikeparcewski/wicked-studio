@@ -35,6 +35,7 @@ import { HotspotsView } from './HotspotsView.js';
 import { LanguageBar } from './LanguageBar.js';
 import { Modal } from './Modal.js';
 import { RepoFindings, findingNeedsReonboard } from './RepoFindings.js';
+import { RepoSeatBase } from './RepoSeatBase.js';
 import { KnowMarks } from './RepoKnowledge.js';
 import { RepoTrackers } from './RepoTrackers.js';
 import { RequirementsModal } from './RequirementsModal.js';
@@ -269,6 +270,14 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
       .then((g) => { if (graphCurrent()) { setGraph(g); setGraphFailed(null); } })
       .catch((e: unknown) => { if (graphCurrent()) setGraphFailed(graphReadError(e)); });
   }, [rawRuns, loading, repoId]);
+
+  /** (crew#1984) A seat image save: the engine's post-write entry is shown (its `git_url` kept: crew adds that on
+   *  `GET /repos` only), and a repository re-read begun before the save no longer lands (it would be older). */
+  function seatSaved(entry: RepoEntry): void {
+    if (entry.id !== repoRef.current) return;
+    reReadSeq.current += 1;
+    setRepo((prev) => (prev !== null && prev.id === entry.id ? { ...entry, ...(prev.git_url !== undefined ? { git_url: prev.git_url } : {}) } : prev));
+  }
 
   /** "Try again" on a failed graph read: re-reads the graph alone, for the repo it was pressed on. */
   function retryGraph(): void {
@@ -698,6 +707,8 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                     <TechDetails data-testid="repo-detail-path" summary="Its folder on this computer" text={repo.root_path} />
                     {gitLink !== null && <a className="wk-link wk-rp-more" href={gitLink} target="_blank" rel="noopener noreferrer">View on the web</a>}
                   </section>
+                  {/* crew#1984: keyed by repository, so a draft for one is never shown on another. */}
+                  <RepoSeatBase key={repo.id} repo={repo} onSaved={seatSaved} />
                 </div>
               </div>
             )}

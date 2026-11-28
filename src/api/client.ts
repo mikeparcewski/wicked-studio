@@ -358,6 +358,18 @@ export const api = {
    * 404 unknown run; a named 400 past the 8KB cap. Slice BE's write side of
    * the durable annotation layer — the read side is the DTO's `guidance` echo.
    */
+  /**
+   * (crew#1984, wicked-core#2023) Set a repository's own seat base image, or clear it with `null`: crew's
+   * `PUT /repos/:id/seat-base`. Resolves to the engine's updated `RepoEntry` (its `seat_base_image` and
+   * `seat_layers`, read as a bag: studio pins an api-types older than those fields). Refusals: 400
+   * `seat_base_invalid` (the engine's words), 404 `repo_not_found`, 501 `repo_seat_base_unsupported`.
+   */
+  setRepoSeatBase: (repoId: string, image: string | null) =>
+    apiFetch<RepoEntry>(`/repos/${encodeURIComponent(repoId)}/seat-base`, {
+      method: 'PUT',
+      body: JSON.stringify({ image }),
+    }),
+
   putGuidance: (id: string, text: string) =>
     apiFetch<GuidanceUpdate>(`/runs/${encodeURIComponent(id)}/guidance`, {
       method: 'PUT',
