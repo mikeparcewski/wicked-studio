@@ -16086,6 +16086,18 @@
       ]
     },
     {
+      "testId": "product-publish-card-site",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-card-type",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
       "testId": "product-publish-card-what",
       "files": [
         "src/components/product/ProductPublish.tsx"
@@ -16141,6 +16153,12 @@
     },
     {
       "testId": "product-publish-publication",
+      "files": [
+        "src/components/product/ProductPublish.tsx"
+      ]
+    },
+    {
+      "testId": "product-publish-ref",
       "files": [
         "src/components/product/ProductPublish.tsx"
       ]
