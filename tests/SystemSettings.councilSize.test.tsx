@@ -53,4 +53,13 @@ describe('SystemSettings — council size', () => {
     await waitFor(() => expect(updated).toHaveBeenCalledWith({ councilSize: 5 }));
     expect(within(group).getByRole('radio', { name: '5' })).toHaveAttribute('aria-checked', 'true');
   });
+
+  it('a pinned size shows the value in force and cannot be picked (crew#2013 round 1)', async () => {
+    vi.mocked(client.api.getSettings).mockResolvedValue({ settings: { graphNodeLimit: 150, councilSize: 3 }, environment: { councilSize: { env: ['WICKED_COUNCIL_SIZE'], value: '7' } } } as never);
+    render(<SystemSettings />);
+    const group = await screen.findByTestId('settings-council-size');
+    await waitFor(() => expect(within(group).getByRole('radio', { name: '7' })).toHaveAttribute('aria-checked', 'true'));
+    expect(within(group).getByRole('radio', { name: '5' })).toBeDisabled();
+    expect(screen.getByTestId('settings-council-size-pinned')).toHaveTextContent('WICKED_COUNCIL_SIZE');
+  });
 });

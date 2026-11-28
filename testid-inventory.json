@@ -87,6 +87,12 @@
       ]
     },
     {
+      "testId": "adv-deliverTrailers-toomany",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
       "testId": "adv-delivery",
       "files": [
         "src/components/AdvancedSettings.tsx"
@@ -94,6 +100,12 @@
     },
     {
       "testId": "adv-identities",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-identities-failed",
       "files": [
         "src/components/AdvancedSettings.tsx"
       ]
@@ -136,6 +148,12 @@
     },
     {
       "testId": "adv-network-none-note",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-not-kept",
       "files": [
         "src/components/AdvancedSettings.tsx"
       ]
@@ -195,6 +213,12 @@
       ]
     },
     {
+      "testId": "adv-save-blocked",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
       "testId": "adv-save-error",
       "files": [
         "src/components/AdvancedSettings.tsx"
@@ -219,6 +243,12 @@
       ]
     },
     {
+      "testId": "adv-seatEgressHosts-toomany",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
       "testId": "adv-seatNetwork",
       "files": [
         "src/components/AdvancedSettings.tsx"
@@ -232,6 +262,12 @@
     },
     {
       "testId": "adv-stall",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-stall-note",
       "files": [
         "src/components/AdvancedSettings.tsx"
       ]

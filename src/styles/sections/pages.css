@@ -283,6 +283,13 @@
 .wk-adv input.wk-field, .wk-adv textarea.wk-field { padding: 4px var(--control-px); min-height: var(--control-h); box-sizing: border-box; }
 .wk-adv input.wk-field[type="text"], .wk-adv input.wk-field[type="url"], .wk-adv textarea.wk-field { width: 100%; }
 .wk-adv .wk-switch { text-align: left; }
+.wk-adv-form { border: 0; margin: 0; padding: 0; min-width: 0; display: contents; }
+.wk-adv .wk-pg-set-control { min-width: 0; }
+@media (max-width: 767px) {
+  /* Phone tap targets (UI-CONTRACT §2 --tap-min) win over the row's desktop field height. */
+  .wk-adv input.wk-field, .wk-adv-default { min-height: var(--tap-min); }
+  .wk-adv-default { padding: 0 var(--space-2); }
+}
 .wk-adv-warning { padding: var(--space-2) var(--space-3); border-left: 2px solid var(--border-subtle); }
 .wk-adv-warning--on { border-left-color: var(--status-warn); color: var(--ink-high); background: color-mix(in oklab, var(--status-warn) 10%, transparent); }
 .wk-adv-default { display: inline-block; margin-top: var(--space-1); font-size: var(--text-xs); background: none; border: 0; padding: 0; cursor: pointer; }
