@@ -6870,6 +6870,30 @@
       ]
     },
     {
+      "testId": "editor-file-head",
+      "files": [
+        "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "testId": "editor-file-loading",
+      "files": [
+        "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "testId": "editor-file-note",
+      "files": [
+        "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "testId": "editor-file-refused",
+      "files": [
+        "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
       "testId": "editor-frame",
       "files": [
         "src/editors/host.ts"
@@ -6907,6 +6931,12 @@
     },
     {
       "testId": "editor-no-sample",
+      "files": [
+        "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "testId": "editor-no-sample-way-in",
       "files": [
         "src/components/editors/EditorHostPage.tsx"
       ]
@@ -25859,6 +25889,12 @@
       ]
     },
     {
+      "testId": "surfaces-file-run",
+      "files": [
+        "src/components/editorHost/EditorSurfacesView.tsx"
+      ]
+    },
+    {
       "testId": "surfaces-mock-chat",
       "files": [
         "src/components/editorHost/EditorSurfacesView.tsx"
@@ -27163,6 +27199,18 @@
     },
     {
       "testId": "viewer-loading",
+      "files": [
+        "src/components/FileViewer.tsx"
+      ]
+    },
+    {
+      "testId": "viewer-open-in-editor",
+      "files": [
+        "src/components/FileViewer.tsx"
+      ]
+    },
+    {
+      "testId": "viewer-open-in-editors",
       "files": [
         "src/components/FileViewer.tsx"
       ]
