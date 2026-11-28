@@ -5,7 +5,7 @@ import { RepoSeatBase, useSeatEdit } from '../src/components/RepoSeatBase.js';
 import { layerWord, seatBaseOf, seatLayersOf } from '../src/board/repoSeat.js';
 
 /** The card with its page-owned edit state ({@link useSeatEdit}), as the repository page renders it. */
-function Card({ repo, reRead = () => Promise.resolve() }: { repo: RepoEntry; reRead?: (id: string) => Promise<void> }): React.ReactElement {
+function Card({ repo, reRead = () => Promise.resolve(true) }: { repo: RepoEntry; reRead?: (id: string) => Promise<boolean> }): React.ReactElement {
   const edit = useSeatEdit(repo.id, reRead);
   return <RepoSeatBase repo={repo} edit={edit} />;
 }
@@ -82,7 +82,7 @@ describe('repository seat image (crew#1984)', () => {
   });
 
   it('STALE READS: Save sends the trimmed reference and shows the engine’s post-write entry', async () => {
-    const reRead = vi.fn(() => Promise.resolve());
+    const reRead = vi.fn(() => Promise.resolve(true));
     const { rerender } = render(<Card repo={entry(null)} reRead={reRead} />);
     fireEvent.change(input(), { target: { value: '  acme/seat-base:go  ' } });
     fireEvent.click(save());
@@ -96,7 +96,7 @@ describe('repository seat image (crew#1984)', () => {
   });
 
   it('“Use the default” clears it with null', async () => {
-    const reRead = vi.fn(() => Promise.resolve());
+    const reRead = vi.fn(() => Promise.resolve(true));
     const { rerender } = render(<Card repo={entry('acme/seat-base:go')} reRead={reRead} />);
     fireEvent.click(screen.getByTestId('repo-seat-base-clear'));
     await waitFor(() => expect(reRead).toHaveBeenCalledTimes(1));
@@ -174,7 +174,7 @@ describe('repository seat image (crew#1984)', () => {
   it('a save in flight blocks another (no second request), then shows its answer', async () => {
     const resolvers: Array<(r: Response) => void> = [];
     answer = () => new Promise<Response>((res) => { resolvers.push(res); });
-    const reRead = vi.fn(() => Promise.resolve());
+    const reRead = vi.fn(() => Promise.resolve(true));
     render(<Card repo={entry('acme/seat-base:go')} reRead={reRead} />);
     fireEvent.change(input(), { target: { value: 'acme/seat-base:java' } });
     fireEvent.click(save());

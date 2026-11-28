@@ -13,6 +13,9 @@ function saveError(e: unknown): string {
   return e instanceof ApiError ? e.message : 'That didn’t save. Try again.';
 }
 
+/** What the card says when a save went in but the page could not read the repository back. */
+const SAVED_NOT_READ = 'Saved. The page could not read it back: reload to see it.';
+
 /** (crew#1984) A repository's seat image edit: the typed draft (`null` until a person types, so the field follows the
  *  repository's base), whether a save is in flight, and why the last one failed. */
 export interface SeatEdit {
@@ -31,7 +34,7 @@ interface EditState { repoId: string; visit: number; draft: string | null; savin
  * repository opened. A save never shows crew's answer itself: when it settles (saved or refused) the page reads the
  * repository again (`reRead`), so what is shown is what crew holds, through the page's one read fence.
  */
-export function useSeatEdit(repoId: string, reRead: (repoId: string) => Promise<void>): SeatEdit {
+export function useSeatEdit(repoId: string, reRead: (repoId: string) => Promise<boolean>): SeatEdit {
   const visit = useRef({ repoId, n: 0 });
   if (visit.current.repoId !== repoId) visit.current = { repoId, n: visit.current.n + 1 };
   const fresh = (): EditState => ({ repoId, visit: visit.current.n, draft: null, saving: false, error: null });
@@ -57,8 +60,11 @@ export function useSeatEdit(repoId: string, reRead: (repoId: string) => Promise<
       void (async () => {
         let error: string | null = null;
         try { await api.setRepoSeatBase(forRepo, image); } catch (e: unknown) { error = saveError(e); }
-        // Saved or refused, crew's state is read again; a failed read keeps the repository shown.
-        try { await reRead(forRepo); } catch { /* kept */ }
+        // Saved or refused, crew's state is read again; a failed read keeps the repository shown. After a save that
+        // went in, that would show the old base as if nothing was saved: the draft stays and the card says so.
+        let readBack = false;
+        try { readBack = await reRead(forRepo); } catch { /* not read */ }
+        if (error === null && !readBack) error = SAVED_NOT_READ;
         if (busy.current === forVisit) busy.current = null;
         update(forVisit, (s) => ({ ...s, saving: false, error, draft: error === null ? null : s.draft }));
       })();

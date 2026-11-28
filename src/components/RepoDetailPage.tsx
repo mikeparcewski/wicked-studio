@@ -274,18 +274,20 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
   /** (crew#1984, DES on studio#1513) Read the repository again after a seat image save settles, so the page shows what
    *  crew holds (never a save's own answer, which a newer read may have passed). It goes through the page's one read
    *  fence: only the newest re-read of the current visit lands. While a visit is still loading, its first read may
-   *  predate the save, so that load is started again instead. Nothing happens once the page shows another repository. */
+   *  predate the save, so that load is started again instead. Nothing happens once the page shows another repository.
+   *  Resolves `false` only when the read itself failed (the page still shows what it showed before the save). */
   const loadingRef = useRef(loading);
   loadingRef.current = loading;
-  function seatReRead(forRepo: string): Promise<void> {
-    if (repoRef.current !== forRepo) return Promise.resolve();
-    if (loadingRef.current) { setReload((n) => n + 1); return Promise.resolve(); }
+  function seatReRead(forRepo: string): Promise<boolean> {
+    if (repoRef.current !== forRepo) return Promise.resolve(true);
+    if (loadingRef.current) { setReload((n) => n + 1); return Promise.resolve(true); }
     const forVisit = visitRef.current.visit;
     const seq = ++reReadSeq.current;
     const current = (): boolean => repoRef.current === forRepo && visitRef.current.visit === forVisit && reReadSeq.current === seq;
     return api.listRepos()
-      .then(({ repos }) => { const r = repos.find((x) => x.id === forRepo) ?? null; if (current() && r !== null) setRepo(r); })
-      .catch(() => { /* a failed repository read keeps the repository shown */ });
+      .then(({ repos }) => { const r = repos.find((x) => x.id === forRepo) ?? null; if (current() && r !== null) setRepo(r); return true; })
+      // A failed repository read keeps the repository shown, and says so to the save that asked.
+      .catch(() => false);
   }
   const seatEdit = useSeatEdit(repoId, seatReRead);
 
