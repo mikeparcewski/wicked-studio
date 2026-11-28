@@ -8,6 +8,7 @@ import { classifyDiff, isDimLine } from '../viewer/colorize.js';
 import { useDisplayPath } from '../hooks/useHomePath.js';
 import type { DiffLineKind } from '../viewer/colorize.js';
 import { TechDetails } from './ui/TechDetails.js';
+import { fileEditorHref, useFileEditors } from '../store/editors.js';
 
 /**
  * The in-studio file & diff viewer (DES-FEEDBACK-002 §3.4, slice I).
@@ -254,6 +255,20 @@ export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupport
     void navigator.clipboard.writeText(path).catch(() => { /* clipboard unavailable */ });
   }
 
+  // studio#1516: a whole text file opens in an installed editor whose kind has no other way in. The registry is
+  // read only once a file is shown (the gesture), and a binary or cut-short file is never offered: an editor must
+  // never see half a file.
+  const whole = tab === 'file' && path !== undefined && file?.state === 'ok' && !file.data.binary && !file.data.truncated;
+  const editors = useFileEditors(whole);
+  const openers = whole && path !== undefined
+    ? editors.map(({ editor, kind }) => ({ id: editor.id, title: editor.title, href: fileEditorHref(editor, kind, runId, path) }))
+    : [];
+  function openInEditor(href: string): void {
+    onClose();
+    history.pushState(null, '', href);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }
+
   // studio#479: the header and the hovers say `~/…` for a path under the home directory in the
   // default layer; the absolute path still drives the reads, the open and the copy.
   const title = path !== undefined ? showPath(path) : 'Changes in this run';
@@ -356,7 +371,7 @@ export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupport
 
         {/* Body */}
         {tab === 'file' ? (
-          <FileBody file={file} onOpenExternally={handleOpenExternally} />
+          <FileBody file={file} onOpenExternally={handleOpenExternally} openers={openers} onOpenInEditor={openInEditor} />
         ) : (
           <DiffBody diff={diff} narrowed={path !== undefined} onRetry={retryDiff} onClose={onClose} />
         )}
@@ -370,9 +385,11 @@ export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupport
   );
 }
 
-function FileBody({ file, onOpenExternally }: {
+function FileBody({ file, onOpenExternally, openers, onOpenInEditor }: {
   file: Fetched<RunFileContent> | null;
   onOpenExternally: () => void;
+  openers: readonly { id: string; title: string; href: string }[];
+  onOpenInEditor: (href: string) => void;
 }): React.ReactElement {
   if (file === null || file.state === 'loading') return <LoadingPane what="the file" />;
   if (file.state === 'error') return <ErrorPane message={file.message} what="this file" />;
@@ -405,6 +422,22 @@ function FileBody({ file, onOpenExternally }: {
         <TruncationBanner
           text={`showing first 512 KB — open externally for the full file (${formatBytes(size)} total)`}
         />
+      )}
+      {openers.length > 0 && (
+        <p data-testid="viewer-open-in-editors" className="px-3 py-2 m-0 flex flex-wrap items-center gap-2 shrink-0"
+          style={{ borderBottom: '1px solid var(--surface-raised)' }}>
+          {openers.map((o) => (
+            <a key={o.id} data-testid="viewer-open-in-editor" href={o.href} className="wk-host-btn" style={{ textDecoration: 'none' }}
+              onClick={(e) => {
+                // A modified click (new tab or window) keeps the browser's own behaviour.
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                e.preventDefault();
+                onOpenInEditor(o.href);
+              }}>
+              Open in {o.title}
+            </a>
+          ))}
+        </p>
       )}
       <div className="flex-1 overflow-auto">
         <pre className="m-0 p-3 min-w-max" style={CODE_STYLE}>

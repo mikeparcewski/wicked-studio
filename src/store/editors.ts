@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { create } from 'zustand';
-import { editorsFor, inspectorEditor, listEditors, subscribeEditorRegistry, type EditorView } from '../api/editors.js';
+import { editorsFor, inspectorEditor, listEditors, MCP_SERVER_KIND, subscribeEditorRegistry, type EditorView } from '../api/editors.js';
+import { hasEditorSample } from '../editors/fixtures/insights.js';
 
 /**
  * Crew's editor registry, read once per tab (EP-P2): which plugin opens which artifact kind. `none`
@@ -92,6 +93,35 @@ export function openableEditors(editors: readonly EditorView[], kind: string): E
 export function openingEditor(editors: readonly EditorView[], kind: string, preferred: string | null): EditorView | null {
   const can = openableEditors(editors, kind);
   return (preferred !== null ? can.find((e) => e.id === preferred) : undefined) ?? can[0] ?? null;
+}
+
+/**
+ * THE EDITORS A JOB'S FILE OPENS IN (studio#1516): the installed editors with no other way in. Each one is enabled,
+ * speaks this host's protocol, has the `pane` size, reads the artifact, and claims a kind that is not a document's
+ * (page, document, deck: those open real documents) and that the test page has no sample of. The kind is the
+ * editor's first such kind; packs declare no file names, so the person picks the editor, nothing is guessed.
+ */
+export function fileEditors(editors: readonly EditorView[]): { editor: EditorView; kind: string }[] {
+  const out: { editor: EditorView; kind: string }[] = [];
+  for (const e of editors) {
+    const kind = e.kinds.find((k) => !hasEditorSample(k) && k !== MCP_SERVER_KIND);
+    if (kind !== undefined && editorReads(e) && editorsFor([e], kind, 'pane').length === 1) out.push({ editor: e, kind });
+  }
+  return out.sort((a, b) => (a.editor.id < b.editor.id ? -1 : a.editor.id > b.editor.id ? 1 : 0));
+}
+
+/** The editor test page on one job's file, read-only, in `editor` as `kind` (EditorHostPage reads `run` and `path`). */
+export function fileEditorHref(editor: Pick<EditorView, 'id' | 'version' | 'sha256' | 'title'>, kind: string, runId: string, path: string): string {
+  const q = new URLSearchParams({ editor: editor.id, version: editor.version, sha: editor.sha256, title: editor.title, kind, run: runId, path });
+  return `/editors/dev?${q.toString()}`;
+}
+
+/** {@link fileEditors} over the tab's one registry read, read on first use (`enabled`: only once a file is shown). */
+export function useFileEditors(enabled: boolean): { editor: EditorView; kind: string }[] {
+  const state = useEditors((s) => s.state);
+  const editors = useEditors((s) => s.editors);
+  useEffect(() => { if (enabled && state === 'idle') void useEditors.getState().load(); }, [enabled, state]);
+  return useMemo(() => (enabled ? fileEditors(editors) : []), [enabled, editors]);
 }
 
 /** The editor that opens `kind`, once the registry is read: `undefined` while loading, `null` when none claims it. */
