@@ -46,6 +46,7 @@ import type { ElicitationAnswerBody } from './ask.js';
 import type { ChatAttachmentUploadResponse, ChatCloseResponse, ChatHistoryPage, ChatMessagesResponse } from './chatHistory-wire.js';
 import type { ChatMessageContext, ChatProposalDecisionBody, ChatProposalDecisionResponse } from './chatArtifacts-wire.js';
 import type { PersonProposalBody, PersonProposalResponse, PersonRevisionBody, ReshapeRunBody, ReshapeRunResponse } from 'wicked-crew-api-types';
+import { noteCrewAnswer } from './crewHeard.js';
 
 export type * from './types.js';
 
@@ -134,6 +135,8 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       ? { 'Content-Type': 'application/json', ...init?.headers }
       : { ...init?.headers };
   const res = await fetch(`${apiBase()}${path}`, { ...init, headers });
+  // wicked-crew#1950: crew answered (the Nerve Center tells a slow crew from an unreachable one by it).
+  noteCrewAnswer(res.status);
   if (!res.ok) {
     const text = await res.text();
     let msg: string;

@@ -204,6 +204,8 @@ export function slowingLine(a: SystemAttention, infra: readonly SystemInfra[] | 
  */
 export function overviewSentence(state: Pick<NerveState, 'read'>, slowing: readonly SystemAttention[], others: number): { lead: string; rest: string; tone: 'ok' | 'warn' | 'fail' | 'quiet' } {
   if (state.read === 'checking') return { lead: 'Checking crew…', rest: '', tone: 'quiet' };
+  // wicked-crew#1950: crew answers, slowly; it is not unreachable.
+  if (state.read === 'slow') return { lead: 'Crew is slow to answer.', rest: 'What you see below may be out of date.', tone: 'warn' };
   if (state.read !== 'fresh') return { lead: 'Can’t reach crew.', rest: 'What you see below may be out of date.', tone: 'warn' };
   const n = slowing.length;
   const rest = others === 0 ? (n === 0 ? 'Everything is healthy.' : 'Everything else is healthy.')

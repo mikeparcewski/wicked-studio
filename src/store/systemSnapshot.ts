@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { create } from 'zustand';
 import { api } from '../api/client.js';
+import { crewAnswerCount, crewAnsweredSince, resetCrewHeard } from '../api/crewHeard.js';
 import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js';
 import { getSystem, isSystemUnsupported, type SystemSnapshot } from '../api/system.js';
 import type { DiagnosticsGovernance } from '../api/types.js';
@@ -43,6 +44,11 @@ export interface SystemStore {
   healthAt: number | null;
   /** The newest `/health` read's failure (`null` once one succeeds). */
   healthError: string | null;
+  /** wicked-crew#1950: the newest tick's read ran out of studio's time ({@link READ_TIMEOUT_MS}) while crew answered
+   *  another read during that tick: crew is up and slow, not unreachable. It only changes the WORDS of the verdict
+   *  (nerveState): the read's failure is kept in `healthError` / `snapshotError` exactly as before, so every reader of
+   *  those fields still treats it as a failed read. `null` once a tick's reads land, or fail any other way. */
+  slow: string | null;
   snapshot: SystemSnapshot | null;
   /** When the newest SUCCESSFUL `/system` read landed. */
   snapshotAt: number | null;
@@ -63,14 +69,17 @@ export interface SystemStore {
 
 const message = (e: unknown): string => (e instanceof Error && e.message !== '' ? e.message : String(e));
 
+/** A read that ran out of studio's own time: the only failure that can be "slow" (wicked-crew#1950). */
+class OutOfTime extends Error {}
+
 function bounded<T>(p: Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`no answer after ${Math.round(READ_TIMEOUT_MS / 1000)} s`)), READ_TIMEOUT_MS);
+    const t = setTimeout(() => reject(new OutOfTime(`no answer after ${Math.round(READ_TIMEOUT_MS / 1000)} s`)), READ_TIMEOUT_MS);
     p.then((v) => { clearTimeout(t); resolve(v); }, (e: unknown) => { clearTimeout(t); reject(e instanceof Error ? e : new Error(String(e))); });
   });
 }
 
-type Answer = Partial<Pick<SystemStore, 'mode' | 'health' | 'healthAt' | 'healthError' | 'snapshot' | 'snapshotAt' | 'snapshotAskedAt' | 'snapshotError' | 'governance' | 'governanceAt'>>;
+type Answer = Partial<Pick<SystemStore, 'mode' | 'health' | 'healthAt' | 'healthError' | 'slow' | 'snapshot' | 'snapshotAt' | 'snapshotAskedAt' | 'snapshotError' | 'governance' | 'governanceAt'>>;
 
 /**
  * One tick's reads, folded into ONE answer that is published at once when the tick settles — never a
@@ -78,14 +87,18 @@ type Answer = Partial<Pick<SystemStore, 'mode' | 'health' | 'healthAt' | 'health
  * would pass for a fresh one while the follow-up read hangs or fails).
  */
 async function readTick(): Promise<Answer> {
+  const began = crewAnswerCount();
+  // wicked-crew#1950: out of studio's time while crew answered something since this tick began (another read of the
+  // page, or this tick's own /health): slow. Any other failure, or no answer from crew at all, is not.
+  const slowly = (e: unknown): boolean => e instanceof OutOfTime && crewAnsweredSince(began);
   let h: { status?: string; version?: string; capabilities?: Record<string, unknown> };
   try {
     // Through a resolved promise, so a client that cannot serve the read at all is a failed read.
     h = await bounded(Promise.resolve().then(() => api.getHealth())) as typeof h;
   } catch (e) {
-    return { healthError: message(e) };
+    return { healthError: message(e), slow: slowly(e) ? message(e) : null };
   }
-  const health: Answer = { health: h, healthAt: Date.now(), healthError: null };
+  const health: Answer = { health: h, healthAt: Date.now(), healthError: null, slow: null };
   if (h.capabilities?.['system'] === true) {
     try {
       const askedAt = Date.now();
@@ -95,7 +108,7 @@ async function readTick(): Promise<Answer> {
       return { ...health, mode: 'system', snapshot, snapshotAt: Date.now(), snapshotAskedAt: askedAt, snapshotError: null };
     } catch (e) {
       // A crew that claims the capability but has no route is an older crew after all.
-      if (!isSystemUnsupported(e)) return { ...health, mode: 'system', snapshotError: message(e) };
+      if (!isSystemUnsupported(e)) return { ...health, mode: 'system', snapshotError: message(e), slow: slowly(e) ? message(e) : null };
     }
   }
   const older: Answer = { ...health, mode: 'fallback', snapshot: null, snapshotAt: null, snapshotAskedAt: null, snapshotError: null };
@@ -118,6 +131,7 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
   health: null,
   healthAt: null,
   healthError: null,
+  slow: null,
   snapshot: null,
   snapshotAt: null,
   snapshotAskedAt: null,
@@ -137,7 +151,8 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
     inflight = readTick()
       .then(async (answer) => {
         // studio#931: a fresh daemon gets one more read before its first failure is shown.
-        if ((answer.healthError != null || answer.snapshotError != null) && get().healthAt === null && mine === generation) answer = await readTick();
+        // (wicked-crew#1950) Not when crew answered and the read was only slow: crew is up, there is nothing to wait out.
+        if ((answer.healthError != null || answer.snapshotError != null) && answer.slow == null && get().healthAt === null && mine === generation) answer = await readTick();
         if (mine === generation) set(answer);
       })
       .finally(() => { inflight = null; set({ reading: queued !== null }); });
@@ -190,8 +205,9 @@ export function resetSystemStore(): void {
   inflight = null;
   queued = null;
   generation = 0;
+  resetCrewHeard();
   useSystemStore.setState({
-    mode: 'unknown', health: null, healthAt: null, healthError: null, snapshot: null, snapshotAt: null, snapshotAskedAt: null,
+    mode: 'unknown', health: null, healthAt: null, healthError: null, slow: null, snapshot: null, snapshotAt: null, snapshotAskedAt: null,
     snapshotError: null, governance: { kind: 'unread' }, governanceAt: null, reading: false,
   });
 }
