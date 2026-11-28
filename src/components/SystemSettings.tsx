@@ -183,6 +183,14 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
       else if ('deliverIdentityLogin' in dirty) setDeliverIdentityError(msg);
       else { setErrorSource(e); setError(msg); }
     } finally {
+      // The council pin is read again after every save (a 409 names a pin set since the page loaded),
+      // and a pending size it now pins is dropped (round 2).
+      const r = await api.getSettings().catch(() => null);
+      if (r !== null) {
+        const pinned = (r as { environment?: { councilSize?: { env: string[]; value: string } } }).environment?.councilSize ?? null;
+        setCouncilPin(pinned);
+        if (pinned !== null) setDirty((d) => { const n = { ...d }; delete n.councilSize; return n; });
+      }
       setSaving(false);
     }
   }
@@ -192,10 +200,14 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   if (settings?.councilSize !== undefined && !councilSizeOptions.includes(String(settings.councilSize))) {
     councilSizeOptions.push(String(settings.councilSize));
   }
-  // A pinned size shows the value in force, the environment's (round 1).
-  if (councilPin !== null && /^[0-9]+$/.test(councilPin.value) && !councilSizeOptions.includes(councilPin.value)) {
-    councilSizeOptions.push(councilPin.value);
-  }
+  // A pinned size shows the size in force: the engine's own reading of the variable (wicked-council
+  // pick.rs `council_size_from`: trimmed, 1..9, else the default 3), not its raw text (round 2).
+  const pinnedSize = councilPin === null ? null : (() => {
+    const t = councilPin.value.trim();
+    const n = /^[0-9]+$/.test(t) ? Number(t) : NaN;
+    return String(n >= 1 && n <= 9 ? n : 3);
+  })();
+  if (pinnedSize !== null && !councilSizeOptions.includes(pinnedSize)) councilSizeOptions.push(pinnedSize);
   const hasDirty = Object.keys(dirty).length > 0;
   const workerRoot = merged.worker_config_root ?? '';
   const workerRootInvalid = workerRoot !== '' && !isAbsolutePathLike(workerRoot);
@@ -299,7 +311,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
           <Segmented
             label="Council size"
             data-testid="settings-council-size"
-            value={councilPin !== null && councilSizeOptions.includes(councilPin.value) ? councilPin.value : String(merged.councilSize ?? 3)}
+            value={pinnedSize ?? String(merged.councilSize ?? 3)}
             options={councilSizeOptions.map((value) => ({ value, label: value, disabled: councilPin !== null || settings === null }))}
             onChange={(value) => patch('councilSize', Number(value))}
           />

@@ -155,6 +155,8 @@ function NumberField({ label, value, scale = 1, min, max, unit, disabled, onChan
           onChange={(e) => {
             const t = e.target.value;
             setText(t);
+            // A number input reports half-typed text ("1e") as '' with badInput: that is not a clear (round 2).
+            if (e.target.validity.badInput) { setBad(true); onInvalid(); return; }
             if (t.trim() === '') { setBad(false); onChange(null); return; }
             const n = Number(t);
             const ok = Number.isInteger(n) && n >= min && n <= max;
@@ -177,6 +179,9 @@ const pinsOf = (res: unknown): Pins => ((res as { environment?: Pins }).environm
 export function AdvancedSettings(): React.ReactElement {
   const [settings, setSettings] = useState<LocalSettings | null>(null);
   const [pins, setPins] = useState<Pins>({});
+  /** The daemon reports its pins (`environment`, crew#2014). An older one does not, and drops these keys:
+   *  the tab is then read-only, since it can neither show what is in force nor save it (round 2). */
+  const [supported, setSupported] = useState(true);
   const [repos, setRepos] = useState<RepoEntry[] | null>(null);
   const [reposFailed, setReposFailed] = useState(false);
   const [dirty, setDirty] = useState<Partial<Record<Key, unknown>>>({});
@@ -203,13 +208,16 @@ export function AdvancedSettings(): React.ReactElement {
   };
   /** New pins: a pinned row can't be changed, so a pending change to it is dropped (round 1: a key pinned
    *  after the page loaded kept being resent and refused). */
-  function takePins(next: Pins): void {
+  function takePins(next: Pins, before: Pins): void {
+    const changed = [...new Set([...Object.keys(next), ...Object.keys(before)])]
+      .filter((k) => JSON.stringify(next[k]) !== JSON.stringify(before[k]));
     const keys = Object.keys(next);
     setPins(next);
     setDirty((d) => omit(d, keys));
     setDrafts((d) => omit(d, keys));
     setInvalid((v) => omit(v, keys));
-    bump('*');
+    // Only the rows whose pin changed remount (round 2: a blanket remount wiped an edit in another row).
+    for (const k of changed) bump(k);
   }
 
   function loadRepos(): void {
@@ -224,6 +232,7 @@ export function AdvancedSettings(): React.ReactElement {
         setSettings(res.settings as LocalSettings);
         // api-types next `SettingsResponse.environment`; absent on an older daemon (no pins shown).
         setPins(pinsOf(res));
+        setSupported(Object.hasOwn(res as object, 'environment'));
         setDrafts({});
         bump('*');
       })
@@ -254,6 +263,24 @@ export function AdvancedSettings(): React.ReactElement {
   function draft(key: Key, text: string): void {
     setDrafts((d) => ({ ...d, [key]: text }));
   }
+  /** Back to the saved value: no pending change, no draft, no error. */
+  function unpatch(key: Key): void {
+    setDirty((d) => omit(d, [key]));
+    setDrafts((d) => omit(d, [key]));
+    setInvalid((v) => omit(v, [key]));
+    touched();
+  }
+  /** One way to change the network mode, for the choice and its "Use default" (round 2): leaving
+   *  "Only these sites" withdraws the host list being edited, so it is neither sent nor left blocking. */
+  function setNetwork(v: NetworkMode): void {
+    if (v === ((settings?.seatNetwork as NetworkMode | null | undefined) ?? 'open')) unpatch('seatNetwork');
+    else patch('seatNetwork', v === 'open' ? null : v);
+    if (v !== 'allowlist') {
+      setDirty((d) => omit(d, ['seatEgressHosts']));
+      setDrafts((d) => omit(d, ['seatEgressHosts']));
+      setInvalid((x) => omit(x, ['seatEgressHosts']));
+    }
+  }
 
   async function save(): Promise<void> {
     // A pinned key is never sent: the daemon refuses it (409 env_pinned) and the whole save with it.
@@ -261,6 +288,7 @@ export function AdvancedSettings(): React.ReactElement {
     if (Object.keys(body).length === 0 || Object.keys(invalid).length > 0) return;
     setSaving(true);
     touched();
+    let outcomeUnknown = false;
     try {
       // Keys api-types 0.216.0 does not carry yet ride the same PUT (no excess-property check on a variable).
       const res = await api.updateSettings(body as Partial<Settings>);
@@ -283,14 +311,16 @@ export function AdvancedSettings(): React.ReactElement {
       // A 4xx is the daemon refusing: nothing was written. Anything else (no answer, a 5xx) is unknown.
       const refused = status !== null && status >= 400 && status < 500;
       setSaveFailure({ text: e instanceof Error ? e.message : String(e), refused });
-      if (!refused) {
-        // Read what the daemon has now; the pending changes stay for another try.
-        api.getSettings().then((r) => setSettings(r.settings as LocalSettings)).catch(() => undefined);
-      }
+      outcomeUnknown = !refused;
     } finally {
+      // One read, finished before the form unlocks (round 2): a save can meet a pin set since the page
+      // loaded (the 409 names it), and after an unknown outcome the page shows what the daemon has.
+      const r = await api.getSettings().catch(() => null);
+      if (r !== null) {
+        if (outcomeUnknown) setSettings(r.settings as LocalSettings);
+        takePins(pinsOf(r), pins);
+      }
       setSaving(false);
-      // A save can meet a pin set since the page loaded (the 409 names it): read the pins again either way.
-      api.getSettings().then((r) => takePins(pinsOf(r))).catch(() => undefined);
     }
   }
 
@@ -307,9 +337,16 @@ export function AdvancedSettings(): React.ReactElement {
   const pin = (k: string): EnvPin | undefined => pins[k];
   const genOf = (k: string): string => `${k}:${gens['*'] ?? 0}:${gens[k] ?? 0}`;
   /** "Use default" for a crew#2013 key: send null (the daemon deletes the variable). */
-  const clear = (k: Key) => (has(k) ? () => { patch(k, null); setDrafts((d) => omit(d, [k])); bump(k); } : undefined);
-  /** For an older key the daemon takes no null for: write its default value. */
-  const reset = (k: Key, def: unknown) => (has(k) && merged[k] !== def ? () => { patch(k, def); bump(k); } : undefined);
+  const savedOf = (k: Key): unknown => (settings as unknown as Record<string, unknown>)[k];
+  const savedIsDefault = (k: Key, def: unknown): boolean => savedOf(k) === undefined || savedOf(k) === null || savedOf(k) === def;
+  // Offered while the row has a value or an error to back out of (round 2: it vanished on an invalid draft).
+  const clear = (k: Key) => (has(k) || invalid[k] === true
+    ? () => { if (savedIsDefault(k, null)) unpatch(k); else { patch(k, null); setDrafts((d) => omit(d, [k])); } bump(k); }
+    : undefined);
+  /** For an older key the daemon takes no null for: write its default value (nothing, if it is saved at it). */
+  const reset = (k: Key, def: unknown) => ((has(k) && merged[k] !== def) || invalid[k] === true
+    ? () => { if (savedIsDefault(k, def)) unpatch(k); else patch(k, def); bump(k); }
+    : undefined);
   /** A pinned row shows the value in force (the environment's), not the one saved beside it (round 1). */
   const num = (k: Key, scale = 1): number | null | undefined => {
     const p = pin(k);
@@ -321,7 +358,12 @@ export function AdvancedSettings(): React.ReactElement {
     <Row label={label} description={description} def={def} pin={pin(k)} testId={`adv-${k}`}
       onDefault={pin(k) !== undefined ? undefined : older !== undefined ? reset(k, older) : clear(k)}>
       <NumberField key={genOf(k)} label={label} value={num(k, field.scale)} disabled={pin(k) !== undefined} testId={`adv-${k}-input`} {...field}
-        onChange={(v) => patch(k, v === null && older !== undefined ? older : v)} onInvalid={() => invalidate(k)} />
+        onChange={(v) => {
+          if (v !== null) patch(k, v);
+          else if (older === undefined) { if (savedIsDefault(k, null)) unpatch(k); else patch(k, null); }
+          else if (savedIsDefault(k, older)) unpatch(k);
+          else patch(k, older);
+        }} onInvalid={() => invalidate(k)} />
     </Row>
   );
   const sizeRow = (k: 'seatMemory' | 'floorMemory', label: string, description: string, def: string, minMb: number) => {
@@ -368,7 +410,12 @@ export function AdvancedSettings(): React.ReactElement {
   return (
     <div className="wk-pg-set-content wk-adv" data-testid="advanced-settings">
       {/* Nothing is editable while a save is in flight: an edit then would be cleared by its answer (round 1). */}
-      <fieldset className="wk-adv-form" disabled={saving}>
+      {!supported && (
+        <p className="wk-field-note wk-field-note--bad" role="status" data-testid="adv-unsupported">
+          This daemon is older than these settings, so Studio can&apos;t show what is in force or save them here. Update wicked-crew to use this tab.
+        </p>
+      )}
+      <fieldset className="wk-adv-form" disabled={saving || !supported}>
       {/* Helper isolation */}
       <section className="wk-card" data-testid="adv-isolation">
         <SectionTitle>Helper isolation</SectionTitle>
@@ -387,7 +434,6 @@ export function AdvancedSettings(): React.ReactElement {
       {/* Stalled helpers (crew-side settings; their own clamps). The watchdog reads them on every sweep. */}
       <section className="wk-card" data-testid="adv-stall">
         <SectionTitle>Stalled helpers</SectionTitle>
-        <p className="wk-field-note" data-testid="adv-stall-note">These apply to jobs already running, from the next check.</p>
         {numRow('workerStallMinutes', 'Quiet before a stall is reported', 'How long a running job can go without any word from its helper before Studio says it has stalled.', '15 minutes', { min: 1, max: 1440, unit: 'minutes' }, 15)}
         {numRow('workerStallEscalateMinutes', 'Quiet before Studio acts', 'How long a helper can go without any word, counted from its last word, before Studio acts on it. Never before the stall is reported. 0 turns this off.', '30 minutes', { min: 0, max: 1440, unit: 'minutes' }, 30)}
         <Row label="What Studio does" description="Hand the step to another helper, or only tell you." def="Reassign" testId="adv-workerStallEscalateAction"
@@ -423,15 +469,11 @@ export function AdvancedSettings(): React.ReactElement {
       <section className="wk-card" data-testid="adv-network">
         <SectionTitle>Network</SectionTitle>
         <Row label="Helper internet access" description="What helpers can reach besides the model service. Every choice only narrows the default."
-          def="Open" pin={networkPin} testId="adv-seatNetwork" onDefault={networkPin !== undefined ? undefined : clear('seatNetwork')}>
+          def="Open" pin={networkPin} testId="adv-seatNetwork" onDefault={networkPin !== undefined || network === 'open' ? undefined : () => setNetwork('open')}>
           {networkPin === undefined ? (
             <Segmented label="Helper internet access" data-testid="adv-seatNetwork-input" value={network}
               options={[{ value: 'open', label: 'Open' }, { value: 'allowlist', label: 'Only these sites' }, { value: 'none', label: 'None' }]}
-              onChange={(v) => {
-                patch('seatNetwork', v === 'open' ? null : v);
-                // Leaving "Only these sites" withdraws a host list that was being typed.
-                if (v !== 'allowlist') setInvalid((x) => omit(x, ['seatEgressHosts']));
-              }} />
+              onChange={setNetwork} />
           ) : null}
           {network === 'none' && networkPin === undefined && <p className="wk-field-note" data-testid="adv-network-none-note">Helpers reach only the model service.</p>}
         </Row>
@@ -454,7 +496,7 @@ export function AdvancedSettings(): React.ReactElement {
       {/* Delivery */}
       <section className="wk-card" data-testid="adv-delivery">
         <SectionTitle>Delivery</SectionTitle>
-        <Row label="Commit trailers" description="Lines added to the end of every delivered commit message, one per line, like Co-Authored-By: Name <address>." def="None"
+        <Row label="Commit trailers" description="Lines added to the end of the commit message Studio writes when it delivers staged changes, one per line, like Co-Authored-By: Name <address>. Commits a helper made itself keep their own messages." def="None"
           pin={trailersPin} testId="adv-deliverTrailers" onDefault={trailersPin !== undefined ? undefined : clear('deliverTrailers')}>
           <textarea className="wk-field" aria-label="Commit trailers" data-testid="adv-deliverTrailers-input" rows={3} value={trailersText} disabled={trailersPin !== undefined}
             aria-invalid={badTrailers.length > 0 || trailerLines.length > TRAILERS_MAX}
@@ -541,7 +583,7 @@ export function AdvancedSettings(): React.ReactElement {
 
       <div>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={save} disabled={!hasDirty || hasInvalid || saving} className="wk-btn wk-btn--primary" data-testid="adv-save">{saving ? 'Saving…' : 'Save'}</button>
+          <button type="button" onClick={save} disabled={!hasDirty || hasInvalid || saving || !supported} className="wk-btn wk-btn--primary" data-testid="adv-save">{saving ? 'Saving…' : 'Save'}</button>
           {saved && <span role="status">Saved</span>}
         </div>
         {saveFailure !== null && (

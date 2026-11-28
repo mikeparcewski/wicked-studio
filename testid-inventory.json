@@ -267,13 +267,13 @@
       ]
     },
     {
-      "testId": "adv-stall-note",
+      "testId": "adv-time",
       "files": [
         "src/components/AdvancedSettings.tsx"
       ]
     },
     {
-      "testId": "adv-time",
+      "testId": "adv-unsupported",
       "files": [
         "src/components/AdvancedSettings.tsx"
       ]

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AdvancedSettings } from '../src/components/AdvancedSettings.js';
 import { SettingsPage } from '../src/components/SettingsPage.js';
@@ -16,8 +16,9 @@ import { ApiError } from '../src/api/errors.js';
 vi.mock('../src/components/Terminal.js', () => ({ Terminal: () => <div data-testid="mock-terminal" /> }));
 
 type Response = Awaited<ReturnType<typeof client.api.getSettings>>;
-const respond = (settings: Record<string, unknown>, environment?: Record<string, { env: string[]; value: string }>): Response =>
-  ({ settings: { graphNodeLimit: 150, ...settings }, path: '~/.wicked-crew/settings.json', ...(environment !== undefined ? { environment } : {}) }) as unknown as Response;
+/** `environment` is always present on crew#2014 (an empty map when nothing is pinned); `null` leaves it out (an older daemon). */
+const respond = (settings: Record<string, unknown>, environment: Record<string, { env: string[]; value: string }> | null = {}): Response =>
+  ({ settings: { graphNodeLimit: 150, ...settings }, path: '~/.wicked-crew/settings.json', ...(environment !== null ? { environment } : {}) }) as unknown as Response;
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -32,7 +33,7 @@ describe('the Advanced tab', () => {
     render(<SettingsPage navigate={vi.fn()} search="?tab=advanced" />);
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['General', 'Theme', 'Advanced']);
     expect(screen.getByTestId('settings-panel')).toHaveAttribute('data-tab', 'advanced');
-    expect(screen.getByText('Most changes apply to work that starts after you save. Work already running keeps its settings, except where a card says otherwise.')).toBeInTheDocument();
+    expect(screen.getByText('Each change applies the next time Studio uses that setting, including in jobs already running.')).toBeInTheDocument();
   });
 
   it('shows the inherit warning always, emphasised once the switch is on, and saves true', async () => {
@@ -273,6 +274,70 @@ describe('the Advanced tab', () => {
       expect(screen.queryByTestId('adv-runLearnings-default')).toBeNull();
       await user.click(screen.getByTestId('adv-save'));
       await waitFor(() => expect(updated).toHaveBeenCalledWith({ runLearnings: null }));
+    });
+  });
+
+  describe('cross-model review round 2', () => {
+    it('half-typed number text ("1e", badInput) is not a clear: the change is withdrawn and Save waits', async () => {
+      const user = userEvent.setup();
+      vi.mocked(client.api.getSettings).mockResolvedValue(respond({ askTimeoutSecs: 120 }));
+      render(<AdvancedSettings />);
+      await user.type(await screen.findByRole('spinbutton', { name: 'Longest chat answer' }), '900');
+      const field = screen.getByRole('spinbutton', { name: 'Wait for an answer to a question' });
+      Object.defineProperty(field, 'validity', { value: { badInput: true }, configurable: true });
+      fireEvent.change(field, { target: { value: '' } });
+      expect(field).toHaveAttribute('aria-invalid', 'true');
+      expect(screen.getByTestId('adv-save')).toBeDisabled();
+    });
+
+    it('leaving "Only these sites" withdraws the host list: never sent, never left blocking Save', async () => {
+      const user = userEvent.setup();
+      const updated = vi.spyOn(client.api, 'updateSettings').mockResolvedValue({ settings: { graphNodeLimit: 150, seatNetwork: 'none' } as never });
+      render(<AdvancedSettings />);
+      await user.click(await screen.findByRole('radio', { name: 'Only these sites' }));
+      await user.type(screen.getByRole('textbox', { name: 'Allowed sites' }), 'Bad Host');
+      await user.click(screen.getByRole('button', { name: 'Use default: Helper internet access' }));
+      expect(screen.queryByTestId('adv-save-blocked')).toBeNull();
+      expect(screen.getByTestId('adv-save')).toBeDisabled(); // back where it started: nothing to save
+      await user.click(screen.getByRole('radio', { name: 'Only these sites' }));
+      expect(screen.getByRole('textbox', { name: 'Allowed sites' })).toHaveValue('');
+      await user.type(screen.getByRole('textbox', { name: 'Allowed sites' }), 'index.crates.io');
+      await user.click(screen.getByRole('radio', { name: 'None' }));
+      await user.click(screen.getByTestId('adv-save'));
+      await waitFor(() => expect(updated).toHaveBeenCalledWith({ seatNetwork: 'none' }));
+    });
+
+    it('"Use default" stays offered on a row with an invalid draft, and backs out of it', async () => {
+      const user = userEvent.setup();
+      render(<AdvancedSettings />);
+      await user.type(await screen.findByRole('spinbutton', { name: 'Free disk to keep' }), '600');
+      await user.click(screen.getByRole('button', { name: 'Use default: Free disk to keep' }));
+      expect(screen.getByRole('spinbutton', { name: 'Free disk to keep' })).toHaveValue(null);
+      expect(screen.queryByTestId('adv-save-blocked')).toBeNull();
+    });
+
+    it('the form stays locked until the read after a save has finished, so it cannot replace a new edit', async () => {
+      const user = userEvent.setup();
+      vi.spyOn(client.api, 'updateSettings').mockResolvedValue({ settings: { graphNodeLimit: 150, askTimeoutSecs: 120 } as never });
+      render(<AdvancedSettings />);
+      await user.type(await screen.findByRole('spinbutton', { name: 'Wait for an answer to a question' }), '120');
+      let finish: (v: Response) => void = () => undefined;
+      vi.mocked(client.api.getSettings).mockReturnValue(new Promise((r) => { finish = r; }));
+      await user.click(screen.getByTestId('adv-save'));
+      await waitFor(() => expect(client.api.getSettings).toHaveBeenCalledTimes(2));
+      expect(screen.getByRole('spinbutton', { name: 'Longest chat answer' })).toBeDisabled();
+      finish(respond({ askTimeoutSecs: 120 }));
+      await waitFor(() => expect(screen.getByRole('spinbutton', { name: 'Longest chat answer' })).toBeEnabled());
+      await user.type(screen.getByRole('spinbutton', { name: 'Longest chat answer' }), '90');
+      expect(screen.getByRole('spinbutton', { name: 'Longest chat answer' })).toHaveValue(90);
+    });
+
+    it('a daemon that reports no pins (older than these settings) gets a read-only tab that says so', async () => {
+      vi.mocked(client.api.getSettings).mockResolvedValue(respond({}, null));
+      render(<AdvancedSettings />);
+      expect(await screen.findByTestId('adv-unsupported')).toHaveTextContent('This daemon is older than these settings');
+      expect(screen.getByRole('switch', { name: "Use this computer's CLI settings in helpers" })).toBeDisabled();
+      expect(screen.getByTestId('adv-save')).toBeDisabled();
     });
   });
 });

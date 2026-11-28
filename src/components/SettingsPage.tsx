@@ -13,7 +13,7 @@ import { Tabs } from './ui/Tabs.js';
 const INTRO: Record<SettingsTab, string> = {
   general: 'Choose how Studio displays your work and uses your helpers.',
   theme: 'Choose the colors and branding for your workspace.',
-  advanced: 'Most changes apply to work that starts after you save. Work already running keeps its settings, except where a card says otherwise.',
+  advanced: 'Each change applies the next time Studio uses that setting, including in jobs already running.',
 };
 
 /**
