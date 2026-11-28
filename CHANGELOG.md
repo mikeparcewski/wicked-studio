@@ -12,6 +12,26 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.18.0] — 2026-11-28
+
+Release on the train-19 cut a44462fb, carrying 12 PRs since 0.17.2: #1498, #1496, #1495, #1490, #1502, #1503, #1504, #1506, #1510, #1508, #1509, #1511. The entries were written from each PR's changelog entry (from the PR description where it had none).
+
+### Changed
+
+- Launch: a job that takes stand-ins never offers reduced assurance. On a short roster crew asks the stand-in question instead, and a held run's creator-seat relaunch reads "Start it again with a stand-in…". A review, the evals and a demo keep the reduced-assurance tick on one helper (wicked-core#1843 P3, #1508).
+
+### Fixed
+
+- Gates: an answer to a gate names which opening of it you saw. If the gate closed and opened again at the same step while your view was behind, crew refuses the answer and the card shows the gate as it is now (studio#1493, #1495).
+- Job card: a plan sent back at a mid-run plan gate reads "re-planning" from the team record, as at the first plan gate (#1492, #1498).
+- Job card: a run past its plan gate no longer says "planning the real steps" when the team record holds no plan decision (#1485, #1490); a late live copy of a plan gate no longer flips an approved job back to "planning" (#1494, #1503).
+- Run page: a failed step being tried again says so in the header and Now ("Trying again · attempt 2") (#1489, #1496); while a gate is open, the pill and header say "Waiting on you" or "Waiting", never "Trying again" or "Working" (#1497, #1500, #1502).
+- Run page: a scripted (Tool) step reads "<Step> is working · N min" instead of "No output", offers no "Ask" or "Move it to another helper", and is not listed in Needs you as wedged (#1499, #1507, #1506).
+- Desk inbox: when a snoozed row leaves, its focus goes to the All tab whatever the render timing (#1501, #1504).
+- Needs you: a snooze on the ranked page also holds the gate out of the project's inbox, its count and the peek; Snooze on a gate crew lists uses crew's own key, and a hold hides nothing unless studio's last crew read was good (#1475, #1430, #1509).
+- Learn: kept rules name the gate their drafts were read at, so a draft from an earlier opening is not kept at a re-opened gate (crew#1982, #1510).
+- Nerve Center: when a read only ran out of studio's time while crew answered, it says crew is slow to answer, not "Can't reach crew" (crew#1950, #1511).
+
 ## [0.17.2] — 2026-11-27
 
 Release on the train-18 cut d502b528, carrying 5 PRs since 0.17.1: #1480, #1482, #1486, #1488, #1487. The entries were written from each PR's changelog entry.
