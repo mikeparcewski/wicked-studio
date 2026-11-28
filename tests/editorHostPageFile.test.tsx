@@ -45,7 +45,9 @@ describe('the editor test page on a run file (studio#1516)', () => {
     expect(getRunFile).toHaveBeenCalledExactlyOnceWith(RUN, PATH);
     const adapter = hosts[0]!.adapter;
     expect(adapter.artifact()).toMatchObject({ kind: 'todo-list', title: 'groceries.todo.json', readonly: true });
-    expect(await adapter.read()).toMatchObject({ content: { type: 'html', html: TODO } });
+    const read = await adapter.read() as { content: { type: string; html: string } };
+    expect(read.content.type).toBe('html');
+    expect(new DOMParser().parseFromString(read.content.html, 'text/html').body.textContent).toBe(TODO);
     expect(screen.queryByTestId('editor-no-sample')).not.toBeInTheDocument();
     expect(screen.getByTestId('editor-file-note')).toHaveTextContent('This is the file the job wrote. A change to it goes through a job.');
     // A real file is not a test page or a sample (coord ruling b): the chrome names the file and says read-only.
@@ -54,6 +56,27 @@ describe('the editor test page on a run file (studio#1516)', () => {
     expect(screen.queryByTestId('surfaces-mock-chat')).not.toBeInTheDocument();
     expect(screen.queryByTestId('plugin-card-who')).not.toBeInTheDocument(); // no made-up maker on a real file
     expect(screen.queryByTestId('editor-protocol-toggle')).not.toBeInTheDocument();
+  });
+
+  it("the file's text reaches the editor exactly: markup in it stays text (codex R-B W20)", async () => {
+    // Ordinary checklist values with angle brackets and ampersands, and the file's own leading whitespace. The J6 todo
+    // pack reads `new DOMParser().parseFromString(content.html, 'text/html').body.textContent` (its index.html:143-146).
+    const text = `\n  ${JSON.stringify({ items: [
+      { title: 'Email Alice <alice@example.com>', done: false },
+      { title: 'Write <button> documentation & <b>notes</b>', done: true },
+      { title: '<img src=x onerror=alert(1)>', done: false },
+    ] }, null, 2)}\n`;
+    vi.spyOn(client.api, 'getRunFile').mockResolvedValue({ path: PATH, content: text, size: text.length, truncated: false, binary: false });
+    at(FILE_HREF);
+    render(<EditorHostPage mode="dev" />);
+    await waitFor(() => expect(hosts.length).toBeGreaterThan(0));
+    const read = await hosts[0]!.adapter.read() as { content: { type: string; html: string } };
+    const doc = new DOMParser().parseFromString(read.content.html, 'text/html');
+    expect(doc.body.textContent).toBe(text);
+    expect(doc.body.querySelector('button, img, b')).toBeNull(); // no element came from the file
+    expect(JSON.parse(doc.body.textContent!.trim()).items.map((i: { title: string }) => i.title)).toEqual([
+      'Email Alice <alice@example.com>', 'Write <button> documentation & <b>notes</b>', '<img src=x onerror=alert(1)>',
+    ]);
   });
 
   it('a truncated or binary file is refused with the reason, and no editor mounts', async () => {

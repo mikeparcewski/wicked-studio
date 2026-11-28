@@ -161,7 +161,7 @@ function ArtifactHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'; nav
         if (!live) return;
         if (r.binary) setFileRead({ page, read: { state: 'refused', text: 'This is a binary file, so an editor cannot open it.' } });
         else if (r.truncated) setFileRead({ page, read: { state: 'refused', text: `This file is too large to open in an editor here (${sizeInWords(r.size)}); only part of it could be read.` } });
-        else setFileRead({ page, read: { state: 'ok', name, adapter: new FakeSurfaceAdapter({ kind: page.kind, title: name }, r.content, { readonly: true }) } });
+        else setFileRead({ page, read: { state: 'ok', name, adapter: FakeSurfaceAdapter.ofFile({ kind: page.kind, title: name }, r.content) } });
       })
       .catch((e: unknown) => {
         if (live) setFileRead({ page, read: { state: 'refused', text: `Couldn’t read this file: ${e instanceof Error ? e.message : String(e)}` } });

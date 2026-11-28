@@ -12,6 +12,15 @@ export class FakeSurfaceAdapter extends FakeDocAdapter implements SurfaceAdapter
     super(html ?? (binding.kind === 'deck' ? SAMPLE_DECK : SAMPLE_PAGE), binding.title, { kind: binding.kind, readonly: opts.readonly ?? false });
   }
   capabilities(): readonly AdapterCapability[] { return this.readonly ? ['read'] : ['read', 'write']; }
+
+  /** A job's file, read-only (studio#1516), as the host's document content: HTML whose text IS the file. The text is
+   *  escaped, so `<alice@example.com>` or `<button>` in the file stays text and never becomes markup; it sits in a
+   *  `<pre>` after one newline (the one the HTML parser drops), so `body.textContent` is the file's text exactly
+   *  (only a CRLF reaches the editor as LF, as any HTML parse does). */
+  static ofFile(binding: Pick<ArtifactBinding, 'kind' | 'title'>, text: string): FakeSurfaceAdapter {
+    const escaped = text.replace(/&/gu, '&amp;').replace(/</gu, '&lt;').replace(/>/gu, '&gt;');
+    return new FakeSurfaceAdapter(binding, `<pre>\n${escaped}</pre>`, { readonly: true });
+  }
   pills(): readonly StatusPill[] { return [{ id: 'version', text: `Version ${this.artifact().head}`, tone: 'neutral' }]; }
 }
 
