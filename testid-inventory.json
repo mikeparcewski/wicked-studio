@@ -51,6 +51,252 @@
       ]
     },
     {
+      "testId": "adv-council",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-deliverAuthorNoreply",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-deliverAuthorNoreply-toggle",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-deliverTrailers",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-deliverTrailers-input",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-deliverTrailers-invalid",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-deliverTrailers-toomany",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-delivery",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-identities",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-identities-failed",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-inherit-warning",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-inheritOperatorCliConfig",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-inheritOperatorCliConfig-toggle",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-isolation",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-learning",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-network",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-network-none-note",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-not-kept",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-onboardingAutoCapture",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-onboardingAutoCapture-toggle",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-publicOrigin",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-publicOrigin-input",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-publicOrigin-invalid",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-resources",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-runLearnings",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-runLearnings-input",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-save",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-save-blocked",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-save-error",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-seatEgressHosts",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-seatEgressHosts-input",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-seatEgressHosts-invalid",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-seatEgressHosts-toomany",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-seatNetwork",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-seatNetwork-input",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-stall",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-time",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-unsupported",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-workerStallEscalateAction",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "adv-workerStallEscalateAction-input",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "testId": "advanced-settings",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
       "testId": "agents-add",
       "files": [
         "src/components/agents/AgentsPage.tsx"
@@ -22624,6 +22870,12 @@
       ]
     },
     {
+      "testId": "settings-council-size-pinned",
+      "files": [
+        "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
       "testId": "settings-page",
       "files": [
         "src/components/SettingsPage.tsx"
@@ -28374,6 +28626,12 @@
       ]
     },
     {
+      "pattern": "*-default",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
       "pattern": "*-detail",
       "files": [
         "src/components/QeRefusalWarning.tsx",
@@ -28482,6 +28740,12 @@
       ]
     },
     {
+      "pattern": "*-invalid",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
       "pattern": "*-item",
       "files": [
         "src/components/trackers/TrackerSet.tsx"
@@ -28567,6 +28831,12 @@
       "pattern": "*-options",
       "files": [
         "src/components/FacetAutocomplete.tsx"
+      ]
+    },
+    {
+      "pattern": "*-pinned",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
       ]
     },
     {
@@ -28973,6 +29243,30 @@
       "pattern": "*-write-own",
       "files": [
         "src/components/sources/AskData.tsx"
+      ]
+    },
+    {
+      "pattern": "adv-*",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "pattern": "adv-*-input",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "pattern": "adv-*-invalid",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
+      ]
+    },
+    {
+      "pattern": "adv-identity-*",
+      "files": [
+        "src/components/AdvancedSettings.tsx"
       ]
     },
     {
@@ -29504,6 +29798,7 @@
     {
       "expression": "testId",
       "files": [
+        "src/components/AdvancedSettings.tsx",
         "src/components/AgeStamp.tsx",
         "src/components/AnchoredOverlay.tsx",
         "src/components/AppearanceSettings.tsx",

@@ -1,6 +1,7 @@
 import { PAGE_NAMES } from '../board/pageNames.js';
 import { readSettingsTab, settingsPath, type SettingsTab } from '../board/settingsTabs.js';
 import type { Navigate } from '../hooks/useRoute.js';
+import { AdvancedSettings } from './AdvancedSettings.js';
 import { MaintenanceSettings } from './MaintenanceSettings.js';
 import { StartOnLoginSettings } from './StartOnLoginSettings.js';
 import { SystemSettings } from './SystemSettings.js';
@@ -12,6 +13,7 @@ import { Tabs } from './ui/Tabs.js';
 const INTRO: Record<SettingsTab, string> = {
   general: 'Choose how Studio displays your work and uses your helpers.',
   theme: 'Choose the colors and branding for your workspace.',
+  advanced: 'Each change applies the next time Studio uses that setting, including in jobs already running.',
 };
 
 /**
@@ -30,7 +32,7 @@ export function SettingsPage({ navigate, search }: { navigate: Navigate; search:
         aria-label="Settings"
         data-testid="settings-tabs"
         tabTestId="settings-tab"
-        tabs={[{ id: 'general', label: 'General' }, { id: 'theme', label: PAGE_NAMES.theme }]}
+        tabs={[{ id: 'general', label: 'General' }, { id: 'theme', label: PAGE_NAMES.theme }, { id: 'advanced', label: 'Advanced' }]}
         active={tab}
         onChange={(id) => { if (id !== tab) navigate(settingsPath(id as SettingsTab)); }}
       />
@@ -38,7 +40,7 @@ export function SettingsPage({ navigate, search }: { navigate: Navigate; search:
         {tab === 'general' ? (
           // (crew#1475) Maintenance follows the General settings, one gap apart; (studio#1324) Start at login just before it.
           <div className="wk-pg-set-content"><SystemSettings navigate={navigate} /><StartOnLoginSettings /><MaintenanceSettings navigate={navigate} /></div>
-        ) : <ThemeSettings navigate={navigate} />}
+        ) : tab === 'advanced' ? <AdvancedSettings /> : <ThemeSettings navigate={navigate} />}
       </div>
     </PageFrame>
   );

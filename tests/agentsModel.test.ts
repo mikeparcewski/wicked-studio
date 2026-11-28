@@ -354,6 +354,8 @@ describe('issues, counts and the fix button (§4)', () => {
     const cw = issueCopy(find(codex, 'codex_worktree'), codex, rows, NOW);
     expect(cw.fix[0]!.text).toContain('Quality checks stay unavailable');
     expect(JSON.stringify(cw.fix.map((f) => [f.lead, f.text]))).not.toContain('WICKED_');
-    expect(cw.fix[1]!.sub![1]!.tech!.text).toContain('WICKED_CODEX_WORKTREE_OK');
+    // crew#2013: the retired host opt-out is never offered; the container floor is.
+    expect(cw.fix[1]!.tech!.text).toContain('WICKED_SEAT_FLOOR=container');
+    expect(JSON.stringify(cw)).not.toContain('WICKED_CODEX_WORKTREE_OK');
   });
 });

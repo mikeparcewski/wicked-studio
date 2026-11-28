@@ -94,6 +94,9 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   /** Where the daemon says its settings file lives (`GET /settings.path`, crew 0.7.36); `null` =
    *  the daemon predates the field — the page then says so instead of naming a path it made up. */
   const [settingsPath, setSettingsPath] = useState<string | null>(null);
+  /** (crew#2013, api-types next `SettingsResponse.environment`) The council size this computer's environment
+   *  sets, if it does: the control is then read-only. Absent on an older daemon. */
+  const [councilPin, setCouncilPin] = useState<{ env: string[]; value: string } | null>(null);
   /** studio#275: the discipline (base) skill posture (`GET /diagnostics.skills.baseSkill`); `undefined`
    *  until read, and when the daemon predates the field or has no diagnostics route. */
   const [baseSkill, setBaseSkill] = useState<BaseSkillPosture | null | undefined>(undefined);
@@ -139,6 +142,10 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
         setSettings(res.settings);
         // api-types 0.38.0 `SettingsResponse.path?` (crew 0.7.36); absent/empty on an older daemon.
         setSettingsPath(typeof res.path === 'string' && res.path !== '' ? res.path : null);
+        const councilPinned = (res as { environment?: { councilSize?: { env: string[]; value: string } } }).environment?.councilSize ?? null;
+        setCouncilPin(councilPinned);
+        // A size picked before the pin was known can't be saved (the daemon's 409): drop it (round 1).
+        if (councilPinned !== null) setDirty((d) => { const n = { ...d }; delete n.councilSize; return n; });
       })
       // EC33: the translated message, never `String(Error)`'s "Error: …" framing.
       .catch((e: unknown) => { setErrorSource((previous: unknown) => readErrorKind(previous) === 'offline' ? previous : e); setError(e instanceof Error ? e.message : String(e)); });
@@ -153,13 +160,16 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   }
 
   async function save(): Promise<void> {
-    if (Object.keys(dirty).length === 0) return;
+    // A pinned council size is never sent (the daemon refuses it, and the whole save with it).
+    const body: Partial<LocalSettings> = { ...dirty };
+    if (councilPin !== null) delete body.councilSize;
+    if (Object.keys(body).length === 0) return;
     setSaving(true);
     setError(null);
     setWorkerRootError(null);
     setDeliverIdentityError(null);
     try {
-      const res = await api.updateSettings(dirty as Partial<Settings>);
+      const res = await api.updateSettings(body as Partial<Settings>);
       setSettings(res.settings);
       setDirty({});
       setSaved(true);
@@ -173,6 +183,14 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
       else if ('deliverIdentityLogin' in dirty) setDeliverIdentityError(msg);
       else { setErrorSource(e); setError(msg); }
     } finally {
+      // The council pin is read again after every save (a 409 names a pin set since the page loaded),
+      // and a pending size it now pins is dropped (round 2).
+      const r = await api.getSettings().catch(() => null);
+      if (r !== null) {
+        const pinned = (r as { environment?: { councilSize?: { env: string[]; value: string } } }).environment?.councilSize ?? null;
+        setCouncilPin(pinned);
+        if (pinned !== null) setDirty((d) => { const n = { ...d }; delete n.councilSize; return n; });
+      }
       setSaving(false);
     }
   }
@@ -182,6 +200,14 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   if (settings?.councilSize !== undefined && !councilSizeOptions.includes(String(settings.councilSize))) {
     councilSizeOptions.push(String(settings.councilSize));
   }
+  // A pinned size shows the size in force: the engine's own reading of the variable (wicked-council
+  // pick.rs `council_size_from`: trimmed, 1..9, else the default 3), not its raw text (round 2).
+  const pinnedSize = councilPin === null ? null : (() => {
+    const t = councilPin.value.trim();
+    const n = /^[0-9]+$/.test(t) ? Number(t) : NaN;
+    return String(n >= 1 && n <= 9 ? n : 3);
+  })();
+  if (pinnedSize !== null && !councilSizeOptions.includes(pinnedSize)) councilSizeOptions.push(pinnedSize);
   const hasDirty = Object.keys(dirty).length > 0;
   const workerRoot = merged.worker_config_root ?? '';
   const workerRootInvalid = workerRoot !== '' && !isAbsolutePathLike(workerRoot);
@@ -285,10 +311,11 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
           <Segmented
             label="Council size"
             data-testid="settings-council-size"
-            value={String(merged.councilSize ?? 3)}
-            options={councilSizeOptions.map((value) => ({ value, label: value }))}
+            value={pinnedSize ?? String(merged.councilSize ?? 3)}
+            options={councilSizeOptions.map((value) => ({ value, label: value, disabled: councilPin !== null || settings === null }))}
             onChange={(value) => patch('councilSize', Number(value))}
           />
+          {councilPin !== null && <p className="wk-field-note" data-testid="settings-council-size-pinned">Set by this computer&apos;s environment ({councilPin.env.join(', ')}), so it can&apos;t be changed here: {councilPin.value}</p>}
         </SettingRow>
       </section>
 

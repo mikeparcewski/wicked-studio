@@ -47,7 +47,7 @@ describe('the Settings page', () => {
     const page = screen.getByTestId('settings-page');
     expect(within(page).getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
     const tabs = screen.getAllByRole('tab');
-    expect(tabs.map((t) => t.textContent)).toEqual(['General', 'Theme']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['General', 'Theme', 'Advanced']);
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
     expect(tabs[1]).toHaveAttribute('aria-selected', 'false');
     const panel = screen.getByRole('tabpanel');
@@ -95,6 +95,8 @@ describe('the Settings page', () => {
     await user.keyboard('{ArrowLeft}');
     expect(general).toHaveFocus();
     await user.keyboard('{End}');
+    expect(screen.getAllByRole('tab')[2]).toHaveFocus(); // Advanced (crew#2013) is last
+    await user.keyboard('{ArrowLeft}');
     expect(theme).toHaveFocus();
     await user.keyboard('{Enter}');
     expect(navigate).toHaveBeenCalledWith(SETTINGS_THEME_PATH);
