@@ -123,3 +123,14 @@
 .wk-rp-add-project { display: flex; flex-direction: column; gap: var(--space-1); margin-top: var(--space-2); min-width: 0; }
 .wk-rp-add-project-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
 .wk-rp-add-project-row .wk-field { width: auto; min-width: 0; max-width: 100%; flex: 1 1 180px; }
+/* crew#1984: a repository's seat image (Settings): the base image field, its actions, and the toolchain layer rows */
+.wk-rp-seatform { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 14px 0; margin-top: 14px; border-top: 1px solid var(--border-subtle); }
+.wk-rp-seatform > label { color: var(--ink-high); font-weight: var(--weight-semi); font-size: var(--text-sm); }
+.wk-rp-seatform > .wk-field { width: 100%; min-width: 0; padding: 4px var(--control-px); font-family: var(--font-mono); }
+.wk-rp-seatform-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.wk-rp-seatform > p { margin: 0; font-size: var(--text-sm); color: var(--ink-muted); line-height: 1.5; }
+.wk-rp-seatform > .wk-rp-seatform-err { color: var(--status-fail); overflow-wrap: anywhere; }
+/* A reference can be one 255-character token (the engine echoes a refused one): it wraps inside the card. */
+.wk-rp-seatbase-now { min-width: 0; overflow-wrap: anywhere; }
+.wk-rp-layers { padding-top: 14px; border-top: 1px solid var(--border-subtle); }
+.wk-rp-layer { display: contents; }

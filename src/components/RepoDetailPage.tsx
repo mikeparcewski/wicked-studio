@@ -35,6 +35,7 @@ import { HotspotsView } from './HotspotsView.js';
 import { LanguageBar } from './LanguageBar.js';
 import { Modal } from './Modal.js';
 import { RepoFindings, findingNeedsReonboard } from './RepoFindings.js';
+import { RepoSeatBase, useSeatEdit } from './RepoSeatBase.js';
 import { KnowMarks } from './RepoKnowledge.js';
 import { RepoTrackers } from './RepoTrackers.js';
 import { RequirementsModal } from './RequirementsModal.js';
@@ -269,6 +270,26 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
       .then((g) => { if (graphCurrent()) { setGraph(g); setGraphFailed(null); } })
       .catch((e: unknown) => { if (graphCurrent()) setGraphFailed(graphReadError(e)); });
   }, [rawRuns, loading, repoId]);
+
+  /** (crew#1984, DES on studio#1513) Read the repository again after a seat image save settles, so the page shows what
+   *  crew holds (never a save's own answer, which a newer read may have passed). It goes through the page's one read
+   *  fence: only the newest re-read of the current visit lands. While a visit is still loading, its first read may
+   *  predate the save, so that load is started again instead. Nothing happens once the page shows another repository.
+   *  Resolves `false` only when the read itself failed (the page still shows what it showed before the save). */
+  const loadingRef = useRef(loading);
+  loadingRef.current = loading;
+  function seatReRead(forRepo: string): Promise<boolean> {
+    if (repoRef.current !== forRepo) return Promise.resolve(true);
+    if (loadingRef.current) { setReload((n) => n + 1); return Promise.resolve(true); }
+    const forVisit = visitRef.current.visit;
+    const seq = ++reReadSeq.current;
+    const current = (): boolean => repoRef.current === forRepo && visitRef.current.visit === forVisit && reReadSeq.current === seq;
+    return api.listRepos()
+      .then(({ repos }) => { const r = repos.find((x) => x.id === forRepo) ?? null; if (current() && r !== null) setRepo(r); return true; })
+      // A failed repository read keeps the repository shown, and says so to the save that asked.
+      .catch(() => false);
+  }
+  const seatEdit = useSeatEdit(repoId, seatReRead);
 
   /** "Try again" on a failed graph read: re-reads the graph alone, for the repo it was pressed on. */
   function retryGraph(): void {
@@ -698,6 +719,8 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                     <TechDetails data-testid="repo-detail-path" summary="Its folder on this computer" text={repo.root_path} />
                     {gitLink !== null && <a className="wk-link wk-rp-more" href={gitLink} target="_blank" rel="noopener noreferrer">View on the web</a>}
                   </section>
+                  {/* crew#1984: the edit state is the page's, reset per repository (useSeatEdit); keyed by repository as well. */}
+                  <RepoSeatBase key={repo.id} repo={repo} edit={seatEdit} />
                 </div>
               </div>
             )}
