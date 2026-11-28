@@ -58,7 +58,9 @@ beforeEach(() => {
   resetRepoKnowledge();
   listRepos.mockReset();
   listRepos.mockResolvedValue({ repos: [listed(null)] });
-  setRepoSeatBase.mockClear();
+  // Reset, not clear: a queued once-answer must never carry into the next test.
+  setRepoSeatBase.mockReset();
+  setRepoSeatBase.mockImplementation(() => Promise.resolve(written('acme/seat-base:go')));
 });
 afterEach(cleanup);
 
@@ -134,7 +136,7 @@ describe('repository page: a seat image save (crew#1984)', () => {
     expect(baseNow()).toBe('acme/seat-base:a');
   });
 
-  it('PARTIAL FAILURE: a refused save after the tab came back does not hide an earlier save that went in', async () => {
+  it('PARTIAL FAILURE: a save in flight across a tab remount blocks another, then lands; a later refused save does not hide it', async () => {
     let answerA: (e: RepoEntry) => void = () => {};
     setRepoSeatBase
       .mockImplementationOnce(() => new Promise<RepoEntry>((r) => { answerA = r; }))
@@ -146,11 +148,30 @@ describe('repository page: a seat image save (crew#1984)', () => {
     rerender(ui([], { tab: 'overview' }));
     rerender(ui([]));
     await screen.findByTestId('repo-seat-image');
-    fireEvent.change(screen.getByTestId('repo-seat-base-input'), { target: { value: 'Bad Ref' } });
+    // The page's edit survived the remount: still saving, so nothing more is sent.
+    expect((screen.getByTestId('repo-seat-base-save') as HTMLButtonElement).textContent).toBe('Saving…');
     fireEvent.click(screen.getByTestId('repo-seat-base-save'));
+    expect(setRepoSeatBase).toHaveBeenCalledTimes(1);
     listRepos.mockResolvedValue({ repos: [listed('acme/seat-base:a')] });
     answerA(written('acme/seat-base:a'));
     await waitFor(() => expect(baseNow()).toBe('acme/seat-base:a'));
+    // Then a refused save: the engine's words, and the base crew holds is still shown.
+    fireEvent.change(screen.getByTestId('repo-seat-base-input'), { target: { value: 'Bad Ref' } });
+    fireEvent.click(screen.getByTestId('repo-seat-base-save'));
+    expect((await screen.findByTestId('repo-seat-base-error')).textContent).toBe('refused by the engine');
+    expect(baseNow()).toBe('acme/seat-base:a');
+  });
+
+  // Coord ruling on the capped check (finding A): a save that went in, read back by a request that failed, says so.
+  it('PARTIAL FAILURE: a save that went in but could not be read back keeps the draft and says to reload', async () => {
+    render(ui([]));
+    await screen.findByTestId('repo-seat-image');
+    listRepos.mockRejectedValue(new ApiError(503, 'Service Unavailable'));
+    fireEvent.change(screen.getByTestId('repo-seat-base-input'), { target: { value: 'acme/seat-base:a' } });
+    fireEvent.click(screen.getByTestId('repo-seat-base-save'));
+    const note = await screen.findByTestId('repo-seat-base-error');
+    expect(note.textContent).toBe('Saved. The page could not read it back: reload to see it.');
+    expect((screen.getByTestId('repo-seat-base-input') as HTMLInputElement).value).toBe('acme/seat-base:a');
   });
 
   it('a draft survives leaving the Settings tab and coming back', async () => {
