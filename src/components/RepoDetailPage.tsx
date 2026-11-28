@@ -35,7 +35,7 @@ import { HotspotsView } from './HotspotsView.js';
 import { LanguageBar } from './LanguageBar.js';
 import { Modal } from './Modal.js';
 import { RepoFindings, findingNeedsReonboard } from './RepoFindings.js';
-import { RepoSeatBase } from './RepoSeatBase.js';
+import { RepoSeatBase, useSeatEdit } from './RepoSeatBase.js';
 import { KnowMarks } from './RepoKnowledge.js';
 import { RepoTrackers } from './RepoTrackers.js';
 import { RequirementsModal } from './RequirementsModal.js';
@@ -271,20 +271,23 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
       .catch((e: unknown) => { if (graphCurrent()) setGraphFailed(graphReadError(e)); });
   }, [rawRuns, loading, repoId]);
 
-  /** (crew#1984) The newest seat image save begun on this page. It lives here, not in the card, because the card
-   *  remounts with the Settings tab: an older card's answer arriving after a newer save must not land. */
-  const seatWrite = useRef(0);
-  /** (crew#1984) Begin a seat image save; the function returned lands its answer. The engine's post-write entry is
-   *  shown (its `git_url` kept: crew adds that on `GET /repos` only) only while it is the newest save begun, and a
-   *  repository re-read begun before it no longer lands (it would be older). */
-  function beginSeatSave(): (entry: RepoEntry) => void {
-    const mine = ++seatWrite.current;
-    return (entry) => {
-      if (seatWrite.current !== mine || entry.id !== repoRef.current) return;
-      reReadSeq.current += 1;
-      setRepo((prev) => (prev !== null && prev.id === entry.id ? { ...entry, ...(prev.git_url !== undefined ? { git_url: prev.git_url } : {}) } : prev));
-    };
+  /** (crew#1984, DES on studio#1513) Read the repository again after a seat image save settles, so the page shows what
+   *  crew holds (never a save's own answer, which a newer read may have passed). It goes through the page's one read
+   *  fence: only the newest re-read of the current visit lands. While a visit is still loading, its first read may
+   *  predate the save, so that load is started again instead. Nothing happens once the page shows another repository. */
+  const loadingRef = useRef(loading);
+  loadingRef.current = loading;
+  function seatReRead(forRepo: string): Promise<void> {
+    if (repoRef.current !== forRepo) return Promise.resolve();
+    if (loadingRef.current) { setReload((n) => n + 1); return Promise.resolve(); }
+    const forVisit = visitRef.current.visit;
+    const seq = ++reReadSeq.current;
+    const current = (): boolean => repoRef.current === forRepo && visitRef.current.visit === forVisit && reReadSeq.current === seq;
+    return api.listRepos()
+      .then(({ repos }) => { const r = repos.find((x) => x.id === forRepo) ?? null; if (current() && r !== null) setRepo(r); })
+      .catch(() => { /* a failed repository read keeps the repository shown */ });
   }
+  const seatEdit = useSeatEdit(repoId, seatReRead);
 
   /** "Try again" on a failed graph read: re-reads the graph alone, for the repo it was pressed on. */
   function retryGraph(): void {
@@ -714,8 +717,8 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph, sea
                     <TechDetails data-testid="repo-detail-path" summary="Its folder on this computer" text={repo.root_path} />
                     {gitLink !== null && <a className="wk-link wk-rp-more" href={gitLink} target="_blank" rel="noopener noreferrer">View on the web</a>}
                   </section>
-                  {/* crew#1984: keyed by repository, so a draft for one is never shown on another. */}
-                  <RepoSeatBase key={repo.id} repo={repo} beginSave={beginSeatSave} />
+                  {/* crew#1984: the edit state is the page's, reset per repository (useSeatEdit); keyed by repository as well. */}
+                  <RepoSeatBase key={repo.id} repo={repo} edit={seatEdit} />
                 </div>
               </div>
             )}

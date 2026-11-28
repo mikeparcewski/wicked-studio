@@ -1,8 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { RepoEntry } from '../src/api/types.js';
-import { RepoSeatBase } from '../src/components/RepoSeatBase.js';
+import { RepoSeatBase, useSeatEdit } from '../src/components/RepoSeatBase.js';
 import { layerWord, seatBaseOf, seatLayersOf } from '../src/board/repoSeat.js';
+
+/** The card with its page-owned edit state ({@link useSeatEdit}), as the repository page renders it. */
+function Card({ repo, reRead = () => Promise.resolve() }: { repo: RepoEntry; reRead?: (id: string) => Promise<void> }): React.ReactElement {
+  const edit = useSeatEdit(repo.id, reRead);
+  return <RepoSeatBase repo={repo} edit={edit} />;
+}
 
 /**
  * crew#1984 (wicked-core#2023, core#1043 part 3): a repository's seat image on its Settings tab.
@@ -58,7 +64,7 @@ const save = () => screen.getByTestId('repo-seat-base-save') as HTMLButtonElemen
 
 describe('repository seat image (crew#1984)', () => {
   it('shows the repository’s base and why each layer is not added', () => {
-    render(<RepoSeatBase repo={entry('acme/seat-base:go')} beginSave={() => () => {}} />);
+    render(<Card repo={entry('acme/seat-base:go')} />);
     expect(screen.getByTestId('repo-seat-base-now').textContent).toBe('acme/seat-base:go');
     expect(input().value).toBe('acme/seat-base:go');
     const rows = screen.getByTestId('repo-seat-layers').textContent ?? '';
@@ -68,7 +74,7 @@ describe('repository seat image (crew#1984)', () => {
   });
 
   it('with no base: the default, and the layers its seats get', () => {
-    render(<RepoSeatBase repo={entry(null)} beginSave={() => () => {}} />);
+    render(<Card repo={entry(null)} />);
     expect(screen.getByTestId('repo-seat-base-now').textContent).toBe('This daemon’s default');
     expect(screen.queryByTestId('repo-seat-base-clear')).toBeNull();
     expect(screen.getByTestId('repo-seat-layers').textContent).toContain('Added to its seats');
@@ -76,39 +82,37 @@ describe('repository seat image (crew#1984)', () => {
   });
 
   it('STALE READS: Save sends the trimmed reference and shows the engine’s post-write entry', async () => {
-    const onSaved = vi.fn();
-    const { rerender } = render(<RepoSeatBase repo={entry(null)} beginSave={() => onSaved} />);
+    const reRead = vi.fn(() => Promise.resolve());
+    const { rerender } = render(<Card repo={entry(null)} reRead={reRead} />);
     fireEvent.change(input(), { target: { value: '  acme/seat-base:go  ' } });
     fireEvent.click(save());
-    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(reRead).toHaveBeenCalledWith('shop'));
     expect(sent).toEqual([{ method: 'PUT', path: '/repos/shop/seat-base', body: { image: 'acme/seat-base:go' } }]);
-    expect(onSaved.mock.calls[0]![0]).toMatchObject({ id: 'shop', seat_base_image: 'acme/seat-base:go' });
-    // The page shows the entry it was handed; the field follows it.
-    rerender(<RepoSeatBase repo={onSaved.mock.calls[0]![0] as RepoEntry} beginSave={() => onSaved} />);
+    await waitFor(() => expect(save().textContent).toBe('Save'));
+    // The page's re-read shows what crew holds; the untouched field follows it.
+    rerender(<Card repo={entry('acme/seat-base:go')} reRead={reRead} />);
     expect(input().value).toBe('acme/seat-base:go');
     expect(save().disabled).toBe(true);
   });
 
   it('“Use the default” clears it with null', async () => {
-    const onSaved = vi.fn();
-    const { rerender } = render(<RepoSeatBase repo={entry('acme/seat-base:go')} beginSave={() => onSaved} />);
+    const reRead = vi.fn(() => Promise.resolve());
+    const { rerender } = render(<Card repo={entry('acme/seat-base:go')} reRead={reRead} />);
     fireEvent.click(screen.getByTestId('repo-seat-base-clear'));
-    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(reRead).toHaveBeenCalledTimes(1));
     expect(sent[0]!.body).toEqual({ image: null });
-    expect(seatBaseOf(onSaved.mock.calls[0]![0] as RepoEntry)).toBeNull();
-    rerender(<RepoSeatBase repo={onSaved.mock.calls[0]![0] as RepoEntry} beginSave={() => onSaved} />);
+    rerender(<Card repo={entry(null)} reRead={reRead} />);
     expect(input().value).toBe('');
   });
 
   it('PARTIAL FAILURE: a refused reference shows the engine’s words, keeps the draft, and saves nothing', async () => {
     answer = (b) => Promise.resolve(json(400, { code: 'seat_base_invalid', error: refusal(String(b['image'])) }));
-    const onSaved = vi.fn();
-    render(<RepoSeatBase repo={entry(null)} beginSave={() => onSaved} />);
+    render(<Card repo={entry(null)} />);
     fireEvent.change(input(), { target: { value: '--privileged' } });
     fireEvent.click(save());
     const err = await screen.findByTestId('repo-seat-base-error');
     expect(err.textContent).toBe(refusal('--privileged'));
-    expect(onSaved).not.toHaveBeenCalled();
+    expect(screen.getByTestId('repo-seat-base-now').textContent).toBe('This daemon’s default');
     expect(input().value).toBe('--privileged');
     expect(save().disabled).toBe(false);
   });
@@ -119,7 +123,7 @@ describe('repository seat image (crew#1984)', () => {
     ['no route', 404, { message: 'Route PUT:/api/v1/repos/shop/seat-base not found', error: 'Not Found', statusCode: 404 }],
   ])('an older daemon (%s) says to update it', async (_name, status, body) => {
     answer = () => Promise.resolve(json(status, body));
-    render(<RepoSeatBase repo={entry(null)} beginSave={() => () => {}} />);
+    render(<Card repo={entry(null)} />);
     fireEvent.change(input(), { target: { value: 'acme/seat-base:go' } });
     fireEvent.click(save());
     expect((await screen.findByTestId('repo-seat-base-error')).textContent).toMatch(/cannot set a repository’s seat image yet/u);
@@ -128,7 +132,7 @@ describe('repository seat image (crew#1984)', () => {
   it('a repository crew no longer knows (404 repo_not_found) shows crew’s words, not upgrade advice', async () => {
     const words = 'no registered repo "shop"';
     answer = () => Promise.resolve(json(404, { code: 'repo_not_found', error: words }));
-    render(<RepoSeatBase repo={entry(null)} beginSave={() => () => {}} />);
+    render(<Card repo={entry(null)} />);
     fireEvent.change(input(), { target: { value: 'acme/seat-base:go' } });
     fireEvent.click(save());
     const err = (await screen.findByTestId('repo-seat-base-error')).textContent ?? '';
@@ -137,12 +141,12 @@ describe('repository seat image (crew#1984)', () => {
   });
 
   it('STALE READS: an untouched field follows the repository’s base as the page re-reads it; an edit is kept', () => {
-    const { rerender } = render(<RepoSeatBase repo={entry('acme/seat-base:go')} beginSave={() => () => {}} />);
-    rerender(<RepoSeatBase repo={entry('acme/seat-base:java')} beginSave={() => () => {}} />);
+    const { rerender } = render(<Card repo={entry('acme/seat-base:go')} />);
+    rerender(<Card repo={entry('acme/seat-base:java')} />);
     expect(input().value).toBe('acme/seat-base:java');
     expect(save().disabled).toBe(true);
     fireEvent.change(input(), { target: { value: 'acme/seat-base:rust' } });
-    rerender(<RepoSeatBase repo={entry('acme/seat-base:node')} beginSave={() => () => {}} />);
+    rerender(<Card repo={entry('acme/seat-base:node')} />);
     expect(input().value).toBe('acme/seat-base:rust');
     expect(save().disabled).toBe(false);
   });
@@ -150,7 +154,7 @@ describe('repository seat image (crew#1984)', () => {
   it('UNTRUSTED TEXT OUT: a reference and a refusal are shown as text, never as markup', async () => {
     const odd = '<b id="x">bold</b>';
     answer = () => Promise.resolve(json(400, { code: 'seat_base_invalid', error: refusal(odd) }));
-    render(<RepoSeatBase repo={entry(odd)} beginSave={() => () => {}} />);
+    render(<Card repo={entry(odd)} />);
     expect(screen.getByTestId('repo-seat-base-now').textContent).toBe(odd);
     expect(document.getElementById('x')).toBeNull();
     fireEvent.change(input(), { target: { value: `${odd} ` } });
@@ -161,17 +165,17 @@ describe('repository seat image (crew#1984)', () => {
   });
 
   it('IDENTITY REUSE: keyed by repository, a draft typed on one is not shown on another', () => {
-    const { rerender } = render(<RepoSeatBase key="shop" repo={entry(null)} beginSave={() => () => {}} />);
+    const { rerender } = render(<Card key="shop" repo={entry(null)} />);
     fireEvent.change(input(), { target: { value: 'acme/seat-base:go' } });
-    rerender(<RepoSeatBase key="shipping" repo={entry(null, 'shipping')} beginSave={() => () => {}} />);
+    rerender(<Card key="shipping" repo={entry(null, 'shipping')} />);
     expect(input().value).toBe('');
   });
 
   it('a save in flight blocks another (no second request), then shows its answer', async () => {
     const resolvers: Array<(r: Response) => void> = [];
     answer = () => new Promise<Response>((res) => { resolvers.push(res); });
-    const onSaved = vi.fn();
-    render(<RepoSeatBase repo={entry('acme/seat-base:go')} beginSave={() => onSaved} />);
+    const reRead = vi.fn(() => Promise.resolve());
+    render(<Card repo={entry('acme/seat-base:go')} reRead={reRead} />);
     fireEvent.change(input(), { target: { value: 'acme/seat-base:java' } });
     fireEvent.click(save());
     expect(save().textContent).toBe('Saving…');
@@ -183,8 +187,8 @@ describe('repository seat image (crew#1984)', () => {
     fireEvent.submit(input().form!);
     expect(resolvers).toHaveLength(1);
     await act(async () => { resolvers[0]!(json(200, entry('acme/seat-base:java'))); await Promise.resolve(); });
-    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
-    expect(seatBaseOf(onSaved.mock.calls[0]![0] as RepoEntry)).toBe('acme/seat-base:java');
+    await waitFor(() => expect(reRead).toHaveBeenCalledTimes(1));
+    expect(sent).toHaveLength(1);
   });
 });
 

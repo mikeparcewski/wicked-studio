@@ -5,13 +5,6 @@ import type { RepoEntry } from '../api/types.js';
 import { layerName, layerWord, seatBaseOf, seatLayersOf } from '../board/repoSeat.js';
 import { SectionTitle } from './ui/index.js';
 
-interface Props {
-  repo: RepoEntry;
-  /** Begin a save; the function returned hands the engine's entry (its single writer's answer) to the page, which
-   *  shows it only if no newer save was begun since (the card remounts with its tab, so the page keeps the order). */
-  beginSave: () => (entry: RepoEntry) => void;
-}
-
 /** What a failed save says: the engine's own words for a reference it refuses, else the plain sentence. */
 function saveError(e: unknown): string {
   const refused = plainRefusal(e, ['seat_base_invalid', 'repo_not_found']);
@@ -20,41 +13,74 @@ function saveError(e: unknown): string {
   return e instanceof ApiError ? e.message : 'That didn’t save. Try again.';
 }
 
+/** (crew#1984) A repository's seat image edit: the typed draft (`null` until a person types, so the field follows the
+ *  repository's base), whether a save is in flight, and why the last one failed. */
+export interface SeatEdit {
+  draft: string | null;
+  saving: boolean;
+  error: string | null;
+  setDraft: (draft: string) => void;
+  save: (image: string | null) => void;
+}
+
+interface EditState { repoId: string; visit: number; draft: string | null; saving: boolean; error: string | null }
+
+/**
+ * (crew#1984, DES on studio#1513) The seat image edit for the repository a page shows. It lives in the page, not the
+ * card, so leaving the Settings tab keeps the draft, the in-flight block and a late refusal; it starts fresh for each
+ * repository opened. A save never shows crew's answer itself: when it settles (saved or refused) the page reads the
+ * repository again (`reRead`), so what is shown is what crew holds, through the page's one read fence.
+ */
+export function useSeatEdit(repoId: string, reRead: (repoId: string) => Promise<void>): SeatEdit {
+  const visit = useRef({ repoId, n: 0 });
+  if (visit.current.repoId !== repoId) visit.current = { repoId, n: visit.current.n + 1 };
+  const fresh = (): EditState => ({ repoId, visit: visit.current.n, draft: null, saving: false, error: null });
+  const [state, setState] = useState<EditState>(fresh);
+  // The opening a save is in flight for: a second press before the re-render shows "Saving…" sends nothing.
+  const busy = useRef<number | null>(null);
+  const cur = state.repoId === repoId && state.visit === visit.current.n ? state : fresh();
+  if (cur !== state) setState(cur);
+
+  /** Apply `f` only while the same opening of the same repository is shown. */
+  const update = (forVisit: number, f: (s: EditState) => EditState): void =>
+    setState((s) => (s.repoId === repoId && s.visit === forVisit ? f(s) : s));
+
+  return {
+    ...cur,
+    setDraft: (draft) => update(cur.visit, (s) => (s.saving ? s : { ...s, draft })),
+    save: (image) => {
+      if (cur.saving || busy.current === cur.visit) return;
+      const forRepo = repoId;
+      const forVisit = cur.visit;
+      busy.current = forVisit;
+      update(forVisit, (s) => ({ ...s, saving: true, error: null }));
+      void (async () => {
+        let error: string | null = null;
+        try { await api.setRepoSeatBase(forRepo, image); } catch (e: unknown) { error = saveError(e); }
+        // Saved or refused, crew's state is read again; a failed read keeps the repository shown.
+        try { await reRead(forRepo); } catch { /* kept */ }
+        if (busy.current === forVisit) busy.current = null;
+        update(forVisit, (s) => ({ ...s, saving: false, error, draft: error === null ? null : s.draft }));
+      })();
+    },
+  };
+}
+
+interface Props {
+  repo: RepoEntry;
+  /** The page's edit for this repository ({@link useSeatEdit}). */
+  edit: SeatEdit;
+}
+
 /**
  * (crew#1984, core#1043) A repository's seat image: its own seat base image (a local image the container runtime
- * already has; never pulled), set or cleared here, and the toolchain layers its seats get. The page keys this by
- * repository id, so a draft typed for one repository is never shown on another.
+ * already has; never pulled), set or cleared here, and the toolchain layers its seats get. It shows the page's
+ * repository and the page's edit state, so it can remount with its tab without losing either.
  */
-export function RepoSeatBase({ repo, beginSave }: Props): React.ReactElement {
+export function RepoSeatBase({ repo, edit }: Props): React.ReactElement {
   const base = seatBaseOf(repo);
   const layers = seatLayersOf(repo);
-  // `null` until a person types: an untouched field follows the repository's base as the page re-reads it.
-  const [draft, setDraft] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // Only the newest save lands its answer (a double click, or Save then Clear).
-  const seq = useRef(0);
-
-  async function save(image: string | null): Promise<void> {
-    const mine = ++seq.current;
-    const land = beginSave();
-    setSaving(true);
-    setError(null);
-    try {
-      const entry = await api.setRepoSeatBase(repo.id, image);
-      if (seq.current !== mine) return;
-      land(entry);
-      // The field follows the base again (it could not be edited while the save was in flight).
-      setDraft(null);
-    } catch (e: unknown) {
-      // Nothing was written: the draft stays as typed, with why.
-      if (seq.current === mine) setError(saveError(e));
-    } finally {
-      if (seq.current === mine) setSaving(false);
-    }
-  }
-
-  const shown = draft ?? base ?? '';
+  const shown = edit.draft ?? base ?? '';
   const trimmed = shown.trim();
   const changed = trimmed !== (base ?? '');
   return (
@@ -66,7 +92,7 @@ export function RepoSeatBase({ repo, beginSave }: Props): React.ReactElement {
       </dl>
       <form
         className="wk-rp-seatform"
-        onSubmit={(ev) => { ev.preventDefault(); if (changed && !saving) void save(trimmed === '' ? null : trimmed); }}
+        onSubmit={(ev) => { ev.preventDefault(); if (changed && !edit.saving) edit.save(trimmed === '' ? null : trimmed); }}
       >
         <label htmlFor={`seat-base-${repo.id}`}>Its own seat base image</label>
         <input
@@ -74,28 +100,29 @@ export function RepoSeatBase({ repo, beginSave }: Props): React.ReactElement {
           className="wk-field"
           data-testid="repo-seat-base-input"
           value={shown}
-          readOnly={saving}
+          readOnly={edit.saving}
           placeholder="e.g. my-team/seat-base:go1.23"
           spellCheck={false}
           autoComplete="off"
           maxLength={255}
-          onChange={(ev) => { if (!saving) setDraft(ev.target.value); }}
+          onChange={(ev) => edit.setDraft(ev.target.value)}
         />
         <div className="wk-rp-seatform-actions">
-          <button type="submit" className="wk-btn wk-btn--secondary" data-testid="repo-seat-base-save" disabled={!changed || saving}>
-            {saving ? 'Saving…' : 'Save'}
+          <button type="submit" className="wk-btn wk-btn--secondary" data-testid="repo-seat-base-save" disabled={!changed || edit.saving}>
+            {edit.saving ? 'Saving…' : 'Save'}
           </button>
           {base !== null && (
-            <button type="button" className="wk-btn wk-btn--quiet" data-testid="repo-seat-base-clear" disabled={saving} onClick={() => void save(null)}>
+            <button type="button" className="wk-btn wk-btn--quiet" data-testid="repo-seat-base-clear" disabled={edit.saving} onClick={() => edit.save(null)}>
               Use the default
             </button>
           )}
         </div>
         <p>
           A local image this computer’s container runtime already has. Its jobs’ seats are built on it instead of the
-          default, from the next step on, and it is never downloaded: a step on an image the runtime lacks stops and says so.
+          default from the next step on, unless this daemon pins its own image for that agent. It is never downloaded:
+          a step on an image the runtime lacks stops and says so.
         </p>
-        {error !== null && <p role="alert" className="wk-rp-seatform-err" data-testid="repo-seat-base-error">{error}</p>}
+        {edit.error !== null && <p role="alert" className="wk-rp-seatform-err" data-testid="repo-seat-base-error">{edit.error}</p>}
       </form>
       {layers !== null && layers.length > 0 && (
         <dl className="wk-rp-kv wk-rp-layers" data-testid="repo-seat-layers">
