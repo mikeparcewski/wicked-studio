@@ -18578,6 +18578,48 @@
       ]
     },
     {
+      "testId": "repo-seat-base-clear",
+      "files": [
+        "src/components/RepoSeatBase.tsx"
+      ]
+    },
+    {
+      "testId": "repo-seat-base-error",
+      "files": [
+        "src/components/RepoSeatBase.tsx"
+      ]
+    },
+    {
+      "testId": "repo-seat-base-input",
+      "files": [
+        "src/components/RepoSeatBase.tsx"
+      ]
+    },
+    {
+      "testId": "repo-seat-base-now",
+      "files": [
+        "src/components/RepoSeatBase.tsx"
+      ]
+    },
+    {
+      "testId": "repo-seat-base-save",
+      "files": [
+        "src/components/RepoSeatBase.tsx"
+      ]
+    },
+    {
+      "testId": "repo-seat-image",
+      "files": [
+        "src/components/RepoSeatBase.tsx"
+      ]
+    },
+    {
+      "testId": "repo-seat-layers",
+      "files": [
+        "src/components/RepoSeatBase.tsx"
+      ]
+    },
+    {
       "testId": "repo-source",
       "files": [
         "src/components/RepositoriesPanel.tsx"
