@@ -5,12 +5,15 @@ import {
   depthOf,
   ISSUE_MAX,
   productPublishApi,
+  projectKeyOf,
   publicationOf,
   publicationsOf,
   publishRefusal,
   publishRefusalCode,
   publishResponseOf,
+  publishSystemOf,
   repoSelector,
+  targetName,
   type ProductPublicationsResponse,
   type ProductPublishCard,
   type PublicationItemState,
@@ -36,22 +39,29 @@ function errorPublication(e: unknown): PublicationState | null {
   return (code === 'unresolved' || code === 'publication_differs') && body['publication'] !== undefined ? publicationOf(body['publication']) : null;
 }
 
-const UNREADABLE = 'crew answered in a form this studio can’t read. Look at the repository before trying again.';
+/** crew's answer couldn't be read: where to look first. Pure. */
+const unreadable = (system: PublishSystem): string => `crew answered in a form this studio can’t read. Look at the ${system === 'jira' ? 'Jira project' : 'repository'} before trying again.`;
 /** The refusals whose way on is a new Compose run (an old run, or a plan crew can't confirm is the launched one). */
 const COMPOSE_AGAIN: ReadonlySet<string> = new Set(['not_a_compose', 'compose_unverified']);
 
+/** Each system's words for where an issue lives (wicked-crew#1901: GitHub's are as before). */
+const WHERE = {
+  github: { on: 'on GitHub', from: 'from GitHub', name: 'GitHub', differs: 'a different title or text', look: 'the repository' },
+  jira: { on: 'in Jira', from: 'from Jira', name: 'Jira', differs: 'a different summary, text, type or parent', look: 'the Jira project' },
+} as const;
+
 /** One item's state, in words, with its tone. Pure. */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- RED STUB (wicked-crew#1901)
-export function itemStateWords(i: PublicationItemState, _system: PublishSystem = 'github'): { words: string; tone: 'ok' | 'warn' | 'fail' | 'muted' } {
+export function itemStateWords(i: PublicationItemState, system: PublishSystem = 'github'): { words: string; tone: 'ok' | 'warn' | 'fail' | 'muted' } {
+  const w = WHERE[system];
   switch (i.state) {
     case 'created':
-      return i.readBack === 'ok' ? { words: 'Created, and checked on GitHub', tone: 'ok' }
-        : i.readBack === 'differs' ? { words: 'Created, but GitHub now shows a different title or text', tone: 'warn' }
-          : i.readBack === null ? { words: 'Created; not checked on GitHub yet', tone: 'muted' }
-            : { words: 'Created, but it couldn’t be read back from GitHub (it may have been deleted)', tone: 'warn' };
+      return i.readBack === 'ok' ? { words: `Created, and checked ${w.on}`, tone: 'ok' }
+        : i.readBack === 'differs' ? { words: `Created, but ${w.name} now shows ${w.differs}`, tone: 'warn' }
+          : i.readBack === null ? { words: `Created; not checked ${w.on} yet`, tone: 'muted' }
+            : { words: `Created, but it couldn’t be read back ${w.from} (it may have been deleted)`, tone: 'warn' };
     case 'sending': return { words: 'Being sent now', tone: 'muted' };
     case 'not_sent': return { words: `Not sent${i.why !== undefined ? `: ${i.why}` : ''}`, tone: 'fail' };
-    case 'unsure': return { words: `Not known whether GitHub created it${i.why !== undefined ? `: ${i.why.replace(/[.\s]+$/, '')}` : ''}. Look in the repository, then say below.`, tone: 'warn' };
+    case 'unsure': return { words: `Not known whether ${w.name} created it${i.why !== undefined ? `: ${i.why.replace(/[.\s]+$/, '')}` : ''}. Look in ${w.look}, then say below.`, tone: 'warn' };
     case 'absent': return { words: 'Not created (you said so); publishing again creates it', tone: 'muted' };
     case 'missing': return { words: 'Not sent yet', tone: 'muted' };
   }
@@ -69,13 +79,20 @@ export function issueNumberOf(typed: string): number | null {
   return Number.isSafeInteger(n) && n <= ISSUE_MAX ? n : null;
 }
 
-/** RED STUB (wicked-crew#1901): the Jira key a person typed. */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- RED STUB
-export const jiraKeyOf = (_typed: string, _target: string): string | null => null;
+/**
+ * (wicked-crew#1901) The Jira issue key a person typed (`PROJA-12`, any case), as a key of the target's own project
+ * (`KEY@<cloudId>`), or `null`: a key of another project, or a bare number, is not taken. Pure.
+ */
+export function jiraKeyOf(typed: string, target: string): string | null {
+  const key = projectKeyOf(target);
+  const m = /^([A-Za-z][A-Za-z0-9_]{0,19})-([1-9]\d{0,9})$/.exec(typed.trim());
+  return key !== null && m !== null && m[1]!.toUpperCase() === key ? `${key}-${m[2]}` : null;
+}
 
 /**
- * PUBLISH TO GITHUB on a finished Compose run (wicked-crew#372): the plan's epics, features and stories as GitHub
- * issues in a repository linked to the job's project as a tracker.
+ * PUBLISH THE PLAN on a finished Compose run (wicked-crew#372): the plan's epics, features and stories as GitHub
+ * issues in a repository linked to the job's project as a tracker, or (wicked-crew#1901) as Jira issues in a Jira
+ * project linked to it: each item's issue type is on the card, and each issue is linked by its key.
  *
  * crew's read says up front whether the run can be published and, when not, why in plain words (a plan edited at its
  * gate, a run composed before publishing shipped), so a person never finds out after the click. Show what would be
@@ -171,7 +188,7 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
 
   if (read.phase === 'absent') return null;
   const titleId = `product-publish-title-${runId}`;
-  const head = <h3 id={titleId} className="wk-pub-title">Publish the plan to GitHub</h3>;
+  const head = <h3 id={titleId} className="wk-pub-title">Publish the plan</h3>;
   const lookAgain = (
     <div className="wk-src-row-btns">
       <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="product-publish-refresh" onClick={() => load(gen.current, read.phase === 'ok')}>Look again</button>
@@ -188,6 +205,10 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
   const pubOf = (repo: string): PublicationState | undefined => publications.find((p) => p.repo === repo);
   const open = targets.filter((t) => pubOf(t.repo)?.published !== true);
   const target = open[Math.min(pick, Math.max(0, open.length - 1))];
+  // (wicked-crew#1901) Whether the plan fits the picked target: crew's answer for it, else its answer for GitHub.
+  const can = target?.publishable ?? publishable;
+  /** What a publication's target is called: crew's label for it, else its selector. */
+  const nameOf = (repo: string): string => { const t = targets.find((x) => x.repo === repo); return t === undefined ? repo : targetName(t); };
   // An earlier attempt at this repository that a person must settle first (crew refuses a confirm with `unresolved`),
   // or one being sent now: no card is offered for it until it is settled.
   const heldOf = (repo: string): PublicationState | undefined => { const p = pubOf(repo); return p !== undefined && p.items.some((i) => i.state === 'unsure' || i.state === 'sending') ? p : undefined; };
@@ -212,7 +233,7 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
     try {
       const answer = publishResponseOf(await productPublishApi.post(projectId, { runId, repo: repoSelector(target, targets) }), runId, projectId);
       if (!here(mine)) return;
-      if (answer === null || answer.done || answer.card.repo !== target.repo) { setAsk({ phase: 'refused', words: UNREADABLE }); return; }
+      if (answer === null || answer.done || answer.card.repo !== target.repo || answer.card.system !== target.system) { setAsk({ phase: 'refused', words: unreadable(publishSystemOf(target)) }); return; }
       merge(answer.publication, target.repo);
       // A card over an attempt that must be settled first is not offered: the publication above says what to do.
       const unsettled = answer.publication?.items.some((i) => i.state === 'unsure' || i.state === 'sending') === true;
@@ -221,7 +242,7 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
       if (!here(mine)) return;
       // `publication_differs` carries the publication crew already holds for this repository: it is shown.
       merge(errorPublication(e), target.repo);
-      setAsk({ phase: 'refused', words: publishRefusal(e) });
+      setAsk({ phase: 'refused', words: publishRefusal(e, publishSystemOf(target)) });
     }
   });
 
@@ -239,7 +260,7 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
         merge(answer.publication, card.repo);
         setAsk({ phase: 'done', publication: answer.publication });
       } else {
-        setAsk({ phase: 'refused', words: UNREADABLE });
+        setAsk({ phase: 'refused', words: unreadable(publishSystemOf(card)) });
       }
     } catch (e) {
       if (!here(mine)) return;
@@ -248,12 +269,13 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
       merge(errorPublication(e), card.repo);
       // The card changed since it was shown: crew's fresh card waits for a new click (nothing was sent).
       const fresh = publishRefusalCode(e) === 'card_changed' ? publishResponseOf({ done: false, card: body['card'], publishHash: body['publishHash'], publication: null }, runId, projectId) : null;
-      setAsk(fresh !== null && !fresh.done ? { phase: 'card', card: fresh.card, hash: fresh.publishHash, publication, note: publishRefusal(e) } : { phase: 'refused', words: publishRefusal(e) });
+      const words = publishRefusal(e, publishSystemOf(card));
+      setAsk(fresh !== null && !fresh.done && fresh.card.repo === card.repo ? { phase: 'card', card: fresh.card, hash: fresh.publishHash, publication, note: words } : { phase: 'refused', words });
     }
     if (here(mine)) load(mine, true);
   });
 
-  const resolve = (p: PublicationState, item: PublicationItemState, issue: number | null): Promise<void> => once(async (mine) => {
+  const resolve = (p: PublicationState, item: PublicationItemState, issue: number | string | null): Promise<void> => once(async (mine) => {
     const slot = `${p.repo}\u0000${item.key}`;
     setResolving(slot);
     setResolveNote((m) => { const rest = { ...m }; delete rest[slot]; return rest; });
@@ -261,11 +283,11 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
     try {
       const answer = publishResponseOf(await productPublishApi.post(projectId, { runId, repo: repoSelector({ repo: p.repo, source: p.source }, targets.some((t) => t.repo === p.repo) ? targets : [{ repo: p.repo, source: p.source }]), resolve: { key: item.key, issue } }), runId, projectId);
       if (!here(mine)) return;
-      if (answer === null) setResolveNote((m) => ({ ...m, [slot]: UNREADABLE }));
+      if (answer === null) setResolveNote((m) => ({ ...m, [slot]: unreadable(publishSystemOf(p)) }));
       else merge(answer.publication, p.repo);
     } catch (e) {
       if (!here(mine)) return;
-      setResolveNote((m) => ({ ...m, [slot]: publishRefusal(e) }));
+      setResolveNote((m) => ({ ...m, [slot]: publishRefusal(e, publishSystemOf(p)) }));
     } finally {
       if (here(mine)) setResolving(null);
     }
@@ -283,12 +305,12 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
   return (
     <section className="wk-pub" aria-labelledby={titleId} data-testid="product-publish">
       {head}
-      {!publishable.ok && (
+      {!can.ok && (
         <>
-          <p className="wk-src-note wk-src-tone-warn" data-testid="product-publish-blocked" data-code={publishable.code}>
-            {`${publishable.error.charAt(0).toUpperCase()}${publishable.error.slice(1)}.`}
+          <p className="wk-src-note wk-src-tone-warn" data-testid="product-publish-blocked" data-code={can.code}>
+            {`${can.error.charAt(0).toUpperCase()}${can.error.slice(1)}.`}
           </p>
-          {COMPOSE_AGAIN.has(publishable.code) && (
+          {COMPOSE_AGAIN.has(can.code) && (
             <div className="wk-src-row-btns">
               <button type="button" className="wk-btn wk-btn--quiet wk-btn--sm" data-testid="product-publish-compose-again" onClick={composeAgain}>Compose again</button>
             </div>
@@ -296,33 +318,41 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
         </>
       )}
 
-      {publications.map((p) => (
+      {publications.map((p) => {
+        const system = publishSystemOf(p);
+        return (
         <div key={p.repo} className="wk-pub-publication" data-testid="product-publish-publication" data-repo={p.repo} data-published={p.published ? 'true' : 'false'}>
           <p className="wk-run-tab-line">
-            <b>{p.repo}</b>{' '}
+            <b>{nameOf(p.repo)}</b>{' '}
             <span className={`wk-src-note ${p.published ? 'wk-src-tone-ok' : 'wk-src-tone-warn'}`} data-testid="product-publish-verdict">
-              {p.published ? `Published: all ${p.items.length} issues created and checked on GitHub.` : `Not fully published: ${p.items.filter((i) => i.state === 'created').length} of ${p.items.length} created.`}
+              {p.published ? `Published: all ${p.items.length} issues created and checked ${WHERE[system].on}.` : `Not fully published: ${p.items.filter((i) => i.state === 'created').length} of ${p.items.length} created.`}
             </span>
           </p>
           <ul className="wk-pub-list">
             {p.items.map((i) => {
-              const s = itemStateWords(i);
+              const s = itemStateWords(i, system);
               const slot = `${p.repo}\u0000${i.key}`;
               const typed = answers[slot] ?? '';
-              const n = issueNumberOf(typed);
+              // A GitHub issue by its number; (wicked-crew#1901) a Jira issue by a key of the publication's own project.
+              const n = system === 'jira' ? jiraKeyOf(typed, p.repo) : issueNumberOf(typed);
+              const projectKey = projectKeyOf(p.repo);
               return (
                 <li key={i.key} className="wk-pub-item" data-depth={depthOf(i.kind)} data-testid="product-publish-item" data-state={i.state}>
                   <span className="wk-pub-item-head">
                     <span className="wk-pub-kind">{KIND_WORD[i.kind]}</span>
                     <span>{i.title}</span>
                     {i.url !== null && i.number !== null && <a href={i.url} target="_blank" rel="noreferrer" data-testid="product-publish-link">{`#${i.number} ↗`}</a>}
+                    {i.ref !== undefined && (i.url !== null
+                      ? <a href={i.url} target="_blank" rel="noreferrer" data-testid="product-publish-link">{`${i.ref} ↗`}</a>
+                      : <span className="wk-pub-state" data-testid="product-publish-ref">{i.ref}</span>)}
                   </span>
                   <span className="wk-pub-state" data-tone={s.tone}>{s.words}</span>
                   {i.state === 'unsure' && (
                     <div className="wk-pub-resolve" data-testid="product-publish-resolve">
                       <label>
                         <span className="wk-src-cap">It exists as issue </span>
-                        <input type="text" inputMode="numeric" aria-label={`The issue number ${i.title} was created as`} placeholder="Issue number" value={typed}
+                        <input type="text" inputMode={system === 'jira' ? 'text' : 'numeric'} aria-label={system === 'jira' ? `The issue key ${i.title} was created as` : `The issue number ${i.title} was created as`}
+                          placeholder={system === 'jira' ? `Issue key, like ${projectKey ?? 'KEY'}-12` : 'Issue number'} value={typed}
                           onChange={(e) => { const v = e.target.value; setAnswers((m) => ({ ...m, [slot]: v })); }} />
                       </label>
                       <button type="button" className="wk-btn wk-btn--sm" data-testid="product-publish-resolve-exists" disabled={n === null || busy} onClick={() => { if (n !== null) void resolve(p, i, n); }}>It exists</button>
@@ -335,34 +365,35 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
             })}
           </ul>
         </div>
-      ))}
+        );
+      })}
 
       {refreshNote !== null && <p className="wk-src-note wk-src-tone-warn" data-testid="product-publish-refresh-note">{refreshNote}</p>}
 
       {publishable.ok && targets.length === 0 && (
-        <p className="wk-src-note" data-testid="product-publish-no-target">To publish its {publishable.items} issues, link a GitHub repository to this project as a tracker.</p>
+        <p className="wk-src-note" data-testid="product-publish-no-target">To publish its {publishable.items} issues, link a GitHub repository to this project as a tracker, or a Jira project.</p>
       )}
 
-      {publishable.ok && target !== undefined && card === null && (
+      {target !== undefined && card === null && (can.ok || open.length > 1) && (
         <div className="wk-src-row-btns">
           {open.length > 1 && (
             <select className="wk-pub-pick" aria-label="The repository to publish to" data-testid="product-publish-pick" value={Math.min(pick, open.length - 1)} disabled={busy} onChange={(e) => { setPick(Number(e.target.value)); setAsk({ phase: 'idle' }); }}>
-              {open.map((t, k) => <option key={`${t.source}\u0000${t.repo}`} value={k}>{t.repo} ({t.source})</option>)}
+              {open.map((t, k) => <option key={`${t.source}\u0000${t.repo}`} value={k}>{targetName(t)} ({t.source})</option>)}
             </select>
           )}
-          {held === undefined && (
+          {can.ok && held === undefined && (
             <button type="button" className="wk-btn wk-btn--primary wk-btn--sm" data-testid="product-publish-show" disabled={busy} onClick={() => void showCard()}>
-              {ask.phase === 'asking' ? 'Asking crew…' : open.length > 1 ? `Show the ${publishable.items} issues` : `Show the ${publishable.items} issues for ${target.repo}`}
+              {ask.phase === 'asking' ? 'Asking crew…' : open.length > 1 ? `Show the ${can.items} issues` : `Show the ${can.items} issues for ${targetName(target)}`}
             </button>
           )}
         </div>
       )}
 
-      {publishable.ok && held !== undefined && card === null && (
+      {can.ok && held !== undefined && card === null && (
         <p className="wk-src-note wk-src-tone-warn" data-testid="product-publish-held">
           {held.items.some((i) => i.state === 'unsure')
-            ? `Before anything more is sent to ${held.repo}, say for each issue marked “not known” whether it exists.`
-            : `Issues are being sent to ${held.repo} now; this looks again every few seconds.`}
+            ? `Before anything more is sent to ${nameOf(held.repo)}, say for each issue marked “not known” whether it exists.`
+            : `Issues are being sent to ${nameOf(held.repo)} now; this looks again every few seconds.`}
         </p>
       )}
       {(sendingNow || refreshNote !== null) && lookAgain}
@@ -371,16 +402,22 @@ export function ProductPublish({ projectId, runId }: { projectId: string; runId:
         <div className="wk-pub-card" data-testid="product-publish-card">
           <p className="wk-src-note" data-testid="product-publish-card-what">
             {toCreate === 0
-              ? <>All {card.items.length} issues already exist in <b>{card.repo}</b>: nothing is created; crew reads each back again.</>
-              : <>Nothing is created until you confirm. crew creates {toCreate === card.items.length ? `these ${toCreate} issues` : `the ${toCreate} issues not created yet (${card.items.length - toCreate} already exist and are not sent again)`} in <b>{card.repo}</b> as <b>{card.identity}</b> on {card.source}, one at a time, then reads each back.</>}
+              ? <>All {card.items.length} issues already exist in <b>{nameOf(card.repo)}</b>: nothing is created; crew reads each back again.</>
+              : <>Nothing is created until you confirm. crew creates {toCreate === card.items.length ? `these ${toCreate} issues` : `the ${toCreate} issues not created yet (${card.items.length - toCreate} already exist and are not sent again)`} in {card.system === 'jira' ? 'the Jira project ' : ''}<b>{nameOf(card.repo)}</b> as {card.system === 'jira' ? 'the Atlassian account ' : ''}<b>{card.identity}</b> on {card.source}, one at a time, then reads each back.</>}
           </p>
+          {card.system === 'jira' && card.site !== undefined && <p className="wk-src-cap" data-testid="product-publish-card-site">{card.site.includes('.') ? `Site: ${card.site}` : `Site: cloud id ${card.site}`}. Each issue gets the type shown beside it, under its parent.</p>}
           {ask.phase === 'card' && ask.note !== undefined && <p className="wk-src-note wk-src-tone-warn" data-testid="product-publish-note">{ask.note}</p>}
           <ul className="wk-pub-list">
             {card.items.map((i) => {
               const made = already.get(i.key);
               return (
                 <li key={i.key} className="wk-pub-item" data-depth={depthOf(i.kind)} data-testid="product-publish-card-item" data-exists={made !== undefined ? 'true' : 'false'}>
-                  <span className="wk-pub-item-head"><span className="wk-pub-kind">{KIND_WORD[i.kind]}</span><span>{i.title}</span>{made !== undefined && made.number !== null && <span className="wk-pub-state">{`already #${made.number}`}</span>}</span>
+                  <span className="wk-pub-item-head">
+                    <span className="wk-pub-kind">{KIND_WORD[i.kind]}</span><span>{i.title}</span>
+                    {i.issueType !== undefined && <span className="wk-tag" data-testid="product-publish-card-type">{i.issueType}</span>}
+                    {made !== undefined && made.number !== null && <span className="wk-pub-state">{`already #${made.number}`}</span>}
+                    {made !== undefined && made.ref !== undefined && <span className="wk-pub-state">{`already ${made.ref}`}</span>}
+                  </span>
                   <details>
                     <summary>Text</summary>
                     <pre className="wk-pub-body">{bodyShown(i)}</pre>
