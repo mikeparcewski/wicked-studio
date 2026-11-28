@@ -15,6 +15,7 @@ import {
   type ProductPublishCard,
   type PublicationItemState,
   type PublicationState,
+  type PublishSystem,
 } from '../../api/productPublish.js';
 import { DRAFT_EPICS_ID, openLaunchWizard } from '../../store/launchWizard.js';
 
@@ -40,7 +41,8 @@ const UNREADABLE = 'crew answered in a form this studio can’t read. Look at th
 const COMPOSE_AGAIN: ReadonlySet<string> = new Set(['not_a_compose', 'compose_unverified']);
 
 /** One item's state, in words, with its tone. Pure. */
-export function itemStateWords(i: PublicationItemState): { words: string; tone: 'ok' | 'warn' | 'fail' | 'muted' } {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- RED STUB (wicked-crew#1901)
+export function itemStateWords(i: PublicationItemState, _system: PublishSystem = 'github'): { words: string; tone: 'ok' | 'warn' | 'fail' | 'muted' } {
   switch (i.state) {
     case 'created':
       return i.readBack === 'ok' ? { words: 'Created, and checked on GitHub', tone: 'ok' }
@@ -66,6 +68,10 @@ export function issueNumberOf(typed: string): number | null {
   const n = m === null ? NaN : Number(m[1]);
   return Number.isSafeInteger(n) && n <= ISSUE_MAX ? n : null;
 }
+
+/** RED STUB (wicked-crew#1901): the Jira key a person typed. */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- RED STUB
+export const jiraKeyOf = (_typed: string, _target: string): string | null => null;
 
 /**
  * PUBLISH TO GITHUB on a finished Compose run (wicked-crew#372): the plan's epics, features and stories as GitHub

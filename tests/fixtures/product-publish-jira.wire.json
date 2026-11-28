@@ -1,0 +1,1143 @@
+{
+ "provenance": "wicked-crew#1901 (crew main f000b617, the merge of wicked-crew#1997): every answer captured from crew's own routes (registerProductPublishRoutes in packages/crew/src/api/product-publish.ts) by a capture-only run of the setup of crew's tests/product-publish-jira.test.ts (lines 1-218: the real compose run view, a Jira source with the saved tool schemas, the tracker PROJA linked to the project on site c1 = acme.atlassian.net) against the fake Atlassian server tests/fixtures/pm/fake-jira.mjs and its switches: createerror (post-unsure, get-unsure, post-unresolved, the resolves), createexit (post-resolve-absent), dropparent (post-differs), types.json without a subtask type (post-type-missing) and without Story (post-card-task), a plan with {{parent}} in a title (get-jira-only-publishable) and with a 256-character title (get-jira-not-publishable), a tracker with no site host (get-hostless, post-card-hostless) and a second site c2 (get-two-sites). The run and project ids are the GitHub fixture's (product-publish.wire.json): both come from crew's tests/fixtures/product/compose-run-view.json.",
+ "runId": "run-compose-1",
+ "projectId": "proj_179558259512700000",
+ "answers": {
+  "get-before": {
+   "status": 200,
+   "body": {
+    "runId": "run-compose-1",
+    "publishable": {
+     "ok": true,
+     "items": 4
+    },
+    "targets": [
+     {
+      "repo": "PROJA@c1",
+      "source": "jira",
+      "system": "jira",
+      "label": "PROJA on acme.atlassian.net",
+      "publishable": {
+       "ok": true,
+       "items": 4
+      }
+     }
+    ],
+    "publications": []
+   }
+  },
+  "post-card": {
+   "status": 200,
+   "body": {
+    "done": false,
+    "card": {
+     "runId": "run-compose-1",
+     "projectId": "proj_179558259512700000",
+     "repo": "PROJA@c1",
+     "source": "jira",
+     "identity": "acct-1",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "body": "Features:\n- Sign in and out\n\nPublished by wicked-crew from run run-compose-1 (item e1, check b5c29905c7853fb9c6cb)",
+       "parentKey": null,
+       "issueType": "Epic"
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "body": "Requirements:\n- repo-a REQ-1\n- repo-a REQ-2\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1, check 21b650c093a2224e4a58)",
+       "parentKey": "e1",
+       "issueType": "Story"
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "body": "Acceptance criteria:\n- A user with an email signs in\n- A wrong password is refused\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1.s1, check f83affe0101c3e4edfc3)",
+       "parentKey": "e1.f1",
+       "issueType": "Sub-task"
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "body": "Acceptance criteria:\n- The session ends and the user's data is hidden\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1.s2, check 0a3f08588877f23a9b93)",
+       "parentKey": "e1.f1",
+       "issueType": "Sub-task"
+      }
+     ],
+     "system": "jira",
+     "site": "acme.atlassian.net"
+    },
+    "publishHash": "462922b430580b830d6c28206407d3a24da0f1f7f5ea7e223807b9a9b42e92e7",
+    "publication": null
+   }
+  },
+  "post-done": {
+   "status": 200,
+   "body": {
+    "done": true,
+    "card": {
+     "runId": "run-compose-1",
+     "projectId": "proj_179558259512700000",
+     "repo": "PROJA@c1",
+     "source": "jira",
+     "identity": "acct-1",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "body": "Features:\n- Sign in and out\n\nPublished by wicked-crew from run run-compose-1 (item e1, check b5c29905c7853fb9c6cb)",
+       "parentKey": null,
+       "issueType": "Epic"
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "body": "Requirements:\n- repo-a REQ-1\n- repo-a REQ-2\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1, check 21b650c093a2224e4a58)",
+       "parentKey": "e1",
+       "issueType": "Story"
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "body": "Acceptance criteria:\n- A user with an email signs in\n- A wrong password is refused\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1.s1, check f83affe0101c3e4edfc3)",
+       "parentKey": "e1.f1",
+       "issueType": "Sub-task"
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "body": "Acceptance criteria:\n- The session ends and the user's data is hidden\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1.s2, check 0a3f08588877f23a9b93)",
+       "parentKey": "e1.f1",
+       "issueType": "Sub-task"
+      }
+     ],
+     "system": "jira",
+     "site": "acme.atlassian.net"
+    },
+    "publication": {
+     "system": "jira",
+     "repo": "PROJA@c1",
+     "source": "jira",
+     "publishHash": "462922b430580b830d6c28206407d3a24da0f1f7f5ea7e223807b9a9b42e92e7",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "state": "created",
+       "number": null,
+       "url": "https://acme.atlassian.net/browse/PROJA-100",
+       "readBack": "ok",
+       "ref": "PROJA-100"
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "state": "created",
+       "number": null,
+       "url": "https://acme.atlassian.net/browse/PROJA-101",
+       "readBack": "ok",
+       "ref": "PROJA-101"
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "state": "created",
+       "number": null,
+       "url": "https://acme.atlassian.net/browse/PROJA-102",
+       "readBack": "ok",
+       "ref": "PROJA-102"
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "state": "created",
+       "number": null,
+       "url": "https://acme.atlassian.net/browse/PROJA-103",
+       "readBack": "ok",
+       "ref": "PROJA-103"
+      }
+     ],
+     "published": true
+    }
+   }
+  },
+  "get-after": {
+   "status": 200,
+   "body": {
+    "runId": "run-compose-1",
+    "publishable": {
+     "ok": true,
+     "items": 4
+    },
+    "targets": [
+     {
+      "repo": "PROJA@c1",
+      "source": "jira",
+      "system": "jira",
+      "label": "PROJA on acme.atlassian.net",
+      "publishable": {
+       "ok": true,
+       "items": 4
+      }
+     }
+    ],
+    "publications": [
+     {
+      "system": "jira",
+      "repo": "PROJA@c1",
+      "source": "jira",
+      "publishHash": "462922b430580b830d6c28206407d3a24da0f1f7f5ea7e223807b9a9b42e92e7",
+      "items": [
+       {
+        "key": "e1",
+        "kind": "epic",
+        "title": "Accounts & access",
+        "state": "created",
+        "number": null,
+        "url": "https://acme.atlassian.net/browse/PROJA-100",
+        "readBack": "ok",
+        "ref": "PROJA-100"
+       },
+       {
+        "key": "e1.f1",
+        "kind": "feature",
+        "title": "Sign in and out",
+        "state": "created",
+        "number": null,
+        "url": "https://acme.atlassian.net/browse/PROJA-101",
+        "readBack": "ok",
+        "ref": "PROJA-101"
+       },
+       {
+        "key": "e1.f1.s1",
+        "kind": "story",
+        "title": "Email sign in (< 3 tries)",
+        "state": "created",
+        "number": null,
+        "url": "https://acme.atlassian.net/browse/PROJA-102",
+        "readBack": "ok",
+        "ref": "PROJA-102"
+       },
+       {
+        "key": "e1.f1.s2",
+        "kind": "story",
+        "title": "Sign out from any page",
+        "state": "created",
+        "number": null,
+        "url": "https://acme.atlassian.net/browse/PROJA-103",
+        "readBack": "ok",
+        "ref": "PROJA-103"
+       }
+      ],
+      "published": true
+     }
+    ]
+   }
+  },
+  "post-unsure": {
+   "status": 200,
+   "body": {
+    "done": true,
+    "card": {
+     "runId": "run-compose-1",
+     "projectId": "proj_179558259512700000",
+     "repo": "PROJA@c1",
+     "source": "jira",
+     "identity": "acct-1",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "body": "Features:\n- Sign in and out\n\nPublished by wicked-crew from run run-compose-1 (item e1, check b5c29905c7853fb9c6cb)",
+       "parentKey": null,
+       "issueType": "Epic"
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "body": "Requirements:\n- repo-a REQ-1\n- repo-a REQ-2\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1, check 21b650c093a2224e4a58)",
+       "parentKey": "e1",
+       "issueType": "Story"
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "body": "Acceptance criteria:\n- A user with an email signs in\n- A wrong password is refused\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1.s1, check f83affe0101c3e4edfc3)",
+       "parentKey": "e1.f1",
+       "issueType": "Sub-task"
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "body": "Acceptance criteria:\n- The session ends and the user's data is hidden\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1.s2, check 0a3f08588877f23a9b93)",
+       "parentKey": "e1.f1",
+       "issueType": "Sub-task"
+      }
+     ],
+     "system": "jira",
+     "site": "acme.atlassian.net"
+    },
+    "publication": {
+     "system": "jira",
+     "repo": "PROJA@c1",
+     "source": "jira",
+     "publishHash": "2b6c5e5d3a5dc7c8173aa1b6bba62e4acf15f3c5de2600c2dd73d200b7c51a88",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "state": "unsure",
+       "number": null,
+       "url": null,
+       "readBack": null,
+       "why": "Jira answered an error, which it may also do after it created an issue (jira answered an error (HTTP 500); its other words are not shown)"
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      }
+     ],
+     "published": false
+    }
+   }
+  },
+  "get-unsure": {
+   "status": 200,
+   "body": {
+    "runId": "run-compose-1",
+    "publishable": {
+     "ok": true,
+     "items": 4
+    },
+    "targets": [
+     {
+      "repo": "PROJA@c1",
+      "source": "jira",
+      "system": "jira",
+      "label": "PROJA on acme.atlassian.net",
+      "publishable": {
+       "ok": true,
+       "items": 4
+      }
+     }
+    ],
+    "publications": [
+     {
+      "system": "jira",
+      "repo": "PROJA@c1",
+      "source": "jira",
+      "publishHash": "2b6c5e5d3a5dc7c8173aa1b6bba62e4acf15f3c5de2600c2dd73d200b7c51a88",
+      "items": [
+       {
+        "key": "e1",
+        "kind": "epic",
+        "title": "Accounts & access",
+        "state": "unsure",
+        "number": null,
+        "url": null,
+        "readBack": null,
+        "why": "Jira answered an error, which it may also do after it created an issue (jira answered an error (HTTP 500); its other words are not shown)"
+       },
+       {
+        "key": "e1.f1",
+        "kind": "feature",
+        "title": "Sign in and out",
+        "state": "missing",
+        "number": null,
+        "url": null,
+        "readBack": null
+       },
+       {
+        "key": "e1.f1.s1",
+        "kind": "story",
+        "title": "Email sign in (< 3 tries)",
+        "state": "missing",
+        "number": null,
+        "url": null,
+        "readBack": null
+       },
+       {
+        "key": "e1.f1.s2",
+        "kind": "story",
+        "title": "Sign out from any page",
+        "state": "missing",
+        "number": null,
+        "url": null,
+        "readBack": null
+       }
+      ],
+      "published": false
+     }
+    ]
+   }
+  },
+  "post-card-over-unsure": {
+   "status": 200,
+   "body": {
+    "done": false,
+    "card": {
+     "runId": "run-compose-1",
+     "projectId": "proj_179558259512700000",
+     "repo": "PROJA@c1",
+     "source": "jira",
+     "identity": "acct-1",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "body": "Features:\n- Sign in and out\n\nPublished by wicked-crew from run run-compose-1 (item e1, check b5c29905c7853fb9c6cb)",
+       "parentKey": null,
+       "issueType": "Epic"
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "body": "Requirements:\n- repo-a REQ-1\n- repo-a REQ-2\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1, check 21b650c093a2224e4a58)",
+       "parentKey": "e1",
+       "issueType": "Story"
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "body": "Acceptance criteria:\n- A user with an email signs in\n- A wrong password is refused\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1.s1, check f83affe0101c3e4edfc3)",
+       "parentKey": "e1.f1",
+       "issueType": "Sub-task"
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "body": "Acceptance criteria:\n- The session ends and the user's data is hidden\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1.s2, check 0a3f08588877f23a9b93)",
+       "parentKey": "e1.f1",
+       "issueType": "Sub-task"
+      }
+     ],
+     "system": "jira",
+     "site": "acme.atlassian.net"
+    },
+    "publishHash": "2b6c5e5d3a5dc7c8173aa1b6bba62e4acf15f3c5de2600c2dd73d200b7c51a88",
+    "publication": {
+     "system": "jira",
+     "repo": "PROJA@c1",
+     "source": "jira",
+     "publishHash": "2b6c5e5d3a5dc7c8173aa1b6bba62e4acf15f3c5de2600c2dd73d200b7c51a88",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "state": "unsure",
+       "number": null,
+       "url": null,
+       "readBack": null,
+       "why": "Jira answered an error, which it may also do after it created an issue (jira answered an error (HTTP 500); its other words are not shown)"
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      }
+     ],
+     "published": false
+    }
+   }
+  },
+  "post-unresolved": {
+   "status": 409,
+   "body": {
+    "error": "an earlier publish could not tell whether some issues were created; say for each whether it exists (resolve) before publishing again",
+    "code": "unresolved",
+    "publication": {
+     "system": "jira",
+     "repo": "PROJA@c1",
+     "source": "jira",
+     "publishHash": "2b6c5e5d3a5dc7c8173aa1b6bba62e4acf15f3c5de2600c2dd73d200b7c51a88",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "state": "unsure",
+       "number": null,
+       "url": null,
+       "readBack": null,
+       "why": "Jira answered an error, which it may also do after it created an issue (jira answered an error (HTTP 500); its other words are not shown)"
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      }
+     ],
+     "published": false
+    }
+   }
+  },
+  "post-resolve-differs": {
+   "status": 409,
+   "body": {
+    "error": "PROJA-1 is not e1: its summary or description is not what was approved for it",
+    "code": "resolve_differs"
+   }
+  },
+  "post-resolve-exists": {
+   "status": 200,
+   "body": {
+    "done": true,
+    "card": {
+     "runId": "run-compose-1",
+     "projectId": "proj_179558259512700000",
+     "repo": "PROJA@c1",
+     "source": "jira",
+     "identity": "acct-1",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "body": "Features:\n- Sign in and out\n\nPublished by wicked-crew from run run-compose-1 (item e1, check b5c29905c7853fb9c6cb)",
+       "parentKey": null,
+       "issueType": "Epic"
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "body": "Requirements:\n- repo-a REQ-1\n- repo-a REQ-2\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1, check 21b650c093a2224e4a58)",
+       "parentKey": "e1",
+       "issueType": "Story"
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "body": "Acceptance criteria:\n- A user with an email signs in\n- A wrong password is refused\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1.s1, check f83affe0101c3e4edfc3)",
+       "parentKey": "e1.f1",
+       "issueType": "Sub-task"
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "body": "Acceptance criteria:\n- The session ends and the user's data is hidden\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1.s2, check 0a3f08588877f23a9b93)",
+       "parentKey": "e1.f1",
+       "issueType": "Sub-task"
+      }
+     ],
+     "system": "jira",
+     "site": "acme.atlassian.net"
+    },
+    "publication": {
+     "system": "jira",
+     "repo": "PROJA@c1",
+     "source": "jira",
+     "publishHash": "2b6c5e5d3a5dc7c8173aa1b6bba62e4acf15f3c5de2600c2dd73d200b7c51a88",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "state": "created",
+       "number": null,
+       "url": "https://acme.atlassian.net/browse/PROJA-100",
+       "readBack": "ok",
+       "ref": "PROJA-100"
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      }
+     ],
+     "published": false
+    }
+   }
+  },
+  "get-resolved": {
+   "status": 200,
+   "body": {
+    "runId": "run-compose-1",
+    "publishable": {
+     "ok": true,
+     "items": 4
+    },
+    "targets": [
+     {
+      "repo": "PROJA@c1",
+      "source": "jira",
+      "system": "jira",
+      "label": "PROJA on acme.atlassian.net",
+      "publishable": {
+       "ok": true,
+       "items": 4
+      }
+     }
+    ],
+    "publications": [
+     {
+      "system": "jira",
+      "repo": "PROJA@c1",
+      "source": "jira",
+      "publishHash": "2b6c5e5d3a5dc7c8173aa1b6bba62e4acf15f3c5de2600c2dd73d200b7c51a88",
+      "items": [
+       {
+        "key": "e1",
+        "kind": "epic",
+        "title": "Accounts & access",
+        "state": "created",
+        "number": null,
+        "url": "https://acme.atlassian.net/browse/PROJA-100",
+        "readBack": "ok",
+        "ref": "PROJA-100"
+       },
+       {
+        "key": "e1.f1",
+        "kind": "feature",
+        "title": "Sign in and out",
+        "state": "missing",
+        "number": null,
+        "url": null,
+        "readBack": null
+       },
+       {
+        "key": "e1.f1.s1",
+        "kind": "story",
+        "title": "Email sign in (< 3 tries)",
+        "state": "missing",
+        "number": null,
+        "url": null,
+        "readBack": null
+       },
+       {
+        "key": "e1.f1.s2",
+        "kind": "story",
+        "title": "Sign out from any page",
+        "state": "missing",
+        "number": null,
+        "url": null,
+        "readBack": null
+       }
+      ],
+      "published": false
+     }
+    ]
+   }
+  },
+  "post-resolve-absent": {
+   "status": 200,
+   "body": {
+    "done": true,
+    "card": {
+     "runId": "run-compose-1",
+     "projectId": "proj_179558259512700000",
+     "repo": "PROJA@c1",
+     "source": "jira",
+     "identity": "acct-1",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "body": "Features:\n- Sign in and out\n\nPublished by wicked-crew from run run-compose-1 (item e1, check b5c29905c7853fb9c6cb)",
+       "parentKey": null,
+       "issueType": "Epic"
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "body": "Requirements:\n- repo-a REQ-1\n- repo-a REQ-2\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1, check 21b650c093a2224e4a58)",
+       "parentKey": "e1",
+       "issueType": "Story"
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "body": "Acceptance criteria:\n- A user with an email signs in\n- A wrong password is refused\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1.s1, check f83affe0101c3e4edfc3)",
+       "parentKey": "e1.f1",
+       "issueType": "Sub-task"
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "body": "Acceptance criteria:\n- The session ends and the user's data is hidden\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1.s2, check 0a3f08588877f23a9b93)",
+       "parentKey": "e1.f1",
+       "issueType": "Sub-task"
+      }
+     ],
+     "system": "jira",
+     "site": "acme.atlassian.net"
+    },
+    "publication": {
+     "system": "jira",
+     "repo": "PROJA@c1",
+     "source": "jira",
+     "publishHash": "2d476b6d1cd046f9fda1884a47295df5572812b1635293a8797a08c4b470ae51",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "state": "absent",
+       "number": null,
+       "url": null,
+       "readBack": null
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "state": "missing",
+       "number": null,
+       "url": null,
+       "readBack": null
+      }
+     ],
+     "published": false
+    }
+   }
+  },
+  "post-differs": {
+   "status": 200,
+   "body": {
+    "done": true,
+    "card": {
+     "runId": "run-compose-1",
+     "projectId": "proj_179558259512700000",
+     "repo": "PROJA@c1",
+     "source": "jira",
+     "identity": "acct-1",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "body": "Features:\n- Sign in and out\n\nPublished by wicked-crew from run run-compose-1 (item e1, check b5c29905c7853fb9c6cb)",
+       "parentKey": null,
+       "issueType": "Epic"
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "body": "Requirements:\n- repo-a REQ-1\n- repo-a REQ-2\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1, check 21b650c093a2224e4a58)",
+       "parentKey": "e1",
+       "issueType": "Story"
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "body": "Acceptance criteria:\n- A user with an email signs in\n- A wrong password is refused\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1.s1, check f83affe0101c3e4edfc3)",
+       "parentKey": "e1.f1",
+       "issueType": "Sub-task"
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "body": "Acceptance criteria:\n- The session ends and the user's data is hidden\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1.s2, check 0a3f08588877f23a9b93)",
+       "parentKey": "e1.f1",
+       "issueType": "Sub-task"
+      }
+     ],
+     "system": "jira",
+     "site": "acme.atlassian.net"
+    },
+    "publication": {
+     "system": "jira",
+     "repo": "PROJA@c1",
+     "source": "jira",
+     "publishHash": "c404c5333a9ee1d99ce688661225f98de95a28f86ba37aad0ed4b4a21ddfacb4",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "state": "created",
+       "number": null,
+       "url": "https://acme.atlassian.net/browse/PROJA-100",
+       "readBack": "ok",
+       "ref": "PROJA-100"
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "state": "created",
+       "number": null,
+       "url": "https://acme.atlassian.net/browse/PROJA-101",
+       "readBack": "differs",
+       "ref": "PROJA-101"
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "state": "created",
+       "number": null,
+       "url": "https://acme.atlassian.net/browse/PROJA-102",
+       "readBack": "differs",
+       "ref": "PROJA-102"
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "state": "created",
+       "number": null,
+       "url": "https://acme.atlassian.net/browse/PROJA-103",
+       "readBack": "differs",
+       "ref": "PROJA-103"
+      }
+     ],
+     "published": false
+    }
+   }
+  },
+  "post-type-missing": {
+   "status": 409,
+   "body": {
+    "error": "PROJA has no issue type for the plan's storys (a subtask type, Sub-task or Subtask, by Jira's standard name); a Jira admin adds one, or compose without that level",
+    "code": "issue_type_missing"
+   }
+  },
+  "post-card-task": {
+   "status": 200,
+   "body": {
+    "done": false,
+    "card": {
+     "runId": "run-compose-1",
+     "projectId": "proj_179558259512700000",
+     "repo": "PROJA@c1",
+     "source": "jira",
+     "identity": "acct-1",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "body": "Features:\n- Sign in and out\n\nPublished by wicked-crew from run run-compose-1 (item e1, check b5c29905c7853fb9c6cb)",
+       "parentKey": null,
+       "issueType": "Epic"
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "body": "Requirements:\n- repo-a REQ-1\n- repo-a REQ-2\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1, check 21b650c093a2224e4a58)",
+       "parentKey": "e1",
+       "issueType": "Task"
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "body": "Acceptance criteria:\n- A user with an email signs in\n- A wrong password is refused\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1.s1, check f83affe0101c3e4edfc3)",
+       "parentKey": "e1.f1",
+       "issueType": "Subtask"
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "body": "Acceptance criteria:\n- The session ends and the user's data is hidden\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1.s2, check 0a3f08588877f23a9b93)",
+       "parentKey": "e1.f1",
+       "issueType": "Subtask"
+      }
+     ],
+     "system": "jira",
+     "site": "acme.atlassian.net"
+    },
+    "publishHash": "5cb14dcaa295fa19a6ca2fc905c39f6dd5b4bae1969dd33c2ba453e103d15911",
+    "publication": null
+   }
+  },
+  "get-jira-only-publishable": {
+   "status": 200,
+   "body": {
+    "runId": "run-compose-1",
+    "publishable": {
+     "ok": false,
+     "code": "plan_unreadable",
+     "error": "the title of e1 has the text {{parent}}, which crew uses for the parent issue"
+    },
+    "targets": [
+     {
+      "repo": "PROJA@c1",
+      "source": "jira",
+      "system": "jira",
+      "label": "PROJA on acme.atlassian.net",
+      "publishable": {
+       "ok": true,
+       "items": 4
+      }
+     }
+    ],
+    "publications": []
+   }
+  },
+  "get-jira-not-publishable": {
+   "status": 200,
+   "body": {
+    "runId": "run-compose-1",
+    "publishable": {
+     "ok": true,
+     "items": 4
+    },
+    "targets": [
+     {
+      "repo": "PROJA@c1",
+      "source": "jira",
+      "system": "jira",
+      "label": "PROJA on acme.atlassian.net",
+      "publishable": {
+       "ok": false,
+       "code": "plan_unreadable",
+       "error": "the title of e1 is longer than the 255 characters a Jira summary holds"
+      }
+     }
+    ],
+    "publications": []
+   }
+  },
+  "get-hostless": {
+   "status": 200,
+   "body": {
+    "runId": "run-compose-1",
+    "publishable": {
+     "ok": true,
+     "items": 4
+    },
+    "targets": [
+     {
+      "repo": "PROJA@c1",
+      "source": "jira",
+      "system": "jira",
+      "label": "PROJA on site c1",
+      "publishable": {
+       "ok": true,
+       "items": 4
+      }
+     }
+    ],
+    "publications": []
+   }
+  },
+  "post-card-hostless": {
+   "status": 200,
+   "body": {
+    "done": false,
+    "card": {
+     "runId": "run-compose-1",
+     "projectId": "proj_179558259512700000",
+     "repo": "PROJA@c1",
+     "source": "jira",
+     "identity": "acct-1",
+     "items": [
+      {
+       "key": "e1",
+       "kind": "epic",
+       "title": "Accounts & access",
+       "body": "Features:\n- Sign in and out\n\nPublished by wicked-crew from run run-compose-1 (item e1, check b5c29905c7853fb9c6cb)",
+       "parentKey": null,
+       "issueType": "Epic"
+      },
+      {
+       "key": "e1.f1",
+       "kind": "feature",
+       "title": "Sign in and out",
+       "body": "Requirements:\n- repo-a REQ-1\n- repo-a REQ-2\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1, check 21b650c093a2224e4a58)",
+       "parentKey": "e1",
+       "issueType": "Story"
+      },
+      {
+       "key": "e1.f1.s1",
+       "kind": "story",
+       "title": "Email sign in (< 3 tries)",
+       "body": "Acceptance criteria:\n- A user with an email signs in\n- A wrong password is refused\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1.s1, check f83affe0101c3e4edfc3)",
+       "parentKey": "e1.f1",
+       "issueType": "Sub-task"
+      },
+      {
+       "key": "e1.f1.s2",
+       "kind": "story",
+       "title": "Sign out from any page",
+       "body": "Acceptance criteria:\n- The session ends and the user's data is hidden\n\nPublished by wicked-crew from run run-compose-1 (item e1.f1.s2, check 0a3f08588877f23a9b93)",
+       "parentKey": "e1.f1",
+       "issueType": "Sub-task"
+      }
+     ],
+     "system": "jira",
+     "site": "c1"
+    },
+    "publishHash": "42e9213ccb3eba52e7b6d288e851b0e8e5eb45cc7e03a62f2da9e2c7b6be41d4",
+    "publication": null
+   }
+  },
+  "get-two-sites": {
+   "status": 200,
+   "body": {
+    "runId": "run-compose-1",
+    "publishable": {
+     "ok": true,
+     "items": 4
+    },
+    "targets": [
+     {
+      "repo": "PROJA@c1",
+      "source": "jira",
+      "system": "jira",
+      "label": "PROJA on acme.atlassian.net",
+      "publishable": {
+       "ok": true,
+       "items": 4
+      }
+     },
+     {
+      "repo": "PROJA@c2",
+      "source": "jira",
+      "system": "jira",
+      "label": "PROJA on acme-two.atlassian.net",
+      "publishable": {
+       "ok": true,
+       "items": 4
+      }
+     }
+    ],
+    "publications": []
+   }
+  }
+ }
+}

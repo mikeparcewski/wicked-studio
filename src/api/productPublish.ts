@@ -17,10 +17,14 @@ import { ApiError, isRouteAbsent } from './errors.js';
 export type PublishKind = 'epic' | 'feature' | 'story';
 
 /** (0.229.0) One issue a publication creates; `body` carries `{{parent}}` until it is sent. */
-export interface PublishItem { key: string; kind: PublishKind; title: string; body: string; parentKey: string | null }
+export interface PublishItem { key: string; kind: PublishKind; title: string; body: string; parentKey: string | null; issueType?: string }
+
+/** (wicked-crew#1901) Where a publication goes: a GitHub repository, or a Jira project. On the wire crew names only
+ * `system: 'jira'`; no `system` is GitHub. */
+export type PublishSystem = 'github' | 'jira';
 
 /** (0.229.0) What a confirm would create, where, and as whom. */
-export interface ProductPublishCard { runId: string; projectId: string; repo: string; source: string; identity: string; items: PublishItem[] }
+export interface ProductPublishCard { runId: string; projectId: string; repo: string; source: string; identity: string; items: PublishItem[]; system?: 'jira'; site?: string }
 
 export type PublicationItemStateWord = 'created' | 'sending' | 'not_sent' | 'unsure' | 'absent' | 'missing';
 
@@ -34,10 +38,14 @@ export interface PublicationItemState {
   url: string | null;
   readBack: 'ok' | 'differs' | 'unreadable' | null;
   why?: string;
+  ref?: string;
 }
 
 /** (0.229.0) One run published to one repository. */
-export interface PublicationState { repo: string; source: string; publishHash: string; items: PublicationItemState[]; published: boolean }
+export interface PublicationState { repo: string; source: string; publishHash: string; items: PublicationItemState[]; published: boolean; system?: 'jira' }
+
+/** One place crew can publish the run to. */
+export interface PublishTarget { repo: string; source: string; system?: 'jira'; label?: string; publishable?: ProductPublicationsResponse['publishable'] }
 
 /** (0.229.0) `POST /projects/:id/product/publish` 200. */
 export type ProductPublishResponse =
@@ -48,12 +56,12 @@ export type ProductPublishResponse =
 export interface ProductPublicationsResponse {
   runId: string;
   publishable: { ok: true; items: number } | { ok: false; code: string; error: string };
-  targets: Array<{ repo: string; source: string }>;
+  targets: PublishTarget[];
   publications: PublicationState[];
 }
 
 /** (0.229.0) The POST body. */
-export interface ProductPublishBody { runId: string; repo: string; confirm?: string; resolve?: { key: string; issue: number | null } }
+export interface ProductPublishBody { runId: string; repo: string; confirm?: string; resolve?: { key: string; issue: number | string | null } }
 
 const enc = encodeURIComponent;
 
@@ -208,6 +216,9 @@ export function bodyShown(item: Pick<PublishItem, 'body' | 'parentKey'>): string
     .join(item.parentKey === null ? 'its parent' : `the issue for ${item.parentKey}`);
 }
 
+/** RED STUB (wicked-crew#1901): a target's name. */
+export const targetName = (t: { repo: string; label?: string }): string => t.repo;
+
 /** How deep an item sits (epic 0, feature 1, story 2), for the card's indent. */
 export const depthOf = (kind: PublishKind): number => (kind === 'epic' ? 0 : kind === 'feature' ? 1 : 2);
 
@@ -222,7 +233,8 @@ export function publishRefusalCode(e: unknown): string | null {
  * sentence carries the reason (a plan it can't read, a compose it can't confirm), that sentence is shown whole after
  * the plain words.
  */
-export function publishRefusal(e: unknown): string {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- RED STUB (wicked-crew#1901)
+export function publishRefusal(e: unknown, _system: PublishSystem = 'github'): string {
   if (isRouteAbsent(e)) return 'This crew can’t publish a plan yet: update crew. Nothing was sent.';
   const code = publishRefusalCode(e);
   const said = e instanceof ApiError && e.wire.trim() !== '' ? cut(e.wire.trim()) : '';
