@@ -7,6 +7,7 @@ vi.mock('../src/api/client.js', () => ({ apiFetch: (...a: unknown[]) => apiFetch
 import { ApiError } from '../src/api/errors.js';
 import { McpToolsPage, schemePrefix } from '../src/components/McpToolsPage.js';
 import { approvals, policies, preview, server, serversResponse, TOOLS } from './mcpFixtures.js';
+import type { McpDiscoveredServer } from '../src/api/mcp-wire.js';
 import { savedHash, unconfirmedBody } from './sourcesFixtures.js';
 
 /**
@@ -828,6 +829,29 @@ describe('MCP tools: remove, discovery, and an older daemon', () => {
     render(<McpToolsPage navigate={navigate} search="" />);
     const band = await screen.findByTestId('mcp-discovered');
     expect(within(band).getByTestId('mcp-discovered-server').textContent).toBe('gh · Claude · helper settings');
+  });
+
+  it('crew#2009: lists only servers in helper settings, and never says the helpers have them', async () => {
+    // An older daemon (before crew#2009) also sent the daemon user's own CLI servers as `origin: 'operator'`.
+    // Seats never load those, so they are not listed.
+    const olderDaemon = { name: 'ops-only', cli: 'codex', origin: 'operator', source: '~/.codex/config.toml', managed: false } as unknown as McpDiscoveredServer;
+    wire({ servers: () => Promise.resolve(serversResponse({ discovered: [
+      { name: 'gh', cli: 'claude', origin: 'worker', source: '<worker home>/claude/.claude.json', managed: false },
+      olderDaemon,
+    ] })) });
+    render(<McpToolsPage navigate={navigate} search="" />);
+    const band = await screen.findByTestId('mcp-discovered');
+    expect(within(band).getAllByTestId('mcp-discovered-server').map((b) => b.textContent)).toEqual(['gh · Claude · helper settings']);
+    expect(band.textContent).not.toMatch(/already have/i);
+    expect(band.textContent).toContain('Helpers don’t use a server from there');
+  });
+
+  it('crew#2009: an older daemon that sends only the daemon user\'s own servers shows no discovered band', async () => {
+    const olderDaemon = { name: 'ops-only', cli: 'claude', origin: 'operator', source: '~/.claude.json', managed: false } as unknown as McpDiscoveredServer;
+    wire({ servers: () => Promise.resolve(serversResponse({ discovered: [olderDaemon] })) });
+    render(<McpToolsPage navigate={navigate} search="" />);
+    await screen.findByTestId('mcp-server-row');
+    expect(screen.queryByTestId('mcp-discovered')).toBeNull();
   });
 
   it('a daemon without the MCP routes renders the named unsupported state', async () => {

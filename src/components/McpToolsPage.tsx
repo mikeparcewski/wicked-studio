@@ -28,6 +28,7 @@ import {
   type McpRunMode,
   type McpServer,
   type McpServersResponse,
+  type McpDiscoveredServer,
   type McpTool,
   type McpUpstreamKind,
   type McpUsageFilter,
@@ -80,6 +81,14 @@ type Load =
   | { kind: 'loaded'; servers: McpServersResponse; policies: McpPolicyPreviewResponse | null; approvals: McpApprovalsResponse | null; usage: McpUsageResponse | null };
 
 const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+/**
+ * The discovered servers to list: only those in a seat's own settings (crew#2009). An older daemon also sent the
+ * daemon user's own CLI servers (`origin: 'operator'`), which seats never load. Retired helper names are left out.
+ */
+function helperDiscovered(list: readonly McpDiscoveredServer[]): McpDiscoveredServer[] {
+  return list.filter((d) => (d.origin as string) === 'worker' && !/agy|antigravity/i.test(d.cli));
+}
 
 function Badge({ testid, text, style, title }: { testid?: string | undefined; text: string; style?: React.CSSProperties | undefined; title?: string | undefined }): React.ReactElement {
   return (
@@ -886,18 +895,18 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
               </ul>
             )}
 
-            {loaded.servers.discovered.some(d => !/agy|antigravity/i.test(d.cli)) && (
+            {helperDiscovered(loaded.servers.discovered).length > 0 && (
               <section data-testid="mcp-discovered" className="wk-card flex flex-col gap-1">
                 <SectionTitle>Discovered tools</SectionTitle>
                 <p className="" style={{ color: 'var(--ink-dim)' }}>
-                  Your helpers already have these servers configured. To manage their access here, add each one with “Add existing server”.
+                  Found in your helpers’ own settings. Helpers don’t use a server from there; to use one, add it here with “Add existing server”.
                 </p>
                 <ul className="flex flex-wrap gap-1.5">
-                  {loaded.servers.discovered.filter(d => !/agy|antigravity/i.test(d.cli)).map((d) => (
+                  {helperDiscovered(loaded.servers.discovered).map((d) => (
                     <li key={`${d.cli}-${d.origin}-${d.name}`}>
                       <Badge
                         testid="mcp-discovered-server"
-                        text={`${d.name} · ${seatLabel({key:d.cli})}${d.origin === 'worker' ? ' · helper settings' : ''}${d.managed ? ' · managed' : ''}`}
+                        text={`${d.name} · ${seatLabel({key:d.cli})} · helper settings${d.managed ? ' · managed' : ''}`}
                         style={{ color: 'var(--status-fail)' }}
                         title="Found in helper settings"
                       />

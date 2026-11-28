@@ -43,9 +43,9 @@ describe('S6 skills and MCP presentation', () => {
   it('MCP gives the mode control a visible label and excludes retired helper names', async () => {
     const servers = serversResponse();
     servers.discovered = [
-      {name:'retired-tool',cli:'agy',origin:'operator',managed:false,source:'/home/operator/settings'},
-      {name:'old-tool',cli:'antigravity',origin:'operator',managed:false,source:'/home/operator/settings'},
-      {name:'current-tool',cli:'codex',origin:'operator',managed:false,source:'/home/operator/settings'},
+      {name:'retired-tool',cli:'agy',origin:'worker',managed:false,source:'<worker home>/settings'},
+      {name:'old-tool',cli:'antigravity',origin:'worker',managed:false,source:'<worker home>/settings'},
+      {name:'current-tool',cli:'codex',origin:'worker',managed:false,source:'<worker home>/settings'},
     ];
     apiFetch.mockImplementation((path: string) => {
       if (path === '/mcp/servers') return Promise.resolve(servers);
