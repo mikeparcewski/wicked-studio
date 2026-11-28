@@ -226,7 +226,7 @@ with sync_playwright() as p:
       current: document.querySelector('[data-testid="desk-rail-build"]')?.getAttribute('aria-current') ?? null,
       themeLink: !!document.querySelector('[data-testid="desk-rail-theme"]') })""")
     page.screenshot(path=str(SHOTS / "desk-rail-theme-tab.png"))
-    check("theme-tab", tabs["selected"] == [["general", "false"], ["theme", "true"]] and tabs["panel"] == "theme"
+    check("theme-tab", tabs["selected"] == [["general", "false"], ["theme", "true"], ["advanced", "false"]] and tabs["panel"] == "theme"
           and tabs["current"] == "page" and not tabs["themeLink"], **tabs)
 
     # ── 3. the pages navigate and mark the current one; Build & settings lists the rest ──
